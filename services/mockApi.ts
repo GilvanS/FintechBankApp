@@ -1,4 +1,3 @@
-
 import { User, Transaction, PixContact } from '../types';
 
 // Helper to get/set data from localStorage
@@ -23,6 +22,20 @@ const initializeDb = () => {
     let db = getDb();
     if (Object.keys(db).length === 0) {
         db = {
+            '00000000000': {
+                fullName: 'Admin User',
+                cpf: '00000000000',
+                email: 'admin@fintech.com',
+                password: 'senhaforte',
+                balance: 0,
+                transactions: [],
+                loginAttempts: 0,
+                isBlocked: false,
+                pixDailyLimit: 999999,
+                passwordResetRequested: false,
+                pixContacts: [],
+                role: 'admin',
+            },
             '11122233344': {
                 fullName: 'Alice Silva',
                 cpf: '11122233344',
@@ -35,6 +48,7 @@ const initializeDb = () => {
                 pixDailyLimit: 2000,
                 passwordResetRequested: false,
                 pixContacts: [],
+                role: 'customer',
             },
             '55566677788': {
                 fullName: 'Beto Rocha',
@@ -48,6 +62,7 @@ const initializeDb = () => {
                 pixDailyLimit: 2000,
                 passwordResetRequested: false,
                 pixContacts: [],
+                role: 'customer',
             },
         };
         saveDb(db);
@@ -58,7 +73,7 @@ initializeDb();
 
 // --- Auth ---
 
-export const signUp = async (userData: Omit<User, 'balance' | 'transactions' | 'loginAttempts' | 'isBlocked' | 'pixDailyLimit' | 'passwordResetRequested' | 'pixContacts'>): Promise<{ success: boolean; message: string; }> => {
+export const signUp = async (userData: Omit<User, 'balance' | 'transactions' | 'loginAttempts' | 'isBlocked' | 'pixDailyLimit' | 'passwordResetRequested' | 'pixContacts' | 'role'>): Promise<{ success: boolean; message: string; }> => {
     await new Promise(res => setTimeout(res, 500));
     const db = getDb();
     if (db[userData.cpf]) {
@@ -77,6 +92,7 @@ export const signUp = async (userData: Omit<User, 'balance' | 'transactions' | '
         pixDailyLimit: 2000, // default limit
         passwordResetRequested: false,
         pixContacts: [],
+        role: 'customer',
     };
     db[userData.cpf] = newUser;
     saveDb(db);
@@ -163,6 +179,31 @@ export const getUserData = async (cpf: string): Promise<User | null> => {
     return null;
 };
 
+export const updateUserPixDailyLimit = async (cpf: string, newLimit: number): Promise<{ success: boolean, message: string }> => {
+    await new Promise(res => setTimeout(res, 500));
+    const db = getDb();
+    const user = db[cpf];
+
+    if (!user) {
+        return { success: false, message: 'Usuário não encontrado.' };
+    }
+     if (newLimit < 0.01 || newLimit > 2000) {
+        return { success: false, message: 'O limite diário deve ser entre R$ 0,01 e R$ 2.000,00.' };
+    }
+    
+    user.pixDailyLimit = newLimit;
+    saveDb(db);
+
+    // Update session storage if the current user is being updated
+    const sessionUser = getCurrentUser();
+    if(sessionUser && sessionUser.cpf === cpf) {
+        sessionUser.pixDailyLimit = newLimit;
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
+    }
+    
+    return { success: true, message: 'Limite diário de PIX atualizado com sucesso!' };
+};
+
 // --- Transactions ---
 
 const createTransaction = (
@@ -211,15 +252,6 @@ export const performPix = async (fromCpf: string, toKey: string, amount: number,
     const dailyUsage = await getPixDailyUsage(fromCpf);
     if (dailyUsage + amount > fromUser.pixDailyLimit) {
         return { success: false, message: 'Transferência excede o limite diário de PIX.' };
-    }
-
-    // Check contact-specific daily limit
-    const contact = fromUser.pixContacts?.find(c => c.key === toKey);
-    if (contact) {
-        const dailyUsageForContact = await getPixDailyUsageForContact(fromCpf, toKey);
-        if (dailyUsageForContact + amount > contact.dailyLimit) {
-            return { success: false, message: `Transferência excede o limite diário de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contact.dailyLimit)} para este contato.` };
-        }
     }
 
     // Perform transaction
@@ -285,9 +317,6 @@ export const addPixContact = async (cpf: string, contactData: PixContact): Promi
     if (!user) {
         return { success: false, message: 'Usuário não encontrado.' };
     }
-    if (contactData.dailyLimit < 0.01 || contactData.dailyLimit > 2000) {
-        return { success: false, message: 'O limite diário deve ser entre R$ 0,01 e R$ 2.000,00.' };
-    }
     if (user.pixContacts.some(c => c.key === contactData.key)) {
         return { success: false, message: 'Um contato com esta chave PIX já existe.' };
     }
@@ -295,28 +324,6 @@ export const addPixContact = async (cpf: string, contactData: PixContact): Promi
     user.pixContacts.push(contactData);
     saveDb(db);
     return { success: true, message: 'Contato adicionado com sucesso!' };
-};
-
-export const updatePixContactLimit = async (cpf: string, contactKey: string, newLimit: number): Promise<{ success: boolean; message: string; }> => {
-    await new Promise(res => setTimeout(res, 500));
-    const db = getDb();
-    const user = db[cpf];
-
-    if (!user) {
-        return { success: false, message: 'Usuário não encontrado.' };
-    }
-    if (newLimit < 0.01 || newLimit > 2000) {
-        return { success: false, message: 'O limite diário deve ser entre R$ 0,01 e R$ 2.000,00.' };
-    }
-    
-    const contact = user.pixContacts.find(c => c.key === contactKey);
-    if (!contact) {
-        return { success: false, message: 'Contato não encontrado.' };
-    }
-
-    contact.dailyLimit = newLimit;
-    saveDb(db);
-    return { success: true, message: 'Limite do contato atualizado com sucesso!' };
 };
 
 export const deletePixContact = async (cpf: string, contactKey: string): Promise<{ success: boolean; message: string; }> => {

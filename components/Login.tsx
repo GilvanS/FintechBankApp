@@ -5,7 +5,6 @@ import { login, requestNewPassword } from '../services/mockApi';
 interface LoginProps {
   onLogin: (user: Omit<User, 'password'>) => void;
   onNavigateToSignUp: () => void;
-  onNavigateToAdmin: () => void;
 }
 
 const Logo: React.FC = () => (
@@ -18,7 +17,7 @@ const Logo: React.FC = () => (
     </div>
 );
 
-const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp, onNavigateToAdmin }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
   const [cpf, setCpf] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -66,9 +65,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp, onNavigateTo
                     id="cpf-blocked"
                     type="text"
                     value={cpf}
-                    onChange={(e) => setCpf(e.target.value)}
+                    onChange={(e) => setCpf(e.target.value.replace(/\D/g, ''))}
                     placeholder="Confirme seu CPF aqui"
                     required
+                    maxLength={11}
                     className="w-full px-3 py-2 mt-4 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
                 />
                 {resetMessage && <p className={`mt-4 text-sm font-medium ${resetMessage.includes('enviada') ? 'text-green-500' : 'text-red-500'}`}>{resetMessage}</p>}
@@ -90,9 +90,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp, onNavigateTo
               id="cpf"
               type="text"
               value={cpf}
-              onChange={(e) => setCpf(e.target.value)}
-              placeholder="000.000.000-00"
+              onChange={(e) => setCpf(e.target.value.replace(/\D/g, ''))}
+              placeholder="Apenas números"
               required
+              maxLength={11}
               className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
             />
           </div>
@@ -104,6 +105,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp, onNavigateTo
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              minLength={6}
+              maxLength={12}
               className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
             />
           </div>
@@ -125,11 +128,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp, onNavigateTo
           </p>
         </form>
         )}
-         <div className="text-center mt-4 border-t pt-4 dark:border-gray-700">
-            <button onClick={onNavigateToAdmin} className="text-xs text-gray-400 hover:text-blue-500 transition-colors">
-                Painel do Administrador
-            </button>
-        </div>
       </div>
     </div>
   );
