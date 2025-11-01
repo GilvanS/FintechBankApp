@@ -1,8 +1,6 @@
-
 export interface PixContact {
   key: string; // The PIX key (CPF or email)
   name: string; // Nickname for the contact
-  dailyLimit: number;
 }
 
 export interface User {
@@ -17,6 +15,7 @@ export interface User {
   pixDailyLimit: number;
   passwordResetRequested: boolean;
   pixContacts: PixContact[];
+  role: 'customer' | 'admin';
 }
 
 export interface Transaction {

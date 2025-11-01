@@ -2,11 +2,10 @@ import React, { useState, useEffect, createContext, useContext } from 'react';
 import Login from './components/Login';
 import SignUp from './components/SignUp';
 import Dashboard from './components/Dashboard';
-import Admin from './components/Admin';
 import { User } from './types';
 import { getCurrentUser, logoutUser } from './services/mockApi';
 
-type Page = 'login' | 'signup' | 'dashboard' | 'admin';
+type Page = 'login' | 'signup' | 'dashboard';
 
 interface AppContextType {
   user: User | null;
@@ -52,15 +51,13 @@ const App: React.FC = () => {
   const renderPage = () => {
     switch (currentPage) {
       case 'login':
-        return <Login onLogin={handleLogin} onNavigateToSignUp={() => setCurrentPage('signup')} onNavigateToAdmin={() => setCurrentPage('admin')} />;
+        return <Login onLogin={handleLogin} onNavigateToSignUp={() => setCurrentPage('signup')} />;
       case 'signup':
         return <SignUp onSignUpSuccess={() => setCurrentPage('login')} onNavigateToLogin={() => setCurrentPage('login')} />;
       case 'dashboard':
         return <Dashboard />;
-      case 'admin':
-        return <Admin onNavigateToLogin={() => setCurrentPage('login')} />;
       default:
-        return <Login onLogin={handleLogin} onNavigateToSignUp={() => setCurrentPage('signup')} onNavigateToAdmin={() => setCurrentPage('admin')} />;
+        return <Login onLogin={handleLogin} onNavigateToSignUp={() => setCurrentPage('signup')} />;
     }
   };
 

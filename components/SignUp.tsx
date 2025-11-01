@@ -32,9 +32,9 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
       setError('As senhas não coincidem.');
       return;
     }
-    // Simple password validation
-    if (password.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres.');
+    
+    if (password.length < 6 || password.length > 12) {
+      setError('A senha deve ter entre 6 e 12 caracteres.');
       return;
     }
 
@@ -82,9 +82,10 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
               id="cpf"
               type="text"
               value={cpf}
-              onChange={(e) => setCpf(e.target.value)}
-              placeholder="000.000.000-00"
+              onChange={(e) => setCpf(e.target.value.replace(/\D/g, ''))}
+              placeholder="Apenas números"
               required
+              maxLength={11}
               className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
             />
           </div>
@@ -108,7 +109,9 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              placeholder="Mínimo 6 caracteres"
+              placeholder="Entre 6 e 12 caracteres"
+              minLength={6}
+              maxLength={12}
               className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
             />
           </div>
@@ -120,6 +123,8 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
+              minLength={6}
+              maxLength={12}
               className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
             />
           </div>
