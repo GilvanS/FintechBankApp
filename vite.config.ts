@@ -12,30 +12,12 @@ export default defineConfig(({ mode }) => {
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.NODE_ENV': JSON.stringify(mode)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
       },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      },
-      build: {
-        outDir: 'dist',
-        assetsDir: 'assets',
-        sourcemap: false,
-        rollupOptions: {
-          output: {
-            manualChunks: {
-              vendor: ['react', 'react-dom'],
-              api: ['axios']
-            }
-          }
-        }
-      },
-      // Configurações específicas para mobile
-      optimizeDeps: {
-        include: ['react', 'react-dom', 'axios']
       }
     };
 });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import Login from './components/Login';
-import SignUp from './components/SignUp';
-import Dashboard from './components/Dashboard';
+import Login from './Login';
+import SignUp from './SignUp';
+import Dashboard from './Dashboard';
 import { User } from './types';
 import { getCurrentUser, logoutUser } from './services/mockApi';
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { signUp } from '../services/api';
+import { signUp } from '../services/mockApi';
 
 interface SignUpProps {
   onSignUpSuccess: () => void;
