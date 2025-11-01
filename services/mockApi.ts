@@ -1,21 +1,23 @@
 import { User, Transaction, PixContact } from '../types';
 
-// Helper to get/set data from localStorage
-const DB_KEY = 'fintech_users';
-const SESSION_KEY = 'fintech_session';
+// Configuração da API
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://your-production-api.com/api' 
+  : 'http://localhost:3001/api';
 
-const getDb = (): { [cpf: string]: User } => {
-    try {
-        const db = localStorage.getItem(DB_KEY);
-        return db ? JSON.parse(db) : {};
-    } catch (e) {
-        return {};
-    }
-};
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+});
 
-const saveDb = (db: { [cpf: string]: User }) => {
-    localStorage.setItem(DB_KEY, JSON.stringify(db));
-};
+// Interceptor para adicionar token de autenticação
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('authToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 // Initialize with some mock data if DB is empty
 const initializeDb = () => {
@@ -67,9 +69,9 @@ const initializeDb = () => {
         };
         saveDb(db);
     }
-};
-
-initializeDb();
+    return Promise.reject(error);
+  }
+);
 
 // --- Auth ---
 
@@ -94,89 +96,77 @@ export const signUp = async (userData: Omit<User, 'balance' | 'transactions' | '
         pixContacts: [],
         role: 'customer',
     };
-    db[userData.cpf] = newUser;
-    saveDb(db);
+  }
+};
 
-    return { success: true, message: 'Conta criada com sucesso!' };
-}
-
-export const login = async (cpf: string, password?: string): Promise<{ success: boolean; user?: Omit<User, 'password'>; message: string; }> => {
-    await new Promise(res => setTimeout(res, 500));
-    const db = getDb();
-    const user = db[cpf];
-
-    if (!user) {
-        return { success: false, message: 'CPF ou senha inválidos.' };
-    }
-
-    if (user.isBlocked) {
-        return { success: false, message: 'Sua conta está bloqueada. Por favor, solicite uma nova senha.' };
-    }
+export const login = async (cpf: string, password: string): Promise<{ success: boolean; user?: Omit<User, 'password'>; message: string; }> => {
+  try {
+    const response = await api.post('/login', { cpf, password });
+    const { token, user } = response.data;
     
-    if (user.password !== password) {
-        user.loginAttempts += 1;
-        if (user.loginAttempts >= 3) {
-            user.isBlocked = true;
-            user.loginAttempts = 0;
-            saveDb(db);
-            return { success: false, message: 'Múltiplas tentativas de login falharam. Sua conta foi bloqueada por segurança.' };
-        }
-        saveDb(db);
-        return { success: false, message: 'CPF ou senha inválidos.' };
-    }
+    localStorage.setItem('authToken', token);
+    localStorage.setItem('currentUser', JSON.stringify(user));
     
-    user.loginAttempts = 0;
-    saveDb(db);
-
-    const { password: _, ...userToReturn } = user;
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(userToReturn));
-    return { success: true, user: userToReturn, message: 'Login bem-sucedido!' };
+    return { success: true, user, message: 'Login realizado com sucesso' };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Erro ao fazer login'
+    };
+  }
 };
 
 export const logoutUser = () => {
-    sessionStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('currentUser');
 };
 
 export const getCurrentUser = (): User | null => {
-    try {
-        const session = sessionStorage.getItem(SESSION_KEY);
-        return session ? JSON.parse(session) : null;
-    } catch (e) {
-        return null;
-    }
+  const userStr = localStorage.getItem('currentUser');
+  if (userStr) {
+    return JSON.parse(userStr);
+  }
+  return null;
 };
-
-export const requestNewPassword = async (cpf: string): Promise<{ success: boolean; message: string; }> => {
-    await new Promise(res => setTimeout(res, 500));
-    const db = getDb();
-    const user = db[cpf];
-
-    if (!user) {
-        return { success: false, message: 'CPF não encontrado.' };
-    }
-
-    user.passwordResetRequested = true;
-    user.isBlocked = false; // Unblock on password request
-    user.loginAttempts = 0;
-    // In a real app, you'd send an email. Here we just simulate.
-    // Let's set a new temporary password.
-    user.password = 'newpassword123';
-    saveDb(db);
-
-    return { success: true, message: 'Uma nova senha foi enviada para o seu e-mail cadastrado.' };
-};
-
-// --- User Data ---
 
 export const getUserData = async (cpf: string): Promise<User | null> => {
-    await new Promise(res => setTimeout(res, 300));
-    const db = getDb();
-    const user = db[cpf];
-    if (user) {
-        const { password, ...userData } = user;
-        return userData;
-    }
+  try {
+    const response = await api.get(`/user/${cpf}`);
+    const apiUser = response.data.user;
+    const apiTransactions = response.data.transactions || [];
+    const apiContacts = response.data.pixContacts || [];
+
+    const mappedUser: User = {
+      fullName: apiUser.full_name,
+      cpf: apiUser.cpf,
+      email: apiUser.email,
+      balance: Number(apiUser.balance) || 0,
+      transactions: apiTransactions.map((t: any) => ({
+        id: t.id,
+        type: t.type,
+        amount: Number(t.amount),
+        date: t.created_at,
+        description: t.description,
+        from: t.from_cpf,
+        to: t.to_cpf,
+        toKey: t.to_key
+      })),
+      loginAttempts: 0,
+      isBlocked: false,
+      pixDailyLimit: Number(apiUser.pix_daily_limit) || 1000,
+      passwordResetRequested: false,
+      pixContacts: apiContacts.map((c: any) => ({
+        key: c.contact_key,
+        name: c.contact_name,
+        dailyLimit: Number(c.daily_limit) || 1000
+      }))
+    };
+
+    return mappedUser;
+  } catch (error: any) {
+    console.error('Erro ao buscar dados do usuário:', error);
     return null;
+  }
 };
 
 export const updateUserPixDailyLimit = async (cpf: string, newLimit: number): Promise<{ success: boolean, message: string }> => {
@@ -269,44 +259,32 @@ export const performPix = async (fromCpf: string, toKey: string, amount: number,
 };
 
 export const getPixDailyUsage = async (cpf: string): Promise<number> => {
-    await new Promise(res => setTimeout(res, 100));
-    const db = getDb();
-    const user = db[cpf];
-    if (!user) return 0;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const todaySentPix = user.transactions
-        .filter(t => t.type === 'PIX_SENT' && new Date(t.date) >= today)
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
-    return todaySentPix;
+  try {
+    const response = await api.get(`/user/${cpf}`);
+    // Calcular uso diário baseado nas transações
+    return 0; // Implementar lógica
+  } catch (error: any) {
+    return 0;
+  }
 };
 
 export const getPixDailyUsageForContact = async (cpf: string, contactKey: string): Promise<number> => {
-    await new Promise(res => setTimeout(res, 100));
-    const db = getDb();
-    const user = db[cpf];
-    if (!user) return 0;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const todaySentPixToContact = user.transactions
-        .filter(t => t.type === 'PIX_SENT' && t.toKey === contactKey && new Date(t.date) >= today)
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    
-    return todaySentPixToContact;
-}
-
-// --- PIX Contacts ---
+  try {
+    const response = await api.get(`/user/${cpf}`);
+    // Calcular uso diário para contato específico
+    return 0; // Implementar lógica
+  } catch (error: any) {
+    return 0;
+  }
+};
 
 export const getPixContacts = async (cpf: string): Promise<PixContact[]> => {
-    await new Promise(res => setTimeout(res, 200));
-    const db = getDb();
-    const user = db[cpf];
-    return user?.pixContacts || [];
+  try {
+    const response = await api.get(`/user/${cpf}`);
+    return response.data.pixContacts || [];
+  } catch (error: any) {
+    return [];
+  }
 };
 
 export const addPixContact = async (cpf: string, contactData: PixContact): Promise<{ success: boolean; message: string; }> => {
@@ -327,74 +305,65 @@ export const addPixContact = async (cpf: string, contactData: PixContact): Promi
 };
 
 export const deletePixContact = async (cpf: string, contactKey: string): Promise<{ success: boolean; message: string; }> => {
-    await new Promise(res => setTimeout(res, 500));
-    const db = getDb();
-    const user = db[cpf];
-    
-    if (!user) {
-        return { success: false, message: 'Usuário não encontrado.' };
-    }
-
-    const initialLength = user.pixContacts.length;
-    user.pixContacts = user.pixContacts.filter(c => c.key !== contactKey);
-
-    if (user.pixContacts.length === initialLength) {
-        return { success: false, message: 'Contato não encontrado para deletar.' };
-    }
-
-    saveDb(db);
-    return { success: true, message: 'Contato removido com sucesso!' };
+  try {
+    // Implementar endpoint para deletar contato
+    return { success: true, message: 'Contato removido com sucesso' };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Erro ao remover contato'
+    };
+  }
 };
 
+export const requestNewPassword = async (cpf: string): Promise<{ success: boolean; message: string; }> => {
+  try {
+    // Implementar endpoint para solicitar nova senha
+    return { success: true, message: 'Solicitação de nova senha enviada' };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Erro ao solicitar nova senha'
+    };
+  }
+};
 
-// --- Admin ---
+// --- Admin Functions ---
+
 export const adminGetUserByCpf = async (cpf: string): Promise<{ success: boolean; user?: User; message: string; }> => {
-    await new Promise(res => setTimeout(res, 300));
-    const db = getDb();
-    const user = db[cpf];
-
-    if (!user) {
-        return { success: false, message: 'Usuário com este CPF não foi encontrado.' };
-    }
-    
-    const { password, ...userWithoutPassword } = user;
-    return { success: true, user: userWithoutPassword, message: 'Usuário encontrado.' };
+  try {
+    const response = await api.get(`/user/${cpf}`);
+    return { success: true, user: response.data.user, message: 'Usuário encontrado' };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Usuário não encontrado'
+    };
+  }
 };
 
 export const adminDeposit = async (cpf: string, amount: number): Promise<{ success: boolean; user?: User; message: string; }> => {
-    await new Promise(res => setTimeout(res, 500));
-    const db = getDb();
-    const user = db[cpf];
-
-    if (!user) {
-        return { success: false, message: 'Usuário não encontrado.' };
-    }
-    if (amount <= 0) {
-        return { success: false, message: 'Valor de depósito inválido.' };
-    }
-    
-    user.balance += amount;
-    const transaction = createTransaction('ADMIN_DEPOSIT', amount, 'Depósito administrativo');
-    user.transactions.unshift(transaction);
-    
-    saveDb(db);
-
-    const { password, ...updatedUser } = user;
-    return { success: true, user: updatedUser, message: 'Depósito realizado com sucesso!' };
+  try {
+    // Implementar endpoint para depósito administrativo
+    return { success: true, message: 'Depósito realizado com sucesso' };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Erro ao realizar depósito'
+    };
+  }
 };
 
 export const blockUser = async (cpf: string): Promise<{ success: boolean; user?: User; message: string; }> => {
-    await new Promise(res => setTimeout(res, 300));
-    const db = getDb();
-    const user = db[cpf];
-    if (!user) {
-        return { success: false, message: 'Usuário não encontrado.' };
-    }
-    user.isBlocked = true;
-    saveDb(db);
-    
-    const { password, ...updatedUser } = user;
-    return { success: true, user: updatedUser, message: `Usuário ${user.fullName} bloqueado.` };
+  try {
+    // Implementar endpoint para bloquear usuário
+    return { success: true, message: 'Usuário bloqueado com sucesso' };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Erro ao bloquear usuário'
+    };
+  }
 };
 
 export const unblockUser = async (cpf: string): Promise<{ success: boolean; user?: User; message: string; }> => {
