@@ -548,23 +548,25 @@ const startServer = async () => {
   try {
     LoggerService.info('Iniciando servidor...');
     
-    // Conectar ao Databricks
-    await databricksService.connect();
-    LoggerService.info('Conectado ao Databricks');
-    
-    // Criar tabelas se não existirem
-    await databricksService.createTables();
-    LoggerService.info('Tabelas verificadas/criadas');
-    
-    // Iniciar servidor
+    // Iniciar servidor primeiro para garantir /api-docs acessível
     app.listen(PORT, () => {
       LoggerService.info(`Servidor rodando na porta ${PORT}`);
       LoggerService.info(`Documentação da API: http://localhost:${PORT}/api-docs`);
     });
+
+    // Conectar ao Databricks em segundo plano
+    try {
+      await databricksService.connect();
+      LoggerService.info('Conectado ao Databricks');
+
+      await databricksService.createTables();
+      LoggerService.info('Tabelas verificadas/criadas');
+    } catch (dbError) {
+      LoggerService.error('Aviso: Falha ao conectar/criar tabelas no Databricks. API continua acessível.', dbError);
+    }
     
   } catch (error) {
     LoggerService.error('Erro ao iniciar servidor:', error);
-    process.exit(1);
   }
 };
 
