@@ -14,7 +14,7 @@ import { User, CreateUserRequest, LoginRequest } from './entities/User';
 import { Transaction, PixTransactionRequest } from './entities/Transaction';
 import { PixContact } from './entities/PixContact';
 
-dotenv.config();
+dotenv.config({ path: '../../.env' });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -561,6 +561,9 @@ const startServer = async () => {
 
       await databricksService.createTables();
       LoggerService.info('Tabelas verificadas/criadas');
+
+      await databricksService.ensureDefaultUser();
+      LoggerService.info('Usuario padrao verificado/criado');
     } catch (dbError) {
       LoggerService.error('Aviso: Falha ao conectar/criar tabelas no Databricks. API continua acessível.', dbError);
     }
