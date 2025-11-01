@@ -40,7 +40,7 @@ api.interceptors.response.use(
 export const signUp = async (userData: Omit<User, 'balance' | 'transactions' | 'loginAttempts' | 'isBlocked' | 'pixDailyLimit' | 'passwordResetRequested' | 'pixContacts'>): Promise<{ success: boolean; message: string; }> => {
   try {
     const response = await api.post('/signup', {
-      fullName: userData.fullName,
+      full_name: userData.fullName,
       cpf: userData.cpf,
       email: userData.email,
       password: userData.password
@@ -87,7 +87,37 @@ export const getCurrentUser = (): User | null => {
 export const getUserData = async (cpf: string): Promise<User | null> => {
   try {
     const response = await api.get(`/user/${cpf}`);
-    return response.data.user;
+    const apiUser = response.data.user;
+    const apiTransactions = response.data.transactions || [];
+    const apiContacts = response.data.pixContacts || [];
+
+    const mappedUser: User = {
+      fullName: apiUser.full_name,
+      cpf: apiUser.cpf,
+      email: apiUser.email,
+      balance: Number(apiUser.balance) || 0,
+      transactions: apiTransactions.map((t: any) => ({
+        id: t.id,
+        type: t.type,
+        amount: Number(t.amount),
+        date: t.created_at,
+        description: t.description,
+        from: t.from_cpf,
+        to: t.to_cpf,
+        toKey: t.to_key
+      })),
+      loginAttempts: 0,
+      isBlocked: false,
+      pixDailyLimit: Number(apiUser.pix_daily_limit) || 1000,
+      passwordResetRequested: false,
+      pixContacts: apiContacts.map((c: any) => ({
+        key: c.contact_key,
+        name: c.contact_name,
+        dailyLimit: Number(c.daily_limit) || 1000
+      }))
+    };
+
+    return mappedUser;
   } catch (error: any) {
     console.error('Erro ao buscar dados do usuário:', error);
     return null;
