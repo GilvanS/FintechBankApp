@@ -1,10 +1,9 @@
-
 import React, { useState } from 'react';
 import { signUp } from '../services/mockApi';
 
 interface SignUpProps {
-    onSignUpSuccess: () => void;
-    onNavigateToLogin: () => void;
+  onSignUpSuccess: () => void;
+  onNavigateToLogin: () => void;
 }
 
 const Logo: React.FC = () => (
@@ -17,84 +16,135 @@ const Logo: React.FC = () => (
     </div>
 );
 
+
 const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) => {
-    const [fullName, setFullName] = useState('');
-    const [cpf, setCpf] = useState('');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [error, setError] = useState('');
-    const [successMessage, setSuccessMessage] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+  const [fullName, setFullName] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-    const handleSignUp = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (password !== confirmPassword) {
-            setError('As senhas não coincidem.');
-            return;
-        }
-        setIsLoading(true);
-        setError('');
-        setSuccessMessage('');
-        
-        const result = await signUp({ fullName, cpf, email, password });
-        setIsLoading(false);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password !== confirmPassword) {
+      setError('As senhas não coincidem.');
+      return;
+    }
+    // Simple password validation
+    if (password.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
 
-        if (result.success) {
-            setSuccessMessage(result.message + ' Você será redirecionado para o login.');
-            setTimeout(() => {
-                onSignUpSuccess();
-            }, 3000);
-        } else {
-            setError(result.message);
-        }
-    };
+    setIsLoading(true);
+    setError('');
 
-    return (
-        <div className="flex flex-col items-center justify-center min-h-screen py-2">
-            <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-2xl shadow-lg dark:bg-gray-800">
-                <Logo />
-                <h2 className="text-2xl font-bold text-center text-gray-900 dark:text-white">Criar sua conta</h2>
-                <form onSubmit={handleSignUp} className="space-y-4">
-                    <div>
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Nome Completo</label>
-                        <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600" />
-                    </div>
-                     <div>
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">CPF</label>
-                        <input type="text" value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" required className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600" />
-                    </div>
-                     <div>
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">E-mail</label>
-                        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600" />
-                    </div>
-                     <div>
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Senha</label>
-                        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600" />
-                    </div>
-                     <div>
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Confirmar Senha</label>
-                        <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600" />
-                    </div>
-                    
-                    {error && <p className="text-sm text-red-500">{error}</p>}
-                    {successMessage && <p className="text-sm text-green-500">{successMessage}</p>}
+    const result = await signUp({
+      fullName,
+      cpf,
+      email,
+      password,
+    });
+    
+    setIsLoading(false);
 
-                    <div>
-                        <button type="submit" disabled={isLoading} className="w-full px-4 py-2 text-lg font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 transition-colors">
-                            {isLoading ? 'Criando...' : 'Criar Conta'}
-                        </button>
-                    </div>
-                    <p className="text-sm text-center text-gray-600 dark:text-gray-400">
-                        Já tem uma conta?{' '}
-                        <button type="button" onClick={onNavigateToLogin} className="font-medium text-blue-500 hover:underline">
-                            Entrar
-                        </button>
-                    </p>
-                </form>
-            </div>
-        </div>
-    );
+    if (result.success) {
+      alert(result.message);
+      onSignUpSuccess();
+    } else {
+      setError(result.message);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen py-2">
+      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-2xl shadow-lg dark:bg-gray-800">
+        <Logo />
+        <h2 className="text-2xl font-bold text-center text-gray-800 dark:text-white">Criar nova conta</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="fullName" className="text-sm font-medium text-gray-700 dark:text-gray-300">Nome Completo</label>
+            <input
+              id="fullName"
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Seu nome completo"
+              required
+              className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+            />
+          </div>
+           <div>
+            <label htmlFor="cpf" className="text-sm font-medium text-gray-700 dark:text-gray-300">CPF</label>
+            <input
+              id="cpf"
+              type="text"
+              value={cpf}
+              onChange={(e) => setCpf(e.target.value)}
+              placeholder="000.000.000-00"
+              required
+              className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+            />
+          </div>
+          <div>
+            <label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-gray-300">E-mail</label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="voce@exemplo.com"
+              required
+              className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+            />
+          </div>
+          <div>
+            <label htmlFor="password"  className="text-sm font-medium text-gray-700 dark:text-gray-300">Senha</label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="Mínimo 6 caracteres"
+              className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+            />
+          </div>
+           <div>
+            <label htmlFor="confirmPassword"  className="text-sm font-medium text-gray-700 dark:text-gray-300">Confirmar Senha</label>
+            <input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          
+          <div>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full px-4 py-2 mt-2 text-lg font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 transition-colors"
+            >
+              {isLoading ? 'Criando conta...' : 'Cadastrar'}
+            </button>
+          </div>
+           <p className="text-sm text-center text-gray-600 dark:text-gray-400">
+            Já tem uma conta?{' '}
+            <button type="button" onClick={onNavigateToLogin} className="font-medium text-blue-500 hover:underline">
+              Faça login
+            </button>
+          </p>
+        </form>
+      </div>
+    </div>
+  );
 };
 
 export default SignUp;

@@ -1,3 +1,10 @@
+
+export interface PixContact {
+  key: string; // The PIX key (CPF or email)
+  name: string; // Nickname for the contact
+  dailyLimit: number;
+}
+
 export interface User {
   fullName: string;
   cpf: string;
@@ -9,6 +16,7 @@ export interface User {
   isBlocked: boolean;
   pixDailyLimit: number;
   passwordResetRequested: boolean;
+  pixContacts: PixContact[];
 }
 
 export interface Transaction {
@@ -19,6 +27,7 @@ export interface Transaction {
   description: string;
   from?: string;
   to?: string;
+  toKey?: string;
 }
 
 export type PixKeyType = 'cpf' | 'email' | 'random';

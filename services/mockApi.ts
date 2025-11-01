@@ -1,354 +1,406 @@
-import { User, Transaction } from '../types';
 
-// ============================================================================================
-// ATENÇÃO: ESTE ARQUIVO SIMULA UMA API DE BACKEND
-// ============================================================================================
-// Em um aplicativo de produção real, este arquivo seria substituído por um cliente de API
-// que faz chamadas de rede (fetch/axios) para um servidor (Node.js, Python, Java, etc.).
-// O servidor seria o único a ter as credenciais e a lógica para se conectar e
-// executar consultas no Databricks.
-// Os comentários "REAL BACKEND INTEGRATION" abaixo mostram onde essa lógica do servidor entraria.
-// ============================================================================================
+import { User, Transaction, PixContact } from '../types';
 
+// Helper to get/set data from localStorage
+const DB_KEY = 'fintech_users';
+const SESSION_KEY = 'fintech_session';
 
-const USERS_DB_KEY = 'fintech_users';
-const AUTH_TOKEN_KEY = 'fintech_auth_token'; // Chave para o nosso token JWT simulado
+const getDb = (): { [cpf: string]: User } => {
+    try {
+        const db = localStorage.getItem(DB_KEY);
+        return db ? JSON.parse(db) : {};
+    } catch (e) {
+        return {};
+    }
+};
 
-// Initialize with some mock data if the DB is empty
+const saveDb = (db: { [cpf: string]: User }) => {
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+};
+
+// Initialize with some mock data if DB is empty
 const initializeDb = () => {
-  if (!localStorage.getItem(USERS_DB_KEY)) {
-    const initialUser: User = {
-      fullName: 'Cliente Exemplo',
-      cpf: '111.111.111-11',
-      email: 'cliente@exemplo.com',
-      password: 'password123',
-      balance: 5000.00,
-      transactions: [
-        { id: '1', type: 'DEPOSIT', amount: 5000.00, date: new Date(new Date().setDate(new Date().getDate() - 10)).toISOString(), description: 'Depósito inicial' },
-        { id: '2', type: 'PIX_SENT', amount: -150.00, date: new Date(new Date().setDate(new Date().getDate() - 5)).toISOString(), description: 'Pagamento Lanchonete', to: 'lanche@exemplo.com' },
-        { id: '3', type: 'PIX_RECEIVED', amount: 300.00, date: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString(), description: 'Recebido de Amigo', from: 'amigo@exemplo.com' },
-      ],
-      loginAttempts: 0,
-      isBlocked: false,
-      pixDailyLimit: 2000,
-      passwordResetRequested: false,
-    };
-    localStorage.setItem(USERS_DB_KEY, JSON.stringify({ [initialUser.cpf]: initialUser }));
-  }
+    let db = getDb();
+    if (Object.keys(db).length === 0) {
+        db = {
+            '11122233344': {
+                fullName: 'Alice Silva',
+                cpf: '11122233344',
+                email: 'alice@example.com',
+                password: 'password123',
+                balance: 5000,
+                transactions: [],
+                loginAttempts: 0,
+                isBlocked: false,
+                pixDailyLimit: 2000,
+                passwordResetRequested: false,
+                pixContacts: [],
+            },
+            '55566677788': {
+                fullName: 'Beto Rocha',
+                cpf: '55566677788',
+                email: 'beto@example.com',
+                password: 'password456',
+                balance: 2500,
+                transactions: [],
+                loginAttempts: 0,
+                isBlocked: false,
+                pixDailyLimit: 2000,
+                passwordResetRequested: false,
+                pixContacts: [],
+            },
+        };
+        saveDb(db);
+    }
 };
 
 initializeDb();
 
-const getUsers = (): Record<string, User> => {
-  const users = localStorage.getItem(USERS_DB_KEY);
-  return users ? JSON.parse(users) : {};
-};
+// --- Auth ---
 
-const saveUsers = (users: Record<string, User>) => {
-  localStorage.setItem(USERS_DB_KEY, JSON.stringify(users));
-};
+export const signUp = async (userData: Omit<User, 'balance' | 'transactions' | 'loginAttempts' | 'isBlocked' | 'pixDailyLimit' | 'passwordResetRequested' | 'pixContacts'>): Promise<{ success: boolean; message: string; }> => {
+    await new Promise(res => setTimeout(res, 500));
+    const db = getDb();
+    if (db[userData.cpf]) {
+        return { success: false, message: 'CPF já cadastrado.' };
+    }
+    if (Object.values(db).some(u => u.email === userData.email)) {
+        return { success: false, message: 'E-mail já cadastrado.' };
+    }
 
-// SIMULAÇÃO: Função para obter o cabeçalho de autorização que seria enviado em cada requisição
-const getAuthHeader = () => {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (!token) return {};
-    return { 'Authorization': `Bearer ${token}` };
-};
-
-export const signUp = async (newUser: Omit<User, 'balance' | 'transactions' | 'loginAttempts' | 'isBlocked' | 'pixDailyLimit' | 'passwordResetRequested'>): Promise<{ success: boolean; message: string }> => {
-  return new Promise(resolve => {
-    // --- REAL BACKEND INTEGRATION ---
-    // 1. O frontend faria: `fetch('/api/signup', { method: 'POST', body: JSON.stringify(newUser) })`
-    // 2. O backend receberia os dados, validaria, faria HASH da senha e inseriria no Databricks.
-    //    SQL: `INSERT INTO fintech.clientes (cpf, fullName, email, password_hash, ...) VALUES (...)`
-    // ---------------------------------
-    setTimeout(() => {
-      const users = getUsers();
-      if (users[newUser.cpf] || Object.values(users).some(u => u.email === newUser.email)) {
-        resolve({ success: false, message: 'CPF ou E-mail já cadastrado.' });
-        return;
-      }
-      
-      const userToSave: User = {
-        ...newUser,
-        balance: 1000, // Initial bonus
-        transactions: [{ id: crypto.randomUUID(), type: 'DEPOSIT', amount: 1000, date: new Date().toISOString(), description: 'Bônus de boas-vindas' }],
+    const newUser: User = {
+        ...userData,
+        balance: 0,
+        transactions: [],
         loginAttempts: 0,
         isBlocked: false,
-        pixDailyLimit: 2000,
+        pixDailyLimit: 2000, // default limit
         passwordResetRequested: false,
-      };
+        pixContacts: [],
+    };
+    db[userData.cpf] = newUser;
+    saveDb(db);
 
-      users[newUser.cpf] = userToSave;
-      saveUsers(users);
-      resolve({ success: true, message: 'Conta criada com sucesso!' });
-    }, 1000);
-  });
-};
+    return { success: true, message: 'Conta criada com sucesso!' };
+}
 
-export const login = async (cpf: string, password_sent: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
-  return new Promise(resolve => {
-    // --- REAL BACKEND INTEGRATION ---
-    // 1. O frontend faria: `fetch('/api/login', { method: 'POST', body: JSON.stringify({ cpf, password_sent }) })`
-    // 2. O backend buscaria o usuário no Databricks, compararia a senha com `bcrypt.compare()`.
-    // 3. Se a senha for válida, o backend geraria um token JWT: `jwt.sign({ id: user.cpf }, JWT_SECRET)`
-    // 4. A resposta da API seria: `{ success: true, token: '...', user: {...} }`
-    // ---------------------------------
-    setTimeout(() => {
-      const users = getUsers();
-      let user = users[cpf];
-      
-      if (!user) {
-        resolve({ success: false, message: 'CPF ou senha inválidos.' });
-        return;
-      }
+export const login = async (cpf: string, password?: string): Promise<{ success: boolean; user?: Omit<User, 'password'>; message: string; }> => {
+    await new Promise(res => setTimeout(res, 500));
+    const db = getDb();
+    const user = db[cpf];
 
-      if (user.isBlocked) {
-        resolve({ success: false, message: 'Sua conta está bloqueada. Por favor, solicite uma nova senha.' });
-        return;
-      }
+    if (!user) {
+        return { success: false, message: 'CPF ou senha inválidos.' };
+    }
 
-      if (user.password === password_sent) {
-        user.loginAttempts = 0;
-        saveUsers(users);
-        const { password, ...userToReturn } = user;
-        // Simulação da criação e armazenamento do token JWT
-        const fakeJwtToken = `fake-jwt-token-for-${user.cpf}-${Date.now()}`;
-        localStorage.setItem(AUTH_TOKEN_KEY, fakeJwtToken);
-
-        resolve({ success: true, message: 'Login bem-sucedido!', user: userToReturn });
-      } else {
+    if (user.isBlocked) {
+        return { success: false, message: 'Sua conta está bloqueada. Por favor, solicite uma nova senha.' };
+    }
+    
+    if (user.password !== password) {
         user.loginAttempts += 1;
         if (user.loginAttempts >= 3) {
-          user.isBlocked = true;
+            user.isBlocked = true;
+            user.loginAttempts = 0;
+            saveDb(db);
+            return { success: false, message: 'Múltiplas tentativas de login falharam. Sua conta foi bloqueada por segurança.' };
         }
-        saveUsers(users);
-        const message = user.isBlocked 
-            ? 'Conta bloqueada por excesso de tentativas.' 
-            : `CPF ou senha inválidos. Tentativas restantes: ${3 - user.loginAttempts}`;
-        resolve({ success: false, message });
-      }
-    }, 1000);
-  });
-};
+        saveDb(db);
+        return { success: false, message: 'CPF ou senha inválidos.' };
+    }
+    
+    user.loginAttempts = 0;
+    saveDb(db);
 
-export const requestNewPassword = async (cpf: string): Promise<{ success: boolean; message: string }> => {
-    // REAL BACKEND: `fetch('/api/request-password-reset', { method: 'POST', body: JSON.stringify({ cpf }) })`
-    return new Promise(resolve => {
-        setTimeout(() => {
-            const users = getUsers();
-            const user = users[cpf];
-            if (user && user.isBlocked) {
-                user.passwordResetRequested = true;
-                saveUsers(users);
-                resolve({ success: true, message: 'Sua solicitação foi enviada. A equipe de administração entrará em contato.' });
-            } else if (user) {
-                resolve({ success: false, message: 'Sua conta não está bloqueada.' });
-            }
-            else {
-                resolve({ success: false, message: 'CPF não encontrado.' });
-            }
-        }, 1000);
-    });
-};
-
-
-export const getCurrentUser = (): User | null => {
-  // Em uma aplicação real, o frontend não armazena o usuário, apenas o token.
-  // A validação do token e a busca dos dados do usuário seriam feitas a cada recarregamento da página.
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
-  if (!token) return null;
-  
-  // Simulação: decodificando o token falso para obter o CPF
-  const cpf = token.split('-')[4];
-  const users = getUsers();
-  const user = users[cpf];
-  if(user){
-      const { password, ...userToReturn } = user;
-      return userToReturn;
-  }
-  return null;
+    const { password: _, ...userToReturn } = user;
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(userToReturn));
+    return { success: true, user: userToReturn, message: 'Login bem-sucedido!' };
 };
 
 export const logoutUser = () => {
-  localStorage.removeItem(AUTH_TOKEN_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
 };
+
+export const getCurrentUser = (): User | null => {
+    try {
+        const session = sessionStorage.getItem(SESSION_KEY);
+        return session ? JSON.parse(session) : null;
+    } catch (e) {
+        return null;
+    }
+};
+
+export const requestNewPassword = async (cpf: string): Promise<{ success: boolean; message: string; }> => {
+    await new Promise(res => setTimeout(res, 500));
+    const db = getDb();
+    const user = db[cpf];
+
+    if (!user) {
+        return { success: false, message: 'CPF não encontrado.' };
+    }
+
+    user.passwordResetRequested = true;
+    user.isBlocked = false; // Unblock on password request
+    user.loginAttempts = 0;
+    // In a real app, you'd send an email. Here we just simulate.
+    // Let's set a new temporary password.
+    user.password = 'newpassword123';
+    saveDb(db);
+
+    return { success: true, message: 'Uma nova senha foi enviada para o seu e-mail cadastrado.' };
+};
+
+// --- User Data ---
 
 export const getUserData = async (cpf: string): Promise<User | null> => {
-    // --- REAL BACKEND INTEGRATION ---
-    // O frontend faria: `fetch('/api/user/data', { headers: getAuthHeader() })`
-    // O backend validaria o token JWT e, se válido, buscaria os dados do usuário no Databricks.
-    // ---------------------------------
-    console.log("Simulando requisição de dados com cabeçalho:", getAuthHeader());
-    return new Promise(resolve => {
-        setTimeout(() => {
-            const users = getUsers();
-            const user = users[cpf];
-            if (user) {
-                const { password, ...userData } = user;
-                resolve(userData);
-            } else {
-                resolve(null);
-            }
-        }, 500);
-    });
+    await new Promise(res => setTimeout(res, 300));
+    const db = getDb();
+    const user = db[cpf];
+    if (user) {
+        const { password, ...userData } = user;
+        return userData;
+    }
+    return null;
 };
 
-const isToday = (someDate: Date) => {
-    const today = new Date();
-    return someDate.getDate() == today.getDate() &&
-        someDate.getMonth() == today.getMonth() &&
-        someDate.getFullYear() == today.getFullYear();
-}
+// --- Transactions ---
+
+const createTransaction = (
+    type: Transaction['type'], 
+    amount: number, 
+    description: string, 
+    from?: string, 
+    to?: string,
+    toKey?: string
+): Transaction => ({
+    id: `tx_${Date.now()}_${Math.random()}`,
+    type,
+    amount,
+    date: new Date().toISOString(),
+    description,
+    from,
+    to,
+    toKey,
+});
+
+export const performPix = async (fromCpf: string, toKey: string, amount: number, description: string): Promise<{ success: boolean; message: string; }> => {
+    await new Promise(res => setTimeout(res, 1000));
+    const db = getDb();
+    const fromUser = db[fromCpf];
+    
+    // Find receiver by CPF or email
+    const toUser = db[toKey] || Object.values(db).find(u => u.email === toKey);
+
+    if (!fromUser) {
+        return { success: false, message: 'Usuário remetente não encontrado.' };
+    }
+    if (!toUser) {
+        return { success: false, message: 'Chave PIX de destino não encontrada.' };
+    }
+    if (fromUser.cpf === toUser.cpf) {
+        return { success: false, message: 'Você não pode enviar PIX para si mesmo.' };
+    }
+    if (amount <= 0) {
+        return { success: false, message: 'Valor inválido.' };
+    }
+    if (fromUser.balance < amount) {
+        return { success: false, message: 'Saldo insuficiente.' };
+    }
+    
+    // Check global daily limit
+    const dailyUsage = await getPixDailyUsage(fromCpf);
+    if (dailyUsage + amount > fromUser.pixDailyLimit) {
+        return { success: false, message: 'Transferência excede o limite diário de PIX.' };
+    }
+
+    // Check contact-specific daily limit
+    const contact = fromUser.pixContacts?.find(c => c.key === toKey);
+    if (contact) {
+        const dailyUsageForContact = await getPixDailyUsageForContact(fromCpf, toKey);
+        if (dailyUsageForContact + amount > contact.dailyLimit) {
+            return { success: false, message: `Transferência excede o limite diário de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contact.dailyLimit)} para este contato.` };
+        }
+    }
+
+    // Perform transaction
+    fromUser.balance -= amount;
+    toUser.balance += amount;
+
+    const sentTransaction = createTransaction('PIX_SENT', -amount, description || `PIX para ${toUser.fullName}`, fromUser.fullName, toUser.fullName, toKey);
+    const receivedTransaction = createTransaction('PIX_RECEIVED', amount, description || `PIX de ${fromUser.fullName}`, fromUser.fullName, toUser.fullName);
+
+    fromUser.transactions.unshift(sentTransaction);
+    toUser.transactions.unshift(receivedTransaction);
+
+    saveDb(db);
+    return { success: true, message: 'PIX enviado com sucesso!' };
+};
 
 export const getPixDailyUsage = async (cpf: string): Promise<number> => {
-    // REAL BACKEND: `fetch('/api/pix/daily-usage', { headers: getAuthHeader() })`
-    return new Promise(resolve => {
-        const users = getUsers();
-        const user = users[cpf];
-        if (!user) {
-            resolve(0);
-            return;
-        }
-        const todayPixSent = user.transactions
-            .filter(t => t.type === 'PIX_SENT' && isToday(new Date(t.date)))
-            .reduce((acc, t) => acc + Math.abs(t.amount), 0);
-        
-        resolve(todayPixSent);
-    });
+    await new Promise(res => setTimeout(res, 100));
+    const db = getDb();
+    const user = db[cpf];
+    if (!user) return 0;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todaySentPix = user.transactions
+        .filter(t => t.type === 'PIX_SENT' && new Date(t.date) >= today)
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    return todaySentPix;
+};
+
+export const getPixDailyUsageForContact = async (cpf: string, contactKey: string): Promise<number> => {
+    await new Promise(res => setTimeout(res, 100));
+    const db = getDb();
+    const user = db[cpf];
+    if (!user) return 0;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todaySentPixToContact = user.transactions
+        .filter(t => t.type === 'PIX_SENT' && t.toKey === contactKey && new Date(t.date) >= today)
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    
+    return todaySentPixToContact;
+}
+
+// --- PIX Contacts ---
+
+export const getPixContacts = async (cpf: string): Promise<PixContact[]> => {
+    await new Promise(res => setTimeout(res, 200));
+    const db = getDb();
+    const user = db[cpf];
+    return user?.pixContacts || [];
+};
+
+export const addPixContact = async (cpf: string, contactData: PixContact): Promise<{ success: boolean; message: string; }> => {
+    await new Promise(res => setTimeout(res, 500));
+    const db = getDb();
+    const user = db[cpf];
+
+    if (!user) {
+        return { success: false, message: 'Usuário não encontrado.' };
+    }
+    if (contactData.dailyLimit < 0.01 || contactData.dailyLimit > 2000) {
+        return { success: false, message: 'O limite diário deve ser entre R$ 0,01 e R$ 2.000,00.' };
+    }
+    if (user.pixContacts.some(c => c.key === contactData.key)) {
+        return { success: false, message: 'Um contato com esta chave PIX já existe.' };
+    }
+
+    user.pixContacts.push(contactData);
+    saveDb(db);
+    return { success: true, message: 'Contato adicionado com sucesso!' };
+};
+
+export const updatePixContactLimit = async (cpf: string, contactKey: string, newLimit: number): Promise<{ success: boolean; message: string; }> => {
+    await new Promise(res => setTimeout(res, 500));
+    const db = getDb();
+    const user = db[cpf];
+
+    if (!user) {
+        return { success: false, message: 'Usuário não encontrado.' };
+    }
+    if (newLimit < 0.01 || newLimit > 2000) {
+        return { success: false, message: 'O limite diário deve ser entre R$ 0,01 e R$ 2.000,00.' };
+    }
+    
+    const contact = user.pixContacts.find(c => c.key === contactKey);
+    if (!contact) {
+        return { success: false, message: 'Contato não encontrado.' };
+    }
+
+    contact.dailyLimit = newLimit;
+    saveDb(db);
+    return { success: true, message: 'Limite do contato atualizado com sucesso!' };
+};
+
+export const deletePixContact = async (cpf: string, contactKey: string): Promise<{ success: boolean; message: string; }> => {
+    await new Promise(res => setTimeout(res, 500));
+    const db = getDb();
+    const user = db[cpf];
+    
+    if (!user) {
+        return { success: false, message: 'Usuário não encontrado.' };
+    }
+
+    const initialLength = user.pixContacts.length;
+    user.pixContacts = user.pixContacts.filter(c => c.key !== contactKey);
+
+    if (user.pixContacts.length === initialLength) {
+        return { success: false, message: 'Contato não encontrado para deletar.' };
+    }
+
+    saveDb(db);
+    return { success: true, message: 'Contato removido com sucesso!' };
 };
 
 
-export const performPix = async (fromCpf: string, toKey: string, amount: number, description: string): Promise<{ success: boolean; message: string; updatedUser?: User }> => {
-    // --- REAL BACKEND INTEGRATION ---
-    // `fetch('/api/pix/transfer', { method: 'POST', headers: getAuthHeader(), body: JSON.stringify({ toKey, amount, description }) })`
-    // O backend faria toda a lógica transacional segura no Databricks.
-    // ---------------------------------
-    return new Promise(async resolve => {
-        setTimeout(async() => {
-            const users = getUsers();
-            const fromUser = users[fromCpf];
+// --- Admin ---
+export const adminGetUserByCpf = async (cpf: string): Promise<{ success: boolean; user?: User; message: string; }> => {
+    await new Promise(res => setTimeout(res, 300));
+    const db = getDb();
+    const user = db[cpf];
 
-            if (!fromUser) {
-                resolve({ success: false, message: 'Usuário de origem não encontrado.' });
-                return;
-            }
-            if (fromUser.balance < amount) {
-                resolve({ success: false, message: 'Saldo insuficiente.' });
-                return;
-            }
-            
-            const dailyUsage = await getPixDailyUsage(fromCpf);
-            if (dailyUsage + amount > fromUser.pixDailyLimit) {
-                resolve({ success: false, message: `Limite diário de PIX excedido. Restante: R$ ${(fromUser.pixDailyLimit - dailyUsage).toFixed(2)}` });
-                return;
-            }
-
-            let toUser: User | undefined = Object.values(users).find(u => u.cpf === toKey || u.email === toKey);
-
-            if (toUser && toUser.isBlocked) {
-                resolve({ success: false, message: 'A conta de destino está bloqueada e não pode receber PIX.' });
-                return;
-            }
-
-            fromUser.balance -= amount;
-            const newTransaction: Transaction = {
-                id: crypto.randomUUID(),
-                type: 'PIX_SENT',
-                amount: -amount,
-                date: new Date().toISOString(),
-                description: description || `PIX para ${toKey}`,
-                to: toKey
-            };
-            fromUser.transactions.unshift(newTransaction);
-            
-            if (toUser) {
-                toUser.balance += amount;
-                const toTransaction: Transaction = {
-                    id: crypto.randomUUID(),
-                    type: 'PIX_RECEIVED',
-                    amount: amount,
-                    date: new Date().toISOString(),
-                    description: description || `PIX de ${fromUser.fullName}`,
-                    from: fromUser.fullName
-                };
-                toUser.transactions.unshift(toTransaction);
-            }
-            
-            saveUsers(users);
-            const { password, ...userToReturn } = fromUser;
-            resolve({ success: true, message: 'PIX enviado com sucesso!', updatedUser: userToReturn });
-        }, 1500);
-    });
+    if (!user) {
+        return { success: false, message: 'Usuário com este CPF não foi encontrado.' };
+    }
+    
+    const { password, ...userWithoutPassword } = user;
+    return { success: true, user: userWithoutPassword, message: 'Usuário encontrado.' };
 };
 
-// --- ADMIN FUNCTIONS ---
+export const adminDeposit = async (cpf: string, amount: number): Promise<{ success: boolean; user?: User; message: string; }> => {
+    await new Promise(res => setTimeout(res, 500));
+    const db = getDb();
+    const user = db[cpf];
 
-export const getAllUsers = async (): Promise<Omit<User, 'password'>[]> => {
-    // REAL BACKEND: `fetch('/api/admin/users', { headers: getAuthHeader() })`
-    return new Promise(resolve => {
-        setTimeout(() => {
-            const users = getUsers();
-            const usersList = Object.values(users).map(u => {
-                const { password, ...user } = u;
-                return user;
-            });
-            resolve(usersList);
-        }, 500);
-    });
+    if (!user) {
+        return { success: false, message: 'Usuário não encontrado.' };
+    }
+    if (amount <= 0) {
+        return { success: false, message: 'Valor de depósito inválido.' };
+    }
+    
+    user.balance += amount;
+    const transaction = createTransaction('ADMIN_DEPOSIT', amount, 'Depósito administrativo');
+    user.transactions.unshift(transaction);
+    
+    saveDb(db);
+
+    const { password, ...updatedUser } = user;
+    return { success: true, user: updatedUser, message: 'Depósito realizado com sucesso!' };
 };
 
-export const adminToggleBlockUser = async (cpf: string): Promise<{ success: boolean }> => {
-    // REAL BACKEND: `fetch(`/api/admin/users/${cpf}/toggle-block`, { method: 'POST', headers: getAuthHeader() })`
-    return new Promise(resolve => {
-        const users = getUsers();
-        if (users[cpf]) {
-            users[cpf].isBlocked = !users[cpf].isBlocked;
-            if(!users[cpf].isBlocked){ users[cpf].loginAttempts = 0; }
-            saveUsers(users);
-            resolve({ success: true });
-        } else {
-            resolve({ success: false });
-        }
-    });
+export const blockUser = async (cpf: string): Promise<{ success: boolean; user?: User; message: string; }> => {
+    await new Promise(res => setTimeout(res, 300));
+    const db = getDb();
+    const user = db[cpf];
+    if (!user) {
+        return { success: false, message: 'Usuário não encontrado.' };
+    }
+    user.isBlocked = true;
+    saveDb(db);
+    
+    const { password, ...updatedUser } = user;
+    return { success: true, user: updatedUser, message: `Usuário ${user.fullName} bloqueado.` };
 };
 
-export const adminUpdateBalance = async (cpf: string, amount: number): Promise<{ success: boolean }> => {
-    // REAL BACKEND: `fetch(`/api/admin/users/${cpf}/add-balance`, { method: 'POST', headers: getAuthHeader(), body: JSON.stringify({ amount }) })`
-    return new Promise(resolve => {
-        const users = getUsers();
-        if (users[cpf]) {
-            users[cpf].balance += amount;
-            const newTransaction: Transaction = {
-                id: crypto.randomUUID(),
-                type: 'ADMIN_DEPOSIT',
-                amount: amount,
-                date: new Date().toISOString(),
-                description: 'Depósito administrativo'
-            };
-            users[cpf].transactions.unshift(newTransaction);
-            saveUsers(users);
-            resolve({ success: true });
-        } else {
-            resolve({ success: false });
-        }
-    });
-};
+export const unblockUser = async (cpf: string): Promise<{ success: boolean; user?: User; message: string; }> => {
+    await new Promise(res => setTimeout(res, 300));
+    const db = getDb();
+    const user = db[cpf];
+    if (!user) {
+        return { success: false, message: 'Usuário não encontrado.' };
+    }
+    user.isBlocked = false;
+    user.loginAttempts = 0;
+    saveDb(db);
 
-export const adminResetPassword = async (cpf: string): Promise<{ success: boolean; newPassword?: string }> => {
-    // REAL BACKEND: `fetch(`/api/admin/users/${cpf}/reset-password`, { method: 'POST', headers: getAuthHeader() })`
-    return new Promise(resolve => {
-        const users = getUsers();
-        if (users[cpf]) {
-            const newPassword = `nova${Math.floor(1000 + Math.random() * 9000)}`;
-            users[cpf].password = newPassword;
-            users[cpf].isBlocked = false;
-            users[cpf].loginAttempts = 0;
-            users[cpf].passwordResetRequested = false;
-            saveUsers(users);
-            resolve({ success: true, newPassword });
-        } else {
-            resolve({ success: false });
-        }
-    });
+    const { password, ...updatedUser } = user;
+    return { success: true, user: updatedUser, message: `Usuário ${user.fullName} desbloqueado.` };
 };

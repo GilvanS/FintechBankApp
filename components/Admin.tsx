@@ -1,127 +1,157 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { User } from '../types';
-import { getAllUsers, adminToggleBlockUser, adminUpdateBalance, adminResetPassword } from '../services/mockApi';
+import { adminGetUserByCpf, adminDeposit, blockUser, unblockUser } from '../services/mockApi';
 
 interface AdminProps {
     onNavigateToLogin: () => void;
 }
 
 const Admin: React.FC<AdminProps> = ({ onNavigateToLogin }) => {
-    const [users, setUsers] = useState<Omit<User, 'password'>[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [actionMessage, setActionMessage] = useState('');
+    const [searchCpf, setSearchCpf] = useState('');
+    const [searchedUser, setSearchedUser] = useState<User | null>(null);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchMessage, setSearchMessage] = useState('');
+    
+    const [error, setError] = useState('');
+    const [userForDepositModal, setUserForDepositModal] = useState<User | null>(null);
+    const [depositAmount, setDepositAmount] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
 
-    const fetchUsers = async () => {
-        setIsLoading(true);
-        const allUsers = await getAllUsers();
-        setUsers(allUsers);
-        setIsLoading(false);
-    };
-
-    useEffect(() => {
-        fetchUsers();
-    }, []);
-
-    const handleToggleBlock = async (cpf: string) => {
-        await adminToggleBlockUser(cpf);
-        setActionMessage(`Status do usuário ${cpf} alterado.`);
-        fetchUsers();
-        setTimeout(() => setActionMessage(''), 3000);
-    };
-
-    const handleAddBalance = async (cpf: string) => {
-        const amountStr = prompt('Digite o valor a ser adicionado:');
-        if (amountStr) {
-            const amount = parseFloat(amountStr);
-            if (!isNaN(amount) && amount > 0) {
-                await adminUpdateBalance(cpf, amount);
-                setActionMessage(`R$ ${amount.toFixed(2)} adicionados ao usuário ${cpf}.`);
-                fetchUsers();
-                setTimeout(() => setActionMessage(''), 3000);
-            } else {
-                alert('Valor inválido.');
-            }
+    const handleSearch = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!searchCpf) return;
+        
+        setIsSearching(true);
+        setSearchedUser(null);
+        setSearchMessage('');
+        setError('');
+        setSuccessMessage('');
+        
+        const result = await adminGetUserByCpf(searchCpf);
+        
+        if (result.success && result.user) {
+            setSearchedUser(result.user);
+        } else {
+            setSearchMessage(result.message);
         }
+        setIsSearching(false);
     };
 
-    const handleResetPassword = async (cpf: string) => {
-        if (confirm(`Tem certeza que deseja resetar a senha para o usuário ${cpf}?`)) {
-            const result = await adminResetPassword(cpf);
-            if (result.success && result.newPassword) {
-                alert(`Senha resetada com sucesso!\n\nNova Senha para ${cpf}: ${result.newPassword}\n\n(Em um app real, isso seria enviado por e-mail/SMS)`);
-                fetchUsers();
-            } else {
-                alert('Falha ao resetar a senha.');
-            }
+    const handleAction = async (action: 'block' | 'unblock', cpf: string) => {
+        setSuccessMessage('');
+        setError('');
+        const result = action === 'block' ? await blockUser(cpf) : await unblockUser(cpf);
+        if (result.success && result.user) {
+            setSuccessMessage(result.message);
+            setSearchedUser(result.user);
+        } else {
+            setError(result.message);
         }
     };
     
-    const passwordRequests = users.filter(u => u.passwordResetRequested);
-    const otherUsers = users.filter(u => !u.passwordResetRequested);
+    const handleDeposit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!userForDepositModal || !depositAmount) return;
+        setSuccessMessage('');
+        setError('');
+        const amount = parseFloat(depositAmount);
+        if (isNaN(amount) || amount <= 0) {
+            setError('Valor de depósito inválido.');
+            return;
+        }
+        
+        const result = await adminDeposit(userForDepositModal.cpf, amount);
+        if (result.success && result.user) {
+            setSuccessMessage(result.message);
+            setSearchedUser(result.user);
+            setUserForDepositModal(null);
+            setDepositAmount('');
+        } else {
+            setError(result.message);
+        }
+    };
 
     return (
-        <div className="w-full max-w-md p-6 bg-white rounded-2xl shadow-lg dark:bg-gray-800 text-gray-900 dark:text-gray-100">
-            <div className="flex justify-between items-center mb-6">
-                 <h1 className="text-2xl font-bold">Painel Admin</h1>
-                 <button onClick={onNavigateToLogin} className="text-sm text-blue-500 hover:underline">Sair</button>
-            </div>
+        <div className="min-h-screen py-8">
+            <div className="w-full max-w-2xl p-8 space-y-6 bg-white rounded-2xl shadow-lg dark:bg-gray-800 mx-auto">
+                <div className="flex justify-between items-center">
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Painel do Administrador</h1>
+                    <button onClick={onNavigateToLogin} className="text-sm text-blue-500 hover:underline">Voltar</button>
+                </div>
+                
+                {error && <p className="text-red-500 bg-red-100 dark:bg-red-900/50 p-3 rounded-md">{error}</p>}
+                {successMessage && <p className="text-green-500 bg-green-100 dark:bg-green-900/50 p-3 rounded-md">{successMessage}</p>}
 
-            {isLoading ? (
-                <p>Carregando usuários...</p>
-            ) : (
-                <>
-                    {actionMessage && <p className="mb-4 p-2 text-center bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-200 rounded-md">{actionMessage}</p>}
-                    
-                    {/* Password Requests */}
-                    {passwordRequests.length > 0 && (
-                        <div className="mb-8">
-                            <h2 className="text-xl font-semibold mb-2 text-red-500">Solicitações de Senha</h2>
-                            <ul className="divide-y dark:divide-gray-700">
-                                {passwordRequests.map(user => (
-                                     <li key={user.cpf} className="py-3 flex justify-between items-center">
-                                        <div>
-                                            <p className="font-semibold">{user.fullName}</p>
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">{user.cpf}</p>
-                                        </div>
-                                        <button onClick={() => handleResetPassword(user.cpf)} className="px-3 py-1 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">
-                                            Enviar Nova Senha
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
+                <div className="border-b dark:border-gray-700 pb-6">
+                    <h2 className="text-xl font-semibold mb-4">Gerenciar Cliente</h2>
+                    <form onSubmit={handleSearch} className="flex items-center space-x-2">
+                        <input
+                            type="text"
+                            value={searchCpf}
+                            onChange={(e) => setSearchCpf(e.target.value)}
+                            placeholder="Digite o CPF do cliente"
+                            className="flex-grow px-3 py-2 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                        />
+                        <button type="submit" disabled={isSearching} className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-400">
+                            {isSearching ? 'Buscando...' : 'Buscar'}
+                        </button>
+                    </form>
+                </div>
+
+                {searchMessage && <p className="text-center text-gray-500 dark:text-gray-400 py-4">{searchMessage}</p>}
+
+                {searchedUser && (
+                    <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-lg space-y-4">
+                        <h3 className="text-lg font-bold">{searchedUser.fullName}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div><span className="font-semibold">CPF:</span> {searchedUser.cpf}</div>
+                            <div><span className="font-semibold">Email:</span> {searchedUser.email}</div>
+                            <div>
+                                <span className="font-semibold">Saldo:</span>{' '}
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(searchedUser.balance)}
+                            </div>
+                            <div>
+                                <span className="font-semibold">Status:</span>{' '}
+                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${searchedUser.isBlocked ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200' : 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'}`}>
+                                    {searchedUser.isBlocked ? 'Bloqueado' : 'Ativo'}
+                                </span>
+                            </div>
                         </div>
-                    )}
-
-
-                    {/* All Users List */}
-                    <h2 className="text-xl font-semibold mb-2">Todos os Clientes</h2>
-                    <div className="max-h-96 overflow-y-auto">
-                        <ul className="divide-y dark:divide-gray-700">
-                            {otherUsers.map(user => (
-                                <li key={user.cpf} className="py-3">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="font-semibold">{user.fullName}</p>
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">{user.cpf}</p>
-                                             <p className="text-sm font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(user.balance)}</p>
-                                        </div>
-                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${user.isBlocked ? 'bg-red-200 text-red-800 dark:bg-red-900/50 dark:text-red-300' : 'bg-green-200 text-green-800 dark:bg-green-900/50 dark:text-green-300'}`}>
-                                            {user.isBlocked ? 'Bloqueado' : 'Ativo'}
-                                        </span>
-                                    </div>
-                                    <div className="flex space-x-2 mt-2">
-                                        <button onClick={() => handleToggleBlock(user.cpf)} className={`w-full px-2 py-1 text-sm rounded-md ${user.isBlocked ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'} text-white`}>
-                                            {user.isBlocked ? 'Desbloquear' : 'Bloquear'}
-                                        </button>
-                                         <button onClick={() => handleAddBalance(user.cpf)} className="w-full px-2 py-1 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-md">
-                                            Adicionar Saldo
-                                        </button>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
+                        <div className="flex justify-end space-x-2 pt-4 border-t dark:border-gray-700">
+                             <button onClick={() => setUserForDepositModal(searchedUser)} className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Depositar</button>
+                            {searchedUser.isBlocked ? (
+                                <button onClick={() => handleAction('unblock', searchedUser.cpf)} className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-md hover:bg-green-700">Desbloquear</button>
+                            ) : (
+                                <button onClick={() => handleAction('block', searchedUser.cpf)} className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-md hover:bg-red-700">Bloquear</button>
+                            )}
+                        </div>
                     </div>
-                </>
+                )}
+            </div>
+            
+            {userForDepositModal && (
+                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                    <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
+                        <h2 className="text-2xl font-bold mb-4">Depositar para {userForDepositModal.fullName}</h2>
+                        <form onSubmit={handleDeposit}>
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Valor do Depósito (R$)</label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                value={depositAmount}
+                                onChange={(e) => setDepositAmount(e.target.value)}
+                                placeholder="0,00"
+                                required
+                                autoFocus
+                                className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                            />
+                             <div className="flex justify-end space-x-4 mt-6">
+                                <button type="button" onClick={() => setUserForDepositModal(null)} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">Cancelar</button>
+                                <button type="submit" className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700">Confirmar Depósito</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../App';
 import { User } from '../types';
@@ -7,8 +8,9 @@ import Header from './Header';
 import Balance from './Balance';
 import Pix from './Pix';
 import Statement from './Statement';
+import Contacts from './Contacts';
 
-type DashboardView = 'home' | 'pix' | 'statement';
+type DashboardView = 'home' | 'pix' | 'statement' | 'contacts';
 
 const Dashboard: React.FC = () => {
     const { user, logout } = useAuth();
@@ -45,6 +47,8 @@ const Dashboard: React.FC = () => {
                 return <Pix currentUser={userData} onTransactionSuccess={handleTransactionSuccess} onBack={() => setCurrentView('home')} />;
             case 'statement':
                 return <Statement transactions={userData.transactions} />;
+            case 'contacts':
+                return <Contacts currentUser={userData} onContactsUpdate={fetchUserData} />;
             case 'home':
             default:
                 return (
@@ -77,6 +81,10 @@ const Dashboard: React.FC = () => {
                     <button onClick={() => setCurrentView('statement')} className={`flex flex-col items-center justify-center w-full text-sm transition-colors ${currentView === 'statement' ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
                          <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                         Extrato
+                    </button>
+                    <button onClick={() => setCurrentView('contacts')} className={`flex flex-col items-center justify-center w-full text-sm transition-colors ${currentView === 'contacts' ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                        <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197m0 0A5.965 5.965 0 0112 13a5.965 5.965 0 013-1.197"></path></svg>
+                        Contatos
                     </button>
                 </nav>
             </footer>

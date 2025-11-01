@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
-import { User } from '../types';
-import { performPix, getPixDailyUsage } from '../services/mockApi';
+import { User, PixContact } from '../types';
+import { performPix, getPixDailyUsage, getPixContacts } from '../services/mockApi';
 
 interface PixProps {
     currentUser: User;
@@ -16,13 +17,16 @@ const Pix: React.FC<PixProps> = ({ currentUser, onTransactionSuccess, onBack }) 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [dailyUsage, setDailyUsage] = useState<number | null>(null);
+    const [contacts, setContacts] = useState<PixContact[]>([]);
 
     useEffect(() => {
-        const fetchUsage = async () => {
+        const fetchData = async () => {
             const usage = await getPixDailyUsage(currentUser.cpf);
             setDailyUsage(usage);
+            const userContacts = await getPixContacts(currentUser.cpf);
+            setContacts(userContacts);
         };
-        fetchUsage();
+        fetchData();
     }, [currentUser.cpf]);
     
     const handleNext = (e: React.FormEvent) => {
@@ -57,6 +61,10 @@ const Pix: React.FC<PixProps> = ({ currentUser, onTransactionSuccess, onBack }) 
             setStep(1);
         }
     };
+
+    const handleSelectContact = (contact: PixContact) => {
+        setPixKey(contact.key);
+    };
     
     const remainingLimit = dailyUsage !== null ? currentUser.pixDailyLimit - dailyUsage : null;
 
@@ -70,6 +78,19 @@ const Pix: React.FC<PixProps> = ({ currentUser, onTransactionSuccess, onBack }) 
             </div>
             
             {step === 1 && (
+                <>
+                {contacts.length > 0 && (
+                    <div className="mb-6">
+                         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Selecionar um contato salvo</h3>
+                         <div className="flex space-x-2 overflow-x-auto pb-2">
+                            {contacts.map(contact => (
+                                <button key={contact.key} onClick={() => handleSelectContact(contact)} className="px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap transition-colors bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-200 dark:hover:bg-blue-900">
+                                    {contact.name}
+                                </button>
+                            ))}
+                         </div>
+                    </div>
+                )}
                 <form onSubmit={handleNext} className="space-y-6">
                     {remainingLimit !== null && (
                          <div className="p-3 bg-blue-50 dark:bg-blue-900/50 rounded-lg text-center">
@@ -80,7 +101,7 @@ const Pix: React.FC<PixProps> = ({ currentUser, onTransactionSuccess, onBack }) 
                     )}
                     <div>
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Chave PIX (CPF, E-mail)</label>
-                        <input type="text" value={pixKey} onChange={(e) => setPixKey(e.target.value)} required placeholder="Digite a chave" className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600" />
+                        <input type="text" value={pixKey} onChange={(e) => setPixKey(e.target.value)} required placeholder="Digite a chave ou selecione um contato" className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600" />
                     </div>
                      <div>
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Valor (R$)</label>
@@ -95,6 +116,7 @@ const Pix: React.FC<PixProps> = ({ currentUser, onTransactionSuccess, onBack }) 
                         {dailyUsage === null ? 'Carregando...' : 'Continuar'}
                     </button>
                 </form>
+                </>
             )}
 
             {step === 2 && (
