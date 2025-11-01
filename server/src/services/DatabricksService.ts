@@ -2,6 +2,7 @@ import { DBSQLClient } from "@databricks/sql";
 import { LoggerService } from "./LoggerService";
 import { DatabricksConfig } from "../database/data-source";
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcryptjs';
 
 export class DatabricksService {
     private client: DBSQLClient | null = null;
@@ -306,6 +307,38 @@ export class DatabricksService {
         `;
         const result = await this.executeQuery(query);
         return result.length > 0 ? result[0] : null;
+    }
+
+    async ensureDefaultUser(): Promise<void> {
+        const DEFAULT_CPF = '00000000000';
+        const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'senhaforte';
+        const DEFAULT_FULL_NAME = process.env.DEFAULT_USER_FULL_NAME || 'Usuario Padrao';
+        const DEFAULT_EMAIL = process.env.DEFAULT_USER_EMAIL || 'usuario@fintechbank.local';
+        const DEFAULT_BALANCE = Number(process.env.DEFAULT_USER_BALANCE) || 1000.00;
+        const DEFAULT_PIX_DAILY_LIMIT = Number(process.env.DEFAULT_USER_PIX_DAILY_LIMIT) || 1000.00;
+
+        try {
+            const existing = await this.findUserByCpf(DEFAULT_CPF);
+            if (existing) {
+                LoggerService.info(`Usuario padrao ja existe: ${DEFAULT_CPF}`);
+                return;
+            }
+
+            const password_hash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+
+            await this.createUser({
+                cpf: DEFAULT_CPF,
+                full_name: DEFAULT_FULL_NAME,
+                email: DEFAULT_EMAIL,
+                password_hash,
+                balance: DEFAULT_BALANCE,
+                pix_daily_limit: DEFAULT_PIX_DAILY_LIMIT
+            });
+
+            LoggerService.info(`Usuario padrao criado: ${DEFAULT_CPF}`);
+        } catch (error) {
+            LoggerService.error('Erro ao garantir usuario padrao:', error);
+        }
     }
 }
 
