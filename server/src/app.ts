@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import 'reflect-metadata';
+import path from 'path';
 
 // Importações dos serviços e entidades
 import { databricksService } from './services/DatabricksService';
@@ -14,7 +15,7 @@ import { User, CreateUserRequest, LoginRequest } from './entities/User';
 import { Transaction, PixTransactionRequest } from './entities/Transaction';
 import { PixContact } from './entities/PixContact';
 
-dotenv.config({ path: '../../.env' });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -543,33 +544,35 @@ app.post('/api/pix', authenticateToken, async (req, res) => {
   }
 });
 
-// Inicialização do servidor
+// Inicializacao do servidor
 const startServer = async () => {
-  try {
-    LoggerService.info('Iniciando servidor...');
-    
-    // Iniciar servidor primeiro para garantir /api-docs acessível
-    app.listen(PORT, () => {
-      LoggerService.info(`Servidor rodando na porta ${PORT}`);
-      LoggerService.info(`Documentação da API: http://localhost:${PORT}/api-docs`);
-    });
+  LoggerService.info('Iniciando servidor...');
+  const server = app.listen(PORT, () => {
+    LoggerService.info(`Servidor rodando na porta ${PORT}`);
+    LoggerService.info(`Documentacao da API: http://localhost:${PORT}/api-docs`);
+  });
 
-    // Conectar ao Databricks em segundo plano
-    try {
-      await databricksService.connect();
-      LoggerService.info('Conectado ao Databricks');
-
-      await databricksService.createTables();
-      LoggerService.info('Tabelas verificadas/criadas');
-
-      await databricksService.ensureDefaultUser();
-      LoggerService.info('Usuario padrao verificado/criado');
-    } catch (dbError) {
-      LoggerService.error('Aviso: Falha ao conectar/criar tabelas no Databricks. API continua acessível.', dbError);
+  server.on('error', (err: any) => {
+    if (err && err.code === 'EADDRINUSE') {
+      LoggerService.error(`Porta ${PORT} em uso. Altere PORT no .env ou libere a porta.`, err);
+      process.exit(1);
+    } else {
+      LoggerService.error('Erro ao iniciar servidor:', err);
+      process.exit(1);
     }
-    
-  } catch (error) {
-    LoggerService.error('Erro ao iniciar servidor:', error);
+  });
+
+  // Tentativa de conexao com Databricks (nao bloqueia o servidor)
+  try {
+    await databricksService.connect();
+    await databricksService.createTables();
+    await databricksService.ensureDefaultUser();
+
+    LoggerService.info('Conectado ao Databricks');
+    LoggerService.info('Tabelas verificadas/criadas');
+    LoggerService.info('Usuario padrao verificado/criado');
+  } catch (dbError) {
+    LoggerService.error('Aviso: Falha ao se comunicar com Databricks. API continua acessivel.', dbError);
   }
 };
 

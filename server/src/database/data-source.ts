@@ -1,7 +1,8 @@
 import * as dotenv from "dotenv";
+import path from "path";
 
 // Carrega as variáveis de ambiente
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 // Log das variáveis de ambiente para debug
 console.log("Variáveis de ambiente carregadas:", {
