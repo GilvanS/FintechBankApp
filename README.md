@@ -1,20 +1,35 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# FintechBankApp — Frontend React (Vite) integrado a API
 
-# Run and deploy your AI Studio app
+Este projeto é um app bancário com frontend em React (Vite). Após as correções, o frontend deixou de usar dados mockados e passou a consumir endpoints reais de API para cadastro, login, carregamento de dados do usuário e transações PIX.
 
-This contains everything you need to run your app locally.
+## Visao Geral
 
-View your app in AI Studio: https://ai.studio/apps/drive/1M-CzLBnJ9kHwfMc-qlIaCwfaRxUnlHnf
+- Frontend: React + Vite (SPA).
+- Servicos: `services/mockApi.ts` ajustado para usar chamadas HTTP reais (via `axios`) e deixar de usar `localStorage` ou mocks locais.
+- Fluxos principais suportados:
+  - Cadastro de usuario (`/api/signup`)
+  - Login (`/api/login`)
+  - Carregar dados do usuario por CPF (`/api/user/:cpf`)
+  - Executar PIX (`/api/pix`)
+- Fluxos ainda indisponiveis (aguardando endpoints no backend):
+  - Limite diario PIX (atualizacao)
+  - Gerenciamento de contatos PIX (adicionar/remover)
+  - Deposito/admin e bloqueio/desbloqueio de usuario
+  - Esses fluxos exibem mensagens de "endpoint indisponivel" no frontend.
 
-## Run Locally
+## Requisitos
 
-**Prerequisites:**  Node.js
+- Node.js LTS instalado
+- Backend acessivel com os endpoints acima (local ou remoto)
+- Opcional: configurar a base URL da API caso nao esteja no mesmo host/porta do frontend
 
+## Configuracao
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- Caso sua API nao esteja em `http://localhost:3000`, ajuste a base de URL utilizada pelo `axios` no arquivo `services/mockApi.ts`.
+- Se voce utiliza variavel de ambiente para base URL (ex: `VITE_API_BASE_URL`), defina-a em `.env` na raiz do projeto.
+
+## Executar o Frontend (Windows)
+
+1. Instalar dependencias:
+   ```bash
+   npm install```
