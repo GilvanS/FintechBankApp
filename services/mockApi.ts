@@ -61,10 +61,9 @@ export const login = async (
   cpf: string,
   password?: string
 ): Promise<{ success: boolean; user?: Omit<User, 'password'>; message: string }> => {
-  // Para login, vamos usar email temporariamente até ajustar o frontend
-  // Por enquanto, assumimos que o CPF é usado como email para compatibilidade
+  // Login usando CPF e senha diretamente
   const payload = {
-    email: `${cpf}@temp.com`, // Temporário - ajustar depois
+    cpf: cpf,
     senha: password ?? '12345678',
   };
   try {
@@ -74,9 +73,9 @@ export const login = async (
       sessionStorage.setItem(TOKEN_KEY, res.data.token);
       const user = res.data.user;
       if (user) {
-        // Mapear campos do Databricks para o formato do frontend
+        // Mapear campos retornados pelo backend (padronizado com nomeCompleto)
         const mappedUser = {
-          fullName: user.nomeCompleto,
+          fullName: user.nomeCompleto ?? user.nome ?? '', // fallback seguro
           cpf: user.cpf,
           email: user.email,
           balance: user.saldo || 0,
