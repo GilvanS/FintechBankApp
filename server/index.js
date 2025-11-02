@@ -1,41 +1,16 @@
 // Servidor da FintechBankApp integrado com Databricks
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const swaggerUi = require('swagger-ui-express');
-const YAML = require('yamljs');
-const path = require('path');
-const { body, validationResult } = require('express-validator');
-require('dotenv').config();
 const { DBSQLClient } = require('@databricks/sql');
-require('dotenv').config();
-const crypto = require('crypto');
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// Configuração do Swagger
-const swaggerDocument = YAML.load(path.resolve(__dirname, 'swagger.yaml'));
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
-
-const PORT = process.env.PORT || 3001;
-
-// Configuração do Databricks
-const databricksConfig = {
-  serverHostname: process.env.DATABRICKS_SERVER_HOSTNAME,
-  httpPath: process.env.DATABRICKS_HTTP_PATH,
-  token: process.env.DATABRICKS_TOKEN,
-  catalog: process.env.DATABRICKS_CATALOG || 'workspace', // Corrigido
-  schema: process.env.DATABRICKS_SCHEMA || 'fintechbank' // Corrigido
-};
 
 // Classe para gerenciar conexão com Databricks
 class DatabricksService {
   constructor() {
     this.client = null;
     this.session = null;
+    this.catalog = process.env.DATABRICKS_CATALOG || 'workspace';
+    this.schema = process.env.DATABRICKS_SCHEMA || 'fintechbank';
   }
 
   generateUUID() {
@@ -120,138 +95,254 @@ class DatabricksService {
     }
   }
 
+  // Helper para sempre qualificar nomes de tabela com catalog.schema.table
+  fq(tableName) {
+      return `\`${this.catalog}\`.\`${this.schema}\`.\`${tableName}\``;
+  }
+  
+  async ensureCatalogAndSchema() {
+      await this.executeQuery(`CREATE CATALOG IF NOT EXISTS \`${this.catalog}\``);
+      await this.executeQuery(`CREATE SCHEMA IF NOT EXISTS \`${this.catalog}\`.\`${this.schema}\``);
+  }
+  
   async createTables() {
-    console.log("Validando catalog e schema no Databricks...");
+      await this.ensureCatalogAndSchema();
+  
+      // USERS
+      await this.executeQuery(`DROP TABLE IF EXISTS ${this.fq('users')}`);
+      await this.executeQuery(`
+          CREATE TABLE ${this.fq('users')} (
+              id STRING NOT NULL,
+              cpf STRING NOT NULL,
+              email STRING,
+              nome STRING,
+              senha STRING,
+              saldo DECIMAL(18,2),
+              role STRING,
+              status STRING,
+              pix_daily_limit DECIMAL(18,2),
+              pix_monthly_limit DECIMAL(18,2),
+              created_at TIMESTAMP,
+              updated_at TIMESTAMP
+          )
+      `);
+  
+      // TRANSACTIONS
+      await this.executeQuery(`DROP TABLE IF EXISTS ${this.fq('transactions')}`);
+      await this.executeQuery(`
+          CREATE TABLE ${this.fq('transactions')} (
+              id STRING NOT NULL,
+              cpf STRING NOT NULL,
+              tipo STRING,
+              valor DECIMAL(18,2),
+              descricao STRING,
+              created_at TIMESTAMP
+          )
+      `);
+  
+      // PIX
+      await this.executeQuery(`DROP TABLE IF EXISTS ${this.fq('pix')}`);
+      await this.executeQuery(`
+          CREATE TABLE ${this.fq('pix')} (
+              id STRING NOT NULL,
+              cpf STRING NOT NULL,
+              chave STRING NOT NULL,
+              tipo STRING,
+              created_at TIMESTAMP
+          )
+      `);
+  }
 
-    // Ajuste crítico: executar cada comando separadamente para evitar PARSE_SYNTAX_ERROR
-    await this.executeQuery(`USE CATALOG ${databricksConfig.catalog}`);
-    await this.executeQuery(`CREATE SCHEMA IF NOT EXISTS ${databricksConfig.schema}`);
-    await this.executeQuery(`USE SCHEMA ${databricksConfig.schema}`);
+  async migrateAdminColumns() {
+    // Placeholder for admin column migration
+    console.log("Admin columns migration completed");
+  }
 
-    // Correção crítica: Remover tabela users existente se tiver estrutura incorreta
+  async ensureAdminUser() {
     try {
-      await this.executeQuery(`DROP TABLE IF EXISTS users`);
-      console.log("Tabela users removida para recriacao com estrutura correta");
+      console.log("Validando usuario admin...");
+      
+      const adminEmail = 'admin@fintechbank.com';
+      const adminCpf = '00000000000';
+      
+      // Verifica se admin já existe
+      const existingAdmin = await this.findUserByEmail(adminEmail);
+      
+      if (!existingAdmin) {
+        console.log("Criando usuario admin padrao...");
+        
+        const adminPassword = 'Admin@123';
+        const hashedPassword = await hashPassword(adminPassword);
+        
+        await this.createUser({
+          cpf: adminCpf,
+          full_name: 'Administrador do Sistema',
+          email: adminEmail,
+          password_hash: hashedPassword,
+          balance: 50000, // Saldo inicial elevado para admin
+          role: 'admin',
+          status: 'active',
+          pix_daily_limit: 100000.00,  // Limite diario elevado
+          pix_monthly_limit: 1000000.00 // Limite mensal elevado
+        });
+        
+        console.log("Usuario admin criado com sucesso!");
+        console.log(`Email: ${adminEmail}`);
+        console.log(`CPF: ${adminCpf}`);
+        console.log(`Senha: ${adminPassword}`);
+      } else {
+        console.log("Usuario admin ja existe no sistema");
+      }
+      
     } catch (error) {
-      console.log("Tabela users nao existia ou erro ao remover:", error.message);
+      console.error("Erro ao validar/criar usuario admin:", error);
+      throw error;
     }
+  }
 
-    // 1) users: com coluna id obrigatoria
-    await this.executeQuery(`
-        CREATE TABLE users (
-            id STRING NOT NULL,
-            full_name STRING NOT NULL,
-            email STRING NOT NULL,
-            cpf STRING NOT NULL,
-            password_hash STRING NOT NULL,
-            created_at TIMESTAMP,
-            PRIMARY KEY (id)
-        )
-        USING DELTA
-    `);
+  async findUserByEmail(email) {
+    const sql = `SELECT * FROM ${this.fq('users')} WHERE email = '${email}'`;
+    const rows = await this.executeQuery(sql);
+    return rows.length > 0 ? rows[0] : null;
+  }
 
-    // Remover e recriar tabelas relacionadas para consistencia
-    try {
-      await this.executeQuery(`DROP TABLE IF EXISTS transactions`);
-      await this.executeQuery(`DROP TABLE IF EXISTS pix`);
-      console.log("Tabelas transactions e pix removidas para recriacao");
-    } catch (error) {
-      console.log("Erro ao remover tabelas relacionadas:", error.message);
-    }
+  async findUserByCpf(cpf) {
+    const sql = `SELECT * FROM ${this.fq('users')} WHERE cpf = '${cpf}'`;
+    const rows = await this.executeQuery(sql);
+    
+    if (rows.length === 0) return null;
+    
+    const rawUser = rows[0];
+    console.log('Raw user data from Databricks:', JSON.stringify(rawUser, null, 2));
+    
+    // Normalizar campos (Databricks pode retornar em maiúsculo)
+    const normalizeField = (obj, field) => {
+      return obj[field] || obj[field.toUpperCase()] || obj[field.toLowerCase()] || null;
+    };
+    
+    const user = {
+      id: normalizeField(rawUser, 'id'),
+      cpf: normalizeField(rawUser, 'cpf'),
+      email: normalizeField(rawUser, 'email'),
+      nome: normalizeField(rawUser, 'nome'),
+      senha: normalizeField(rawUser, 'senha'),
+      saldo: normalizeField(rawUser, 'saldo'),
+      role: normalizeField(rawUser, 'role'),
+      status: normalizeField(rawUser, 'status'),
+      pix_daily_limit: normalizeField(rawUser, 'pix_daily_limit'),
+      pix_monthly_limit: normalizeField(rawUser, 'pix_monthly_limit')
+    };
+    
+    console.log('Normalized user data:', JSON.stringify(user, null, 2));
+    return user;
+  }
 
-    // 2) transactions: cobre movimentos gerais (incluindo PIX)
-    await this.executeQuery(`
-        CREATE TABLE transactions (
-            id STRING NOT NULL,
-            user_id STRING NOT NULL,
-            type STRING NOT NULL,             -- ex: 'PIX', 'BANK'
-            direction STRING,                 -- ex: 'IN', 'OUT'
-            amount DECIMAL(18,2) NOT NULL,
-            description STRING,
-            counterparty_cpf STRING,
-            created_at TIMESTAMP,
-            PRIMARY KEY (id)
-        )
-        USING DELTA
-    `);
+  async findPixByCpf(cpf) {
+    const sql = `SELECT * FROM ${this.fq('pix')} WHERE cpf = '${cpf}'`;
+    const rows = await this.executeQuery(sql);
+    return rows.length > 0 ? rows[0] : null;
+  }
 
-    // 3) pix: consolidado (chave, saldo e contato) em uma unica tabela
-    await this.executeQuery(`
-        CREATE TABLE pix (
-            id STRING NOT NULL,
-            user_id STRING NOT NULL,
-            cpf STRING NOT NULL,
-            pix_key_type STRING,              -- ex: 'CPF', 'EMAIL', 'PHONE', 'EVP'
-            pix_key_value STRING,
-            current_balance DECIMAL(18,2) NOT NULL,
-            incoming_balance DECIMAL(18,2) NOT NULL,
-            outgoing_balance DECIMAL(18,2) NOT NULL,
-            contact_name STRING,
-            contact_cpf STRING,
-            created_at TIMESTAMP,
-            PRIMARY KEY (id)
-        )
-        USING DELTA
-    `);
-    }
+  async createUser(userData) {
+    const id = this.generateUUID();
+    const now = new Date().toISOString();
+    
+    const sql = `
+      INSERT INTO ${this.fq('users')} 
+      (id, cpf, email, nome, senha, saldo, role, status, pix_daily_limit, pix_monthly_limit, created_at, updated_at)
+      VALUES ('${id}', '${userData.cpf}', '${userData.email}', '${userData.full_name}', '${userData.password_hash}', 
+              ${userData.balance}, '${userData.role || 'user'}', '${userData.status || 'active'}', 
+              ${userData.pix_daily_limit || 1000.00}, ${userData.pix_monthly_limit || 20000.00}, 
+              '${now}', '${now}')
+    `;
+    
+    await this.executeQuery(sql);
+    
+    // Create PIX entry
+    const pixId = this.generateUUID();
+    const pixSql = `
+      INSERT INTO ${this.fq('pix')} 
+      (id, cpf, chave, tipo, created_at)
+      VALUES ('${pixId}', '${userData.cpf}', '${userData.cpf}', 'CPF', '${now}')
+    `;
+    
+    await this.executeQuery(pixSql);
+    
+    return { id, ...userData };
+  }
 
-    async findUserByEmail(email) {
-      const query = `SELECT * FROM ${databricksConfig.schema}.users WHERE email = '${email}'`;
-      const result = await this.executeQuery(query);
-      return result.length > 0 ? result[0] : null;
-    }
+  async updateUserBalance(cpf, newBalance) {
+    const sql = `UPDATE ${this.fq('users')} SET saldo = ${newBalance} WHERE cpf = '${cpf}'`;
+    await this.executeQuery(sql);
+  }
 
-    async findUserByCpf(cpf) {
-      const query = `SELECT * FROM ${databricksConfig.schema}.users WHERE cpf = '${cpf}'`;
-      const result = await this.executeQuery(query);
-      return result.length > 0 ? result[0] : null;
-    }
+  async insertTransaction(transactionData) {
+    const now = new Date().toISOString();
+    const sql = `
+      INSERT INTO ${this.fq('transactions')} 
+      (id, cpf, tipo, valor, descricao, created_at)
+      VALUES ('${transactionData.id}', '${transactionData.counterparty_cpf}', '${transactionData.type}', 
+              ${transactionData.amount}, '${transactionData.description}', '${now}')
+    `;
+    await this.executeQuery(sql);
+  }
 
-    async findPixByCpf(cpf) {
-      const query = `SELECT * FROM ${databricksConfig.schema}.pix WHERE cpf = '${cpf}' LIMIT 1`;
-      const result = await this.executeQuery(query);
-      return result.length > 0 ? result[0] : null;
-    }
+  async getAllUsers() {
+    const sql = `SELECT * FROM ${this.fq('users')} ORDER BY created_at DESC`;
+    return await this.executeQuery(sql);
+  }
 
-    async createUser({ cpf, full_name, email, password_hash, balance = 0 }) {
-        const { randomUUID } = require('crypto');
-        const userId = randomUUID();
-        const pixId = randomUUID();
+  async updateUserLimits(cpf, dailyLimit, monthlyLimit) {
+    const sql = `
+      UPDATE ${this.fq('users')} 
+      SET pix_daily_limit = ${dailyLimit}, pix_monthly_limit = ${monthlyLimit}
+      WHERE cpf = '${cpf}'
+    `;
+    await this.executeQuery(sql);
+  }
 
-        console.log("Criando usuario e registro PIX correlacionado...");
+  async updateUserStatus(cpf, status) {
+    const sql = `UPDATE ${this.fq('users')} SET status = '${status}' WHERE cpf = '${cpf}'`;
+    await this.executeQuery(sql);
+  }
 
-        await this.executeQuery(`
-            INSERT INTO users (id, cpf, full_name, email, password_hash, created_at)
-            VALUES ('${userId}', '${cpf}', '${full_name}', '${email}', '${password_hash}', current_timestamp())
-        `);
-
-        await this.executeQuery(`
-            INSERT INTO pix (id, user_id, cpf, current_balance, incoming_balance, outgoing_balance, created_at)
-            VALUES ('${pixId}', '${userId}', '${cpf}', ${balance}, 0, 0, current_timestamp())
-        `);
-
-        return { id: userId, cpf, full_name, email, balance };
-    }
-
-    async updateUserBalance(cpf, newBalance) {
-      const query = `
-        UPDATE ${databricksConfig.schema}.pix
-        SET current_balance = ${newBalance}
-        WHERE cpf = '${cpf}'
-      `;
-      await this.executeQuery(query);
-    }
-
-    async insertTransaction({ id, user_id, type, direction, amount, description, counterparty_cpf }) {
-      const escapedDescription = (description || '').replace(/'/g, "''");
-      const query = `
-        INSERT INTO ${databricksConfig.schema}.transactions
-        (id, user_id, type, direction, amount, description, counterparty_cpf, created_at)
-        VALUES ('${id}', '${user_id}', '${type}', '${direction}', ${amount}, '${escapedDescription}', '${counterparty_cpf || ''}', current_timestamp())
-      `;
-      await this.executeQuery(query);
-    }
+  async getUserTransactions(cpf) {
+    const sql = `SELECT * FROM ${this.fq('transactions')} WHERE cpf = '${cpf}' ORDER BY created_at DESC`;
+    return await this.executeQuery(sql);
+  }
 }
+
+// Declarações após a definição da classe
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const swaggerUi = require('swagger-ui-express');
+const YAML = require('yamljs');
+const path = require('path');
+const { body, validationResult } = require('express-validator');
+const crypto = require('crypto');
+
+// Configuração do Databricks (MOVIDA PARA ANTES DA INSTANCIAÇÃO) (MOVIDA PARA ANTES DA INSTANCIAÇÃO)
+const databricksConfig = {
+  serverHostname: process.env.DATABRICKS_SERVER_HOSTNAME,
+  httpPath: process.env.DATABRICKS_HTTP_PATH,
+  token: process.env.DATABRICKS_TOKEN,
+  catalog: process.env.DATABRICKS_CATALOG || 'workspace',
+  schema: process.env.DATABRICKS_SCHEMA || 'fintechbank'
+};
+
+// Instanciação da aplicação Express (ÚNICA VEZ)
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Configuração do Swagger (ÚNICA VEZ)
+const swaggerDocument = YAML.load(path.resolve(__dirname, 'swagger.yaml'));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// Instanciação dos serviços
+const PORT = process.env.PORT || 3001;
+const databricksService = new DatabricksService();
+let isDbReady = false;
 
 // Middleware para tratar erros de validação
 const handleValidationErrors = (req, res, next) => {
@@ -282,157 +373,110 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Rota raiz - redireciona para documentação
-app.get('/', (req, res) => {
-  res.redirect('/api-docs');
-});
-
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    version: '1.0.0',
-    documentation: '/api-docs'
-  });
-});
-
-// Função para garantir que o usuário admin existe
-// Ajuste: receber a instancia do serviço como parâmetro
-// Declara a instancia em escopo superior para ser acessivel em todo arquivo
-let databricksService;
-
-// Middlewares e rotas
-function signupValidation(req, res, next) {
-  const { full_name, email, cpf, password } = req.body;
-
-  const errors = [];
-
-  if (!full_name || typeof full_name !== 'string' || full_name.trim().length < 3) {
-    errors.push("Nome completo obrigatorio");
-  }
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!email || !emailRegex.test(email)) {
-    errors.push("Email obrigatorio e valido");
-  }
-  const cpfDigits = (cpf || "").replace(/\D/g, "");
-  if (!cpfDigits || cpfDigits.length !== 11) {
-    errors.push("CPF obrigatorio com 11 digitos");
-  }
-  if (!password || typeof password !== 'string' || password.length < 8) {
-    errors.push("Senha obrigatoria com minimo de 8 caracteres");
-  }
-
-  if (errors.length > 0) {
-    return res.status(400).json({
-      success: false,
-      message: "Dados invalidos para cadastro",
-      errors
-    });
-  }
-
-  next();
-}
-
-// Endpoint de cadastro integrado com Databricks
-app.post('/api/signup', async (req, res) => {
-    const { full_name, email, cpf, password } = req.body;
-    const errors = [];
-
-    if (!full_name || typeof full_name !== 'string' || full_name.trim().length < 3) {
-        errors.push("Nome completo obrigatorio");
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email)) {
-        errors.push("Email obrigatorio e valido");
-    }
-    const cpfDigits = (cpf || "").replace(/\D/g, "");
-    if (!cpfDigits || cpfDigits.length !== 11) {
-        errors.push("CPF obrigatorio com 11 digitos");
-    }
-    if (!password || typeof password !== 'string' || password.length < 8) {
-        errors.push("Senha obrigatoria com minimo de 8 caracteres");
-    }
-
-    if (errors.length > 0) {
-        return res.status(400).json({
-            success: false,
-            message: "Dados invalidos para cadastro",
-            errors
-        });
-    }
-
-    try {
-        const password_hash = await hashPassword(password); // assume util existente
-        const user = await databricksService.createUser({
-            cpf: cpfDigits,
-            full_name,
-            email,
-            password_hash,
-            balance: 0
-        });
-        return res.status(201).json({
-            success: true,
-            message: "Cadastro realizado com sucesso",
-            user
-        });
-    } catch (err) {
-        console.error("Erro no cadastro:", err);
-        return res.status(500).json({
-            success: false,
-            message: "Erro interno ao cadastrar usuario"
-        });
-    }
-});
-
-// Validações para login
-const loginValidation = [
-  body('cpf')
-    .matches(/^[0-9]{11}$/)
-    .withMessage('CPF deve conter exatamente 11 dígitos'),
-  body('senha')
-    .isLength({ min: 6 })
-    .withMessage('Senha deve ter pelo menos 6 caracteres')
-];
-
-// Endpoint de login integrado com Databricks
-app.post('/api/login', loginValidation, handleValidationErrors, async (req, res) => {
+// Middleware de autenticacao admin
+const authenticateAdmin = async (req, res, next) => {
   try {
-    const { email, cpf, senha } = req.body || {};
-    if (!senha) {
-      return res.status(400).json({ error: 'senha obrigatoria' });
+    const user = await databricksService.findUserByCpf(req.user.cpf);
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: 'acesso negado - privilegios de admin requeridos' });
     }
-    if (!email && !cpf) {
-      return res.status(400).json({ error: 'email ou cpf obrigatorio' });
-    }
-    let user = null;
-    if (email) {
-      user = await databricksService.findUserByEmail(email);
-    } else {
-      user = await databricksService.findUserByCpf(cpf);
-    }
-    if (!user) {
-      return res.status(401).json({ error: 'credenciais invalidas' });
-    }
-    const isMatch = await bcrypt.compare(senha, user.password_hash); // Corrigido
-    if (!isMatch) {
-      return res.status(401).json({ error: 'credenciais invalidas' });
-    }
-    const token = jwt.sign({ userId: user.id, cpf: user.cpf }, process.env.JWT_SECRET || 'fintech-secret', { expiresIn: '24h' });
-    const pixRow = await databricksService.findPixByCpf(user.cpf);
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        nomeCompleto: user.full_name,
-        cpf: user.cpf,
-        email: user.email,
-        saldo: pixRow ? pixRow.current_balance : 0
-      }
-    });
+    req.adminUser = user;
+    next();
   } catch (error) {
-    console.error('Erro no login:', error.message);
+    console.error('Erro na autenticacao admin:', error);
     res.status(500).json({ error: 'erro interno do servidor' });
   }
+};
+
+// Função para hash de senha
+async function hashPassword(password) {
+    const salt = await bcrypt.genSalt(10);
+    return bcrypt.hash(password, salt);
+}
+
+// Middleware opcional para bloquear chamadas enquanto BD não está pronto
+function requireDbReady(req, res, next) {
+    if (!isDbReady) {
+        return res.status(503).json({ error: 'db_not_ready' });
+    }
+    next();
+}
+
+app.post('/api/login', requireDbReady, async (req, res) => {
+    try {
+        console.log('=== INÍCIO DO LOGIN ===');
+        const { cpf, password } = req.body || {};
+        console.log('Dados recebidos:', { cpf: cpf || 'AUSENTE', password: password ? '***PRESENTE***' : 'AUSENTE' });
+        
+        // Validação de entrada
+        if (!cpf || !password || typeof password !== 'string') {
+            console.log('Erro: Credenciais inválidas');
+            return res.status(400).json({ error: 'credenciais_invalidas' });
+        }
+
+        // Buscar usuário no banco
+        console.log('Buscando usuário no banco...');
+        const user = await databricksService.findUserByCpf(cpf);
+        if (!user) {
+            console.log('Erro: Usuário não encontrado');
+            return res.status(401).json({ error: 'usuario_nao_encontrado' });
+        }
+        
+        // Validar senha
+        console.log('Validando senha...');
+        console.log('Senha do usuário:', user.senha ? '***HASH_PRESENTE***' : 'HASH_AUSENTE');
+        console.log('Tipo da senha:', typeof user.senha);
+        
+        if (!user.senha || typeof user.senha !== 'string') {
+            console.log('Erro: Senha indisponível no banco');
+            return res.status(500).json({ error: 'senha_indisponivel' });
+        }
+
+        console.log('Comparando senhas com bcrypt...');
+        const isMatch = await bcrypt.compare(password, user.senha);
+        console.log('Resultado da comparação:', isMatch);
+        
+        if (!isMatch) {
+            console.log('Erro: Senha incorreta');
+            return res.status(401).json({ error: 'credenciais_invalidas' });
+        }
+
+        // Gerar token JWT
+        console.log('Gerando token JWT...');
+        const tokenPayload = { 
+            userId: user.id, 
+            cpf: user.cpf, 
+            role: user.role || 'user',
+            status: user.status || 'active'
+        };
+        const token = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'fintech-secret', { expiresIn: '24h' });
+
+        console.log('Login realizado com sucesso!');
+        console.log('=== FIM DO LOGIN ===');
+        
+        // Resposta de sucesso
+        return res.json({
+            token,
+            user: {
+                id: user.id,
+                nomeCompleto: user.nome,
+                cpf: user.cpf,
+                email: user.email,
+                saldo: user.saldo || 0,
+                role: user.role || 'user',
+                status: user.status || 'active',
+                isAdmin: (user.role || 'user') === 'admin',
+                limits: {
+                    daily: user.pix_daily_limit || 1000.00,
+                    monthly: user.pix_monthly_limit || 20000.00
+                }
+            }
+        });
+        
+    } catch (error) {
+        console.error('=== FIM DO ERRO ===');
+        return res.status(500).json({ error: 'erro_interno_servidor' });
+    }
 });
 
 // Endpoint para buscar dados do usuario (protegido)
@@ -453,10 +497,10 @@ app.get('/api/user/:cpf', authenticateToken, async (req, res) => {
     
     res.json({
       id: usuario.id,
-      nomeCompleto: usuario.full_name,
+      nomeCompleto: usuario.nome,
       cpf: usuario.cpf,
       email: usuario.email,
-      saldo: pixRow ? pixRow.current_balance : 0,
+      saldo: usuario.saldo || 0,
       dataCriacao: usuario.created_at
     });
     
@@ -492,31 +536,58 @@ app.post('/api/pix', authenticateToken, pixValidation, handleValidationErrors, a
       return res.status(400).json({ error: 'dados obrigatorios ausentes ou invalidos' });
     }
     
-    const origemPix = await databricksService.findPixByCpf(cpfOrigem);
-    if (!origemPix) {
+    // Verificar usuario origem
+    const userOrigem = await databricksService.findUserByCpf(cpfOrigem);
+    if (!userOrigem) {
       return res.status(404).json({ error: 'usuario origem nao encontrado' });
     }
-    if (origemPix.current_balance < valor) {
+    
+    // Verificar status do usuario origem
+    if (userOrigem.status !== 'active') {
+      const statusMessages = {
+        'blocked': 'Usuario bloqueado. Entre em contato com o suporte.',
+        'suspended': 'Usuario suspenso. Entre em contato com o suporte.'
+      };
+      return res.status(403).json({ 
+        error: statusMessages[userOrigem.status] || 'Usuario inativo' 
+      });
+    }
+    
+    // Verificar limites PIX
+    if (valor > userOrigem.pix_daily_limit) {
+      return res.status(400).json({ 
+        error: `Valor excede o limite diario de R$ ${userOrigem.pix_daily_limit}` 
+      });
+    }
+    
+    if (userOrigem.saldo < valor) {
       return res.status(400).json({ success: false, message: 'Saldo insuficiente' });
     }
-    const destinoPix = await databricksService.findPixByCpf(cpfDestino);
-    if (!destinoPix) {
+    
+    const userDestino = await databricksService.findUserByCpf(cpfDestino);
+    if (!userDestino) {
       return res.status(404).json({ error: 'usuario destino nao encontrado' });
     }
     
     const transacaoId = `PIX-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
-    await databricksService.updateUserBalance(cpfOrigem, origemPix.current_balance - valor);
-    await databricksService.updateUserBalance(cpfDestino, destinoPix.current_balance + valor);
+    await databricksService.updateUserBalance(cpfOrigem, userOrigem.saldo - valor);
+    await databricksService.updateUserBalance(cpfDestino, userDestino.saldo + valor);
     
     await databricksService.insertTransaction({
       id: transacaoId,
-      user_id: origemPix.user_id,
+      counterparty_cpf: cpfOrigem,
       type: 'PIX',
-      direction: 'OUT',
+      amount: -valor,
+      description: descricao || 'Transferencia PIX'
+    });
+    
+    await databricksService.insertTransaction({
+      id: transacaoId + '-IN',
+      counterparty_cpf: cpfDestino,
+      type: 'PIX',
       amount: valor,
-      description: descricao || 'Transferencia PIX',
-      counterparty_cpf: cpfDestino
+      description: descricao || 'Transferencia PIX recebida'
     });
     
     res.status(201).json({
@@ -536,92 +607,179 @@ app.post('/api/pix', authenticateToken, pixValidation, handleValidationErrors, a
 
 
 
-app.get('/api/saldo', authenticateToken, async (req, res) => {
+app.get('/api/saldo', authenticateToken, requireDbReady, async (req, res) => {
   try {
-    const pixRow = await databricksService.findPixByCpf(req.user.cpf);
-    if (!pixRow) {
+    const user = await databricksService.findUserByCpf(req.user.cpf);
+    if (!user) {
       return res.status(400).json({ success: false, message: 'Erro ao buscar saldo' });
     }
-    res.json({ success: true, saldo: pixRow.current_balance });
+    res.json({ success: true, saldo: user.saldo || 0 });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Erro ao buscar saldo' });
   }
 });
 
-// Inicializa a instancia apos definir a classe DatabricksService
-databricksService = new DatabricksService();
+// ========== ENDPOINTS ADMINISTRATIVOS ==========
 
-const server = app.listen(PORT, async () => {
-  console.log(`Servidor iniciado na porta ${PORT}`);
-  
+// Listar todos os usuarios (admin only)
+app.get('/api/admin/users', authenticateToken, authenticateAdmin, async (req, res) => {
   try {
-    await databricksService.connect();
-    await databricksService.createTables();
-    await ensureAdminUser(databricksService);
+    const users = await databricksService.getAllUsers();
+    res.json({ success: true, users });
   } catch (error) {
-    console.error('Erro na inicialização:', error);
+    console.error('Erro ao listar usuarios:', error);
+    res.status(500).json({ success: false, message: 'Erro ao listar usuarios' });
   }
 });
+
+// Atualizar limites de PIX de um usuario (admin only)
+app.put('/api/admin/user/:cpf/limits', authenticateToken, authenticateAdmin, async (req, res) => {
+  try {
+    const { cpf } = req.params;
+    const { dailyLimit, monthlyLimit } = req.body;
+
+    if (!dailyLimit || !monthlyLimit || dailyLimit <= 0 || monthlyLimit <= 0) {
+      return res.status(400).json({ success: false, message: 'Limites devem ser maiores que zero' });
+    }
+
+    if (dailyLimit > monthlyLimit) {
+      return res.status(400).json({ success: false, message: 'Limite diario nao pode ser maior que o mensal' });
+    }
+
+    const user = await databricksService.findUserByCpf(cpf);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    }
+
+    await databricksService.updateUserLimits(cpf, dailyLimit, monthlyLimit);
+
+    res.json({ 
+      success: true, 
+      message: `Limites atualizados para ${user.nome}`,
+      limits: { dailyLimit, monthlyLimit }
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar limites:', error);
+    res.status(500).json({ success: false, message: 'Erro ao atualizar limites' });
+  }
+});
+
+// Alterar status do usuario (admin only)
+app.put('/api/admin/user/:cpf/status', authenticateToken, authenticateAdmin, async (req, res) => {
+  try {
+    const { cpf } = req.params;
+    const { status } = req.body;
+
+    const validStatuses = ['active', 'blocked', 'suspended'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Status invalido. Use: ${validStatuses.join(', ')}` 
+      });
+    }
+
+    const user = await databricksService.findUserByCpf(cpf);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    }
+
+    if (user.role === 'admin') {
+      return res.status(403).json({ success: false, message: 'Nao e possivel alterar status de outro admin' });
+    }
+
+    await databricksService.updateUserStatus(cpf, status);
+
+    const statusMessages = {
+      'active': 'desbloqueado',
+      'blocked': 'bloqueado',
+      'suspended': 'suspenso'
+    };
+
+    res.json({ 
+      success: true, 
+      message: `Usuario ${user.nome} foi ${statusMessages[status]}`,
+      user: { cpf, status }
+    });
+  } catch (error) {
+    console.error('Erro ao alterar status:', error);
+    res.status(500).json({ success: false, message: 'Erro ao alterar status do usuario' });
+  }
+});
+
+// Visualizar transacoes de um usuario (admin only)
+app.get('/api/admin/user/:cpf/transactions', authenticateToken, authenticateAdmin, async (req, res) => {
+  try {
+    const { cpf } = req.params;
+    
+    const user = await databricksService.findUserByCpf(cpf);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    }
+
+    const transactions = await databricksService.getUserTransactions(cpf);
+    
+    res.json({ 
+      success: true, 
+      user: { cpf, name: user.nome },
+      transactions 
+    });
+  } catch (error) {
+    console.error('Erro ao buscar transacoes:', error);
+    res.status(500).json({ success: false, message: 'Erro ao buscar transacoes' });
+  }
+});
+
+// Dashboard administrativo
+app.get('/api/admin/dashboard', authenticateToken, authenticateAdmin, async (req, res) => {
+  try {
+    const users = await databricksService.getAllUsers();
+    
+    const stats = {
+      totalUsers: users.length,
+      activeUsers: users.filter(u => u.status === 'active').length,
+      blockedUsers: users.filter(u => u.status === 'blocked').length,
+      suspendedUsers: users.filter(u => u.status === 'suspended').length,
+      totalBalance: users.reduce((sum, u) => sum + (parseFloat(u.saldo) || 0), 0)
+    };
+
+    res.json({ success: true, stats, recentUsers: users.slice(0, 10) });
+  } catch (error) {
+    console.error('Erro no dashboard:', error);
+    res.status(500).json({ success: false, message: 'Erro ao carregar dashboard' });
+  }
+});
+
+// Bootstrap e start após readiness
+async function bootstrap() {
+    try {
+        await databricksService.connect();
+        await databricksService.ensureCatalogAndSchema();
+        await databricksService.createTables();
+        if (typeof databricksService.migrateAdminColumns === 'function') {
+            await databricksService.migrateAdminColumns();
+        }
+        await databricksService.ensureAdminUser();
+        isDbReady = true;
+    } catch (err) {
+        console.error('Falha ao inicializar servidor/BD:', err);
+        throw err;
+    }
+}
+
+bootstrap()
+    .then(() => {
+        app.listen(PORT, () => {
+            console.log(`Servidor iniciado na porta ${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error('Falha geral na inicializacao:', err);
+        process.exit(1);
+    });
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('Encerrando servidor...');
-  await databricksService.disconnect();
-  server.close(() => {
-    console.log('Servidor encerrado');
+    console.log('Encerrando servidor...');
+    await databricksService.disconnect();
     process.exit(0);
-  });
 });
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`Porta ${PORT} em uso. Altere PORT no .env ou libere a porta.`);
-  } else {
-    console.error('Erro no servidor:', err.message);
-  }
-  process.exit(1);
-});
-
-async function hashPassword(password) {
-  const salt = await bcrypt.genSalt(10);
-  return bcrypt.hash(password, salt);
-}
-
-// Função para garantir que o usuário admin existe
-async function ensureAdminUser(service) {
-  try {
-    console.log("Validando usuario admin...");
-    
-    const adminEmail = 'admin@fintechbank.com';
-    const adminCpf = '00000000000';
-    
-    // Verifica se admin já existe
-    const existingAdmin = await service.findUserByEmail(adminEmail);
-    
-    if (!existingAdmin) {
-      console.log("Criando usuario admin padrao...");
-      
-      const adminPassword = 'Admin@123';
-      const hashedPassword = await hashPassword(adminPassword);
-      
-      await service.createUser({
-        cpf: adminCpf,
-        full_name: 'Administrador do Sistema',
-        email: adminEmail,
-        password_hash: hashedPassword,
-        balance: 10000 // Saldo inicial para testes
-      });
-      
-      console.log("Usuario admin criado com sucesso!");
-      console.log(`Email: ${adminEmail}`);
-      console.log(`CPF: ${adminCpf}`);
-      console.log(`Senha: ${adminPassword}`);
-    } else {
-      console.log("Usuario admin ja existe no sistema");
-    }
-    
-  } catch (error) {
-    console.error("Erro ao validar/criar usuario admin:", error);
-    throw error;
-  }
-}

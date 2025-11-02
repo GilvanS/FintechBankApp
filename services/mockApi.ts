@@ -64,7 +64,7 @@ export const login = async (
   // Login usando CPF e senha diretamente
   const payload = {
     cpf: cpf,
-    senha: password ?? '12345678',
+    password: password ?? '12345678',
   };
   try {
     const res = await api.post('/api/login', payload);
