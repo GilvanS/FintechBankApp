@@ -175,3 +175,30 @@ export const unblockUser = async (cpf: string): Promise<{ success: boolean; user
     });
     return handleResponse(response);
 };
+
+// Novas APIs administrativas
+export const adminUpdatePixLimit = async (cpf: string, newLimit: number): Promise<{ success: boolean; user?: User; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${cpf}/pix-limit`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ newLimit })
+    });
+    return handleResponse(response);
+};
+
+export const adminResetPassword = async (cpf: string, newPassword: string): Promise<{ success: boolean; user?: User; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${cpf}/reset-password`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ newPassword })
+    });
+    return handleResponse(response);
+};
+
+export const adminGenerateTempPassword = async (cpf: string): Promise<{ success: boolean; user?: User; message: string; tempPassword?: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${cpf}/generate-temp-password`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+    });
+    return handleResponse(response);
+};

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { adminGetUserByCpf, adminDeposit, blockUser, unblockUser } from '../services/mockApi';
+import { adminGetUserByCpf, adminDeposit, blockUser, unblockUser, adminUpdatePixLimit, adminResetPassword, adminGenerateTempPassword } from '../services/mockApi';
 
 const Admin: React.FC = () => {
     const [searchCpf, setSearchCpf] = useState('');
@@ -12,6 +12,13 @@ const Admin: React.FC = () => {
     const [userForDepositModal, setUserForDepositModal] = useState<User | null>(null);
     const [depositAmount, setDepositAmount] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
+
+    // Estados para novas funcionalidades
+    const [userForLimitModal, setUserForLimitModal] = useState<User | null>(null);
+    const [newPixLimit, setNewPixLimit] = useState('');
+    const [userForPasswordModal, setUserForPasswordModal] = useState<User | null>(null);
+    const [newPassword, setNewPassword] = useState('');
+    const [tempPassword, setTempPassword] = useState('');
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -62,6 +69,66 @@ const Admin: React.FC = () => {
             setSearchedUser(result.user);
             setUserForDepositModal(null);
             setDepositAmount('');
+        } else {
+            setError(result.message);
+        }
+    };
+
+    // Novas funções administrativas
+    const handleUpdatePixLimit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!userForLimitModal || !newPixLimit) return;
+        setSuccessMessage('');
+        setError('');
+        const limit = parseFloat(newPixLimit);
+        if (isNaN(limit) || limit < 0) {
+            setError('Limite deve ser um valor positivo.');
+            return;
+        }
+        
+        const result = await adminUpdatePixLimit(userForLimitModal.cpf, limit);
+        if (result.success && result.user) {
+            setSuccessMessage(result.message);
+            setSearchedUser(result.user);
+            setUserForLimitModal(null);
+            setNewPixLimit('');
+        } else {
+            setError(result.message);
+        }
+    };
+
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!userForPasswordModal || !newPassword) return;
+        setSuccessMessage('');
+        setError('');
+        
+        if (newPassword.length < 6 || newPassword.length > 12) {
+            setError('Nova senha deve ter entre 6 e 12 caracteres.');
+            return;
+        }
+        
+        const result = await adminResetPassword(userForPasswordModal.cpf, newPassword);
+        if (result.success && result.user) {
+            setSuccessMessage(result.message);
+            setSearchedUser(result.user);
+            setUserForPasswordModal(null);
+            setNewPassword('');
+        } else {
+            setError(result.message);
+        }
+    };
+
+    const handleGenerateTempPassword = async (cpf: string) => {
+        setSuccessMessage('');
+        setError('');
+        setTempPassword('');
+        
+        const result = await adminGenerateTempPassword(cpf);
+        if (result.success && result.user) {
+            setSuccessMessage(result.message);
+            setSearchedUser(result.user);
+            setTempPassword(result.tempPassword || '');
         } else {
             setError(result.message);
         }
@@ -141,6 +208,59 @@ const Admin: React.FC = () => {
                              <div className="flex justify-end space-x-4 mt-6">
                                 <button type="button" onClick={() => setUserForDepositModal(null)} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">Cancelar</button>
                                 <button type="submit" className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700">Confirmar Depósito</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal para alterar limite PIX */}
+            {userForLimitModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
+                        <h2 className="text-2xl font-bold mb-4">Alterar Limite PIX - {userForLimitModal.fullName}</h2>
+                        <form onSubmit={handleUpdatePixLimit}>
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Novo Limite PIX (R$)</label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                value={newPixLimit}
+                                onChange={(e) => setNewPixLimit(e.target.value)}
+                                placeholder="0,00"
+                                required
+                                autoFocus
+                                className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                            />
+                            <div className="flex justify-end space-x-4 mt-6">
+                                <button type="button" onClick={() => setUserForLimitModal(null)} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">Cancelar</button>
+                                <button type="submit" className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700">Alterar Limite</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal para resetar senha */}
+            {userForPasswordModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
+                        <h2 className="text-2xl font-bold mb-4">Resetar Senha - {userForPasswordModal.fullName}</h2>
+                        <form onSubmit={handleResetPassword}>
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Nova Senha (6-12 caracteres)</label>
+                            <input
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                placeholder="Digite a nova senha"
+                                minLength={6}
+                                maxLength={12}
+                                required
+                                autoFocus
+                                className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                            />
+                            <div className="flex justify-end space-x-4 mt-6">
+                                <button type="button" onClick={() => setUserForPasswordModal(null)} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">Cancelar</button>
+                                <button type="submit" className="px-4 py-2 text-white bg-orange-600 rounded-md hover:bg-orange-700">Resetar Senha</button>
                             </div>
                         </form>
                     </div>

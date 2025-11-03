@@ -1,3 +1,15 @@
+# Script para restaurar o projeto FintechBankApp
+Write-Host "🔧 Restaurando projeto FintechBankApp..." -ForegroundColor Cyan
+
+# 1. Fazer backup do swagger atual
+Write-Host "📦 Fazendo backup do swagger atual..." -ForegroundColor Yellow
+if (Test-Path "server\swagger.yaml") {
+    Copy-Item "server\swagger.yaml" "server\swagger-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss').yaml"
+}
+
+# 2. Criar swagger limpo
+Write-Host "✨ Criando swagger.yaml limpo..." -ForegroundColor Green
+@"
 openapi: 3.0.0
 info:
   title: FintechBankApp API
@@ -88,7 +100,7 @@ components:
           type: string
           example: "Login realizado com sucesso"
         user:
-          $ref: '#/components/schemas/User'
+          `$ref: '#/components/schemas/User'
         token:
           type: string
           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -146,26 +158,26 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginRequest'
+              `$ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
           description: Login realizado com sucesso
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                `$ref: '#/components/schemas/AuthResponse'
         '400':
           description: Dados inválidos
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                `$ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Credenciais inválidas
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                `$ref: '#/components/schemas/ErrorResponse'
 
   /users/{cpf}:
     get:
@@ -195,51 +207,7 @@ paths:
                     type: boolean
                     example: true
                   user:
-                    $ref: '#/components/schemas/User'
-        '401':
-          description: Token inválido
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Usuário não encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /users/{cpf}/statement:
-    get:
-      tags:
-        - Usuários
-      summary: Extrato do usuário
-      description: Retorna o extrato de transações do usuário
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Extrato do usuário
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  transactions:
-                    type: array
-                    items:
-                      type: object
+                    `$ref: '#/components/schemas/User'
 
   /admin/users:
     get:
@@ -263,37 +231,7 @@ paths:
                   users:
                     type: array
                     items:
-                      $ref: '#/components/schemas/User'
-
-  /admin/users/{cpf}:
-    get:
-      tags:
-        - Administração
-      summary: Consultar usuário (Admin)
-      description: Consulta dados de um usuário (apenas administradores)
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Dados do usuário
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  user:
-                    $ref: '#/components/schemas/User'
+                      `$ref: '#/components/schemas/User'
 
   /admin/users/{cpf}/deposit:
     post:
@@ -329,19 +267,6 @@ paths:
       responses:
         '200':
           description: Depósito realizado com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Depósito realizado com sucesso"
-                  user:
-                    $ref: '#/components/schemas/User'
 
   /admin/users/{cpf}/block:
     put:
@@ -362,19 +287,6 @@ paths:
       responses:
         '200':
           description: Usuário bloqueado com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Usuário bloqueado com sucesso"
-                  user:
-                    $ref: '#/components/schemas/User'
 
   /admin/users/{cpf}/unblock:
     put:
@@ -395,19 +307,6 @@ paths:
       responses:
         '200':
           description: Usuário desbloqueado com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Usuário desbloqueado com sucesso"
-                  user:
-                    $ref: '#/components/schemas/User'
 
   /admin/users/{cpf}/pix-limit:
     put:
@@ -443,19 +342,6 @@ paths:
       responses:
         '200':
           description: Limite alterado com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Limite PIX alterado com sucesso"
-                  user:
-                    $ref: '#/components/schemas/User'
 
   /admin/users/{cpf}/reset-password:
     put:
@@ -491,19 +377,6 @@ paths:
       responses:
         '200':
           description: Senha resetada com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Senha resetada com sucesso"
-                  user:
-                    $ref: '#/components/schemas/User'
 
   /admin/users/{cpf}/generate-temp-password:
     post:
@@ -538,5 +411,36 @@ paths:
                   tempPassword:
                     type: string
                     example: "temp1234"
-                  user:
-                    $ref: '#/components/schemas/User'
+"@ | Out-File -FilePath "server\swagger.yaml" -Encoding UTF8
+
+# 3. Verificar se o servidor pode iniciar
+Write-Host "🚀 Testando se o servidor pode iniciar..." -ForegroundColor Blue
+Set-Location server
+$testProcess = Start-Process -FilePath "node" -ArgumentList "server.js" -PassThru -WindowStyle Hidden
+Start-Sleep -Seconds 3
+
+if ($testProcess.HasExited -eq $false) {
+    Write-Host "✅ Servidor iniciou com sucesso!" -ForegroundColor Green
+    Stop-Process -Id $testProcess.Id -Force
+} else {
+    Write-Host "❌ Erro ao iniciar servidor. Verificando logs..." -ForegroundColor Red
+}
+
+# 4. Instalar dependências Newman se necessário
+Write-Host "📦 Verificando dependências Newman..." -ForegroundColor Yellow
+if (-not (Get-Command newman -ErrorAction SilentlyContinue)) {
+    Write-Host "Instalando Newman globalmente..." -ForegroundColor Yellow
+    npm install -g newman newman-reporter-html
+}
+
+# 5. Instalar dependências locais
+Write-Host "📦 Instalando dependências locais..." -ForegroundColor Yellow
+npm install newman newman-reporter-html --save-dev
+
+Write-Host "🎉 Restauração concluída!" -ForegroundColor Green
+Write-Host ""
+Write-Host "📋 Próximos passos:" -ForegroundColor Cyan
+Write-Host "1. Execute: cd server && npm start" -ForegroundColor White
+Write-Host "2. Teste a API: http://localhost:3001/health" -ForegroundColor White
+Write-Host "3. Execute os testes Newman: npm run test" -ForegroundColor White
+Write-Host "4. Acesse a documentação: http://localhost:3001/api-docs" -ForegroundColor White
