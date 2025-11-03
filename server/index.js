@@ -41,19 +41,29 @@ class DatabricksService {
 
     async connect() {
         if (!databricksConfig.serverHostname || !databricksConfig.httpPath || !databricksConfig.token) {
-            throw new Error("Configurações do Databricks incompletas. Verifique as variáveis de ambiente.");
+            console.warn("⚠️  Configurações do Databricks incompletas. Executando em modo MOCK para desenvolvimento.");
+            console.warn("⚠️  Para produção, configure as variáveis: DATABRICKS_SERVER_HOSTNAME, DATABRICKS_HTTP_PATH, DATABRICKS_TOKEN");
+            this.mockMode = true;
+            return;
         }
-        this.client = new DBSQLClient();
-        const connectedClient = await this.client.connect({
-            host: databricksConfig.serverHostname,
-            path: databricksConfig.httpPath,
-            token: databricksConfig.token,
-        });
-        this.session = await connectedClient.openSession({
-            initialCatalog: databricksConfig.catalog,
-            initialSchema: databricksConfig.schema,
-        });
-        console.log("Conectado ao Databricks com sucesso.");
+        
+        try {
+            this.client = new DBSQLClient();
+            const connectedClient = await this.client.connect({
+                host: databricksConfig.serverHostname,
+                path: databricksConfig.httpPath,
+                token: databricksConfig.token,
+            });
+            this.session = await connectedClient.openSession({
+                initialCatalog: databricksConfig.catalog,
+                initialSchema: databricksConfig.schema,
+            });
+            console.log("✅ Conectado ao Databricks com sucesso.");
+            this.mockMode = false;
+        } catch (error) {
+            console.warn("⚠️  Falha ao conectar com Databricks. Executando em modo MOCK:", error.message);
+            this.mockMode = true;
+        }
     }
 
     async disconnect() {
@@ -63,6 +73,18 @@ class DatabricksService {
     }
 
     async executeQuery(query) {
+        if (this.mockMode) {
+            console.log("🔧 MODO MOCK - Query:", query.substring(0, 100) + "...");
+            // Retorna dados mock baseados no tipo de query
+            if (query.includes('SELECT') && query.includes('users')) {
+                return []; // Lista vazia de usuários
+            }
+            if (query.includes('INSERT') || query.includes('UPDATE') || query.includes('DELETE')) {
+                return { affectedRows: 1 }; // Simula sucesso
+            }
+            return [];
+        }
+        
         if (!this.session) throw new Error("Não conectado ao Databricks");
         console.log("Executing Query:", query); // Log para debug
         const operation = await this.session.executeStatement(query, { runAsync: false, maxRows: 10000 });
@@ -365,8 +387,15 @@ async function ensureAdminUser() {
 
 async function bootstrap() {
     await databricksService.connect();
-    console.log("A estrutura da tabela deve ser criada manualmente usando o arquivo server/schema.sql");
-    await ensureAdminUser();
+    
+    if (databricksService.mockMode) {
+        console.log("🔧 MODO DESENVOLVIMENTO - Databricks não configurado");
+        console.log("📋 Para testar o Swagger: http://localhost:3001/api-docs");
+        console.log("⚠️  APIs retornarão dados mock. Configure Databricks para dados reais.");
+    } else {
+        console.log("📋 A estrutura da tabela deve ser criada manualmente usando o arquivo server/schema.sql");
+        await ensureAdminUser();
+    }
 }
 
 bootstrap()
