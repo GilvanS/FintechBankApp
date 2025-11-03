@@ -28,6 +28,12 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+
+    if (cpf.length !== 11) {
+      setError('O CPF deve conter exatamente 11 dígitos numéricos.');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('As senhas não coincidem.');
       return;
@@ -39,7 +45,6 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
     }
 
     setIsLoading(true);
-    setError('');
 
     const result = await signUp({
       fullName,

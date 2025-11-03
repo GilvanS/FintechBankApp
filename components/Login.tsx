@@ -27,15 +27,26 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setError('');
+
+    // Validação do frontend
+    if (cpf.length !== 11) {
+      setError('O CPF deve conter exatamente 11 dígitos numéricos.');
+      return;
+    }
+    if (password.length < 6 || password.length > 12) {
+      setError('A senha deve ter entre 6 e 12 caracteres.');
+      return;
+    }
+
+    setIsLoading(true);
     const result = await login(cpf, password);
     setIsLoading(false);
     if (result.success && result.user) {
       onLogin(result.user);
     } else {
       setError(result.message);
-      if (result.message.includes('bloqueada')) {
+      if (result.message && result.message.includes('bloqueada')) {
         setIsBlocked(true);
       }
     }

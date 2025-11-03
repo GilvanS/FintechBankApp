@@ -29,9 +29,11 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const user = getCurrentUser();
-    if (user) {
-      setUser(user);
+    // A verificação inicial agora apenas checa se existe um token.
+    // Os dados completos do usuário serão carregados no Dashboard.
+    const userSession = getCurrentUser();
+    if (userSession) {
+      setUser(userSession); // Define um usuário parcial com CPF
       setCurrentPage('dashboard');
     }
     setLoading(false);

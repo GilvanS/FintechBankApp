@@ -22,6 +22,7 @@ const Pix: React.FC<PixProps> = ({ currentUser, onTransactionSuccess, onBack }) 
 
     useEffect(() => {
         const fetchData = async () => {
+            setDailyUsage(null); // Reset while fetching
             const usage = await getPixDailyUsage(currentUser.cpf);
             setDailyUsage(usage);
             const userContacts = await getPixContacts(currentUser.cpf);

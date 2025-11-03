@@ -1,249 +1,177 @@
-import axios from 'axios';
 import { User, Transaction, PixContact } from '../types';
 
-// Configuração do axios para o backend da fintech
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001').replace(/\/$/, '');
-const api = axios.create({
-  baseURL: BASE_URL,
-});
-
-// Interceptor para token
+const API_BASE_URL = 'http://localhost:3001/api/v1';
 const TOKEN_KEY = 'fintech_token';
-const SESSION_USER_KEY = 'fintech_session';
 
-api.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem(TOKEN_KEY);
-  if (token) {
-    config.headers = config.headers ?? {};
-    config.headers['Authorization'] = `Bearer ${token}`;
-  }
-  return config;
-});
+// Helper to get auth headers
+const getAuthHeaders = () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+    };
+};
+
+const handleResponse = async (response: Response) => {
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+        return { success: true };
+    }
+    
+    // !! MELHORIA: Verifica se a resposta é realmente JSON antes de tentar fazer o parse.
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+        console.error('Resposta do servidor não é JSON:', await response.text());
+        return { success: false, message: 'O servidor não respondeu com o formato esperado. Verifique o console do servidor.' };
+    }
+
+    try {
+        const data = await response.json();
+        if (!response.ok) {
+            return { success: false, message: data.message || 'Ocorreu um erro.' };
+        }
+        return data;
+    } catch (e) {
+         return { success: false, message: 'Resposta inválida do servidor.' };
+    }
+};
 
 // --- Auth ---
 
-export const signUp = async (
-  userData: Omit<
-    User,
-    | 'balance'
-    | 'transactions'
-    | 'loginAttempts'
-    | 'isBlocked'
-    | 'pixDailyLimit'
-    | 'passwordResetRequested'
-    | 'pixContacts'
-    | 'role'
-  >
-): Promise<{ success: boolean; message: string }> => {
-  // Mapeia para /api/signup do backend integrado com Databricks
-  const payload = {
-    nomeCompleto: userData.fullName,
-    cpf: userData.cpf,
-    email: userData.email,
-    senha: userData.password ?? '12345678',
-  };
-  try {
-    const res = await api.post('/api/signup', payload);
-    const ok = res.status >= 200 && res.status < 300;
-    return {
-      success: ok,
-      message: ok ? 'Conta criada com sucesso!' : (res.data?.message ?? 'Falha ao criar conta.'),
-    };
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.response?.data?.error ?? 'Erro interno do servidor.',
-    };
-  }
+export const signUp = async (userData: Omit<User, 'balance' | 'transactions' | 'loginAttempts' | 'isBlocked' | 'pixDailyLimit' | 'passwordResetRequested' | 'pixContacts' | 'role'>): Promise<{ success: boolean; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
+    });
+    return handleResponse(response);
 };
 
-export const login = async (
-  cpf: string,
-  password?: string
-): Promise<{ success: boolean; user?: Omit<User, 'password'>; message: string }> => {
-  // Login usando CPF e senha diretamente
-  const payload = {
-    cpf: cpf,
-    password: password ?? '12345678',
-  };
-  try {
-    const res = await api.post('/api/login', payload);
-    const ok = res.status >= 200 && res.status < 300;
-    if (ok && res.data?.token) {
-      sessionStorage.setItem(TOKEN_KEY, res.data.token);
-      const user = res.data.user;
-      if (user) {
-        // Mapear campos retornados pelo backend (padronizado com nomeCompleto)
-        const mappedUser = {
-          fullName: user.nomeCompleto ?? user.nome ?? '', // fallback seguro
-          cpf: user.cpf,
-          email: user.email,
-          balance: user.saldo || 0,
-          transactions: [],
-          loginAttempts: 0,
-          isBlocked: false,
-          pixDailyLimit: user.limits?.daily || 1000,
-          passwordResetRequested: false,
-          pixContacts: [],
-          role: user.role || 'customer', // Usar role do backend
-          isAdmin: user.isAdmin || false // Adicionar flag isAdmin
-        };
-        sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(mappedUser));
-        return {
-          success: true,
-          user: mappedUser,
-          message: 'Login realizado com sucesso!',
-        };
-      }
+export const login = async (cpf: string, password?: string): Promise<{ success: boolean; user?: Omit<User, 'password'>; token?: string; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf, password })
+    });
+    const data = await handleResponse(response);
+    if (data.success && data.token) {
+        localStorage.setItem(TOKEN_KEY, data.token);
     }
-    return {
-      success: false,
-      message: res.data?.error ?? 'Falha no login.',
-    };
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.response?.data?.error ?? 'Erro interno do servidor.',
-    };
-  }
+    return data;
 };
 
 export const logoutUser = () => {
-  sessionStorage.removeItem(TOKEN_KEY);
-  sessionStorage.removeItem(SESSION_USER_KEY);
+    localStorage.removeItem(TOKEN_KEY);
 };
 
 export const getCurrentUser = (): User | null => {
-  try {
-    const session = sessionStorage.getItem(SESSION_USER_KEY);
-    return session ? JSON.parse(session) : null;
-  } catch {
-    return null;
-  }
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return null;
+    try {
+        const payloadBase64 = token.split('.')[1];
+        const decodedPayload = JSON.parse(atob(payloadBase64));
+        return { cpf: decodedPayload.cpf } as User; 
+    } catch (e) {
+        return null;
+    }
 };
 
-export const requestNewPassword = async (cpf: string): Promise<{ success: boolean; message: string }> => {
-  // Aguarda endpoint específico de recuperação de senha
-  return { success: false, message: 'endpoint indisponivel' };
+export const requestNewPassword = async (cpf: string): Promise<{ success: boolean; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/auth/request-password-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf })
+    });
+    return handleResponse(response);
 };
 
 // --- User Data ---
 
 export const getUserData = async (cpf: string): Promise<User | null> => {
-  // Mapeia para /api/user/:cpf do backend integrado com Databricks
-  try {
-    const res = await api.get(`/api/user/${cpf}`);
-    const ok = res.status >= 200 && res.status < 300;
-    if (ok && res.data) {
-      // Mapear campos do Databricks para o formato do frontend
-      return {
-        fullName: res.data.nomeCompleto,
-        cpf: res.data.cpf,
-        email: res.data.email,
-        balance: res.data.saldo || 0,
-        transactions: [], // TODO: implementar busca de transações
-        loginAttempts: 0,
-        isBlocked: false,
-        pixDailyLimit: res.data.limits?.daily || 1000,
-        passwordResetRequested: false,
-        pixContacts: [],
-        role: res.data.role || 'customer', // Usar role do backend
-        isAdmin: res.data.isAdmin || false // Adicionar flag isAdmin
-      };
-    }
-    return null;
-  } catch (error: any) {
-    console.error('Erro ao buscar dados do usuário:', error.response?.data?.error ?? error.message);
-    return null;
-  }
+    const response = await fetch(`${API_BASE_URL}/user/me/${cpf}`, { headers: getAuthHeaders() });
+    if (!response.ok) return null;
+    // Aqui esperamos uma resposta JSON válida, o handleResponse não é necessário se queremos o objeto direto
+    return response.json();
 };
 
-export const updateUserPixDailyLimit = async (
-  cpf: string,
-  newLimit: number
-): Promise<{ success: boolean; message: string }> => {
-  // Aguardando rota dedicada no backend
-  return { success: false, message: 'endpoint indisponivel' };
+export const updateUserPixDailyLimit = async (cpf: string, newLimit: number): Promise<{ success: boolean, message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/user/limits/pix-daily/${cpf}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ newLimit })
+    });
+    return handleResponse(response);
 };
 
 // --- Transactions ---
 
-export const performPix = async (
-  fromCpf: string,
-  toKey: string,
-  amount: number,
-  description: string
-): Promise<{ success: boolean; message: string }> => {
-  // Mapeia para /api/pix do backend integrado com Databricks
-  const payload = {
-    cpfOrigem: fromCpf,
-    cpfDestino: toKey, // Assumindo que toKey é um CPF
-    valor: amount,
-    descricao: description,
-  };
-  try {
-    const res = await api.post('/api/pix', payload);
-    const ok = res.status >= 200 && res.status < 300;
-    return {
-      success: ok,
-      message: ok ? 'PIX realizado com sucesso!' : (res.data?.error ?? 'Falha no PIX.'),
-    };
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.response?.data?.error ?? 'Erro interno do servidor.',
-    };
-  }
+export const performPix = async (fromCpf: string, toKey: string, amount: number, description: string): Promise<{ success: boolean; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/pix/transfer`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ fromCpf, toKey, amount, description })
+    });
+    return handleResponse(response);
 };
 
 export const getPixDailyUsage = async (cpf: string): Promise<number> => {
-  // Aguardando rota para métrica diária
-  return 0;
+     const response = await fetch(`${API_BASE_URL}/user/pix-daily-usage/${cpf}`, { headers: getAuthHeaders() });
+     const data = await handleResponse(response);
+     return data.success ? data.dailyUsage : 0;
 };
 
-export const getPixDailyUsageForContact = async (cpf: string, contactKey: string): Promise<number> => {
-  // Aguardando rota para métrica diária por contato
-  return 0;
-};
+// --- PIX Contacts ---
 
 export const getPixContacts = async (cpf: string): Promise<PixContact[]> => {
-  // Aguardando rotas de contatos PIX
-  return [];
+    const response = await fetch(`${API_BASE_URL}/pix/contacts/${cpf}`, { headers: getAuthHeaders() });
+    if (!response.ok) return [];
+    return response.json();
 };
 
-export const addPixContact = async (cpf: string, contactData: PixContact): Promise<{ success: boolean; message: string }> => {
-  return { success: false, message: 'endpoint indisponivel' };
+export const addPixContact = async (cpf: string, contactData: PixContact): Promise<{ success: boolean; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/pix/contacts/${cpf}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(contactData)
+    });
+    return handleResponse(response);
 };
 
-export const deletePixContact = async (cpf: string, contactKey: string): Promise<{ success: boolean; message: string }> => {
-  return { success: false, message: 'endpoint indisponivel' };
+export const deletePixContact = async (cpf: string, contactKey: string): Promise<{ success: boolean; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/pix/contacts/${cpf}/${contactKey}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+    });
+    return handleResponse(response);
 };
+
 
 // --- Admin ---
-
-export const adminGetUserByCpf = async (
-  cpf: string
-): Promise<{ success: boolean; user?: User; message: string }> => {
-  const user = await getUserData(cpf);
-  if (!user) return { success: false, message: 'Usuario nao encontrado' };
-  return { success: true, user, message: 'OK' };
+export const adminGetUserByCpf = async (cpf: string): Promise<{ success: boolean; user?: User; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${cpf}`, { headers: getAuthHeaders() });
+    return handleResponse(response);
 };
 
-export const adminDeposit = async (
-  cpf: string,
-  amount: number
-): Promise<{ success: boolean; user?: User; message: string }> => {
-  return { success: false, message: 'endpoint indisponivel' };
+export const adminDeposit = async (cpf: string, amount: number): Promise<{ success: boolean; user?: User; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${cpf}/deposit`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ amount })
+    });
+    return handleResponse(response);
 };
 
-export const blockUser = async (
-  cpf: string
-): Promise<{ success: boolean; user?: User; message: string }> => {
-  return { success: false, message: 'endpoint indisponivel' };
+export const blockUser = async (cpf: string): Promise<{ success: boolean; user?: User; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${cpf}/block`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+    });
+    return handleResponse(response);
 };
 
-export const unblockUser = async (
-  cpf: string
-): Promise<{ success: boolean; user?: User; message: string }> => {
-  return { success: false, message: 'endpoint indisponivel' };
+export const unblockUser = async (cpf: string): Promise<{ success: boolean; user?: User; message: string; }> => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${cpf}/unblock`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+    });
+    return handleResponse(response);
 };

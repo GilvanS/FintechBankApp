@@ -16,7 +16,6 @@ export interface User {
   passwordResetRequested: boolean;
   pixContacts: PixContact[];
   role: 'customer' | 'admin';
-  isAdmin?: boolean; // Flag para facilitar validações
 }
 
 export interface Transaction {
