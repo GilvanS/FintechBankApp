@@ -2,7 +2,7 @@ import axios from 'axios';
 import { User, Transaction, PixContact } from '../types';
 
 // Configuração do axios para o backend da fintech
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 const api = axios.create({
   baseURL: BASE_URL,
 });
@@ -82,10 +82,11 @@ export const login = async (
           transactions: [],
           loginAttempts: 0,
           isBlocked: false,
-          pixDailyLimit: 1000,
+          pixDailyLimit: user.limits?.daily || 1000,
           passwordResetRequested: false,
           pixContacts: [],
-          role: 'customer' as const
+          role: user.role || 'customer', // Usar role do backend
+          isAdmin: user.isAdmin || false // Adicionar flag isAdmin
         };
         sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(mappedUser));
         return {
@@ -143,10 +144,11 @@ export const getUserData = async (cpf: string): Promise<User | null> => {
         transactions: [], // TODO: implementar busca de transações
         loginAttempts: 0,
         isBlocked: false,
-        pixDailyLimit: 1000,
+        pixDailyLimit: res.data.limits?.daily || 1000,
         passwordResetRequested: false,
         pixContacts: [],
-        role: 'user' as const
+        role: res.data.role || 'customer', // Usar role do backend
+        isAdmin: res.data.isAdmin || false // Adicionar flag isAdmin
       };
     }
     return null;

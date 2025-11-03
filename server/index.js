@@ -479,6 +479,130 @@ app.post('/api/login', requireDbReady, async (req, res) => {
     }
 });
 
+// Validações para cadastro
+const registerValidation = [
+  body('nomeCompleto')
+    .notEmpty()
+    .withMessage('Nome completo é obrigatório')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Nome deve ter entre 2 e 100 caracteres'),
+  body('cpf')
+    .notEmpty()
+    .withMessage('CPF é obrigatório')
+    .isLength({ min: 11, max: 11 })
+    .withMessage('CPF deve ter 11 dígitos')
+    .matches(/^\d{11}$/)
+    .withMessage('CPF deve conter apenas números'),
+  body('email')
+    .isEmail()
+    .withMessage('Email deve ter formato válido')
+    .normalizeEmail(),
+  body('senha')
+    .isLength({ min: 6 })
+    .withMessage('Senha deve ter pelo menos 6 caracteres')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Senha deve conter pelo menos: 1 letra minúscula, 1 maiúscula e 1 número')
+];
+
+// Endpoint de cadastro
+app.post('/api/signup', requireDbReady, registerValidation, handleValidationErrors, async (req, res) => {
+  try {
+    console.log('=== INÍCIO DO CADASTRO ===');
+    const { nomeCompleto, cpf, email, senha } = req.body || {};
+    console.log('Dados recebidos:', { 
+      nomeCompleto: nomeCompleto || 'AUSENTE', 
+      cpf: cpf || 'AUSENTE', 
+      email: email || 'AUSENTE',
+      senha: senha ? '***PRESENTE***' : 'AUSENTE'
+    });
+
+    // Verificar se usuário já existe por CPF
+    console.log('Verificando se CPF já existe...');
+    const existingUserByCpf = await databricksService.findUserByCpf(cpf);
+    if (existingUserByCpf) {
+      console.log('Erro: CPF já cadastrado');
+      return res.status(409).json({ 
+        success: false, 
+        message: 'CPF já cadastrado no sistema' 
+      });
+    }
+
+    // Verificar se usuário já existe por email
+    console.log('Verificando se email já existe...');
+    const existingUserByEmail = await databricksService.findUserByEmail(email);
+    if (existingUserByEmail) {
+      console.log('Erro: Email já cadastrado');
+      return res.status(409).json({ 
+        success: false, 
+        message: 'Email já cadastrado no sistema' 
+      });
+    }
+
+    // Hash da senha
+    console.log('Gerando hash da senha...');
+    const passwordHash = await hashPassword(senha);
+
+    // Criar usuário
+    console.log('Criando usuário no banco...');
+    const userData = {
+      cpf,
+      email,
+      full_name: nomeCompleto,
+      password_hash: passwordHash,
+      balance: 0.00,
+      role: 'user',
+      status: 'active',
+      pix_daily_limit: 1000.00,
+      pix_monthly_limit: 20000.00
+    };
+
+    const newUser = await databricksService.createUser(userData);
+    console.log('Usuário criado com sucesso:', newUser.id);
+
+    // Gerar token JWT para login automático
+    console.log('Gerando token JWT...');
+    const tokenPayload = { 
+      userId: newUser.id, 
+      cpf: newUser.cpf, 
+      role: 'user',
+      status: 'active'
+    };
+    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'fintech-secret', { expiresIn: '24h' });
+
+    console.log('Cadastro realizado com sucesso!');
+    console.log('=== FIM DO CADASTRO ===');
+
+    // Resposta de sucesso
+    return res.status(201).json({
+      success: true,
+      message: 'Usuário cadastrado com sucesso',
+      token,
+      user: {
+        id: newUser.id,
+        nomeCompleto: nomeCompleto,
+        cpf: cpf,
+        email: email,
+        saldo: 0.00,
+        role: 'user',
+        status: 'active',
+        isAdmin: false,
+        limits: {
+          daily: 1000.00,
+          monthly: 20000.00
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro no cadastro:', error);
+    console.log('=== FIM DO ERRO NO CADASTRO ===');
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Erro interno do servidor' 
+    });
+  }
+});
+
 // Endpoint para buscar dados do usuario (protegido)
 app.get('/api/user/:cpf', authenticateToken, async (req, res) => {
   try {
@@ -501,6 +625,12 @@ app.get('/api/user/:cpf', authenticateToken, async (req, res) => {
       cpf: usuario.cpf,
       email: usuario.email,
       saldo: usuario.saldo || 0,
+      role: usuario.role || 'user',
+      isAdmin: (usuario.role || 'user') === 'admin',
+      limits: {
+        daily: usuario.pix_daily_limit || 1000.00,
+        monthly: usuario.pix_monthly_limit || 20000.00
+      },
       dataCriacao: usuario.created_at
     });
     

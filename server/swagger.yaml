@@ -1,14 +1,18 @@
 openapi: 3.0.0
 info:
   title: Fintech Bank API
-  description: API para aplicação bancária fintech com gestão de usuários, transações PIX e saldos
+  description: API para aplicação bancária com funcionalidades PIX
   version: 1.0.0
   contact:
-    email: admin@fintechbank.local
+    name: Equipe de Desenvolvimento
+    email: dev@fintechbank.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 
 servers:
   - url: http://localhost:3001
-    description: Servidor de Desenvolvimento
+    description: Servidor de desenvolvimento
 
 components:
   securitySchemes:
@@ -20,14 +24,19 @@ components:
   schemas:
     User:
       type: object
+      required:
+        - id
+        - nomeCompleto
+        - cpf
+        - email
+        - saldo
       properties:
         id:
           type: string
-          format: uuid
-        nome_completo:
+          description: ID único do usuário
+        nomeCompleto:
           type: string
-          minLength: 2
-          maxLength: 100
+          description: Nome completo do usuário
         cpf:
           type: string
           pattern: '^[0-9]{11}$'
@@ -39,7 +48,22 @@ components:
           type: number
           format: decimal
           minimum: 0
-        data_criacao:
+        role:
+          type: string
+          enum: [user, admin]
+        status:
+          type: string
+          enum: [active, blocked, suspended]
+        limits:
+          type: object
+          properties:
+            daily:
+              type: number
+              format: decimal
+            monthly:
+              type: number
+              format: decimal
+        dataCriacao:
           type: string
           format: date-time
 
@@ -53,9 +77,11 @@ components:
           type: string
           pattern: '^[0-9]{11}$'
           description: CPF com 11 dígitos
+          example: "12345678901"
         senha:
           type: string
           minLength: 6
+          example: "MinhaSenh@123"
 
     LoginResponse:
       type: object
@@ -92,31 +118,47 @@ components:
           type: string
           minLength: 2
           maxLength: 100
+          description: Nome completo do usuário
+          example: "João da Silva"
         cpf:
           type: string
           pattern: '^[0-9]{11}$'
-          description: CPF com 11 dígitos
+          description: CPF com 11 dígitos (apenas números)
+          example: "12345678901"
         email:
           type: string
           format: email
+          description: Email válido do usuário
+          example: "joao.silva@example.com"
         senha:
           type: string
           minLength: 6
+          description: Senha com pelo menos 6 caracteres, contendo ao menos 1 letra minúscula, 1 maiúscula e 1 número
+          example: "MinhaSenh@123"
 
     PixTransactionRequest:
       type: object
       required:
-        - chavePix
+        - cpfOrigem
+        - cpfDestino
         - valor
       properties:
-        chavePix:
+        cpfOrigem:
           type: string
-          description: Chave PIX (CPF, email, telefone ou chave aleatória)
+          pattern: '^[0-9]{11}$'
+          description: CPF do remetente
+          example: "12345678901"
+        cpfDestino:
+          type: string
+          pattern: '^[0-9]{11}$'
+          description: CPF do destinatário
+          example: "98765432100"
         valor:
           type: number
           format: decimal
           minimum: 0.01
           maximum: 10000
+          example: 100.50
 
     PixTransactionResponse:
       type: object
@@ -170,8 +212,8 @@ paths:
             schema:
               $ref: '#/components/schemas/LoginRequest'
             example:
-              cpf: "00000000000"
-              senha: "admin123"
+              cpf: "12345678901"
+              senha: "MinhaSenh@123"
       responses:
         '200':
           description: Login realizado com sucesso
@@ -179,6 +221,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+              example:
+                success: true
+                message: "Login realizado com sucesso"
+                user:
+                  id: "f8035fa3-864c-59df-540e-c5ccd4566501"
+                  nomeCompleto: "João da Silva"
+                  cpf: "12345678901"
+                  email: "joao.silva@example.com"
+                  saldo: 1500.75
+                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
         '400':
           description: Dados inválidos
           content:
@@ -194,10 +246,15 @@ paths:
 
   /api/signup:
     post:
-      summary: Cadastrar novo usuário
-      description: Cria uma nova conta de usuário
       tags:
         - Autenticação
+      summary: Cadastrar novo usuário
+      description: |
+        Cadastra um novo usuário no sistema. Os campos id, saldo e limits são gerados automaticamente:
+        - id: UUID gerado automaticamente
+        - saldo: Iniciado com R$ 0,00
+        - pix_daily_limit: R$ 1.000,00 (padrão)
+        - pix_monthly_limit: R$ 20.000,00 (padrão)
       requestBody:
         required: true
         content:
@@ -205,26 +262,38 @@ paths:
             schema:
               $ref: '#/components/schemas/SignupRequest'
             example:
-              nomeCompleto: "João Silva"
+              nomeCompleto: "João da Silva"
               cpf: "12345678901"
-              email: "joao@email.com"
-              senha: "minhasenha123"
+              email: "joao.silva@example.com"
+              senha: "MinhaSenh@123"
       responses:
         '201':
-          description: Usuário criado com sucesso
+          description: Usuário cadastrado com sucesso
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Usuário criado com sucesso"
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                success: true
+                message: "Usuário cadastrado com sucesso"
+                user:
+                  id: "f8035fa3-864c-59df-540e-c5ccd4566501"
+                  nomeCompleto: "João da Silva"
+                  cpf: "12345678901"
+                  email: "joao.silva@example.com"
+                  saldo: 0.00
+                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '409':
+          description: CPF ou email já cadastrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                message: "CPF já cadastrado no sistema"
         '400':
-          description: Dados inválidos ou usuário já existe
+          description: Dados inválidos
           content:
             application/json:
               schema:
@@ -245,7 +314,8 @@ paths:
             schema:
               $ref: '#/components/schemas/PixTransactionRequest'
             example:
-              chavePix: "12345678901"
+              cpfOrigem: "12345678901"
+              cpfDestino: "98765432100"
               valor: 100.50
       responses:
         '200':
@@ -254,6 +324,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PixTransactionResponse'
+              example:
+                success: true
+                message: "Transação PIX realizada com sucesso"
+                transacao:
+                  id: "tx_123456789"
+                  valor: 100.50
+                  destinatario: "98765432100"
+                  data: "2024-03-20T10:30:00Z"
         '400':
           description: Dados inválidos ou saldo insuficiente
           content:

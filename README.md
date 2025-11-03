@@ -28,8 +28,16 @@ Este projeto é um app bancário com frontend em React (Vite). Após as correç�
 - Caso sua API nao esteja em `http://localhost:3000`, ajuste a base de URL utilizada pelo `axios` no arquivo `services/mockApi.ts`.
 - Se voce utiliza variavel de ambiente para base URL (ex: `VITE_API_BASE_URL`), defina-a em `.env` na raiz do projeto.
 
-## Executar o Frontend (Windows)
+## Executando o Projeto
 
 1. Instalar dependencias:
    ```bash
-   npm install```
+   npm install
+   ```
+
+2. Executar o servidor de desenvolvimento:
+   ```bash
+   npm run dev
+   ```
+
+A aplicação estará disponível em `http://localhost:5173` (ou outra porta indicada pelo Vite).
