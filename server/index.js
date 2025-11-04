@@ -382,6 +382,7 @@ apiRouter.post('/auth/request-password-reset', asyncHandler(async (req, res) => 
 
 
 // --- Rotas de Usuário ---
+// Rota: apiRouter.get('/user/me/:cpf', ...)
 apiRouter.get('/user/me/:cpf', authenticateToken, asyncHandler(async (req, res) => {
     if (req.user.cpf !== req.params.cpf && req.user.role !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
@@ -391,7 +392,7 @@ apiRouter.get('/user/me/:cpf', authenticateToken, asyncHandler(async (req, res) 
     
     const user = users[0];
     const transactions = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('transactions')} WHERE cpf = '${req.params.cpf}' ORDER BY date DESC`);
-    const contacts = await databricksService.executeQuery(`SELECT contact_name as name, contact_key FROM ${databricksService.fq('pix_contacts')} WHERE pix_account_id = '${req.params.cpf}'`);
+    const contacts = await databricksService.executeQuery(`SELECT contact_name as name, contact_cpf as key FROM ${databricksService.fq('pix_contacts')} WHERE pix_account_id = '${req.params.cpf}' ORDER BY created_at DESC`);
     
     const userData = normalizeUser(user);
     userData.transactions = transactions.map(normalizeTransaction);
