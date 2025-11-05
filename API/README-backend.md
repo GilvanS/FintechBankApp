@@ -13,7 +13,7 @@ API backend da FintechBankApp integrada com Databricks. Este README explica setu
 - Windows PowerShell (para scripts `.ps1`, se necessário)
 
 ## Configuração de Ambiente
-Use o arquivo de exemplo `.env.example` como base e crie `.env` no diretório `server/`.
+Use o arquivo de exemplo `.env.example` como base e crie `.env` no diretório `API/`.
 
 Variáveis suportadas:
 - `PORT` — porta da API (padrão `3001`)
@@ -33,7 +33,7 @@ copy .env.example .env
 Edite o `.env` com seus valores.
 
 ## Instalação
-Instale as dependências no diretório `server/`.
+Instale as dependências no diretório `API/`.
 
 ```bash
 npm install
@@ -110,7 +110,7 @@ Executar via `.bat`:
 ```
 
 ## Replicação do Backend em Outro Projeto
-1. Copie o diretório `server/` completo para o novo projeto.
+1. Copie o diretório `API/` completo para o novo projeto.
 2. Garanta que os arquivos essenciais estejam presentes:
    - `index.js` (servidor + rotas + inicialização Databricks)
    - `swagger.yaml` (ou use `swagger-clean.yaml` como base)

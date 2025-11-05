@@ -89,7 +89,7 @@ try {
 ### Comandos para Correção
 ```bash
 # 1. Navegar para o diretório do servidor
-cd server
+cd API
 
 # 2. Fazer backup
 cp swagger.yaml swagger-backup.yaml

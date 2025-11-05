@@ -9,7 +9,7 @@ pnpm-debug.log*
 # Production builds
 dist/
 build/
-server/dist/
+API/dist/
 
 # Environment variables
 .env
@@ -17,8 +17,8 @@ server/dist/
 .env.development.local
 .env.test.local
 .env.production.local
-server/.env
-server/.env.local
+API/.env
+API/.env.local
 
 # IDE and Editor files
 .vscode/

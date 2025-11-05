@@ -84,7 +84,7 @@
 ### Opção 2: Manual
 ```bash
 # 1. Navegar para o diretório do servidor
-cd server
+cd API
 
 # 2. Substituir o swagger.yaml pelo limpo
 # (usar o conteúdo do arquivo swagger-clean.yaml)

@@ -3,8 +3,8 @@ Write-Host "🔧 Restaurando projeto FintechBankApp..." -ForegroundColor Cyan
 
 # 1. Fazer backup do swagger atual
 Write-Host "📦 Fazendo backup do swagger atual..." -ForegroundColor Yellow
-if (Test-Path "server\swagger.yaml") {
-    Copy-Item "server\swagger.yaml" "server\swagger-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss').yaml"
+if (Test-Path "API\swagger.yaml") {
+    Copy-Item "API\swagger.yaml" "API\swagger-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss').yaml"
 }
 
 # 2. Criar swagger limpo
@@ -411,7 +411,7 @@ paths:
                   tempPassword:
                     type: string
                     example: "temp1234"
-"@ | Out-File -FilePath "server\swagger.yaml" -Encoding UTF8
+"@ | Out-File -FilePath "API\swagger.yaml" -Encoding UTF8
 
 # 3. Verificar se o servidor pode iniciar
 Write-Host "🚀 Testando se o servidor pode iniciar..." -ForegroundColor Blue
@@ -440,7 +440,7 @@ npm install newman newman-reporter-html --save-dev
 Write-Host "🎉 Restauração concluída!" -ForegroundColor Green
 Write-Host ""
 Write-Host "📋 Próximos passos:" -ForegroundColor Cyan
-Write-Host "1. Execute: cd server && npm start" -ForegroundColor White
+Write-Host "1. Execute: cd API && npm start" -ForegroundColor White
 Write-Host "2. Teste a API: http://localhost:3001/health" -ForegroundColor White
 Write-Host "3. Execute os testes Newman: npm run test" -ForegroundColor White
 Write-Host "4. Acesse a documentação: http://localhost:3001/api-docs" -ForegroundColor White
