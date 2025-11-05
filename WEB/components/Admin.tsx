@@ -1,6 +1,7 @@
+// Componente Admin: sanitização do CPF e validação de tamanho
 import React, { useState } from 'react';
 import { User } from '../types';
-import { adminGetUserByCpf, adminDeposit, blockUser, unblockUser, adminUpdatePixLimit, adminResetPassword, adminGenerateTempPassword } from '../services/mockApi';
+import { adminGetUserByCpf, adminDeposit, blockUser, unblockUser } from '../services/mockApi';
 
 const Admin: React.FC = () => {
     const [searchCpf, setSearchCpf] = useState('');
@@ -13,24 +14,25 @@ const Admin: React.FC = () => {
     const [depositAmount, setDepositAmount] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
 
-    // Estados para novas funcionalidades
-    const [userForLimitModal, setUserForLimitModal] = useState<User | null>(null);
-    const [newPixLimit, setNewPixLimit] = useState('');
-    const [userForPasswordModal, setUserForPasswordModal] = useState<User | null>(null);
-    const [newPassword, setNewPassword] = useState('');
-    const [tempPassword, setTempPassword] = useState('');
-
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!searchCpf) return;
-        
+
+        // Validação: somente CPF com 11 dígitos
+        const sanitizedCpf = searchCpf.replace(/\D/g, '');
+        if (sanitizedCpf.length !== 11) {
+            setError('O CPF deve conter exatamente 11 digitos numericos.');
+            setSearchedUser(null);
+            setSearchMessage('');
+            return;
+        }
+
         setIsSearching(true);
         setSearchedUser(null);
         setSearchMessage('');
         setError('');
         setSuccessMessage('');
         
-        const result = await adminGetUserByCpf(searchCpf);
+        const result = await adminGetUserByCpf(sanitizedCpf);
         
         if (result.success && result.user) {
             setSearchedUser(result.user);
@@ -51,7 +53,7 @@ const Admin: React.FC = () => {
             setError(result.message);
         }
     };
-    
+
     const handleDeposit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!userForDepositModal || !depositAmount) return;
@@ -74,66 +76,6 @@ const Admin: React.FC = () => {
         }
     };
 
-    // Novas funções administrativas
-    const handleUpdatePixLimit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!userForLimitModal || !newPixLimit) return;
-        setSuccessMessage('');
-        setError('');
-        const limit = parseFloat(newPixLimit);
-        if (isNaN(limit) || limit < 0) {
-            setError('Limite deve ser um valor positivo.');
-            return;
-        }
-        
-        const result = await adminUpdatePixLimit(userForLimitModal.cpf, limit);
-        if (result.success && result.user) {
-            setSuccessMessage(result.message);
-            setSearchedUser(result.user);
-            setUserForLimitModal(null);
-            setNewPixLimit('');
-        } else {
-            setError(result.message);
-        }
-    };
-
-    const handleResetPassword = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!userForPasswordModal || !newPassword) return;
-        setSuccessMessage('');
-        setError('');
-        
-        if (newPassword.length < 6 || newPassword.length > 12) {
-            setError('Nova senha deve ter entre 6 e 12 caracteres.');
-            return;
-        }
-        
-        const result = await adminResetPassword(userForPasswordModal.cpf, newPassword);
-        if (result.success && result.user) {
-            setSuccessMessage(result.message);
-            setSearchedUser(result.user);
-            setUserForPasswordModal(null);
-            setNewPassword('');
-        } else {
-            setError(result.message);
-        }
-    };
-
-    const handleGenerateTempPassword = async (cpf: string) => {
-        setSuccessMessage('');
-        setError('');
-        setTempPassword('');
-        
-        const result = await adminGenerateTempPassword(cpf);
-        if (result.success && result.user) {
-            setSuccessMessage(result.message);
-            setSearchedUser(result.user);
-            setTempPassword(result.tempPassword || '');
-        } else {
-            setError(result.message);
-        }
-    };
-
     return (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 my-4">
              <div className="flex justify-between items-center mb-6">
@@ -149,15 +91,29 @@ const Admin: React.FC = () => {
                     <input
                         type="text"
                         value={searchCpf}
-                        onChange={(e) => setSearchCpf(e.target.value)}
-                        placeholder="Digite o CPF do cliente"
+                        onChange={(e) => {
+                            // Sanitiza: apenas números, máximo 11
+                            const onlyDigits = e.target.value.replace(/\D/g, '').slice(0, 11);
+                            setSearchCpf(onlyDigits);
+                        }}
+                        placeholder="Digite o CPF do cliente (11 digitos)"
+                        maxLength={11}
                         className="flex-grow px-3 py-2 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
                     />
-                    <button type="submit" disabled={isSearching} className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-400">
+                    <button
+                        type="submit"
+                        disabled={isSearching || searchCpf.length !== 11}
+                        className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-400"
+                    >
                         {isSearching ? 'Buscando...' : 'Buscar'}
                     </button>
                 </form>
+                {searchCpf.length > 0 && searchCpf.length !== 11 && (
+                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">CPF deve ter 11 digitos numericos.</p>
+                )}
             </div>
+            {error && <p className="text-red-500 bg-red-100 dark:bg-red-900/50 p-3 rounded-md mb-4">{error}</p>}
+            {successMessage && <p className="text-green-500 bg-green-100 dark:bg-green-900/50 p-3 rounded-md mb-4">{successMessage}</p>}
 
             {searchMessage && <p className="text-center text-gray-500 dark:text-gray-400 py-4">{searchMessage}</p>}
 
@@ -208,59 +164,6 @@ const Admin: React.FC = () => {
                              <div className="flex justify-end space-x-4 mt-6">
                                 <button type="button" onClick={() => setUserForDepositModal(null)} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">Cancelar</button>
                                 <button type="submit" className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700">Confirmar Depósito</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Modal para alterar limite PIX */}
-            {userForLimitModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
-                        <h2 className="text-2xl font-bold mb-4">Alterar Limite PIX - {userForLimitModal.fullName}</h2>
-                        <form onSubmit={handleUpdatePixLimit}>
-                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Novo Limite PIX (R$)</label>
-                            <input
-                                type="number"
-                                step="0.01"
-                                value={newPixLimit}
-                                onChange={(e) => setNewPixLimit(e.target.value)}
-                                placeholder="0,00"
-                                required
-                                autoFocus
-                                className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                            />
-                            <div className="flex justify-end space-x-4 mt-6">
-                                <button type="button" onClick={() => setUserForLimitModal(null)} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">Cancelar</button>
-                                <button type="submit" className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700">Alterar Limite</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Modal para resetar senha */}
-            {userForPasswordModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
-                        <h2 className="text-2xl font-bold mb-4">Resetar Senha - {userForPasswordModal.fullName}</h2>
-                        <form onSubmit={handleResetPassword}>
-                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Nova Senha (6-12 caracteres)</label>
-                            <input
-                                type="password"
-                                value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                placeholder="Digite a nova senha"
-                                minLength={6}
-                                maxLength={12}
-                                required
-                                autoFocus
-                                className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-100 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                            />
-                            <div className="flex justify-end space-x-4 mt-6">
-                                <button type="button" onClick={() => setUserForPasswordModal(null)} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">Cancelar</button>
-                                <button type="submit" className="px-4 py-2 text-white bg-orange-600 rounded-md hover:bg-orange-700">Resetar Senha</button>
                             </div>
                         </form>
                     </div>

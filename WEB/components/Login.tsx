@@ -1,3 +1,4 @@
+// Componente Login (handleLogin com try/catch para evitar travar em 'Entrando...')
 import React, { useState } from 'react';
 import { User } from '../types';
 import { login, requestNewPassword } from '../services/mockApi';
@@ -40,15 +41,21 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
     }
 
     setIsLoading(true);
-    const result = await login(cpf, password);
-    setIsLoading(false);
-    if (result.success && result.user) {
-      onLogin(result.user);
-    } else {
-      setError(result.message);
-      if (result.message && result.message.includes('bloqueada')) {
-        setIsBlocked(true);
+    try {
+      const result = await login(cpf, password);
+      setIsLoading(false);
+
+      if (result.success && result.user) {
+        onLogin(result.user);
+      } else {
+        setError(result.message || 'Falha ao entrar. Tente novamente.');
+        if (result.message && result.message.includes('bloqueada')) {
+          setIsBlocked(true);
+        }
       }
+    } catch (err) {
+      setIsLoading(false);
+      setError('Falha de conexao com o servidor. Tente novamente em instantes.');
     }
   };
 
