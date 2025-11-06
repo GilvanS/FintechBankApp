@@ -1,8 +1,13 @@
+
 import React, { useState } from 'react';
 import { User } from './types';
 import { adminGetUserByCpf, adminDeposit, blockUser, unblockUser } from './services/mockApi';
 
-const Admin: React.FC = () => {
+interface AdminProps {
+    onBack: () => void;
+}
+
+const Admin: React.FC<AdminProps> = ({ onBack }) => {
     const [searchCpf, setSearchCpf] = useState('');
     const [searchedUser, setSearchedUser] = useState<User | null>(null);
     const [isSearching, setIsSearching] = useState(false);
@@ -71,6 +76,7 @@ const Admin: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 my-4">
              <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Gerenciamento de Clientes</h1>
+                <button onClick={onBack}>Voltar</button>
             </div>
             
             {error && <p className="text-red-500 bg-red-100 dark:bg-red-900/50 p-3 rounded-md mb-4">{error}</p>}

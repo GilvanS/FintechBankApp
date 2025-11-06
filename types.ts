@@ -1,32 +1,72 @@
-export interface PixContact {
-  key: string; // The PIX key (CPF or email)
-  name: string; // Nickname for the contact
-}
-
-export interface User {
-  fullName: string;
-  cpf: string;
-  email: string;
-  password?: string; // Optional because we don't want to send it back to the client
-  balance: number;
-  transactions: Transaction[];
-  loginAttempts: number;
-  isBlocked: boolean;
-  pixDailyLimit: number;
-  passwordResetRequested: boolean;
-  pixContacts: PixContact[];
-  role: 'customer' | 'admin';
-}
 
 export interface Transaction {
   id: string;
-  type: 'PIX_SENT' | 'PIX_RECEIVED' | 'DEPOSIT' | 'ADMIN_DEPOSIT';
-  amount: number;
   date: string;
   description: string;
+  amount: number;
+  type: 'PIX_SENT' | 'PIX_RECEIVED' | 'DEPOSIT' | 'ADMIN_DEPOSIT';
   from?: string;
   to?: string;
-  toKey?: string;
 }
 
-export type PixKeyType = 'cpf' | 'email' | 'random';
+export interface PixContact {
+  name: string;
+  key: string;
+}
+
+export interface AppNotification {
+    id: number;
+    message: string;
+    is_read: boolean;
+    created_at: string;
+}
+
+// Fix: Added CreditCardDetails interface
+export interface CreditCardDetails {
+    invoice: number;
+    limit: number;
+    dueDate: string;
+}
+
+// Fix: Added DigitalCard interface
+export interface DigitalCard {
+    id: string;
+    number: string;
+    holderName: string;
+    expiryDate: string;
+    cvv: string;
+    brand: 'visa' | 'mastercard';
+    type: 'credit' | 'debit';
+}
+
+export interface User {
+  cpf: string;
+  fullName: string;
+  email: string;
+  balance: number;
+  pixDailyLimit: number;
+  isBlocked: boolean;
+  role: 'user' | 'admin';
+  transactions: Transaction[];
+  notifications: AppNotification[];
+  pixContacts: PixContact[];
+  password?: string;
+  // Fix: Added creditCardDetails to User interface
+  creditCardDetails: CreditCardDetails;
+}
+
+export interface PasswordResetRequest {
+    cpf: string;
+    status: 'pending' | 'approved' | 'denied';
+    reason?: string;
+    token: string;
+    createdAt: number;
+}
+
+export interface LimitIncreaseRequest {
+    cpf: string;
+    amount: number;
+    status: 'pending' | 'approved' | 'denied';
+    reason?: string;
+    createdAt: number;
+}
