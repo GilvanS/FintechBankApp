@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User } from './types';
 import { updateUserPixDailyLimit } from './services/mockApi';
@@ -5,9 +6,10 @@ import { updateUserPixDailyLimit } from './services/mockApi';
 interface LimitsProps {
     currentUser: User;
     onLimitsUpdate: () => void;
+    onBack: () => void;
 }
 
-const Limits: React.FC<LimitsProps> = ({ currentUser, onLimitsUpdate }) => {
+const Limits: React.FC<LimitsProps> = ({ currentUser, onLimitsUpdate, onBack }) => {
     const [newLimit, setNewLimit] = useState(currentUser.pixDailyLimit.toString());
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -39,7 +41,13 @@ const Limits: React.FC<LimitsProps> = ({ currentUser, onLimitsUpdate }) => {
 
     return (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 my-4">
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Meus Limites PIX</h2>
+             <div className="flex items-center mb-6">
+                <button onClick={onBack} className="mr-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <svg className="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                </button>
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Meus Limites PIX</h2>
+            </div>
+            
             <p className="text-gray-600 dark:text-gray-400 mb-6">Ajuste seu limite diário para transferências PIX. Esta é uma medida de segurança para sua conta.</p>
 
             {error && <p className="mb-4 p-3 bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200 rounded-md">{error}</p>}

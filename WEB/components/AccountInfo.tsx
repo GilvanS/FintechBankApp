@@ -1,11 +1,12 @@
+
 import React, { useState } from 'react';
 
-interface BalanceProps {
+interface AccountInfoProps {
     balance: number;
 }
 
-const Balance: React.FC<BalanceProps> = ({ balance }) => {
-    const [isVisible, setIsVisible] = useState(true);
+const AccountInfo: React.FC<AccountInfoProps> = ({ balance }) => {
+    const [isVisible, setIsVisible] = useState(false);
 
     const formattedBalance = new Intl.NumberFormat('pt-BR', {
         style: 'currency',
@@ -13,9 +14,9 @@ const Balance: React.FC<BalanceProps> = ({ balance }) => {
     }).format(balance);
 
     return (
-        <div className="bg-gray-800 rounded-2xl shadow-lg p-6 my-4 text-white">
+        <div className="w-full text-left">
             <div className="flex justify-between items-center">
-                <h2 className="text-lg font-semibold text-gray-300">Saldo em Conta</h2>
+                <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Saldo conta-corrente</h2>
                 <button onClick={() => setIsVisible(!isVisible)} className="text-gray-400 hover:text-white">
                     {isVisible ? (
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
@@ -24,11 +25,13 @@ const Balance: React.FC<BalanceProps> = ({ balance }) => {
                     )}
                 </button>
             </div>
-            <p className={`text-3xl font-bold mt-2 transition-all duration-300 ${!isVisible ? 'blur-md' : ''}`}>
-                {isVisible ? formattedBalance : 'R$ ••••••'}
-            </p>
+            <div className="flex items-center space-x-4 mt-1">
+                <p className={`text-3xl font-bold transition-all duration-300 text-white`}>
+                    {isVisible ? formattedBalance : 'R$ ••••••'}
+                </p>
+            </div>
         </div>
     );
 };
 
-export default Balance;
+export default AccountInfo;

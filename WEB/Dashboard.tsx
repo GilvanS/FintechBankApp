@@ -1,14 +1,16 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './App';
 import { User } from './types';
 import { getUserData } from './services/mockApi';
-import Header from './Header';
-import Balance from './Balance';
-import Pix from './Pix';
-import Statement from './Statement';
-import Contacts from './Contacts';
-import Limits from './Limits';
-import Admin from './Admin';
+import Header from './components/Header';
+import Balance from './components/Balance';
+import Pix from './components/Pix';
+import Statement from './components/Statement';
+import Contacts from './components/Contacts';
+import Limits from './components/Limits';
+import Admin from './components/Admin';
 
 type DashboardView = 'home' | 'pix' | 'statement' | 'contacts' | 'limits' | 'admin';
 
@@ -46,19 +48,21 @@ const Dashboard: React.FC = () => {
             case 'pix':
                 return <Pix currentUser={userData} onTransactionSuccess={handleTransactionSuccess} onBack={() => setCurrentView('home')} />;
             case 'statement':
-                return <Statement transactions={userData.transactions} />;
+                // Fix: Property 'balance' is missing.
+                return <Statement balance={userData.balance} transactions={userData.transactions} />;
             case 'contacts':
-                return <Contacts currentUser={userData} onContactsUpdate={fetchUserData} />;
+                return <Contacts currentUser={userData} onContactsUpdate={fetchUserData} onBack={() => setCurrentView('home')} />;
             case 'limits':
-                return <Limits currentUser={userData} onLimitsUpdate={fetchUserData} />;
+                return <Limits currentUser={userData} onLimitsUpdate={fetchUserData} onBack={() => setCurrentView('home')} />;
             case 'admin':
-                return userData.role === 'admin' ? <Admin /> : <p>Acesso negado.</p>;
+                return userData.role === 'admin' ? <Admin onBack={() => setCurrentView('home')} /> : <p>Acesso negado.</p>;
             case 'home':
             default:
                 return (
                     <>
                         <Balance balance={userData.balance} />
-                        <Statement transactions={userData.transactions.slice(0, 5)} isPreview={true} />
+                        {/* Fix: Property 'balance' is missing. */}
+                        <Statement balance={userData.balance} transactions={userData.transactions.slice(0, 5)} isPreview={true} />
                     </>
                 );
         }
@@ -66,7 +70,9 @@ const Dashboard: React.FC = () => {
     
     return (
         <div className="flex flex-col h-screen max-h-screen">
-            <Header userName={userData.fullName} onLogout={logout} />
+            {/* Fix: Property 'userName' does not exist on type 'HeaderProps'. Pass 'user' object instead. */}
+            {/* Fix: Removed unsupported onNavigateToNotifications prop. */}
+            <Header user={userData} onNavigateToSettings={() => {}} />
             <main className="flex-grow overflow-y-auto p-1 pb-24">
                  {renderContent()}
             </main>

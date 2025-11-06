@@ -1,0 +1,3 @@
+# Fintech Bank App
+
+A modern and secure web and mobile banking application for a Fintech, allowing users to manage their accounts, perform PIX transfers, and view their transaction history.

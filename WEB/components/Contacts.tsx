@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
+// Fix: Corrected import paths
 import { User, PixContact } from '../types';
 import { getPixContacts, addPixContact, deletePixContact } from '../services/mockApi';
 
 interface ContactsProps {
     currentUser: User;
     onContactsUpdate: () => void;
+    onBack: () => void;
 }
 
-const Contacts: React.FC<ContactsProps> = ({ currentUser, onContactsUpdate }) => {
+const Contacts: React.FC<ContactsProps> = ({ currentUser, onContactsUpdate, onBack }) => {
     const [contacts, setContacts] = useState<PixContact[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
@@ -66,7 +68,13 @@ const Contacts: React.FC<ContactsProps> = ({ currentUser, onContactsUpdate }) =>
 
     return (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 my-4">
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">Contatos Seguros</h2>
+             <div className="flex items-center mb-6">
+                <button onClick={onBack} className="mr-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <svg className="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                </button>
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Contatos Seguros</h2>
+            </div>
+
 
             {error && <p className="mb-4 p-3 bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200 rounded-md">{error}</p>}
             {success && <p className="mb-4 p-3 bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-200 rounded-md">{success}</p>}
