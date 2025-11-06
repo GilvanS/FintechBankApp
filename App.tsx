@@ -58,26 +58,26 @@ const App: React.FC = () => {
         return <Dashboard />;
       case 'login':
       default:
-        // Fix: Removed onLogin prop as it's not part of LoginProps. The component uses useAuth hook.
         return <Login onNavigateToSignUp={() => setView('signup')} />;
     }
   };
 
   if (loading) {
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-100">
-            <div className="w-16 h-16 border-4 border-t-transparent border-orange-500 rounded-full animate-spin"></div>
+        <div className="flex items-center justify-center min-h-screen bg-black">
+            <div className="w-16 h-16 border-4 border-t-transparent border-green-500 rounded-full animate-spin"></div>
         </div>
     );
   }
 
   return (
     <AuthContext.Provider value={authContextValue}>
-      <div className="bg-gray-100 min-h-screen flex justify-center">
-         <div className="w-full max-w-md bg-white relative shadow-lg">
+      <div className="bg-black min-h-screen flex justify-center p-0 sm:p-4">
+         <div className="w-full max-w-md bg-black relative shadow-lg sm:rounded-2xl overflow-hidden">
             {renderView()}
          </div>
       </div>
+    {/* Fix: Corrected typo in closing tag from Auth-Context.Provider to AuthContext.Provider */}
     </AuthContext.Provider>
   );
 };

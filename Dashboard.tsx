@@ -71,7 +71,8 @@ const Dashboard: React.FC = () => {
     return (
         <div className="flex flex-col h-screen max-h-screen">
             {/* Fix: Property 'userName' does not exist on type 'HeaderProps'. Pass 'user' object instead. */}
-            <Header user={userData} onNavigateToSettings={() => {}} onNavigateToNotifications={() => {}} />
+            {/* Fix: Removed unsupported onNavigateToNotifications prop. */}
+            <Header user={userData} onNavigateToSettings={() => {}} />
             <main className="flex-grow overflow-y-auto p-1 pb-24">
                  {renderContent()}
             </main>

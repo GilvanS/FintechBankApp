@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { signUp } from '../services/mockApi';
 import { formatCPF } from '../utils/formatters';
@@ -9,12 +10,11 @@ interface SignUpProps {
 
 
 const Logo: React.FC = () => (
-    <div className="flex items-center justify-center mb-6">
-        <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 10v-1m0-6c-1.657 0-3 .895-3 2s1.343 2 3 2m0-4a2 2 0 100 4 2 2 0 000-4z"></path>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 21a9 9 0 100-18 9 9 0 000 18z"></path>
+    <div className="flex items-center justify-center mb-10">
+        <svg className="w-10 h-10 text-green-400" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
         </svg>
-        <span className="ml-3 text-2xl font-bold text-white">Fintech</span>
+        <span className="ml-3 text-3xl font-bold text-white tracking-wider">Fintech</span>
     </div>
 );
 
@@ -65,83 +65,81 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
   };
 
   return (
-     <div className="min-h-screen flex flex-col bg-gray-100">
-        <header className="bg-orange-500 p-6">
+     <div className="min-h-screen flex flex-col justify-center bg-black p-6">
+        <header className="absolute top-6 left-6">
             <Logo />
         </header>
-        <main className="flex-grow flex items-center justify-center">
-            <div className="w-full max-w-md bg-white rounded-lg shadow-md -mt-16 p-8">
-                 <h2 className="text-3xl font-bold text-gray-800 mb-6">Criar conta</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                    <label className="text-sm font-medium text-gray-700">Nome Completo</label>
-                    <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 mt-1 bg-gray-100 border-gray-300 rounded-md"
-                    />
-                </div>
-                <div>
-                    <label className="text-sm font-medium text-gray-700">CPF</label>
-                    <input
-                    type="text"
-                    value={formatCPF(cpf)}
-                    onChange={(e) => setCpf(e.target.value)}
-                    required
-                    maxLength={14}
-                    className="w-full px-3 py-2 mt-1 bg-gray-100 border-gray-300 rounded-md"
-                    />
-                </div>
-                <div>
-                    <label className="text-sm font-medium text-gray-700">E-mail</label>
-                    <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 mt-1 bg-gray-100 border-gray-300 rounded-md"
-                    />
-                </div>
-                <div>
-                    <label className="text-sm font-medium text-gray-700">Senha</label>
-                    <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={6}
-                    maxLength={12}
-                    className="w-full px-3 py-2 mt-1 bg-gray-100 border-gray-300 rounded-md"
-                    />
-                </div>
-                <div>
-                    <label className="text-sm font-medium text-gray-700">Confirmar Senha</label>
-                    <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 mt-1 bg-gray-100 border-gray-300 rounded-md"
-                    />
-                </div>
-
-                {error && <p className="text-sm text-red-500">{error}</p>}
-                
-                <div>
-                    <button type="submit" disabled={isLoading} className="w-full py-3 mt-2 font-semibold text-white bg-orange-500 rounded-md hover:bg-orange-600 disabled:bg-orange-300">
-                    {isLoading ? 'Criando...' : 'Cadastrar'}
-                    </button>
-                </div>
-                </form>
-                 <p className="text-sm text-center text-gray-600 mt-6">
-                    Já tem uma conta?{' '}
-                    <button type="button" onClick={onNavigateToLogin} className="font-semibold text-orange-600 hover:underline">
-                    Faça login
-                    </button>
-                </p>
+        <main>
+            <h2 className="text-3xl font-bold text-white mb-8">Criar conta</h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+                <label className="text-sm font-medium text-gray-400">Nome Completo</label>
+                <input
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+                className="w-full px-4 py-3 mt-1 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
             </div>
+            <div>
+                <label className="text-sm font-medium text-gray-400">CPF</label>
+                <input
+                type="text"
+                value={formatCPF(cpf)}
+                onChange={(e) => setCpf(e.target.value)}
+                required
+                maxLength={14}
+                className="w-full px-4 py-3 mt-1 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+            </div>
+            <div>
+                <label className="text-sm font-medium text-gray-400">E-mail</label>
+                <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full px-4 py-3 mt-1 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+            </div>
+            <div>
+                <label className="text-sm font-medium text-gray-400">Senha</label>
+                <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                maxLength={12}
+                className="w-full px-4 py-3 mt-1 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+            </div>
+            <div>
+                <label className="text-sm font-medium text-gray-400">Confirmar Senha</label>
+                <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                className="w-full px-4 py-3 mt-1 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+            </div>
+
+            {error && <p className="text-sm text-red-400">{error}</p>}
+            
+            <div>
+                <button type="submit" disabled={isLoading} className="w-full py-3 mt-2 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500 disabled:bg-green-700">
+                {isLoading ? 'Criando...' : 'Cadastrar'}
+                </button>
+            </div>
+            </form>
+            <p className="text-sm text-center text-gray-400 mt-6">
+                Já tem uma conta?{' '}
+                <button type="button" onClick={onNavigateToLogin} className="font-semibold text-green-400 hover:underline">
+                Faça login
+                </button>
+            </p>
         </main>
     </div>
   );
