@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../App';
 import { AppNotification } from '../types';
+// FIX: Removed .ts extension from import path.
 import { getNotifications, markNotificationAsRead } from '../services/mockApi';
 
 interface NotificationsProps {

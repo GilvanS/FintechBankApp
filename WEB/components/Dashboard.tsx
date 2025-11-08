@@ -1,132 +1,282 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAuth } from '../App';
-import { User } from '../types';
-import { getUserData } from '../services/mockApi';
+import { PurchasedItem } from '../types';
+// FIX: Import mock API functions for handling user actions.
+import { purchaseWithDebit, purchaseWithCard, performPixCreditInstallment, parcelCreditCardInvoice, payCreditCardInvoice } from '../services/mockApi';
+
+// FIX: Import all necessary components for the dashboard views.
 import Header from './Header';
-import Statement from './Statement';
-import Pix from './Pix';
-import Settings from './Settings';
-import Notifications from './Notifications';
-import Admin from './Admin';
-import AccountInfo from './AccountInfo';
+import AccountBalance from './AccountBalance';
 import MainActions from './MainActions';
+import CreditCardInfo from './CreditCardInfo';
+import PromotionalBanner from './PromotionalBanner';
+import GuardianBanner from './GuardianBanner';
+import BottomNavBar from './BottomNavBar';
+import Pix from './Pix';
 import CardDashboard from './CardDashboard';
-import Contacts from './Contacts';
-import Limits from './Limits';
+import Shop from './Shop';
+import Investments from './Investments';
+import Profile from './Profile';
+import Statement from './Statement';
+import Loans from './Loans';
+import NewsJournal from './NewsJournal';
+import Products from './Products';
+import ProductPage from './ProductPage';
+import PaymentMethods from './PaymentMethods';
+import InstallmentModal from './InstallmentModal';
+import PurchaseConfirmation from './PurchaseConfirmation';
+import AnticipateInstallments from './AnticipateInstallments';
+import PixInstallmentDetails from './PixInstallmentDetails';
+import InstallmentReview from './InstallmentReview';
+import PasswordModal from './PasswordModal';
+import PaymentReceipt from './PaymentReceipt';
 
-type MainView = 'home' | 'cards' | 'pix' | 'settings';
-type SubView = 'notifications' | 'admin' | 'contacts' | 'limits' | 'statement' | null;
+// FIX: Define a type for all possible views within the Dashboard.
+type DashboardView = 
+  | 'home' | 'cards' | 'shop' | 'invest' | 'profile' 
+  | 'pix' | 'statement' | 'loans' | 'newsJournal' | 'products'
+  | 'productPage' | 'paymentMethods' | 'anticipateInstallments' | 'pixInstallmentDetails' | 'installmentReview';
 
+// FIX: Create the Dashboard component.
 const Dashboard: React.FC = () => {
-    const { user, logout } = useAuth();
-    const [userData, setUserData] = useState<User | null>(null);
-    const [mainView, setMainView] = useState<MainView>('home');
-    const [subView, setSubView] = useState<SubView>(null);
-    const [loading, setLoading] = useState(true);
+    const { user, updateUser, logout } = useAuth();
+    const [view, setView] = useState<DashboardView>('home');
 
-    const fetchUserData = async () => {
-        if (user) {
-            const data = await getUserData(user.cpf);
-            setUserData(data);
-            setLoading(false);
+    const [selectedProduct, setSelectedProduct] = useState<PurchasedItem | null>(null);
+    const [showInstallmentModal, setShowInstallmentModal] = useState(false);
+    const [purchaseDetails, setPurchaseDetails] = useState<any>(null);
+    const [showConfirmation, setShowConfirmation] = useState(false);
+    
+    const [installmentDetails, setInstallmentDetails] = useState<any>(null);
+    
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [passwordModalAction, setPasswordModalAction] = useState<{ action: () => void, title: string } | null>(null);
+
+    const [paymentReceiptDetails, setPaymentReceiptDetails] = useState<any>(null);
+
+    const navigate = useCallback((newView: DashboardView) => {
+        setView(newView);
+    }, []);
+
+    if (!user) {
+        logout();
+        return null;
+    }
+
+    const handleProductSelect = (product: PurchasedItem) => {
+        setSelectedProduct(product);
+        navigate('productPage');
+    };
+
+    const handlePurchase = (product: PurchasedItem) => {
+        setSelectedProduct(product);
+        navigate('paymentMethods');
+    };
+    
+    const handleSelectPaymentMethod = (method: 'debit' | 'credit') => {
+        if (!selectedProduct) return;
+        if (method === 'credit') {
+            setShowInstallmentModal(true);
+        } else {
+            setPasswordModalAction({
+                title: 'Confirmar Compra no Débito',
+                action: () => confirmDebitPurchase({ cashbackUsed: 0 })
+            });
+            setShowPasswordModal(true);
         }
     };
     
-    useEffect(() => {
-        fetchUserData();
-    }, [user]);
-
-    const handleTransactionSuccess = () => {
-        fetchUserData();
-        setSubView('statement');
-    }
-    
-    if (loading || !userData) {
-        return <div className="flex items-center justify-center min-h-screen bg-black"><div className="w-16 h-16 border-4 border-t-transparent border-green-500 rounded-full animate-spin"></div></div>;
-    }
-
-    const renderSubView = () => {
-        switch (subView) {
-            case 'notifications':
-                return <Notifications onBack={() => setSubView(null)} />;
-            case 'admin':
-                return <Admin onBack={() => setSubView(null)} />;
-            case 'contacts':
-                return <Contacts currentUser={userData} onContactsUpdate={fetchUserData} onBack={() => setSubView(null)} />;
-            case 'limits':
-                 return <Limits currentUser={userData} onLimitsUpdate={fetchUserData} onBack={() => setSubView(null)} />;
-            case 'statement':
-                return <Statement balance={userData.balance} transactions={userData.transactions} onBack={() => setSubView(null)} />;
-            default:
-                return null;
+    const confirmDebitPurchase = async (details: { cashbackUsed: number }) => {
+        if (!selectedProduct) return;
+        const result = await purchaseWithDebit(user.cpf, selectedProduct, details.cashbackUsed);
+        if (result.success && result.user) {
+            updateUser(result.user);
+            setPurchaseDetails({ item: selectedProduct, method: 'debit', ...details });
+            setShowConfirmation(true);
+        } else {
+            alert(result.message);
         }
-    }
+    };
 
-    const renderMainView = () => {
-        if (subView) return renderSubView();
-
-        switch (mainView) {
-            case 'cards':
-                return <CardDashboard user={userData} />;
-            case 'pix':
-                 return <Pix currentUser={userData} onTransactionSuccess={handleTransactionSuccess} onBack={() => setMainView('home')} />;
-            case 'settings':
-                return <Settings user={userData} onLogout={logout} onNavigateToAdmin={() => setSubView('admin')} onBack={() => setMainView('home')} />;
-            case 'home':
-            default:
-                return (
-                    <div className="p-4 space-y-6">
-                        <AccountInfo balance={userData.balance} />
-                        <div className="bg-gray-900 p-4 rounded-lg text-center text-white">
-                            <h3 className="font-semibold">Débito Automático next</h3>
-                            <p className="text-sm text-gray-400">Cadastre aqui para ter as contas sempre em dia</p>
-                        </div>
-                        <MainActions onNavigate={(view) => {
-                            if (view === 'pix') setMainView('pix');
-                            if (view === 'statement') setSubView('statement');
-                        }} />
-                        <div className="space-y-4">
-                             <h2 className="text-xl font-bold text-white">nextShop</h2>
-                              <div className="bg-gray-900 p-4 rounded-lg text-white">
-                                <h3 className="font-semibold">Seguro Cartão de Crédito 💚</h3>
-                                <p className="text-sm text-gray-400">Proteja seu cartão para as compras da Black Friday e das festas de fim de ano</p>
-                                <button className="mt-4 text-black bg-green-400 font-bold py-2 px-4 rounded-lg text-sm">QUERO CONTRATAR</button>
-                            </div>
-                        </div>
-                    </div>
-                );
+    const handleConfirmInstallments = (details: { cashbackUsed: number; installments: number }) => {
+        if (!selectedProduct) return;
+        setShowInstallmentModal(false);
+        setPasswordModalAction({
+            title: 'Confirmar Compra no Crédito',
+            action: () => confirmCreditPurchase(details)
+        });
+        setShowPasswordModal(true);
+    };
+    
+    const confirmCreditPurchase = async (details: { cashbackUsed: number; installments: number }) => {
+        if (!selectedProduct) return;
+        const result = await purchaseWithCard(user.cpf, selectedProduct, details.cashbackUsed, details.installments);
+        if (result.success && result.user) {
+            updateUser(result.user);
+            setPurchaseDetails({ item: selectedProduct, method: 'credit', ...details });
+            setShowConfirmation(true);
+        } else {
+            alert(result.message);
         }
     };
     
+    const handleCloseConfirmation = () => {
+        setShowConfirmation(false);
+        setPurchaseDetails(null);
+        setSelectedProduct(null);
+        navigate('shop');
+    };
+    
+    const handleGoToInstallmentDetails = (details: any) => {
+        setInstallmentDetails(details);
+        navigate('pixInstallmentDetails');
+    };
+    
+    const handleConfirmPixInstallment = () => {
+        setInstallmentDetails((prev: any) => ({ ...prev, type: 'pix-credit' }));
+        navigate('installmentReview');
+    };
+    
+    const handleParcelInvoice = (details: { amount: number; installments: number }) => {
+        setInstallmentDetails({ ...details, type: 'invoice' });
+        navigate('installmentReview');
+    };
+    
+    const handleConfirmInstallmentReview = () => {
+        const isPix = installmentDetails?.type === 'pix-credit';
+        setPasswordModalAction({
+            title: isPix ? 'Confirmar PIX Parcelado' : 'Confirmar Parcelamento',
+            action: isPix ? executePixCreditInstallment : executeInvoiceParcel
+        });
+        setShowPasswordModal(true);
+    };
+
+    const executePixCreditInstallment = async () => {
+        if (!installmentDetails) return;
+        const result = await performPixCreditInstallment(user.cpf, installmentDetails.amount, installmentDetails.installments);
+        if (result.success && result.user) {
+            updateUser(result.user);
+            navigate('pix');
+        } else {
+            alert(result.message);
+        }
+        setInstallmentDetails(null);
+    };
+    
+    const executeInvoiceParcel = async () => {
+        if (!installmentDetails) return;
+        const result = await parcelCreditCardInvoice(user.cpf, installmentDetails.amount, installmentDetails.installments);
+         if (result.success && result.user) {
+            updateUser(result.user);
+            navigate('cards');
+        } else {
+            alert(result.message);
+        }
+        setInstallmentDetails(null);
+    };
+    
+    const handlePayInvoice = () => {
+        setPasswordModalAction({
+            title: 'Confirmar Pagamento',
+            action: executePayInvoice
+        });
+        setShowPasswordModal(true);
+    };
+    
+    const executePayInvoice = async () => {
+        const result = await payCreditCardInvoice(user.cpf);
+        if (result.success && result.user && result.transactionId) {
+            updateUser(result.user);
+            setPaymentReceiptDetails({
+                amountPaid: Math.abs(result.user.transactions.find(tx => tx.id === result.transactionId)?.amount || 0),
+                date: new Date().toISOString(),
+                transactionId: result.transactionId
+            });
+        } else {
+            alert(result.message);
+        }
+    };
+
+    const renderHome = () => (
+        <div className="flex-grow overflow-y-auto no-scrollbar p-4">
+            <Header user={user} onNavigateToMenu={() => navigate('profile')} onNavigateToNotifications={() => alert('Notifications coming soon!')} />
+            <AccountBalance balance={user.balance} />
+            <MainActions onNavigate={(v) => {
+                const viewMap: { [key: string]: DashboardView } = {
+                    pix: 'pix',
+                    pagar: 'pix',
+                    cards: 'cards',
+                    loans: 'loans',
+                    products: 'products',
+                    statement: 'statement',
+                    newsJournal: 'newsJournal',
+                };
+                navigate(viewMap[v] || 'home');
+            }} />
+            <CreditCardInfo creditCard={user.creditCard} onNavigate={() => navigate('cards')} />
+            <PromotionalBanner />
+            <GuardianBanner />
+        </div>
+    );
+
+    const renderView = () => {
+        switch (view) {
+            case 'home': return renderHome();
+            case 'cards': return <CardDashboard onBack={() => navigate('home')} onPayInvoice={handlePayInvoice} onParcelInvoice={handleParcelInvoice} onNavigateToAnticipate={() => navigate('anticipateInstallments')} />;
+            case 'shop': return <Shop onBack={() => navigate('home')} onProductSelect={handleProductSelect} />;
+            case 'invest': return <Investments onBack={() => navigate('home')} />;
+            case 'profile': return <Profile />;
+            case 'pix': return <Pix currentUser={user} onDataRefresh={() => updateUser({...user})} onBack={() => navigate('home')} isTabRoot onGoToInstallmentDetails={handleGoToInstallmentDetails} />;
+            case 'statement': return <Statement onBack={() => navigate('home')} />;
+            case 'loans': return <Loans onBack={() => navigate('home')} />;
+            case 'newsJournal': return <NewsJournal onBack={() => navigate('home')} />;
+            case 'products': return <Products onNavigateToInvestments={() => navigate('invest')} />;
+            case 'productPage': return selectedProduct ? <ProductPage product={selectedProduct} onBack={() => navigate('shop')} onPurchase={handlePurchase} /> : renderHome();
+            case 'paymentMethods': return <PaymentMethods user={user} item={selectedProduct} onBack={() => navigate('productPage')} onSelectMethod={handleSelectPaymentMethod} />;
+            case 'anticipateInstallments': return <AnticipateInstallments onBack={() => navigate('cards')} />;
+            case 'pixInstallmentDetails': return installmentDetails ? <PixInstallmentDetails details={installmentDetails} onConfirm={handleConfirmPixInstallment} onBack={() => navigate('pix')} /> : renderHome();
+            case 'installmentReview': return installmentDetails ? <InstallmentReview type={installmentDetails.type} user={user} details={installmentDetails} onConfirm={handleConfirmInstallmentReview} onBack={() => navigate(installmentDetails.type === 'pix-credit' ? 'pixInstallmentDetails' : 'cards')} /> : renderHome();
+            default: return renderHome();
+        }
+    };
+
     return (
-        <div className="flex flex-col h-full bg-black text-white">
-            { !subView && <Header user={userData} onNavigateToSettings={() => setMainView('settings')} /> }
-            
-            <main className="flex-grow overflow-y-auto pb-20">
-                 {renderMainView()}
-            </main>
-            
-            <footer className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-gray-900">
-                <nav className="flex justify-around py-2">
-                    <button onClick={() => setMainView('home')} className={`flex flex-col items-center w-full text-xs transition-colors ${mainView === 'home' ? 'text-green-400' : 'text-gray-400'}`}>
-                        <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-                        Início
-                    </button>
-                     <button onClick={() => setMainView('cards')} className={`flex flex-col items-center w-full text-xs transition-colors ${mainView === 'cards' ? 'text-green-400' : 'text-gray-400'}`}>
-                        <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
-                        Cartões
-                    </button>
-                    <button onClick={() => setMainView('pix')} className={`flex flex-col items-center w-full text-xs transition-colors ${mainView === 'pix' ? 'text-green-400' : 'text-gray-400'}`}>
-                         <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 10v-1m0-6c-1.657 0-3 .895-3 2s1.343 2 3 2m0-4a2 2 0 100 4 2 2 0 000-4z"/></svg>
-                        PIX
-                    </button>
-                     <button onClick={() => setMainView('settings')} className={`flex flex-col items-center w-full text-xs transition-colors ${mainView === 'settings' ? 'text-green-400' : 'text-gray-400'}`}>
-                        <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        Ajustes
-                    </button>
-                </nav>
-            </footer>
+        <div className="flex flex-col h-full bg-black text-white relative">
+            <div className="flex-grow overflow-hidden">
+                 {renderView()}
+            </div>
+            {['home', 'cards', 'shop', 'invest', 'profile'].includes(view) &&
+                <BottomNavBar currentView={view} onNavigate={(v) => navigate(v as DashboardView)} />
+            }
+            {showInstallmentModal && selectedProduct && (
+                <InstallmentModal
+                    isOpen={showInstallmentModal}
+                    onClose={() => setShowInstallmentModal(false)}
+                    item={selectedProduct}
+                    user={user}
+                    onConfirm={handleConfirmInstallments}
+                />
+            )}
+            {showConfirmation && purchaseDetails && (
+                <PurchaseConfirmation details={purchaseDetails} onClose={handleCloseConfirmation} />
+            )}
+            {showPasswordModal && passwordModalAction && (
+                <PasswordModal 
+                    title={passwordModalAction.title}
+                    onConfirm={() => {
+                        passwordModalAction.action();
+                        setShowPasswordModal(false);
+                    }} 
+                    onCancel={() => setShowPasswordModal(false)} 
+                />
+            )}
+            {paymentReceiptDetails && (
+                <PaymentReceipt details={paymentReceiptDetails} onClose={() => {
+                    setPaymentReceiptDetails(null);
+                    navigate('home');
+                }} />
+            )}
         </div>
     );
 };

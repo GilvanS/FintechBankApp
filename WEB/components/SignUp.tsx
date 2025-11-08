@@ -1,5 +1,7 @@
 
+
 import React, { useState } from 'react';
+// FIX: Removed .ts extension from import path.
 import { signUp } from '../services/mockApi';
 import { formatCPF } from '../utils/formatters';
 
@@ -52,6 +54,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
       cpf: cpf.replace(/\D/g, ''),
       email,
       password,
+      showStoriesPopup: true,
     });
     
     setIsLoading(false);

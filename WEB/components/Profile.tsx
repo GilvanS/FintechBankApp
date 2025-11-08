@@ -1,0 +1,129 @@
+
+import React, { useState } from 'react';
+import { useAuth } from '../App';
+import { User } from '../types';
+import MyData from './MyData';
+import EditProfile from './EditProfile';
+import Security from './Security';
+import Limits from './Limits';
+import Admin from './Admin';
+import Notifications from './Notifications';
+import Settings from './Settings';
+import PointsDashboard from './PointsDashboard';
+
+type ProfileView = 'main' | 'myData' | 'editProfile' | 'security' | 'limits' | 'admin' | 'notifications' | 'points';
+
+const Profile: React.FC = () => {
+    const { user, logout, updateUser } = useAuth();
+    const [view, setView] = useState<ProfileView>('main');
+    
+    if (!user) {
+        logout();
+        return null;
+    }
+    
+    const onSaveProfile = (updatedUser: Omit<User, 'password'>) => {
+        updateUser(updatedUser);
+        setView('myData');
+    };
+
+    const renderContent = () => {
+        switch (view) {
+            case 'myData':
+                return <MyData user={user} onBack={() => setView('main')} onNavigateToEdit={() => setView('editProfile')} />;
+            case 'editProfile':
+                return <EditProfile user={user} onBack={() => setView('myData')} onSave={onSaveProfile} />;
+            case 'security':
+                return <Security onBack={() => setView('main')} onNavigateToLimits={() => setView('limits')} />;
+            case 'limits':
+                return <Limits currentUser={user} onUpdate={() => {}} onClose={() => setView('security')} />;
+            case 'admin':
+                return <Admin onBack={() => setView('main')} />;
+            case 'notifications':
+                return <Notifications onBack={() => setView('main')} />;
+            case 'points':
+                return <PointsDashboard user={user} onBack={() => setView('main')} />;
+            case 'main':
+            default:
+                return <Settings user={user} onLogout={logout} onBack={() => {}} onNavigateToAdmin={() => setView('admin')} />;
+        }
+    };
+
+    const MainView = () => {
+        const SettingButton: React.FC<{label: string, icon: React.ReactNode, onClick: () => void, notification?: boolean }> = ({ label, icon, onClick, notification }) => (
+            <button onClick={onClick} className="w-full text-left p-4 bg-gray-900 rounded-lg font-medium text-white hover:bg-gray-800 flex justify-between items-center relative">
+                <div className="flex items-center space-x-4">
+                    <div className="text-green-400">{icon}</div>
+                    <span>{label}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                    {notification && <div className="w-2 h-2 bg-orange-500 rounded-full"></div>}
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
+                </div>
+            </button>
+        );
+
+        const iconClasses = "w-6 h-6";
+
+        return (
+             <div className="bg-black min-h-full">
+                <header className="p-4 flex items-center">
+                    <h2 className="text-2xl font-bold text-white">Meu Perfil</h2>
+                </header>
+
+                <div className="p-4 space-y-4">
+                     <div className="text-center">
+                        <div className="w-24 h-24 rounded-full bg-gray-700 text-white flex items-center justify-center font-bold text-4xl mx-auto mb-3 border-4 border-gray-800">
+                            {user.fullName.charAt(0)}
+                        </div>
+                        <p className="font-bold text-xl text-white">{user.fullName}</p>
+                        <p className="text-sm text-gray-400">{user.username || user.email}</p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <SettingButton label="Meus dados" icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>} onClick={() => setView('myData')} />
+                        <SettingButton label="Segurança" icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>} onClick={() => setView('security')} />
+                        <SettingButton label="Notificações" notification icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>} onClick={() => setView('notifications')} />
+                        <SettingButton label="Fintech Loop" icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v1h- опасен.5V5a.5.5 0 00-.5-.5H7a.5.5 0 00-.5.5v.5H2v10a2 2 0 002 2h10a2 2 0 002-2V19h.5v.5a.5.5 0 01-.5.5H7a.5.5 0 01-.5-.5v-1H5v1z" /></svg>} onClick={() => setView('points')} />
+                        {user.role === 'admin' && (
+                            <SettingButton label="Painel do Admin" icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>} onClick={() => setView('admin')} />
+                        )}
+                    </div>
+
+                    <div className="pt-4">
+                        <button onClick={logout} className="w-full text-center py-3 font-semibold text-red-400 bg-transparent border border-red-900/80 rounded-lg hover:bg-red-900/70">
+                            Sair do App
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    };
+    
+    const renderView = () => {
+        switch (view) {
+            case 'myData':
+                return <MyData user={user} onBack={() => setView('main')} onNavigateToEdit={() => setView('editProfile')} />;
+            case 'editProfile':
+                return <EditProfile user={user} onBack={() => setView('myData')} onSave={onSaveProfile} />;
+            case 'security':
+                return <Security onBack={() => setView('main')} onNavigateToLimits={() => setView('limits')} />;
+            case 'limits':
+                return <Limits currentUser={user} onUpdate={() => {}} onClose={() => setView('security')} isModal={false} />;
+            case 'admin':
+                return <Admin onBack={() => setView('main')} />;
+            case 'notifications':
+                return <Notifications onBack={() => setView('main')} />;
+             case 'points':
+                return <PointsDashboard user={user} onBack={() => setView('main')} />;
+            case 'main':
+            default:
+                return <MainView />;
+        }
+    }
+
+
+    return <div className="h-full flex flex-col bg-black">{renderView()}</div>;
+};
+
+export default Profile;

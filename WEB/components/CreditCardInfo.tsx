@@ -1,16 +1,15 @@
 import React from 'react';
+import { CreditCard } from '../types';
 
 interface CreditCardInfoProps {
-    invoiceAmount: number;
-    availableLimit: number;
-    dueDate: string;
+    creditCard: CreditCard;
     onNavigate: () => void;
 }
 
-const CreditCardInfo: React.FC<CreditCardInfoProps> = ({ invoiceAmount, availableLimit, dueDate, onNavigate }) => {
+const CreditCardInfo: React.FC<CreditCardInfoProps> = ({ creditCard, onNavigate }) => {
     
-    const formattedInvoice = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(invoiceAmount);
-    const formattedLimit = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(availableLimit);
+    const formattedInvoice = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCard.currentInvoice || 0);
+    const formattedLimit = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCard.availableLimit || 0);
 
     return (
         <button onClick={onNavigate} className="w-full text-left p-4 bg-[#1C1C1E] rounded-lg hover:bg-gray-800 transition-colors">
@@ -29,7 +28,7 @@ const CreditCardInfo: React.FC<CreditCardInfoProps> = ({ invoiceAmount, availabl
                     Limite disponível de {formattedLimit}
                 </p>
                 <p className="text-xs text-gray-400">
-                    Fecha em {dueDate}
+                    Fecha em {creditCard.dueDate}
                 </p>
             </div>
         </button>
