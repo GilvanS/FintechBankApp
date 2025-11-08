@@ -1,12 +1,12 @@
+
 import React, { useState } from 'react';
 
 interface AccountBalanceProps {
     balance: number;
-    onNavigate: () => void;
 }
 
-const AccountBalance: React.FC<AccountBalanceProps> = ({ balance, onNavigate }) => {
-    const [isVisible, setIsVisible] = useState(false);
+const AccountBalance: React.FC<AccountBalanceProps> = ({ balance }) => {
+    const [isVisible, setIsVisible] = useState(true);
 
     const formattedBalance = new Intl.NumberFormat('pt-BR', {
         style: 'currency',
@@ -14,16 +14,10 @@ const AccountBalance: React.FC<AccountBalanceProps> = ({ balance, onNavigate }) 
     }).format(balance);
 
     return (
-        <button onClick={onNavigate} className="w-full text-left p-4 hover:bg-gray-800/50 rounded-lg transition-colors">
+        <div className="bg-gray-900 rounded-2xl shadow-lg p-6 my-4 text-white">
             <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-white">Saldo em conta</h2>
-                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
-            </div>
-            <div className="flex items-center space-x-4 mt-2">
-                <p className={`text-2xl font-bold transition-all duration-300 ${!isVisible ? 'blur-md' : ''}`}>
-                    {isVisible ? formattedBalance : '••••••'}
-                </p>
-                <button onClick={(e) => { e.stopPropagation(); setIsVisible(!isVisible); }} className="text-gray-400 hover:text-white">
+                <h2 className="text-lg font-semibold text-gray-300">Saldo da Conta</h2>
+                <button onClick={() => setIsVisible(!isVisible)} className="text-gray-400 hover:text-white">
                     {isVisible ? (
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                     ) : (
@@ -31,7 +25,10 @@ const AccountBalance: React.FC<AccountBalanceProps> = ({ balance, onNavigate }) 
                     )}
                 </button>
             </div>
-        </button>
+            <p className={`text-4xl font-bold mt-2 transition-all duration-300 ${!isVisible ? 'blur-md' : ''}`}>
+                {isVisible ? formattedBalance : 'R$ ••••••'}
+            </p>
+        </div>
     );
 };
 

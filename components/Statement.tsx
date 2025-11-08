@@ -1,96 +1,76 @@
 
-import React from 'react';
+import React, { useState } from 'react';
+import { useAuth } from '../App';
 import { Transaction } from '../types';
+import AccountInfo from './AccountInfo';
+import PixReceipt from './PixReceipt';
 
 interface StatementProps {
-    transactions: Transaction[];
-    balance: number;
-    isPreview?: boolean;
-    onSeeAll?: () => void;
-    onBack?: () => void;
+  onBack: () => void;
 }
 
-const TransactionItem: React.FC<{ transaction: Transaction }> = ({ transaction }) => {
-    const isCredit = transaction.amount > 0;
-    const formattedAmount = new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL'
-    }).format(Math.abs(transaction.amount));
+const Statement: React.FC<StatementProps> = ({ onBack }) => {
+  const { user } = useAuth();
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
-    const icon = {
-        PIX_SENT: "M13 7l5 5m0 0l-5 5m5-5H6",
-        PIX_RECEIVED: "M11 17l-5-5m0 0l5-5m-5 5h12",
-        DEPOSIT: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 10v-1m0-6c-1.657 0-3 .895-3 2s1.343 2 3 2m0-4a2 2 0 100 4 2 2 0 000-4z",
-        ADMIN_DEPOSIT: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-    }[transaction.type];
+  if (!user) return null;
+  
+  if (selectedTransaction) {
+    return <PixReceipt transaction={selectedTransaction} onBack={() => setSelectedTransaction(null)} />
+  }
 
-    const iconColor = isCredit ? 'text-green-400 bg-gray-800' : 'text-red-400 bg-gray-800';
-    
-    return (
-        <li className="flex items-center justify-between py-4">
-            <div className="flex items-center">
-                <div className={`flex items-center justify-center w-10 h-10 rounded-full ${iconColor}`}>
-                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={icon} /></svg>
-                </div>
-                <div className="ml-3">
-                    <p className="font-semibold text-white">{transaction.description}</p>
-                    <p className="text-sm text-gray-400">{new Date(transaction.date).toLocaleDateString('pt-BR')}</p>
-                </div>
-            </div>
-            <p className={`font-semibold ${isCredit ? 'text-green-400' : 'text-white'}`}>
-                {isCredit ? '+' : '-'} {formattedAmount}
-            </p>
-        </li>
-    );
-};
-
-const Statement: React.FC<StatementProps> = ({ transactions, balance, isPreview = false, onSeeAll, onBack }) => {
-    
-    if (isPreview) {
-        return (
-             <div className="space-y-2">
-                <div className="flex justify-between items-center px-4">
-                    <h2 className="text-xl font-bold text-white">Últimas movimentações</h2>
-                    <button onClick={onSeeAll} className="text-sm font-semibold text-green-400">Ver todos</button>
-                </div>
-                {transactions.length > 0 ? (
-                    <ul className="divide-y divide-gray-800 px-4">
-                        {transactions.map(t => <TransactionItem key={t.id} transaction={t} />)}
-                    </ul>
-                ) : (
-                    <p className="text-center text-gray-500 py-4 px-4">Nenhuma transação recente.</p>
-                )}
-             </div>
-        )
+  const groupedTransactions: { [key: string]: Transaction[] } = user.transactions.reduce((acc, tx) => {
+    const date = new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
+    if (!acc[date]) {
+      acc[date] = [];
     }
+    acc[date].push(tx);
+    return acc;
+  }, {} as { [key: string]: Transaction[] });
 
-    return (
-        <div className="bg-black min-h-full">
-            <header className="bg-black text-white p-4 sticky top-0 z-10 border-b border-gray-800">
-                <div className="flex items-center">
-                    <button onClick={onBack} className="mr-4 p-2 -ml-2 rounded-full hover:bg-gray-800">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
-                    </button>
-                    <h2 className="text-xl font-bold">Extrato</h2>
-                </div>
-            </header>
-            
-            <div className="p-4">
-                <div className="mb-4">
-                    <p className="text-sm text-gray-400">Saldo disponível</p>
-                    <p className="text-2xl font-bold text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(balance)}</p>
-                </div>
-                
-                {transactions.length > 0 ? (
-                    <ul className="divide-y divide-gray-800">
-                        {transactions.map(t => <TransactionItem key={t.id} transaction={t} />)}
-                    </ul>
-                ) : (
-                    <p className="text-center text-gray-500 py-8">Nenhuma transação neste período.</p>
-                )}
-            </div>
-        </div>
-    );
+
+  return (
+    <div className="bg-black text-white p-4 min-h-full flex flex-col">
+      <header className="flex items-center mb-6">
+        <button onClick={onBack} className="mr-4 p-2 rounded-full hover:bg-gray-800">
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <h1 className="text-2xl font-bold">Extrato da Conta</h1>
+      </header>
+      
+      <div className="px-4 mb-6">
+         <AccountInfo balance={user.balance} />
+      </div>
+
+      <main className="flex-grow overflow-y-auto no-scrollbar">
+        {Object.entries(groupedTransactions).map(([date, transactions]) => (
+          <div key={date}>
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider py-3 px-4">{date}</h2>
+            <ul className="space-y-1">
+              {transactions.map(tx => (
+                <li key={tx.id}>
+                  <button onClick={() => setSelectedTransaction(tx)} className="w-full flex items-center p-4 rounded-lg bg-gray-900 hover:bg-gray-800 transition-colors">
+                    <div className="flex-grow text-left">
+                      <p className="font-semibold text-md text-white">{tx.description}</p>
+                      <p className="text-sm text-gray-400">{tx.type === 'PIX_SENT' ? `Para: ${tx.recipientName || tx.to}` : (tx.type === 'PIX_RECEIVED' ? `De: ${tx.senderName || tx.from}` : 'Operação na conta')}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-semibold text-lg ${tx.amount > 0 ? 'text-green-400' : 'text-white'}`}>
+                        {tx.amount < 0 ? '-' : ''} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(tx.amount))}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+         {user.transactions.length === 0 && (
+            <p className="text-center text-gray-500 py-10">Nenhuma transação ainda.</p>
+        )}
+      </main>
+    </div>
+  );
 };
 
 export default Statement;

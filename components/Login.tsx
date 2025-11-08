@@ -1,11 +1,12 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '../App';
+// FIX: Removed .ts extension from import path.
 import { requestNewPassword, checkPasswordRequestStatus, resetPassword } from '../services/mockApi';
 import { formatCPF } from '../utils/formatters';
 
 interface LoginProps {
   onNavigateToSignUp: () => void;
+  onNavigateToPreLogin: () => void;
 }
 
 const Logo: React.FC = () => (
@@ -19,10 +20,11 @@ const Logo: React.FC = () => (
 
 type View = 'login' | 'forgot_password' | 'pending' | 'approved' | 'denied';
 
-const Login: React.FC<LoginProps> = ({ onNavigateToSignUp }) => {
+const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin }) => {
   const { login } = useAuth();
   const [cpf, setCpf] = useState('');
   const [password, setPassword] = useState('');
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [view, setView] = useState<View>('login');
@@ -32,12 +34,29 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp }) => {
   const [denialReason, setDenialReason] = useState('');
   const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
+  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const cleaned = e.target.value.replace(/\D/g, '');
+    if (cleaned.length <= 11) {
+        setCpf(cleaned);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    
+    const cleanCpf = cpf.replace(/\D/g, '');
+    
+    if (cleanCpf.length !== 11) {
+        setError('O CPF deve conter 11 dígitos.');
+        setIsLoading(false);
+        return;
+    }
+    
+    // FIX: Removed .ts extension from dynamic import path.
     const api = await import('../services/mockApi');
-    const result = await api.login(cpf.replace(/\D/g, ''), password);
+    const result = await api.login(cleanCpf, password);
     setIsLoading(false);
     if (result.success && result.user) {
       login(result.user);
@@ -50,10 +69,11 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp }) => {
       e.preventDefault();
       setIsLoading(true);
       setError('');
-      const result = await requestNewPassword(cpf.replace(/\D/g, ''));
+      const cleanCpf = cpf.replace(/\D/g, '');
+      const result = await requestNewPassword(cleanCpf);
       if(result.success){
           setView('pending');
-          startPolling(cpf.replace(/\D/g, ''));
+          startPolling(cleanCpf);
       } else {
           setError(result.message);
       }
@@ -68,7 +88,8 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp }) => {
       }
       setIsLoading(true);
       setError('');
-      const result = await resetPassword(cpf.replace(/\D/g, ''), cpf.replace(/\D/g, '').slice(-4), newPassword);
+      const cleanCpf = cpf.replace(/\D/g, '');
+      const result = await resetPassword(cleanCpf, cleanCpf.slice(-4), newPassword);
        if(result.success){
           alert(result.message);
           setView('login');
@@ -99,6 +120,16 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp }) => {
       }, 5000);
       setPollingInterval(interval);
   };
+
+  const handleCancelPending = () => {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        setPollingInterval(null);
+    }
+    setView('login');
+    setCpf('');
+    setError('');
+  };
   
   React.useEffect(() => {
     return () => {
@@ -122,10 +153,9 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp }) => {
                             id="cpf-forgot"
                             type="text"
                             value={formatCPF(cpf)}
-                            onChange={(e) => setCpf(e.target.value)}
+                            onChange={handleCpfChange}
                             placeholder="000.000.000-00"
                             required
-                            maxLength={14}
                             className="w-full px-4 py-3 mt-1 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
                             />
                         </div>
@@ -143,6 +173,9 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp }) => {
                     <div className="w-12 h-12 border-4 border-t-transparent border-green-500 rounded-full animate-spin mx-auto mb-4"></div>
                     <h2 className="text-xl font-bold text-white">Aguardando aprovação...</h2>
                     <p className="text-gray-400 mt-2">Sua solicitação foi enviada. Você será notificado assim que for analisada.</p>
+                    <button onClick={handleCancelPending} className="mt-6 w-full py-3 font-semibold text-green-400 bg-transparent border border-green-400 rounded-lg hover:bg-green-400/10">
+                        Voltar para o Login
+                    </button>
                 </div>
             );
           case 'approved':
@@ -188,23 +221,42 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp }) => {
                             id="cpf"
                             type="text"
                             value={formatCPF(cpf)}
-                            onChange={(e) => setCpf(e.target.value)}
+                            onChange={handleCpfChange}
                             placeholder="000.000.000-00"
                             required
-                            maxLength={14}
                             className="w-full px-4 py-3 mt-1 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
                             />
                         </div>
                         <div>
                             <label htmlFor="password"  className="text-sm font-medium text-gray-400">Senha</label>
-                            <input
-                            id="password"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            className="w-full px-4 py-3 mt-1 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
-                            />
+                            <div className="relative">
+                                <input
+                                id="password"
+                                type={isPasswordVisible ? 'text' : 'password'}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                className="w-full px-4 py-3 pr-12 mt-1 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setIsPasswordVisible(!isPasswordVisible)}
+                                    className="absolute inset-y-0 right-0 top-1 flex items-center pr-4 text-gray-400 hover:text-white"
+                                    aria-label={isPasswordVisible ? 'Ocultar senha' : 'Mostrar senha'}
+                                >
+                                    {isPasswordVisible ? (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a10.05 10.05 0 015.313-6.494m4.23-1.031a10.034 10.034 0 015.494 6.494M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18" />
+                                        </svg>
+                                    ) : (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                         <button type="button" onClick={() => setView('forgot_password')} className="text-xs text-green-400 hover:underline text-right w-full block">Esqueceu a senha?</button>
                         {error && <p className="text-sm text-red-400">{error}</p>}
@@ -230,6 +282,17 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp }) => {
         <header className="absolute top-6 left-6">
             <Logo />
         </header>
+        {view === 'login' && (
+            <button 
+                onClick={onNavigateToPreLogin} 
+                className="absolute top-6 right-6 p-2 rounded-full text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                aria-label="Voltar"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+        )}
         <main>
              {renderContent()}
         </main>
