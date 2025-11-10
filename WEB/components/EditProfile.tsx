@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 // FIX: Corrected import path for User type from parent directory.
 import { User } from '../types';
-import { updateUserProfile } from '../services/mockApi';
+import { updateUserProfile } from '../services/api';
+import { useToast, ToastContainer } from './Toast';
 
 interface EditProfileProps {
     user: User;
@@ -18,6 +19,8 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const { toast, showSuccess, showError, hide } = useToast();
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
@@ -33,8 +36,11 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
         setIsLoading(false);
         if (result.success && result.user) {
             onSave(result.user as Omit<User, 'password'>);
+            showSuccess('Perfil atualizado com sucesso');
         } else {
-            setError(result.message);
+            const msg = result.message || 'Falha ao atualizar perfil.';
+            setError(msg);
+            showError(msg);
         }
     };
 
@@ -89,6 +95,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
                     </button>
                 </div>
             </form>
+            <ToastContainer toast={toast} onClose={hide} />
         </div>
     );
 };

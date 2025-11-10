@@ -51,7 +51,9 @@ async function runTests() {
         console.error('❌ Arquivo de collection não encontrado:', config.collection);
         process.exit(1);
     }
-
+    // Pré-processa a collection para garantir base /api correta
+    const preparedCollection = prepareCollection(config.collection);
+    const newmanConfig = { ...config, collection: preparedCollection };
     // Verificar se o servidor está rodando
     const serverHealthy = await checkServerHealth();
     if (!serverHealthy) {
@@ -60,7 +62,7 @@ async function runTests() {
 
     console.log('🧪 Executando testes...\n');
 
-    newman.run(config, function (err, summary) {
+    newman.run(newmanConfig, function (err, summary) {
         if (err) {
             console.error('❌ Erro ao executar os testes:', err);
             process.exit(1);
@@ -126,6 +128,16 @@ async function runTests() {
             process.exit(1);
         }
     });
+}
+
+// Função para ajustar a collection
+function prepareCollection(originalPath) {
+    const raw = fs.readFileSync(originalPath, 'utf8');
+    const replaced = raw.replace(/\/api\/v1\b/g, '/api');
+    const fixedPath = path.join(__dirname, 'postman-collection.fixed.json');
+    fs.writeFileSync(fixedPath, replaced, 'utf8');
+    console.log(`🔧 Collection ajustada: ${fixedPath} (replace /api/v1 -> /api)`);
+    return fixedPath;
 }
 
 // Executar os testes

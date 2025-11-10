@@ -1,9 +1,11 @@
 
+// Dentro do componente Login
 import React, { useState } from 'react';
 // FIX: Corrected import path for useAuth from parent directory.
 import { useAuth } from '../App';
 import { login, requestNewPassword } from '../services/api';
 import { formatCPF } from '../utils/formatters';
+import { useToast, ToastContainer } from './Toast';
 
 interface LoginProps {
     onNavigateToSignUp: () => void;
@@ -18,6 +20,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [resetPasswordMessage, setResetPasswordMessage] = useState('');
+    const { toast, showSuccess, showError, showInfo, hide } = useToast();
 
     function mapLoginError(code?: string): string {
         switch (code) {
@@ -38,8 +41,11 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                 localStorage.setItem('authToken', result.token);
             }
             auth.login(result.user);
+            showSuccess('Login efetuado com sucesso');
         } else {
-            setError(mapLoginError(result.code));
+            const msg = mapLoginError(result.code);
+            setError(msg);
+            showError(msg);
         }
     };
 
@@ -54,6 +60,11 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
         const result = await requestNewPassword(cpf.replace(/\D/g, ''));
         setResetPasswordMessage(result.message);
         setIsLoading(false);
+        if (result.success) {
+            showInfo('Solicitacao de nova senha enviada. Aguarde aprovacao.');
+        } else {
+            showError(result.message || 'Falha ao solicitar nova senha.');
+        }
     };
 
     return (
@@ -136,6 +147,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                     <span>Sua segurança em primeiro lugar.</span>
                 </div>
             </footer>
+            <ToastContainer toast={toast} onClose={hide} />
         </div>
     );
 };

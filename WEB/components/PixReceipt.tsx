@@ -3,6 +3,7 @@
 import React from 'react';
 // FIX: Corrected import path for Transaction type from parent directory.
 import { Transaction } from '../types';
+import { useToast, ToastContainer } from './Toast';
 
 interface PixReceiptProps {
     transaction: Transaction;
@@ -17,10 +18,35 @@ const InfoRow: React.FC<{ label: string, value: string | React.ReactNode }> = ({
 );
 
 const PixReceipt: React.FC<PixReceiptProps> = ({ transaction, onBack }) => {
+    const { toast, showSuccess, showError, hide } = useToast();
+
     const isReceived = transaction.type === 'PIX_RECEIVED';
     const amount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(transaction.amount));
     const date = new Date(transaction.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
     const time = new Date(transaction.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    async function handleShare() {
+        const text =
+            `Comprovante PIX\n` +
+            `Tipo: ${isReceived ? 'PIX Recebido' : 'PIX Enviado'}\n` +
+            `Valor: ${amount}\n` +
+            `Data: ${date} ${time}\n` +
+            `ID: ${transaction.id}\n`;
+
+        try {
+            if (navigator.share) {
+                await navigator.share({ title: 'Comprovante PIX', text });
+                showSuccess('Comprovante compartilhado com sucesso');
+            } else if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(text);
+                showSuccess('Comprovante copiado para a area de transferencia');
+            } else {
+                throw new Error('Compartilhamento indisponivel neste dispositivo');
+            }
+        } catch (err: any) {
+            showError(err?.message || 'Falha ao compartilhar comprovante');
+        }
+    }
 
     return (
         <div className="p-4 bg-black min-h-full text-white flex flex-col">
@@ -50,10 +76,11 @@ const PixReceipt: React.FC<PixReceiptProps> = ({ transaction, onBack }) => {
             </main>
 
             <footer className="mt-auto pt-4">
-                 <button className="w-full py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500">
+                <button onClick={handleShare} className="w-full py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500">
                     Compartilhar
                 </button>
             </footer>
+            <ToastContainer toast={toast} onClose={hide} />
         </div>
     );
 };

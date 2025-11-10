@@ -7,6 +7,7 @@ import { useAuth } from '../App';
 // FIX: Corrected import path for types from parent directory.
 import { AppNotification } from '../types';
 import { getNotifications, markNotificationAsRead } from '../services/api';
+import { useToast, ToastContainer } from './Toast';
 
 interface NotificationsProps {
     onBack: () => void;
@@ -15,6 +16,7 @@ function Notifications() {
     const { user } = useAuth();
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const { toast, showSuccess, showError, hide } = useToast();
 
     const fetchNotifications = async () => {
         if (user) {
@@ -35,7 +37,12 @@ function Notifications() {
     const handleMarkAsRead = async (id: number) => {
         if (user) {
             const res = await markNotificationAsRead(user.cpf, id);
-            if (res.success) fetchNotifications();
+            if (res.success) {
+                showSuccess('Notificacao marcada como lida');
+                fetchNotifications();
+            } else {
+                showError(res.message || 'Falha ao marcar notificacao');
+            }
         }
     };
 
@@ -67,6 +74,7 @@ function Notifications() {
                     )
                 )}
             </div>
+            <ToastContainer toast={toast} onClose={hide} />
         </div>
     );
 };

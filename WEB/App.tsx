@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
 import { User } from './types';
-import { initializeMockUsers } from './services/mockApi';
 import Login from './components/Login';
 import SignUp from './components/SignUp';
 import Dashboard from './components/Dashboard';
@@ -33,9 +32,7 @@ function App() {
     const [view, setView] = useState('prelogin'); // prelogin, login, signup, dashboard, resetPassword
 
     useEffect(() => {
-        if (import.meta.env.VITE_USE_MOCK === '1') {
-            initializeMockUsers();
-        }
+        // Removido initializeMockUsers para evitar dependencia de mockApi
     }, []);
 
     const handleLogin = (loggedInUser: Omit<User, 'password'>) => {

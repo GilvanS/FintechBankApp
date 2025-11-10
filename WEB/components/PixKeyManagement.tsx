@@ -4,6 +4,7 @@ import { useAuth } from '../App';
 // FIX: Corrected import path for types from parent directory.
 import { PixKey } from '../types';
 import { getPixKeys, registerPixKey, deletePixKey } from '../services/api';
+import { useToast, ToastContainer } from './Toast';
 
 interface PixKeyManagementProps {
     onBack: () => void;
@@ -17,6 +18,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     const [newKeyType, setNewKeyType] = useState<'CPF' | 'EMAIL'>('CPF');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const { toast, showSuccess, showError, hide } = useToast();
 
     const fetchKeys = async () => {
         if (user) {
@@ -40,20 +42,33 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
         const result = await registerPixKey(newKeyType, key);
         if (result.success) {
             setSuccess(result.message);
+            showSuccess('Chave PIX cadastrada com sucesso');
             fetchKeys();
             setTimeout(() => {
                 setShowAddModal(false);
                 setSuccess('');
             }, 1500);
         } else {
-            setError(result.message);
+            const msg = result.message || 'Falha ao cadastrar chave.';
+            // Tratamento explicito de chave duplicada
+            if (/duplic/gi.test(msg)) {
+                showError('Chave PIX ja cadastrada');
+            } else {
+                showError(msg);
+            }
+            setError(msg);
         }
     };
 
     const handleDeleteKey = async (key: string) => {
         if(user && window.confirm('Tem certeza que deseja remover esta chave PIX?')){
             const res = await deletePixKey(key);
-            if (res.success) fetchKeys();
+            if (res.success) {
+                showSuccess('Chave PIX removida com sucesso');
+                fetchKeys();
+            } else {
+                showError(res.message || 'Falha ao remover chave PIX');
+            }
         }
     };
 
@@ -120,6 +135,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                     </div>
                 </div>
             )}
+            <ToastContainer toast={toast} onClose={hide} />
         </div>
     );
 };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useToast, ToastContainer } from './Toast';
 
 interface PixConfirmationProps {
     details: {
@@ -20,13 +21,19 @@ const InfoRow: React.FC<{ label: string; value: string | React.ReactNode }> = ({
 
 const PixConfirmation: React.FC<PixConfirmationProps> = ({ details, onConfirm, onBack }) => {
     const { amount, description, recipientName, recipientCpf } = details;
+    const { toast, showInfo, hide } = useToast();
+
+    const handleBack = () => {
+        showInfo('Transferencia cancelada pelo usuario');
+        onBack();
+    };
 
     return (
         <div className="lg:col-span-2 flex flex-col gap-8 animate-fade-in">
             <div className="bg-surface-dark rounded-xl p-6">
                  <div className="flex justify-between items-center mb-4">
                     <h1 className="text-white text-2xl font-bold leading-tight">Confirme os dados</h1>
-                    <button onClick={onBack} className="p-2 rounded-full hover:bg-white/10">
+                    <button onClick={handleBack} className="p-2 rounded-full hover:bg-white/10">
                         <span className="material-symbols-outlined">close</span>
                     </button>
                 </div>
@@ -48,6 +55,7 @@ const PixConfirmation: React.FC<PixConfirmationProps> = ({ details, onConfirm, o
                     Confirmar Transferência
                 </button>
             </div>
+            <ToastContainer toast={toast} onClose={hide} />
              <style>{`
                 @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
                 .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }

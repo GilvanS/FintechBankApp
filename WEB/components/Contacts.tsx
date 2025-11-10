@@ -5,6 +5,7 @@ import { PixContact } from '../types';
 import { getPixContacts, addPixContact, deletePixContact } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import InfoPopupBottom from './InfoPopupBottom';
+import { useToast, ToastContainer } from './Toast';
 
 interface ContactsProps {
     onBack?: () => void;
@@ -22,6 +23,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
     const [newContactName, setNewContactName] = useState('');
     const [newContactKey, setNewContactKey] = useState('');
     const [error, setError] = useState('');
+    const { toast, showSuccess, showError, hide } = useToast();
 
     const fetchContacts = async () => {
         if (user) {
@@ -50,16 +52,28 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
             setShowAddModal(false);
             setNewContactName('');
             setNewContactKey('');
+            showSuccess('Contato salvo com sucesso');
             fetchContacts();
         } else {
-            setError(result.message);
+            const msg = result.message || 'Falha ao salvar contato.';
+            if (/duplic/gi.test(msg)) {
+                showError('Contato com esta chave ja existe');
+            } else {
+                showError(msg);
+            }
+            setError(msg);
         }
     };
 
     const handleDeleteContact = async (key: string) => {
         if (user && window.confirm('Tem certeza que deseja remover este contato?')) {
             const res = await deletePixContact(user.cpf, key);
-            if (res.success) fetchContacts();
+            if (res.success) {
+                showSuccess('Contato removido com sucesso');
+                fetchContacts();
+            } else {
+                showError(res.message || 'Falha ao remover contato');
+            }
         }
     };
     
@@ -131,6 +145,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
                     </div>
                 </div>
             )}
+            <ToastContainer toast={toast} onClose={hide} />
         </div>
     );
 };

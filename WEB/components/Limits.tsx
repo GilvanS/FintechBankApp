@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import { updateUserPixDailyLimit, requestLimitIncrease, getUserByCpf } from '../services/api';
 import { useAuth } from '../App';
+import { useToast, ToastContainer } from './Toast';
 
 const Limits: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     const { user, updateUser } = useAuth();
@@ -9,6 +10,7 @@ const Limits: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const { toast, showSuccess, showError, hide } = useToast();
     
     if(!user) return null;
 
@@ -21,23 +23,26 @@ const Limits: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
         const limit = parseFloat(newLimit);
         if (isNaN(limit) || limit <= 0) {
             setError('Valor de limite inválido.');
+            showError('Valor de limite invalido');
             setIsLoading(false);
             return;
         }
 
         let result;
         if (limit > 5000) {
-             result = await requestLimitIncrease(user.cpf, limit);
+             result = await requestLimitIncrease(user!.cpf, limit);
         } else {
-             result = await updateUserPixDailyLimit(user.cpf, limit);
+             result = await updateUserPixDailyLimit(user!.cpf, limit);
         }
         
         if (result.success) {
             setSuccess(result.message);
-            const refreshed = await getUserByCpf(user.cpf);
+            showSuccess(limit > 5000 ? 'Solicitacao de aumento de limite enviada' : 'Limite atualizado com sucesso');
+            const refreshed = await getUserByCpf(user!.cpf);
             if (refreshed.success && refreshed.user) updateUser(refreshed.user);
         } else {
             setError(result.message);
+            showError(result.message ? `Falha ao atualizar limite: ${result.message}` : 'Falha ao atualizar limite');
         }
 
         setIsLoading(false);
@@ -90,6 +95,7 @@ const Limits: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                     </form>
                 </div>
             </main>
+            <ToastContainer toast={toast} onClose={hide} />
         </div>
     );
 };

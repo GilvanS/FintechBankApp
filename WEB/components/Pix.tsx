@@ -8,6 +8,7 @@ import PixKeyManagement from './PixKeyManagement';
 import PixSidebar from './PixSidebar';
 import PasswordModal from './PasswordModal';
 import PixConfirmation from './PixConfirmation';
+import { useToast, ToastContainer } from './Toast';
 
 type PixSubView = 'transfer' | 'keyManagement' | 'contacts' | 'confirmation';
 
@@ -137,14 +138,17 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             setTransferDetails(details);
             setRecipientInfo({ name: recipientResult.name, cpf: recipientResult.cpf });
             setSubView('confirmation');
+            showInfo('Destinatario verificado. Confirme a transferencia.');
         } else {
-            setTransferError(recipientResult.message || 'Chave PIX inválida ou não encontrada.');
+            const msg = recipientResult.message || 'Chave PIX invalida ou nao encontrada.';
+            setTransferError(msg);
+            showError(msg);
         }
         setIsProcessing(false);
     };
     
     const handleConfirmFromConfirmationScreen = () => {
-        setPasswordModalInfo({ title: 'Confirmar Transferência', description: 'Digite seu PIN para autorizar.' });
+        setPasswordModalInfo({ title: 'Confirmar Transferencia', description: 'Digite seu PIN para autorizar.' });
         setPendingPinAction(() => async (pin: string) => {
             if (!user || !transferDetails) return;
             setIsProcessing(true);
@@ -157,10 +161,11 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             if (result.success) {
                 const refreshed = await getUserByCpf(user.cpf);
                 if (refreshed.success && refreshed.user) updateUser(refreshed.user);
-                alert('Transferencia realizada com sucesso!');
+                showSuccess('Transferencia realizada com sucesso!');
                 setSubView('transfer');
             } else {
-                alert(`Falha na transferencia: ${result.message}`);
+                const msg = `Falha na transferencia: ${result.message}`;
+                showError(msg);
             }
             setIsProcessing(false);
             setIsPasswordModalOpen(false);
@@ -231,11 +236,12 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <PasswordModal
                 isOpen={isPasswordModalOpen}
                 onClose={() => setIsPasswordModalOpen(false)}
-                onConfirm={handleConfirmTransfer}
-                title="Confirmar Transferência"
+                onConfirm={handlePasswordConfirm}
+                title="Confirmar Transferencia"
                 description="Digite sua senha para autorizar."
                 isLoading={isProcessing}
             />
+            <ToastContainer toast={toast} onClose={hide} />
         </div>
     );
 };

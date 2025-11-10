@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 function scanDir(dir, pattern) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -17,8 +17,11 @@ function scanDir(dir, pattern) {
     }
 }
 
-const root = path.join(__dirname, '..');
+// Resolve paths relative ao diretório WEB
+const webRoot = path.resolve(process.cwd(), 'WEB');
 const pattern = /from\s+['"]\.\.\/services\/mockApi['"]/;
-scanDir(path.join(root, 'components'), pattern);
-scanDir(path.join(root, 'services'), pattern);
+
+scanDir(path.join(webRoot, 'components'), pattern);
+scanDir(path.join(webRoot, 'services'), pattern);
+
 console.log('OK: no mockApi imports found.');

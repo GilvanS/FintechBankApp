@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { signUp } from '../services/api';
 import { formatCPF } from '../utils/formatters';
+import { useToast, ToastContainer } from './Toast';
 
 interface SignUpProps {
     onSignUpSuccess: () => void;
@@ -16,11 +17,13 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const { toast, showSuccess, showError, hide } = useToast();
 
     const handleSignUp = async (e: React.FormEvent) => {
         e.preventDefault();
         if (password !== confirmPassword) {
-            setError('As senhas não coincidem.');
+            setError('As senhas nao coincidem.');
+            showError('As senhas nao coincidem.');
             return;
         }
         setIsLoading(true);
@@ -38,11 +41,14 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
         setIsLoading(false);
         if (result.success) {
             setSuccess(result.message);
+            showSuccess('Conta criada com sucesso');
             setTimeout(() => {
                 onSignUpSuccess();
-            }, 2000);
+            }, 1500);
         } else {
-            setError(result.message);
+            const msg = result.message || 'Falha ao criar conta.';
+            setError(msg);
+            showError(msg);
         }
     };
 
@@ -90,6 +96,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                 </form>
             </main>
             <style>{`.input-style { background-color: #1A2C1F; border: 2px solid #1A2C1F; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-top: 0.25rem; color: #E5E7EB; } .input-style:focus { outline: none; box-shadow: 0 0 0 2px #13ec5b; border-color: transparent; }`}</style>
+            <ToastContainer toast={toast} onClose={hide} />
         </div>
     );
 };
