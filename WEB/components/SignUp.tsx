@@ -26,12 +26,34 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
             showError('As senhas nao coincidem.');
             return;
         }
+        const cpfDigits = cpf.replace(/\D/g, '');
+        if (cpfDigits.length !== 11) {
+            setError('CPF deve ter 11 digitos.');
+            showError('CPF deve ter 11 digitos.');
+            return;
+        }
+        if (password.length < 6 || password.length > 12) {
+            setError('A senha deve ter entre 6 e 12 caracteres.');
+            showError('A senha deve ter entre 6 e 12 caracteres.');
+            return;
+        }
+        if (!fullName.trim()) {
+            setError('Nome completo e obrigatorio.');
+            showError('Nome completo e obrigatorio.');
+            return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            setError('Formato de email invalido.');
+            showError('Formato de email invalido.');
+            return;
+        }
+
         setIsLoading(true);
         setError('');
         setSuccess('');
 
         const result = await signUp({
-            cpf: cpf.replace(/\D/g, ''),
+            cpf: cpfDigits,
             fullName,
             email,
             password,

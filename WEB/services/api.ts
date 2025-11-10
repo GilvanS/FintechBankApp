@@ -186,7 +186,10 @@ export async function signUp(payload: { cpf: string; fullName: string; email: st
         const res = await fetch(`${API_BASE}/auth/signup`, {
             method: 'POST',
             headers: getAuthHeaders('json'),
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+                ...payload,
+                cpf: (payload.cpf || '').replace(/\D/g, ''),
+            }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success) {
@@ -295,12 +298,13 @@ export async function registerPixKey(type: 'CPF' | 'EMAIL', key: string) {
 }
 
 // Método: getPixRecipientInfo
-export async function getPixRecipientInfo(key: string) {
+export async function getPixRecipientInfo(key: string, senderCpf?: string) {
     try {
+        const payload = senderCpf ? { key, fromCpf: senderCpf } : { key };
         const res = await fetch(`${API_BASE}/pix/recipient-info`, {
             method: 'POST',
             headers: getAuthHeaders('json'),
-            body: JSON.stringify({ key }),
+            body: JSON.stringify(payload),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success) {
@@ -484,7 +488,11 @@ export async function getPixContacts(cpf: string): Promise<{ success: boolean; m
         if (!res.ok) {
             return { success: false, message: data?.message || 'Falha ao listar contatos.' };
         }
-        const contacts = Array.isArray(data) ? data : (data.contacts || []);
+        const list = Array.isArray(data) ? data : (data.contacts || []);
+        const contacts = list.map((c: any) => ({
+            name: c.contact_name || c.name,
+            key: c.contact_cpf || c.key || c.contact_key,
+        }));
         return { success: true, contacts };
     } catch (error) {
         return { success: false, message: 'Erro de conexao ao listar contatos.' };
@@ -493,10 +501,12 @@ export async function getPixContacts(cpf: string): Promise<{ success: boolean; m
 
 export async function addPixContact(cpf: string, contact: { name: string; key: string }): Promise<{ success: boolean; message: string }> {
     try {
+        const sanitizedCpf = (contact.key || '').replace(/\D/g, '').slice(0, 11);
+        const payload = { contactCpf: sanitizedCpf, contactName: contact.name };
         const res = await fetch(`${API_BASE}/pix/contacts/${cpf}`, {
             method: 'POST',
             headers: getAuthHeaders('json'),
-            body: JSON.stringify(contact),
+            body: JSON.stringify(payload),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data?.success) {

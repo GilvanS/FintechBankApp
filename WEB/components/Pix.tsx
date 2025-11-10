@@ -117,6 +117,7 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [transferError, setTransferError] = useState('');
     const [contacts, setContacts] = useState<PixContact[]>([]);
     const [selectedContact, setSelectedContact] = useState<PixContact | null>(null);
+    const { toast, showSuccess, showError, showInfo, hide } = useToast();
 
     useEffect(() => {
         const fetchContacts = async () => {

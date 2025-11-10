@@ -689,7 +689,7 @@ apiRouter.post('/pix/contacts/:cpf', bearerAuth(), asyncHandler(async (req, res)
     if (req.user.cpf !== req.params.cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
     const { contactCpf, contactName } = req.body || {};
     if (!contactCpf || !contactName) return res.status(400).json({ success: false, message: 'Payload invalido.' });
-    await pixRepo.addContact(req.params.cpf, contactCpf, contactName);
+    await pixRepo.addContact({ cpf: req.params.cpf, contactKey: contactCpf, contactName });
     auditLog(req, 'pix_contact_add', 'info');
     res.status(201).json({ success: true, message: 'Contato adicionado' });
 }));

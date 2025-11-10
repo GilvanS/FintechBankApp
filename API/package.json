@@ -28,6 +28,8 @@
     "yamljs": "^0.3.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
     "newman": "^6.1.2",
     "newman-reporter-html": "^1.0.5",
     "nodemon": "^3.1.0"

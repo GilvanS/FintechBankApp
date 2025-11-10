@@ -27,6 +27,73 @@ export const useAuth = () => {
     return context;
 };
 
+// Função de normalizacao do usuario vindo do backend
+function normalizeUserShape(input: Partial<User>): User {
+    const nowIso = new Date().toISOString();
+    const defaultCard = {
+        number: '0000000000000000',
+        dueDate: nowIso,
+        invoiceDueDate: nowIso,
+        closedInvoiceDueDate: nowIso,
+        currentInvoice: 0,
+        closedInvoice: 0,
+        availableLimit: 0,
+        totalLimit: 0,
+        pointsBalance: 0,
+        isBlocked: false,
+        transactions: [],
+        closedTransactions: [],
+    };
+
+    const ccRaw: any = (input as any).credit_card || input.creditCard || {};
+    const toNum = (v: any) => (typeof v === 'number' ? v : Number(v || 0));
+    const toBool = (v: any) => Boolean(v);
+    const toStr = (v: any) => (v == null ? '' : String(v));
+
+    const creditCard = {
+        ...defaultCard,
+        ...(ccRaw || {}),
+        dueDate: ccRaw.dueDate || ccRaw.due_date || defaultCard.dueDate,
+        invoiceDueDate: ccRaw.invoiceDueDate || ccRaw.invoice_due_date || defaultCard.invoiceDueDate,
+        closedInvoiceDueDate: ccRaw.closedInvoiceDueDate || ccRaw.closed_invoice_due_date || defaultCard.closedInvoiceDueDate,
+        currentInvoice: toNum(ccRaw.currentInvoice),
+        closedInvoice: toNum(ccRaw.closedInvoice),
+        availableLimit: toNum(ccRaw.availableLimit),
+        totalLimit: toNum(ccRaw.totalLimit),
+        pointsBalance: toNum(ccRaw.pointsBalance),
+        isBlocked: toBool(ccRaw.isBlocked),
+        transactions: Array.isArray(ccRaw.transactions) ? ccRaw.transactions : [],
+        closedTransactions: Array.isArray(ccRaw.closedTransactions) ? ccRaw.closedTransactions : [],
+    };
+
+    const user: User = {
+        cpf: toStr(input.cpf),
+        fullName: toStr(input.fullName),
+        username: input.username || '',
+        profileDescription: input.profileDescription || '',
+        email: toStr(input.email),
+        password: toStr((input as any).password),
+        balance: toNum(input.balance),
+        transactions: Array.isArray(input.transactions) ? input.transactions : [],
+        isBlocked: toBool(input.isBlocked),
+        role: input.role === 'admin' ? 'admin' : 'user',
+        pixDailyLimit: toNum(input.pixDailyLimit),
+        pixKeys: Array.isArray(input.pixKeys) ? input.pixKeys : [],
+        pixContacts: Array.isArray(input.pixContacts) ? input.pixContacts : [],
+        limitIncreaseRequest: input.limitIncreaseRequest ?? null,
+        showStoriesPopup: toBool(input.showStoriesPopup),
+        purchasedItems: Array.isArray(input.purchasedItems) ? input.purchasedItems : [],
+        creditCard,
+    };
+
+    // Garantir consistencia em datas como strings
+    user.creditCard.dueDate = toStr(user.creditCard.dueDate) || nowIso;
+    user.creditCard.invoiceDueDate = toStr(user.creditCard.invoiceDueDate) || nowIso;
+    user.creditCard.closedInvoiceDueDate = toStr(user.creditCard.closedInvoiceDueDate) || nowIso;
+
+    return user;
+}
+
 function App() {
     const [user, setUser] = useState<User | null>(null);
     const [view, setView] = useState('prelogin'); // prelogin, login, signup, dashboard, resetPassword
@@ -36,7 +103,8 @@ function App() {
     }, []);
 
     const handleLogin = (loggedInUser: Omit<User, 'password'>) => {
-        setUser(loggedInUser as User);
+        const normalized = normalizeUserShape(loggedInUser as Partial<User>);
+        setUser(normalized as User);
         setView('dashboard');
     };
 
@@ -49,7 +117,8 @@ function App() {
     const handleUpdateUser = useCallback((updatedUserData: Partial<Omit<User, 'password'>>) => {
         setUser(prevUser => {
             if (!prevUser) return null;
-            return { ...prevUser, ...updatedUserData } as User;
+            const merged = { ...prevUser, ...updatedUserData } as Partial<User>;
+            return normalizeUserShape(merged);
         });
     }, []);
 

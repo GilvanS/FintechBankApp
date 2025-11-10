@@ -47,7 +47,16 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
         e.preventDefault();
         if (!user) return;
         setError('');
-        const result = await addPixContact(user.cpf, { name: newContactName, key: newContactKey });
+
+        const onlyDigits = newContactKey.replace(/\D/g, '');
+        if (onlyDigits.length !== 11) {
+            const msg = 'CPF deve ter 11 digitos numericos.';
+            setError(msg);
+            showError(msg);
+            return;
+        }
+
+        const result = await addPixContact(user.cpf, { name: newContactName, key: onlyDigits });
         if (result.success) {
             setShowAddModal(false);
             setNewContactName('');
@@ -133,8 +142,17 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
                                <input type="text" value={newContactName} onChange={e => setNewContactName(e.target.value)} required className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 mt-1 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" />
                             </div>
                             <div>
-                               <label className="text-sm font-medium text-gray-300">Chave PIX (CPF, E-mail, etc.)</label>
-                               <input type="text" value={newContactKey} onChange={e => setNewContactKey(e.target.value)} required className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 mt-1 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" />
+                               <label className="text-sm font-medium text-gray-300">Chave PIX (CPF)</label>
+                               <input
+                                   type="text"
+                                   inputMode="numeric"
+                                   pattern="[0-9]*"
+                                   value={newContactKey}
+                                   onChange={e => setNewContactKey(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                                   required
+                                   className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 mt-1 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                               />
+                               <p className="text-xs text-gray-400 mt-1">Digite apenas os 11 digitos do CPF.</p>
                             </div>
                             {error && <p className="text-sm text-red-400">{error}</p>}
                             <div className="flex justify-end space-x-4 mt-6">
