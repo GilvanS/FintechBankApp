@@ -27,6 +27,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
             case 'AUTH_USER_NOT_FOUND': return 'CPF ou senha invalida.';
             case 'AUTH_BLOCKED': return 'Conta bloqueada. Solicite nova senha.';
             case 'AUTH_INVALID_CREDENTIALS': return 'CPF ou senha invalida.';
+            case 'AUTH_USER_LOAD_FAILED': return 'Falha ao carregar dados do usuario apos login.';
             default: return 'Falha no login.';
         }
     }
@@ -34,8 +35,10 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
         e.preventDefault();
         setIsLoading(true);
         setError('');
-        const result = await login(cpf.replace(/\D/g, ''), password);
+        const rawCpf = cpf.replace(/\D/g, '');
+        const result = await login(rawCpf, password);
         setIsLoading(false);
+
         if (result.success && result.user) {
             if (result.token) {
                 localStorage.setItem('authToken', result.token);
@@ -43,7 +46,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
             auth.login(result.user);
             showSuccess('Login efetuado com sucesso');
         } else {
-            const msg = mapLoginError(result.code);
+            const msg = result.message || mapLoginError(result.code);
             setError(msg);
             showError(msg);
         }
