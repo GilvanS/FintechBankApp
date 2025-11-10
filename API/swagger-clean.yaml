@@ -11,7 +11,7 @@ info:
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: http://localhost:3001
+  - url: http://localhost:3001/api/v1
     description: Servidor de desenvolvimento
 
 components:
@@ -540,3 +540,97 @@ paths:
                     example: "temp1234"
                   user:
                     $ref: '#/components/schemas/User'
+
+  /users/{cpf}/pix-daily-usage:
+    get:
+      tags: [PIX]
+      summary: Uso diario do PIX (valor enviado no dia)
+      description: Retorna o total enviado via PIX no dia corrente para o CPF informado.
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  cpf: { type: string, example: '12345678901' }
+                  date: { type: string, format: date, example: '2025-11-10' }
+                  totalSentToday: { type: number, format: float, example: 250.00 }
+        '400':
+          description: Erro
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /cards/invoice/anticipate:
+    post:
+      tags: [Card]
+      summary: Antecipar parcelas da fatura do cartao
+      description: Antecipacao de parcelas com regra de desconto e atualizacao de fatura/transacoes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cpf, pin, installmentTransactionIds]
+              properties:
+                cpf: { type: string, pattern: '^[0-9]{11}$' }
+                pin: { type: string, minLength: 4, maxLength: 4 }
+                installmentTransactionIds:
+                  type: array
+                  items: { type: string }
+              example:
+                cpf: '12345678901'
+                pin: '1234'
+                installmentTransactionIds: ['tx-inv-001', 'tx-inv-002']
+      responses:
+        '200':
+          description: Parcelas antecipadas com sucesso
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '400':
+          description: Dados invalidos ou inconsistencia nas parcelas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /user/me/{cpf}:
+    get:
+      tags: [Users]
+      summary: Dados do usuario (compatibilidade)
+      description: Retorna dados do usuario, transacoes e contatos PIX (rota de compatibilidade).
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }

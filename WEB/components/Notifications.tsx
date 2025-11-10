@@ -1,15 +1,17 @@
 
+
+
 import React, { useState, useEffect } from 'react';
+// FIX: Corrected import path for useAuth from parent directory.
 import { useAuth } from '../App';
+// FIX: Corrected import path for types from parent directory.
 import { AppNotification } from '../types';
-// FIX: Removed .ts extension from import path.
-import { getNotifications, markNotificationAsRead } from '../services/mockApi';
+import { getNotifications, markNotificationAsRead } from '../services/api';
 
 interface NotificationsProps {
     onBack: () => void;
 }
-
-const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
+function Notifications() {
     const { user } = useAuth();
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -17,8 +19,11 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
     const fetchNotifications = async () => {
         if (user) {
             setIsLoading(true);
-            const userNotifications = await getNotifications(user.cpf);
-            setNotifications(userNotifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+            const result = await getNotifications(user.cpf);
+            if (result.success) {
+                const userNotifications = result.notifications!;
+                setNotifications(userNotifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+            }
             setIsLoading(false);
         }
     };
@@ -29,9 +34,8 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
 
     const handleMarkAsRead = async (id: number) => {
         if (user) {
-            await markNotificationAsRead(user.cpf, id);
-            // Re-fetch to update the list and header count
-            fetchNotifications(); 
+            const res = await markNotificationAsRead(user.cpf, id);
+            if (res.success) fetchNotifications();
         }
     };
 
@@ -66,5 +70,4 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
         </div>
     );
 };
-
 export default Notifications;

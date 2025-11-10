@@ -1,107 +1,120 @@
 # Script para executar testes Newman da FintechBankApp
-# Este script executa todos os testes, incluindo os administrativos
 
 param(
     [switch]$SkipServerCheck,
     [switch]$OpenReport,
-    [string]$Collection = "..\postman-collection.json",
+    [string]$Collection = ".\postman-collection.json",
     [int]$Timeout = 30000,
     [int]$Delay = 500
 )
 
-Write-Host "🚀 NEWMAN TESTS - FintechBankApp" -ForegroundColor Green
-Write-Host "=================================" -ForegroundColor Green
+Write-Host "NEWMAN TESTS - FintechBankApp"
+Write-Host "================================="
 Write-Host ""
 
-# Verificar se Newman está instalado
-Write-Host "🔍 Verificando dependências..." -ForegroundColor Yellow
+# Verificar se Newman esta instalado
+Write-Host "Verificando dependencias..."
 try {
     $newmanVersion = newman --version 2>$null
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "✅ Newman instalado: v$newmanVersion" -ForegroundColor Green
+        Write-Host ("Newman instalado: v{0}" -f $newmanVersion)
     } else {
-        throw "Newman não encontrado"
+        throw "Newman nao encontrado"
     }
 } catch {
-    Write-Host "❌ Newman não está instalado!" -ForegroundColor Red
-    Write-Host "   Instale com: npm install -g newman newman-reporter-html" -ForegroundColor Yellow
+    Write-Host "Newman nao esta instalado!"
+    Write-Host "Instale com: npm install -g newman newman-reporter-html"
     exit 1
 }
 
 # Verificar se o arquivo de collection existe
 if (-not (Test-Path $Collection)) {
-    Write-Host "❌ Arquivo de collection não encontrado: $Collection" -ForegroundColor Red
-    exit 1
+    Write-Host ("Arquivo de collection nao encontrado: {0}" -f $Collection)
+    # Tentar fallback relativo ao script
+    $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $collectionPath = Join-Path $root "..\postman-collection.json"
+    if (Test-Path $collectionPath) {
+        Write-Host ("Usando collection no caminho alternativo: {0}" -f $collectionPath)
+        $Collection = $collectionPath
+    } else {
+        exit 1
+    }
 }
 
-Write-Host "✅ Collection encontrada: $Collection" -ForegroundColor Green
+Write-Host ("Collection encontrada: {0}" -f $Collection)
 
-# Verificar se o servidor está rodando (opcional)
+# Verificar se o servidor esta rodando (opcional)
 if (-not $SkipServerCheck) {
-    Write-Host "🔍 Verificando se o servidor está rodando..." -ForegroundColor Yellow
+    Write-Host "Verificando se o servidor esta rodando..."
     try {
         $response = Invoke-WebRequest -Uri "http://localhost:3001/health" -TimeoutSec 5 -ErrorAction Stop
         if ($response.StatusCode -eq 200) {
-            Write-Host "✅ Servidor está rodando e saudável" -ForegroundColor Green
+            Write-Host "Servidor esta rodando e saudavel"
         } else {
-            throw "Servidor não saudável"
+            throw "Servidor nao saudavel"
         }
     } catch {
-        Write-Host "❌ Servidor não está rodando ou não está saudável!" -ForegroundColor Red
-        Write-Host "   Inicie o servidor com: npm start" -ForegroundColor Yellow
-        Write-Host "   Ou use -SkipServerCheck para pular esta verificação" -ForegroundColor Yellow
+        Write-Host "Servidor nao esta rodando ou nao esta saudavel!"
+        Write-Host "Inicie o servidor com: npm start"
+        Write-Host "Ou use -SkipServerCheck para pular esta verificacao"
         exit 1
     }
 }
 
 Write-Host ""
-Write-Host "🧪 Executando testes Newman..." -ForegroundColor Yellow
-Write-Host "   Collection: $Collection" -ForegroundColor Cyan
-Write-Host "   Timeout: $Timeout ms" -ForegroundColor Cyan
-Write-Host "   Delay: $Delay ms" -ForegroundColor Cyan
+Write-Host "Executando testes Newman..."
+Write-Host ("Collection: {0}" -f $Collection)
+Write-Host ("Timeout: {0} ms" -f $Timeout)
+Write-Host ("Delay: {0} ms" -f $Delay)
 Write-Host ""
 
-# Executar Newman
-$reportHtml = "newman-report-$(Get-Date -Format 'yyyyMMdd-HHmmss').html"
-$reportJson = "newman-report-$(Get-Date -Format 'yyyyMMdd-HHmmss').json"
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $root
 
-try {
-    newman run $Collection `
-        --reporters cli,html,json `
-        --reporter-html-export $reportHtml `
-        --reporter-json-export $reportJson `
-        --timeout $Timeout `
-        --delay-request $Delay `
-        --insecure `
-        --color on
+$collectionPath = Join-Path $root "..\postman-collection.json"
+$configPath = Join-Path $root "newman.config.json"
 
-    $exitCode = $LASTEXITCODE
-
-    Write-Host ""
-    Write-Host "📄 RELATÓRIOS GERADOS:" -ForegroundColor Green
-    Write-Host "   📊 HTML: $reportHtml" -ForegroundColor Cyan
-    Write-Host "   📋 JSON: $reportJson" -ForegroundColor Cyan
-
-    if ($OpenReport -and (Test-Path $reportHtml)) {
-        Write-Host ""
-        Write-Host "🌐 Abrindo relatório HTML..." -ForegroundColor Yellow
-        Start-Process $reportHtml
-    }
-
-    if ($exitCode -eq 0) {
-        Write-Host ""
-        Write-Host "🎉 TODOS OS TESTES PASSARAM! 🎉" -ForegroundColor Green
-        Write-Host "✅ APIs funcionando corretamente, incluindo as administrativas" -ForegroundColor Green
-    } else {
-        Write-Host ""
-        Write-Host "⚠️  ALGUNS TESTES FALHARAM" -ForegroundColor Yellow
-        Write-Host "❌ Verifique o relatório para mais detalhes" -ForegroundColor Red
-    }
-
-    exit $exitCode
-
-} catch {
-    Write-Host ""
-    Write-Host "❌ Erro ao executar Newman: $($_.Exception.Message)" -ForegroundColor Red
+if (!(Test-Path $collectionPath)) {
+    Write-Host ("Colecao Postman nao encontrada: {0}" -f $collectionPath)
     exit 1
 }
+
+if (!(Test-Path $configPath)) {
+    Write-Host ("Arquivo de configuracao nao encontrado: {0}" -f $configPath)
+}
+
+# Executar Newman via Node (script JS gerencia reporter/flags)
+$exitCode = 0
+try {
+    Write-Host "Executando Newman via Node..."
+    node .\run-newman-tests.js
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        Write-Host ("Newman terminou com erro. Codigo: {0}" -f $exitCode)
+        exit $exitCode
+    }
+    Write-Host "Suite Newman concluida com sucesso."
+} catch {
+    $msg = $_.Exception.Message
+    Write-Host ("Erro ao executar Newman: {0}" -f $msg)
+    exit 1
+}
+
+# Relatorios (informativo; gerados pelo script JS quando configurado)
+Write-Host ""
+Write-Host "RELATORIOS:"
+Write-Host "HTML e JSON podem ser gerados via newman.config.json"
+
+if ($OpenReport) {
+    Write-Host "Abra o relatorio HTML manualmente se necessario."
+}
+
+if ($exitCode -eq 0) {
+    Write-Host "TODOS OS TESTES PASSARAM!"
+    Write-Host "APIs funcionando corretamente, incluindo administracao."
+} else {
+    Write-Host "ALGUNS TESTES FALHARAM"
+    Write-Host "Verifique o relatorio para mais detalhes."
+}
+
+exit $exitCode

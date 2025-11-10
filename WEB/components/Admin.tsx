@@ -1,288 +1,339 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, PasswordResetRequest, LimitIncreaseRequest } from '../types';
-// FIX: Removed .ts extension from import path.
-import { 
-    adminGetUserByCpf, 
-    adminDeposit, 
-    blockUser, 
+import {
+    adminGetUserByCpf,
+    blockUser,
     unblockUser,
+    adminDeposit,
     adminGetPasswordRequests,
     adminApprovePasswordRequest,
     adminDenyPasswordRequest,
     adminGetLimitRequests,
     adminApproveLimitRequest,
-    adminDenyLimitRequest
-} from '../services/mockApi';
+    adminDenyLimitRequest,
+    adminUpdateCardDetails
+} from '../services/api';
 import { formatCPF } from '../utils/formatters';
+import { useAuth } from '../App';
 
-interface AdminProps {
-    onBack: () => void;
-}
-
-const RequestCard: React.FC<{ title: string; children: React.ReactNode; count: number }> = ({ title, children, count }) => (
-    <div className="bg-gray-900 p-4 rounded-lg">
-        <h3 className="text-lg font-semibold text-white mb-3">
-            {title} <span className="text-sm font-normal bg-green-900/50 text-green-300 rounded-full px-2 py-0.5">{count}</span>
-        </h3>
-        {children}
+const StatCard: React.FC<{ title: string; value: string | number; icon: string }> = ({ title, value, icon }) => (
+    <div className="bg-surface-dark p-6 rounded-xl flex flex-col justify-between">
+        <div className="flex items-center space-x-3 mb-4">
+            <span className="material-symbols-outlined text-primary text-3xl">{icon}</span>
+            <p className="text-sm text-subtle-dark">{title}</p>
+        </div>
+        <p className="text-4xl font-bold text-text-dark">{value}</p>
     </div>
 );
 
-const Admin: React.FC<AdminProps> = ({ onBack }) => {
-    const [searchCpf, setSearchCpf] = useState('');
+const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
+    const { user: adminUser, logout } = useAuth();
+    const [cpfSearch, setCpfSearch] = useState('');
     const [searchedUser, setSearchedUser] = useState<User | null>(null);
-    const [isSearching, setIsSearching] = useState(false);
-    const [searchMessage, setSearchMessage] = useState('');
-    
-    const [userForDepositModal, setUserForDepositModal] = useState<User | null>(null);
-    const [depositAmount, setDepositAmount] = useState('');
-    
-    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
     const [passwordRequests, setPasswordRequests] = useState<PasswordResetRequest[]>([]);
     const [limitRequests, setLimitRequests] = useState<LimitIncreaseRequest[]>([]);
-    const [isLoadingRequests, setIsLoadingRequests] = useState(true);
+    const [isLoadingAction, setIsLoadingAction] = useState(false);
+    
+    // State for Modals and Toasts
+    const [modalState, setModalState] = useState<{
+        isOpen: boolean;
+        action: 'approve' | 'deny' | 'block' | 'unblock' | 'deposit' | null;
+        data?: any;
+    }>({ isOpen: false, action: null });
+    const [denyReason, setDenyReason] = useState('');
+    const [depositAmount, setDepositAmount] = useState('');
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+    // State for card details form
+    const [cardDueDate, setCardDueDate] = useState('');
+    const [cardInvoiceDate, setCardInvoiceDate] = useState('');
+
+    useEffect(() => {
+        if (searchedUser) {
+            setCardDueDate(searchedUser.creditCard.dueDate);
+            const invoiceDateStr = searchedUser.creditCard.closedInvoiceDueDate || searchedUser.creditCard.invoiceDueDate;
+            const invoiceDate = new Date(invoiceDateStr);
+            const formattedDate = invoiceDate.toISOString().split('T')[0];
+            setCardInvoiceDate(formattedDate);
+        }
+    }, [searchedUser]);
+
+    const showToast = (message: string, type: 'success' | 'error') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 4000);
+    };
 
     const fetchRequests = async () => {
-        setIsLoadingRequests(true);
-        try {
-            const [pwReqs, limReqs] = await Promise.all([
-                adminGetPasswordRequests(),
-                adminGetLimitRequests()
-            ]);
-            setPasswordRequests(pwReqs);
-            setLimitRequests(limReqs);
-        } catch (e) {
-            setNotification({ message: 'Falha ao buscar a lista de solicitações.', type: 'error' });
-        }
-        setIsLoadingRequests(false);
+        const [pwReqs, limReqs] = await Promise.all([
+            adminGetPasswordRequests(),
+            adminGetLimitRequests()
+        ]);
+        setPasswordRequests(pwReqs);
+        setLimitRequests(limReqs);
     };
 
     useEffect(() => {
         fetchRequests();
     }, []);
 
-    const handleSearch = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!searchCpf) return;
-        
-        setIsSearching(true);
-        setSearchedUser(null);
-        setSearchMessage('');
-        setNotification(null);
-        
-        const result = await adminGetUserByCpf(searchCpf.replace(/\D/g, ''));
-        
+    const handleSearch = async (e?: React.FormEvent) => {
+        e?.preventDefault();
+        if (!cpfSearch) return;
+        const result = await adminGetUserByCpf(cpfSearch.replace(/\D/g, ''));
         if (result.success && result.user) {
             setSearchedUser(result.user);
         } else {
-            setSearchMessage(result.message);
-        }
-        setIsSearching(false);
-    };
-
-    const handleAction = async (action: 'block' | 'unblock', cpf: string) => {
-        const result = action === 'block' ? await blockUser(cpf) : await unblockUser(cpf);
-        setNotification({ message: result.message, type: result.success ? 'success' : 'error' });
-        if (result.success && result.user) {
-            setSearchedUser(result.user);
+            showToast(result.message, 'error');
+            setSearchedUser(null);
         }
     };
     
-    const handleDeposit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!userForDepositModal || !depositAmount) return;
-        
-        const amount = parseFloat(depositAmount);
-        if (isNaN(amount) || amount <= 0) {
-            setNotification({ message: 'Valor de depósito inválido.', type: 'error' });
-            return;
-        }
-        
-        const result = await adminDeposit(userForDepositModal.cpf, amount);
-        setNotification({ message: result.message, type: result.success ? 'success' : 'error' });
+    const openModal = (action: typeof modalState.action, data: any) => {
+        setModalState({ isOpen: true, action, data });
+    };
+
+    const closeModal = () => {
+        setModalState({ isOpen: false, action: null, data: null });
+        // FIX: Corrected typo and completed the function to reset modal state.
+        setDenyReason('');
+        setDepositAmount('');
+    };
+    
+    const handleUpdateCard = async () => {
+        if (!searchedUser) return;
+        setIsLoadingAction(true);
+        const result = await adminUpdateCardDetails(searchedUser.cpf, {
+            dueDate: cardDueDate,
+            invoiceDueDate: new Date(cardInvoiceDate + 'T00:00:00Z').toISOString()
+        });
         if (result.success && result.user) {
             setSearchedUser(result.user);
-            setUserForDepositModal(null);
-            setDepositAmount('');
-        }
-    };
-
-    const handlePasswordRequest = async (cpf: string, approve: boolean) => {
-        let result;
-        if (approve) {
-            result = await adminApprovePasswordRequest(cpf);
+            showToast(result.message, 'success');
         } else {
-            const reason = prompt('Por favor, informe o motivo da negação:');
-            if (reason) {
-                result = await adminDenyPasswordRequest(cpf, reason);
-            } else {
-                return; // User cancelled prompt
-            }
+            showToast(result.message, 'error');
         }
-        
-        setNotification({ message: result.message, type: result.success ? 'success' : 'error' });
-        if (result.success) {
-            fetchRequests();
-        }
+        setIsLoadingAction(false);
     };
 
-    const handleLimitRequest = async (cpf: string, approve: boolean) => {
-        let result;
-        if (approve) {
-            result = await adminApproveLimitRequest(cpf);
-        } else {
-            const reason = prompt('Por favor, informe o motivo da negação:');
-            if (reason) {
-                result = await adminDenyLimitRequest(cpf, reason);
-            } else {
-                return; // User cancelled prompt
-            }
-        }
-        
-        setNotification({ message: result.message, type: result.success ? 'success' : 'error' });
-        if (result.success) {
-            fetchRequests();
-        }
-    };
+    const handleConfirmAction = async () => {
+        if (!modalState.action || !modalState.data) return;
 
+        setIsLoadingAction(true);
+        let result: { success: boolean; message: string; user?: User };
+
+        switch (modalState.action) {
+            case 'approve':
+                if (modalState.data.amount) { // Limit request
+                    result = await adminApproveLimitRequest(modalState.data.cpf);
+                } else { // Password request
+                    result = await adminApprovePasswordRequest(modalState.data.cpf);
+                }
+                break;
+            case 'deny':
+                if (modalState.data.amount) { // Limit request
+                    result = await adminDenyLimitRequest(modalState.data.cpf, denyReason);
+                } else { // Password request
+                    result = await adminDenyPasswordRequest(modalState.data.cpf, denyReason);
+                }
+                break;
+            case 'block':
+                result = await blockUser(modalState.data.cpf);
+                if (result.success && result.user) setSearchedUser(result.user);
+                break;
+            case 'unblock':
+                result = await unblockUser(modalState.data.cpf);
+                if (result.success && result.user) setSearchedUser(result.user);
+                break;
+            case 'deposit':
+                const amount = parseFloat(depositAmount);
+                if (isNaN(amount) || amount <= 0) {
+                    showToast('Valor de depósito inválido.', 'error');
+                    setIsLoadingAction(false);
+                    return;
+                }
+                result = await adminDeposit(modalState.data.cpf, amount);
+                if (result.success && result.user) setSearchedUser(result.user);
+                break;
+            default:
+                result = { success: false, message: 'Ação desconhecida.' };
+        }
+
+        showToast(result.message, result.success ? 'success' : 'error');
+        setIsLoadingAction(false);
+        closeModal();
+        fetchRequests(); // Refresh lists
+    };
 
     return (
-        <div className="bg-black text-white p-4 min-h-full">
-            <div className="flex items-center mb-6">
-                <button onClick={onBack} className="mr-4 p-2 rounded-full hover:bg-gray-800">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
+        <div className="bg-background-dark text-text-dark min-h-full flex flex-col p-4 sm:p-6 lg:p-8">
+            <header className="flex items-center justify-between mb-8">
+                <div className="flex items-center space-x-3">
+                    <span className="material-symbols-outlined text-primary text-4xl">admin_panel_settings</span>
+                    <div>
+                        <h1 className="text-2xl font-bold text-text-dark">Painel do Administrador</h1>
+                        <p className="text-sm text-subtle-dark">Bem-vindo, {adminUser?.fullName.split(' ')[0]}</p>
+                    </div>
+                </div>
+                <button onClick={onBack} className="p-2 rounded-full hover:bg-surface-dark transition-colors">
+                    <span className="material-symbols-outlined">logout</span>
                 </button>
-                <h1 className="text-2xl font-bold">Painel Admin</h1>
-            </div>
-            
-            {notification && (
-                <div className={`p-3 rounded-md mb-4 flex justify-between items-center ${notification.type === 'success' ? 'text-green-400 bg-green-900/50' : 'text-red-400 bg-red-900/50'}`}>
-                    <span>{notification.message}</span>
-                    <button onClick={() => setNotification(null)} className={`p-1 rounded-full ${notification.type === 'success' ? 'hover:bg-green-800/50' : 'hover:bg-red-800/50'} -mr-1`}>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                </div>
-            )}
+            </header>
 
-            <div className="space-y-6">
-                <div className="border-b border-gray-700 pb-6 space-y-4">
-                    <h2 className="text-xl font-semibold">Solicitações Pendentes</h2>
-                    {isLoadingRequests ? (
-                        <div className="text-center text-gray-400">Carregando solicitações...</div>
-                    ) : (
-                        <div className="space-y-4">
-                            <RequestCard title="Redefinição de Senha" count={passwordRequests.length}>
-                                {passwordRequests.length > 0 ? (
-                                    <ul className="space-y-2">
-                                        {passwordRequests.map(req => (
-                                            <li key={req.cpf} className="flex items-center justify-between bg-gray-800 p-2 rounded-md">
-                                                <span className="text-sm font-mono">{formatCPF(req.cpf)}</span>
-                                                <div className="space-x-2">
-                                                    <button onClick={() => handlePasswordRequest(req.cpf, true)} className="px-2 py-1 text-xs font-semibold text-black bg-green-400 rounded-md hover:bg-green-500">Aprovar</button>
-                                                    <button onClick={() => handlePasswordRequest(req.cpf, false)} className="px-2 py-1 text-xs font-semibold text-white bg-red-500 rounded-md hover:bg-red-600">Negar</button>
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : <p className="text-sm text-gray-500">Nenhuma solicitação pendente.</p>}
-                            </RequestCard>
+            <main className="flex-grow overflow-y-auto no-scrollbar space-y-8">
+                {/* Stats */}
+                <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <StatCard title="Solicitações de Senha" value={passwordRequests.length} icon="lock_reset" />
+                    <StatCard title="Solicitações de Limite" value={limitRequests.length} icon="upgrade" />
+                    <StatCard title="Total de Clientes" value="-" icon="group" />
+                    <StatCard title="Transações Hoje" value="-" icon="monitoring" />
+                </section>
 
-                             <RequestCard title="Aumento de Limite PIX" count={limitRequests.length}>
-                                {limitRequests.length > 0 ? (
-                                    <ul className="space-y-2">
-                                        {limitRequests.map(req => (
-                                            <li key={req.cpf} className="flex items-center justify-between bg-gray-800 p-2 rounded-md">
-                                                <div>
-                                                    <span className="text-sm font-mono block">{formatCPF(req.cpf)}</span>
-                                                    <span className="text-xs text-gray-400">Valor: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(req.amount)}</span>
-                                                </div>
-                                                <div className="space-x-2">
-                                                    <button onClick={() => handleLimitRequest(req.cpf, true)} className="px-2 py-1 text-xs font-semibold text-black bg-green-400 rounded-md hover:bg-green-500">Aprovar</button>
-                                                    <button onClick={() => handleLimitRequest(req.cpf, false)} className="px-2 py-1 text-xs font-semibold text-white bg-red-500 rounded-md hover:bg-red-600">Negar</button>
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : <p className="text-sm text-gray-500">Nenhuma solicitação pendente.</p>}
-                            </RequestCard>
-                        </div>
-                    )}
-                </div>
-
-                <div>
-                    <h2 className="text-xl font-semibold mb-4">Gerenciar Cliente</h2>
-                    <form onSubmit={handleSearch} className="flex items-center space-x-2">
+                {/* User Management */}
+                <section className="bg-surface-dark p-6 rounded-xl">
+                    <h2 className="text-lg font-semibold mb-4">Gerenciar Cliente</h2>
+                    <form onSubmit={handleSearch} className="flex items-center gap-4 mb-6">
                         <input
                             type="text"
-                            value={formatCPF(searchCpf)}
-                            onChange={(e) => setSearchCpf(e.target.value)}
-                            placeholder="Digite o CPF do cliente"
+                            value={formatCPF(cpfSearch)}
+                            onChange={(e) => setCpfSearch(e.target.value)}
+                            placeholder="Buscar por CPF"
                             maxLength={14}
-                            className="flex-grow px-4 py-3 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                            className="flex-grow px-4 py-3 bg-background-dark border-2 border-background-dark rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary"
                         />
-                        <button type="submit" disabled={isSearching} className="px-4 py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500 disabled:bg-green-700">
-                            {isSearching ? '...' : 'Buscar'}
-                        </button>
+                        <button type="submit" className="px-6 py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90">Buscar</button>
                     </form>
-                </div>
-
-                {searchMessage && <p className="text-center text-gray-500 py-4">{searchMessage}</p>}
-
-                {searchedUser && (
-                    <div className="bg-gray-900 p-6 rounded-lg space-y-4">
-                        <h3 className="text-lg font-bold">{searchedUser.fullName}</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                            <div><span className="font-semibold">CPF:</span> {formatCPF(searchedUser.cpf)}</div>
-                            <div><span className="font-semibold">Email:</span> {searchedUser.email}</div>
+                    {searchedUser && (
+                        <div className="bg-background-dark p-4 rounded-lg space-y-4">
                             <div>
-                                <span className="font-semibold">Saldo:</span>{' '}
-                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(searchedUser.balance)}
+                                <h3 className="font-bold">{searchedUser.fullName}</h3>
+                                <p className="text-sm text-subtle-dark">CPF: {formatCPF(searchedUser.cpf)}</p>
+                                <p className={`text-sm font-semibold ${searchedUser.isBlocked || searchedUser.creditCard.isBlocked ? 'text-red-400' : 'text-primary'}`}>
+                                    {searchedUser.isBlocked ? 'CONTA BLOQUEADA' : 'CONTA ATIVA'} / {searchedUser.creditCard.isBlocked ? 'CARTÃO BLOQUEADO' : 'CARTÃO ATIVO'}
+                                </p>
+                                <div className="flex gap-4 mt-4">
+                                    {searchedUser.isBlocked ? (
+                                        <button onClick={() => openModal('unblock', searchedUser)} className="btn-secondary">Desbloquear Conta</button>
+                                    ) : (
+                                        <button onClick={() => openModal('block', searchedUser)} className="btn-danger">Bloquear Conta</button>
+                                    )}
+                                    <button onClick={() => openModal('deposit', searchedUser)} className="btn-primary">Depositar</button>
+                                </div>
                             </div>
-                            <div>
-                                <span className="font-semibold">Status:</span>{' '}
-                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${searchedUser.isBlocked ? 'bg-red-900/50 text-red-300' : 'bg-green-900/50 text-green-300'}`}>
-                                    {searchedUser.isBlocked ? 'Bloqueado' : 'Ativo'}
-                                </span>
+                            
+                            <div className="border-t border-subtle-dark/50 pt-4">
+                                <h4 className="font-semibold text-text-dark mb-2">Alterar Dados do Cartão</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs text-subtle-dark">Vencimento do Cartão (MM/AA)</label>
+                                        <input
+                                            type="text"
+                                            value={cardDueDate}
+                                            onChange={(e) => setCardDueDate(e.target.value)}
+                                            placeholder="MM/AA"
+                                            className="w-full bg-surface-dark p-2 rounded-md mt-1"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-subtle-dark">Venc. Fatura Fechada</label>
+                                        <input
+                                            type="date"
+                                            value={cardInvoiceDate}
+                                            onChange={(e) => setCardInvoiceDate(e.target.value)}
+                                            className="w-full bg-surface-dark p-2 rounded-md mt-1"
+                                        />
+                                    </div>
+                                </div>
+                                <button onClick={handleUpdateCard} disabled={isLoadingAction} className="btn-secondary mt-4 w-full sm:w-auto disabled:opacity-50">
+                                    {isLoadingAction ? 'Salvando...' : 'Salvar Alterações do Cartão'}
+                                </button>
                             </div>
                         </div>
-                        <div className="flex justify-end space-x-2 pt-4 border-t border-gray-700">
-                            <button onClick={() => setUserForDepositModal(searchedUser)} className="px-4 py-2 text-sm font-semibold text-white bg-indigo-500 rounded-md hover:bg-indigo-600">Depositar</button>
-                            {searchedUser.isBlocked ? (
-                                <button onClick={() => handleAction('unblock', searchedUser.cpf)} className="px-4 py-2 text-sm font-semibold text-black bg-green-400 rounded-md hover:bg-green-500">Desbloquear</button>
-                            ) : (
-                                <button onClick={() => handleAction('block', searchedUser.cpf)} className="px-4 py-2 text-sm font-semibold text-white bg-red-500 rounded-md hover:bg-red-600">Bloquear</button>
-                            )}
+                    )}
+                </section>
+                
+                {/* Requests */}
+                <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Password Requests */}
+                    <div className="bg-surface-dark p-6 rounded-xl">
+                         <h2 className="text-lg font-semibold mb-4">Solicitações de Senha</h2>
+                         <div className="space-y-3 max-h-64 overflow-y-auto">
+                            {passwordRequests.length > 0 ? passwordRequests.map(req => (
+                                <div key={req.cpf} className="bg-background-dark p-3 rounded-lg flex justify-between items-center">
+                                    <p className="font-mono text-sm">{formatCPF(req.cpf)}</p>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => openModal('approve', req)} className="btn-success-sm">Aprovar</button>
+                                        <button onClick={() => openModal('deny', req)} className="btn-danger-sm">Negar</button>
+                                    </div>
+                                </div>
+                            )) : <p className="text-subtle-dark text-sm text-center py-4">Nenhuma solicitação pendente.</p>}
                         </div>
                     </div>
-                )}
-            </div>
-            
-            {userForDepositModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-                    <div className="bg-gray-900 p-8 rounded-lg shadow-xl w-full max-w-md">
-                        <h2 className="text-2xl font-bold mb-4">Depositar para {userForDepositModal.fullName}</h2>
-                        <form onSubmit={handleDeposit}>
-                            <label className="text-sm font-medium text-gray-400">Valor do Depósito (R$)</label>
-                            <input
-                                type="number"
-                                step="0.01"
-                                value={depositAmount}
-                                onChange={(e) => setDepositAmount(e.target.value)}
-                                placeholder="0,00"
-                                required
-                                autoFocus
-                                className="w-full px-4 py-3 mt-1 bg-gray-800 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
-                            />
-                            <div className="flex justify-end space-x-4 mt-6">
-                                <button type="button" onClick={() => setUserForDepositModal(null)} className="px-4 py-2 text-gray-200 bg-gray-700 rounded-md hover:bg-gray-600">Cancelar</button>
-                                <button type="submit" className="px-4 py-2 text-black bg-green-400 font-semibold rounded-md hover:bg-green-500">Confirmar</button>
-                            </div>
-                        </form>
+
+                    {/* Limit Requests */}
+                    <div className="bg-surface-dark p-6 rounded-xl">
+                        <h2 className="text-lg font-semibold mb-4">Solicitações de Limite</h2>
+                         <div className="space-y-3 max-h-64 overflow-y-auto">
+                            {limitRequests.length > 0 ? limitRequests.map(req => (
+                                <div key={req.cpf} className="bg-background-dark p-3 rounded-lg flex justify-between items-center">
+                                    <div>
+                                        <p className="font-mono text-sm">{formatCPF(req.cpf)}</p>
+                                        <p className="text-xs text-primary">Novo Limite: {req.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => openModal('approve', req)} className="btn-success-sm">Aprovar</button>
+                                        <button onClick={() => openModal('deny', req)} className="btn-danger-sm">Negar</button>
+                                    </div>
+                                </div>
+                            )) : <p className="text-subtle-dark text-sm text-center py-4">Nenhuma solicitação pendente.</p>}
+                        </div>
+                    </div>
+                </section>
+            </main>
+
+            {/* Modal */}
+            {modalState.isOpen && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                    <div className="bg-surface-dark p-8 rounded-xl shadow-2xl w-full max-w-md">
+                        <h2 className="text-xl font-bold mb-4">Confirmar Ação</h2>
+                        {modalState.action === 'deny' && (
+                            <>
+                                <p className="text-subtle-dark mb-2">Por favor, informe o motivo da recusa:</p>
+                                <textarea value={denyReason} onChange={e => setDenyReason(e.target.value)} className="w-full bg-background-dark p-2 rounded-lg" rows={3}></textarea>
+                            </>
+                        )}
+                        {modalState.action === 'deposit' && (
+                             <>
+                                <p className="text-subtle-dark mb-2">Informe o valor a ser depositado:</p>
+                                <input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className="w-full bg-background-dark p-2 rounded-lg" placeholder="0.00" />
+                            </>
+                        )}
+                        {modalState.action !== 'deny' && modalState.action !== 'deposit' && (
+                            <p className="text-subtle-dark mb-6">Você tem certeza que deseja executar esta ação para o CPF {formatCPF(modalState.data.cpf)}?</p>
+                        )}
+                        <div className="flex justify-end gap-4 mt-6">
+                            <button onClick={closeModal} className="btn-secondary">Cancelar</button>
+                            <button onClick={handleConfirmAction} disabled={isLoadingAction} className="btn-primary disabled:opacity-50">
+                                {isLoadingAction ? 'Processando...' : 'Confirmar'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
+            
+            {/* Toast */}
+            {toast && (
+                <div className={`fixed bottom-8 right-8 p-4 rounded-lg shadow-lg text-white ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+                    {toast.message}
+                </div>
+            )}
+            
+            <style>{`
+                .btn-primary { padding: 0.5rem 1rem; background-color: #13ec5b; color: #0C1E11; font-weight: 600; border-radius: 0.5rem; }
+                .btn-secondary { padding: 0.5rem 1rem; background-color: #3e4c41; color: #E5E7EB; font-weight: 600; border-radius: 0.5rem; }
+                .btn-danger { padding: 0.5rem 1rem; background-color: #ef4444; color: white; font-weight: 600; border-radius: 0.5rem; }
+                .btn-success-sm { padding: 0.25rem 0.75rem; font-size: 0.875rem; background-color: #22c55e; color: white; font-weight: 600; border-radius: 0.5rem; }
+                .btn-danger-sm { padding: 0.25rem 0.75rem; font-size: 0.875rem; background-color: #ef4444; color: white; font-weight: 600; border-radius: 0.5rem; }
+            `}</style>
         </div>
     );
 };

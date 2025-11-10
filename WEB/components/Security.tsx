@@ -8,7 +8,7 @@ interface SecurityProps {
 const Security: React.FC<SecurityProps> = ({ onBack, onNavigateToLimits }) => {
     
     const SettingButton: React.FC<{label: string, description: string, onClick: () => void}> = ({ label, description, onClick }) => (
-        <button onClick={onClick} className="w-full text-left p-4 bg-gray-900 rounded-lg hover:bg-gray-800 flex justify-between items-center transition-colors">
+        <button onClick={onClick} className="w-full text-left p-4 bg-surface-dark rounded-lg hover:bg-white/10 flex justify-between items-center transition-colors">
             <div>
                 <p className="font-medium text-white">{label}</p>
                 <p className="text-sm text-gray-400">{description}</p>
@@ -18,9 +18,9 @@ const Security: React.FC<SecurityProps> = ({ onBack, onNavigateToLimits }) => {
     );
 
     return (
-        <div className="bg-black text-white p-4 min-h-full">
+        <div className="bg-background-dark text-white p-4 min-h-full">
             <header className="flex items-center mb-6">
-                <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-gray-800">
+                <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-white/10">
                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
                 <h2 className="text-2xl font-bold text-white">Segurança</h2>

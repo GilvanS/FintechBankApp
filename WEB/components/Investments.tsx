@@ -1,5 +1,5 @@
-
 import React, { useState } from 'react';
+// FIX: Corrected import path for FixedIncomeProduct type from parent directory.
 import { FixedIncomeProduct } from '../types';
 
 interface InvestmentsProps {
@@ -59,7 +59,7 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
     const renderMainDashboard = () => (
         <>
             <header className="flex items-center mb-6 px-4 pt-4">
-                <button onClick={onBack} className="mr-4 p-2 rounded-full hover:bg-gray-800">
+                <button onClick={onBack} className="mr-4 p-2 rounded-full hover:bg-white/10">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
                 <h1 className="text-2xl font-bold">Investimentos</h1>
@@ -83,7 +83,7 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
                 <div>
                     <h2 className="text-lg font-semibold text-white mb-3">Onde investir</h2>
                     <div className="space-y-3">
-                        <button onClick={() => setView('fixedIncome')} className="w-full text-left p-4 bg-gray-900 rounded-lg flex justify-between items-center hover:bg-gray-800">
+                        <button onClick={() => setView('fixedIncome')} className="w-full text-left p-4 bg-surface-dark rounded-lg flex justify-between items-center hover:bg-white/10">
                             <div>
                                 <p className="font-bold text-white">Renda Fixa</p>
                                 <p className="text-sm text-gray-400">Investimentos seguros com rentabilidade previsível.</p>
@@ -100,14 +100,14 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
     const renderFixedIncomeView = () => (
         <>
             <header className="flex items-center mb-6 px-4 pt-4">
-                <button onClick={() => setView('main')} className="mr-4 p-2 rounded-full hover:bg-gray-800">
+                <button onClick={() => setView('main')} className="mr-4 p-2 rounded-full hover:bg-white/10">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
                 <h1 className="text-2xl font-bold">Renda Fixa</h1>
             </header>
             <main className="flex-grow overflow-y-auto no-scrollbar px-4 space-y-3">
                 {mockFixedIncomeProducts.map(product => (
-                    <div key={product.id} className="bg-gray-900 p-4 rounded-lg border border-gray-800">
+                    <div key={product.id} className="bg-surface-dark p-4 rounded-lg border border-subtle-dark/50">
                         <h3 className="font-bold text-white">{product.name}</h3>
                         <p className="text-sm text-orange-400 font-semibold">{product.yield}</p>
                         <div className="flex justify-between items-center mt-3 text-xs text-gray-400">
@@ -131,7 +131,7 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
     };
     
     return (
-        <div className="bg-black text-white min-h-full flex flex-col">
+        <div className="bg-background-dark text-white min-h-full flex flex-col">
             {renderContent()}
         </div>
     );

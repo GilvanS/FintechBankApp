@@ -1,5 +1,7 @@
 
+
 import React, { useState, useMemo } from 'react';
+// FIX: Corrected import path for types from parent directory.
 import { User, PurchasedItem } from '../types';
 
 interface InstallmentModalProps {

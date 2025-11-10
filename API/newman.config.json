@@ -1,36 +1,7 @@
 {
   "collection": "../postman-collection.json",
-  "environment": null,
-  "globals": null,
-  "iterationCount": 1,
-  "iterationData": null,
-  "folder": null,
-  "workingDir": "./",
-  "insecureFileRead": false,
-  "timeout": 30000,
-  "delayRequest": 500,
-  "timeoutRequest": 30000,
-  "timeoutScript": 5000,
-  "ignoreRedirects": false,
+  "reporters": ["cli"],
+  "timeoutRequest": 15000,
   "insecure": true,
-  "bail": false,
-  "suppressExitCode": false,
-  "reporters": ["cli", "html", "json"],
-  "reporter": {
-    "cli": {
-      "noAssertions": false,
-      "noConsole": false,
-      "noSummary": false,
-      "silent": false
-    },
-    "html": {
-      "export": "./newman-report.html",
-      "template": null
-    },
-    "json": {
-      "export": "./newman-report.json"
-    }
-  },
-  "color": "on",
-  "verbose": false
+  "bail": false
 }

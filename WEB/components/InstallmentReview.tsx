@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+// FIX: Corrected import path for User type from parent directory.
 import { User } from '../types';
 
 interface InstallmentReviewProps {

@@ -1,157 +1,61 @@
 # FintechBankApp Backend (Node + Express + Databricks + Swagger)
 
-API backend da FintechBankApp integrada com Databricks. Este README explica setup, execução, variáveis de ambiente, testes e como replicar o backend em outro projeto.
-
-## Visão Geral
-- Stack: Node.js, Express, JWT, bcrypt, Databricks SQL SDK
-- Documentação: Swagger UI (`swagger.yaml`)
-- Inicialização de schema/tabelas realizada automaticamente na subida do servidor
-
-## Pré-requisitos
-- Node.js 18+ (recomendado 18 LTS ou 20 LTS)
-- Acesso ao workspace Databricks (host, httpPath e token válidos)
-- Windows PowerShell (para scripts `.ps1`, se necessário)
-
-## Configuração de Ambiente
-Use o arquivo de exemplo `.env.example` como base e crie `.env` no diretório `API/`.
-
-Variáveis suportadas:
-- `PORT` — porta da API (padrão `3001`)
-- `JWT_SECRET` — segredo JWT (defina um valor forte)
-- `DATABRICKS_SERVER_HOSTNAME` — hostname do seu workspace Databricks
-- `DATABRICKS_HTTP_PATH` — httpPath do cluster/endpoint
-- `DATABRICKS_TOKEN` — token de acesso
-- `DATABRICKS_CATALOG` — catálogo (padrão `workspace`)
-- `DATABRICKS_SCHEMA` — schema (padrão `fintechbank`)
-
-Exemplo (ajuste para seu ambiente):
-
-```bash
-copy .env.example .env
-```
-
-Edite o `.env` com seus valores.
-
-## Instalação
-Instale as dependências no diretório `API/`.
-
-```bash
-npm install
-```
-
-Ou, para ambientes limpos:
-
+## Como subir
+- Instale dependencias:
 ```bash
 npm ci
 ```
-
-## Executar em desenvolvimento
-Inicie com `nodemon`:
-
+- Configure `.env` com `JWT_SECRET` e credenciais do Databricks.
+- Suba a API:
 ```bash
-npm run dev
+node index.js
 ```
 
-- Health: `http://localhost:3001/api/v1/health`
-- Swagger UI: `http://localhost:3001/api-docs`
-- Base URL da API: `http://localhost:3001`
+## Inicializacao do banco
+- Estrutura e seeds sao aplicados automaticamente ao iniciar.
+- Tabelas: `users`, `transactions`, `pix_contacts`, `notifications`, `limit_increase_requests`, `pix_keys`, `products`.
 
-Na inicialização:
-- Conecta ao Databricks.
-- Verifica/cria `catalog` e `schema`.
-- Cria/valida tabelas `users`, `transactions`, `pix_contacts`.
-- Recria o usuário admin padrão:
-  - CPF: `00000000000`
-  - Senha: `admin123`
-  - Email: `admin@fintechbank.com`
-  - Role: `admin`
-
-## Endpoints Principais
-- Autenticação:
-  - `POST /api/v1/auth/login`
-  - `POST /api/v1/auth/request-password-reset`
-- Usuário:
-  - `GET /api/v1/user/me/:cpf`
-  - `PUT /api/v1/user/limits/pix-daily/:cpf`
-- Contatos PIX:
-  - `GET /api/v1/pix/contacts/:cpf`
-  - `POST /api/v1/pix/contacts/:cpf`
-  - `DELETE /api/v1/pix/contacts/:cpf/:contactKey`
+## Endpoints principais (links no swagger.yaml)
+- Autenticacao:
+  - `POST /auth/login`, `POST /auth/request-password-reset`
+- Usuarios:
+  - `GET /users/me`
+  - `GET /users/{cpf}`, `GET /users/{cpf}/statement`
+  - `GET /users/{cpf}/notifications`, `POST /users/{cpf}/notifications/{id}/read`
+- PIX:
+  - `POST /pix/recipient-info`
+  - `POST /pix/transfer`, `POST /pix/transfer-credit`
+  - `GET/POST/DELETE /pix/keys`
+  - `GET/POST/DELETE /pix/contacts`
+- Cartao:
+  - `POST /cards/invoice/pay`, `POST /cards/invoice/parcel`, `POST /cards/invoice/anticipate`
+- Shop:
+  - `GET /shop/products`, `POST /shop/checkout`
 - Admin:
-  - `GET /api/v1/admin/users`
-  - `POST /api/v1/admin/users/:cpf/block`
-  - `POST /api/v1/admin/users/:cpf/unblock`
-  - `PUT /api/v1/admin/users/:cpf/pix-limit`
-  - `POST /api/v1/admin/users/:cpf/reset-password`
+  - `GET/POST /admin/users/*`
+  - `GET/POST /admin/requests/*`
+- Proxy:
+  - `GET /proxy/news` (cache simples + bearer)
 
-Swagger disponível em `http://localhost:3001/api-docs`.
+## Segurança e middlewares
+- `bearerAuth`: 401 sem token; 403 token invalido.
+- `requireScope`: 403 quando escopo inadequado (admin/customer).
+- `pinGuard`: 400 em endpoints sensiveis sem `pin`.
+- `withReqId`: correlacao minima de logs.
 
-## Testes de API (Newman/Postman)
-Coleção Postman: `../postman-collection.json`  
-Config Newman: `./newman.config.json`  
-Scripts auxiliares: `run-newman-tests.ps1`, `run-newman-tests.js`, `run-tests.bat`
-
-Executar os testes via Node:
-
+## Testes (Newman/Postman)
+- Configure `API/newman.config.json`.
+- Execute:
 ```bash
-node run-newman-tests.js
+powershell -ExecutionPolicy Bypass -File .\API\run-newman-tests.ps1
+```
+- Objetivo: 95%+ dos cenarios passando; documentar falhas com bug IDs.
+
+## Validacao do Swagger
+```bash
+node F:\GITHUB\FintechBankApp\API\validate-swagger.js
 ```
 
-Executar via PowerShell:
-
-```bash
-./run-newman-tests.ps1
-```
-
-Executar via `.bat`:
-
-```bash
-./run-tests.bat
-```
-
-## Replicação do Backend em Outro Projeto
-1. Copie o diretório `API/` completo para o novo projeto.
-2. Garanta que os arquivos essenciais estejam presentes:
-   - `index.js` (servidor + rotas + inicialização Databricks)
-   - `swagger.yaml` (ou use `swagger-clean.yaml` como base)
-   - `package.json`, `package-lock.json` (opcional), scripts `.ps1` e `.js` auxiliares
-   - `.env.example` (crie `.env` no projeto novo)
-3. Atualize `package.json` (nome, scripts, versão) conforme seu projeto.
-4. Ajuste `.env` com seus dados Databricks.
-5. Instale dependências:
-   ```bash
-   npm install
-   ```
-6. Suba o servidor:
-   ```bash
-   npm run dev
-   ```
-7. Valide:
-   - `GET /api/v1/health` retorna `success: true`.
-   - `Swagger` abre sem erros.
-   - Admin é criado e login funciona.
-
-### Observações importantes ao replicar
-- Se alterar o schema/catalog, o servidor cria automaticamente estruturas conforme definidos em `index.js`.
-- Consistência de colunas:
-  - `pix_contacts` usa `contact_cpf` (não `contact_key`). As queries devem selecionar `contact_cpf as key`.
-- Se ocorrer erro de YAML no Swagger, substitua por `swagger-clean.yaml` e garanta o regex correto: `pattern: '^[0-9]{11}$'`.
-
-## Problemas Comuns e Soluções
-- Falha ao conectar no Databricks:
-  - Verifique `DATABRICKS_*` no `.env`.
-  - Confirme catálogo `workspace` e schema `fintechbank` existem ou deixe o servidor criar.
-- Erro 500 em `/user/me/:cpf`:
-  - Confirme que a query de contatos usa `contact_cpf as key`.
-- CORS/Autorização:
-  - Token JWT é obrigatório; obtenha via `POST /auth/login`.
-
-## Scripts Úteis
-- Validação de Swagger:
-  ```bash
-  node validate-swagger.js
-  ```
-- Testar start do servidor:
-  ```bash
-  ./test-server-start.ps1
-  ```
+## Observabilidade
+- Logs padronizados via `auditLog`; sem PII sensivel.
+- Correlaçao via `x-request-id`.

@@ -1,5 +1,7 @@
 
+
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+// FIX: Corrected import path for PixContact type from parent directory.
 import { PixContact } from '../types';
 
 interface QuickTransferProps {

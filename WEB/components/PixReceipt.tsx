@@ -1,5 +1,7 @@
 
+
 import React from 'react';
+// FIX: Corrected import path for Transaction type from parent directory.
 import { Transaction } from '../types';
 
 interface PixReceiptProps {

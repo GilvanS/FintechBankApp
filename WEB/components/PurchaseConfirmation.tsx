@@ -1,61 +1,68 @@
-import React from 'react';
-import { PurchasedItem } from '../types';
+import React, { useEffect, useState } from 'react';
+import { PurchasedItem, Transaction } from '../types';
 
 interface PurchaseConfirmationProps {
   details: {
-    item: PurchasedItem;
-    method?: 'debit' | 'credit';
-    installments?: number;
-    cashbackUsed?: number;
+    product: PurchasedItem;
+    transaction?: Transaction;
+    message: string;
   };
   onClose: () => void;
 }
 
 const PurchaseConfirmation: React.FC<PurchaseConfirmationProps> = ({ details, onClose }) => {
-  if (!details || !details.item) {
-    return (
-      <div className="absolute inset-0 bg-black text-white flex flex-col items-center justify-center p-6 z-40">
-        <h2 className="text-2xl font-bold">Erro na Confirmação</h2>
-        <p className="text-gray-400">Não foi possível exibir os detalhes da compra.</p>
-        <button onClick={onClose} className="mt-4 w-full max-w-sm py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500">
-          Voltar
-        </button>
-      </div>
-    );
-  }
+  const [progress, setProgress] = useState(0);
 
-  const { item } = details;
+  useEffect(() => {
+    // Set a timer to automatically close the confirmation screen after 4 seconds
+    const timer = setInterval(() => {
+      setProgress(oldProgress => {
+        if (oldProgress >= 100) {
+          clearInterval(timer);
+          onClose(); // Navigate away
+          return 100;
+        }
+        return oldProgress + 1;
+      });
+    }, 40); // 40ms * 100 steps = 4000ms
+
+    return () => {
+      clearInterval(timer); // Cleanup on unmount
+    };
+  }, [onClose]);
+
+  if (!details) return null;
+  const { product, message } = details;
 
   return (
-    <div className="absolute inset-0 bg-black text-white flex flex-col items-center justify-center p-6 z-40 animate-fade-in">
-      <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mb-6">
-        <svg className="w-12 h-12 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-        </svg>
-      </div>
-      <h2 className="text-2xl font-bold text-center mb-2">Compra realizada com sucesso!</h2>
-      <p className="text-gray-400 text-center mb-6">
-        Você comprou <strong className="text-white">{item.name}</strong>.
-      </p>
+    <div className="absolute inset-0 bg-black z-30 p-6 flex flex-col justify-center items-center text-white animate-fade-in">
+        <div className="bg-surface-dark p-8 rounded-lg shadow-xl w-full max-w-sm text-center">
+            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="material-symbols-outlined text-4xl text-background-dark">check</span>
+            </div>
+            <h2 className="text-2xl font-bold mb-2 text-white">Compra Confirmada!</h2>
+            <p className="text-subtle-dark mb-6">{message}</p>
+            
+            {product && (
+                <div className="text-left bg-white/5 p-4 rounded-lg mb-6">
+                    <p className="font-bold">{product.name}</p>
+                    <p className="text-primary">{product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                </div>
+            )}
 
-      <div className="bg-gray-900 rounded-lg p-4 flex items-center space-x-4 w-full max-w-sm mb-8">
-        <img src={item.imageUrl} alt={item.name} className="w-16 h-16 object-cover rounded-md" />
-        <div className="flex-grow">
-          <p className="font-semibold text-white">{item.name}</p>
-          <p className="text-sm text-gray-400">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price)}</p>
+            <div className="w-full bg-white/10 rounded-full h-1 mt-4">
+                <div 
+                    className="bg-primary h-1 rounded-full" 
+                    style={{ width: `${progress}%`, transition: 'width 40ms linear' }}
+                ></div>
+            </div>
+            <p className="text-xs text-subtle-dark mt-2">Redirecionando para o início...</p>
+
         </div>
-      </div>
-
-      <button onClick={onClose} className="w-full max-w-sm py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500">
-        Voltar
-      </button>
-       <style>{`
-        @keyframes fade-in {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
-      `}</style>
+         <style>{`
+            @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+            .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
+        `}</style>
     </div>
   );
 };

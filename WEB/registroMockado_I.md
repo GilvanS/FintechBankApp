@@ -1,64 +1,65 @@
-full contents of registroMockado_I.md# Registro de Mocks e Lógicas Simuladas
+# Registro de Mocks e APIs - Fintech Bank (registroMockado_I.md)
 
-Este documento serve como um guia para todas as partes do projeto que estão atualmente "mockadas" ou simuladas. Seu objetivo é facilitar a futura integração com um backend real, fornecendo um mapa claro do que precisa ser substituído por chamadas de API verdadeiras.
+Este documento serve como um catálogo de todas as funcionalidades, dados e chamadas de API que estão atualmente "mockados" (simulados) no frontend do projeto Fintech Bank. O objetivo é fornecer um guia claro para a equipe de backend sobre o que precisa ser substituído por uma implementação real.
 
-## 1. Fonte de Dados Principal: `localStorage`
+## 1. Simulação de Banco de Dados (`localStorage`)
 
-Toda a persistência de dados da aplicação é gerenciada através do `localStorage` do navegador.
-
-- **Chave**: `fintech_app_data`
-- **O que armazena**: Um objeto JSON contendo `users`, `passwordRequests`, `limitRequests`, e `notifications`.
-- **Por que está mockado**: Para permitir que o frontend seja desenvolvido e testado de forma totalmente independente, sem a necessidade de um banco de dados ou servidor real.
-- **Futuro**: O `localStorage` será completamente substituído por um banco de dados (ex: PostgreSQL, MongoDB) gerenciado pelo backend.
+- **Localização:** `src/services/mockApi.ts`
+- **Descrição:** Toda a "base de dados" da aplicação (usuários, solicitações, notificações) é armazenada em uma única chave no `localStorage` do navegador (`fintech_app_data`).
+- **Motivo do Mock:** Para permitir o desenvolvimento e teste do frontend de forma independente.
+- **Substituição Futura:** Todas as funções que leem ou escrevem no `localStorage` (`_getStore`, `_saveStore`) serão substituídas por chamadas HTTP para a API do backend.
 
 ## 2. Usuários de Teste
 
-- **Localização**: `data/mockData.ts`
-- **O que é**: Um array (`MOCK_USERS`) contendo objetos de usuários pré-configurados, incluindo:
-  - **Usuário Administrador**: Com a role `admin` e credenciais para acessar o painel de gerenciamento.
-  - **Usuários Comuns**: Com diferentes saldos, transações e configurações para testar os mais variados cenários.
-- **Por que está mockado**: Para garantir que sempre haja dados consistentes para testar a aplicação, especialmente as funcionalidades de login e administração. A função `initializeMockUsers` em `mockApi.ts` garante que esses usuários sejam inseridos ou atualizados no `localStorage` a cada carregamento da aplicação.
-- **Futuro**: Em um ambiente de produção, esses usuários não existiriam. Apenas o fluxo de cadastro (`/api/v1/auth/signup`) criaria novos usuários no banco de dados.
+- **Localização:** `src/data/mockData.ts` (`MOCK_USERS`)
+- **Descrição:** O projeto inclui um conjunto de usuários de teste pré-definidos com dados completos. A função `initializeMockUsers` em `mockApi.ts` garante que esses usuários estejam sempre presentes no `localStorage`.
+- **Substituição Futura:** Em um ambiente de produção, a base de dados será populada por usuários reais através do fluxo de cadastro.
 
-## 3. Simulação da API Backend
+## 3. Funções de API Simuladas (`mockApi.ts`)
 
-- **Localização**: `services/mockApi.ts`
-- **O que é**: Um arquivo que exporta funções assíncronas que imitam o comportamento de uma API RESTful. Cada função manipula os dados no `localStorage` e retorna uma promessa com um resultado, simulando a latência de rede com um `delay`.
+O arquivo `src/services/mockApi.ts` simula todo o comportamento do backend. Cada função exportada representa um endpoint que precisará ser criado no servidor.
 
-### Funções Mockadas e sua Futura Substituição:
+### 3.1. Autenticação
+- `login`, `signUp`, `requestNewPassword`, `resetPassword`
+- **Descrição:** Simulam o registro, login e o fluxo completo de recuperação de senha.
+- **Substituição Futura:** Substituir por chamadas a endpoints `POST /auth/...`.
 
-| Função em `mockApi.ts`                  | Endpoint Backend Correspondente           | Descrição da Simulação                                                                 |
-| --------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------- |
-| `login`                                 | `POST /auth/login`                        | Valida CPF e senha contra os dados no `localStorage`.                                  |
-| `signUp`                                | `POST /auth/signup`                       | Adiciona um novo usuário ao `localStorage` se o CPF/email não existirem.               |
-| `requestNewPassword`                    | `POST /auth/request-password-reset`       | Adiciona uma solicitação de senha à lista de `passwordRequests`.                       |
-| `checkPasswordRequestStatus`            | `GET /auth/password-request-status/{cpf}` | Busca o status de uma solicitação no `localStorage`.                                   |
-| `resetPassword`                         | `POST /auth/reset-password`               | Atualiza a senha de um usuário no `localStorage` após a aprovação.                     |
-| `performPix`                            | `POST /pix/transfer`                      | Deduz o saldo do remetente e, se o destinatário for um usuário mockado, adiciona o saldo a ele. |
-| `performPixCreditInstallment`           | `POST /pix/transfer/credit`               | Lança o valor do PIX como uma compra parcelada na fatura do cartão de crédito.           |
-| `purchaseWithDebit`                     | `POST /shop/purchase/debit`               | Valida e deduz o saldo da conta, aplica cashback e registra a transação no extrato.      |
-| `purchaseWithCard`                      | `POST /shop/purchase/credit`              | Valida o limite do cartão, aplica cashback, lança a compra (parcelada ou não) na fatura. |
-| `payCreditCardInvoice`                  | `POST /cards/invoice/pay`                 | Deduz o valor da fatura do saldo da conta e libera o limite do cartão.                  |
-| `parcelCreditCardInvoice`               | `POST /cards/invoice/parcel`              | Zera a fatura fechada e lança as novas parcelas com juros na fatura aberta.              |
-| **Todas as funções de Admin**           | `/admin/*`                                | Manipulam diretamente os dados dos usuários no `localStorage` (bloquear, depositar, etc.). |
-| **Todas as funções de `get` e `update`** | `GET` / `PUT` / `POST` / `DELETE`         | Buscam ou modificam arrays específicos (`pixKeys`, `pixContacts`, `notifications`) no `localStorage`. |
+### 3.2. Operações PIX
+- `getPixRecipientInfo`
+  - **Descrição:** Simula a validação de uma chave PIX, retornando o nome e o CPF mascarado do destinatário. Implementa a regra de não permitir auto-transferência.
+- `performPix`, `performPixCreditInstallment`
+  - **Descrição:** Simulam transferências PIX. A função `performPixCreditInstallment` agora atribui **datas futuras corretas** para cada parcela na fatura do cartão, uma regra de negócio crucial.
+- `getPixContacts`, `addPixContact`, `deletePixContact`, `getPixKeys`, `registerPixKey`, `deletePixKey`
+  - **Descrição:** Simulam o gerenciamento de chaves e contatos.
+- `updateUserPixDailyLimit`, `requestLimitIncrease`
+  - **Descrição:** Simulam a alteração do limite PIX e a solicitação de aumento.
+- **Substituição Futura:** Substituir por chamadas a endpoints `/pix/...`.
+
+### 3.3. Compras e Marketplace
+- `purchaseWithDebit`, `purchaseWithCard`
+- **Descrição:** Simulam o fluxo de compra. A função `purchaseWithCard` foi atualizada para:
+  - Salvar `purchaseDate` e `pointsEarned` em cada item comprado.
+  - Atribuir **datas futuras corretas** para cada parcela na fatura do cartão.
+- **Substituição Futura:** Substituir por uma chamada a um endpoint `POST /shop/checkout`.
+
+### 3.4. Gerenciamento de Cartão
+- `payCreditCardInvoice`, `parcelCreditCardInvoice`, `anticipateCreditCardInstallments`
+- **Descrição:** Simulam as operações da fatura do cartão. A função `parcelCreditCardInvoice` foi atualizada para atribuir **datas futuras corretas** para cada nova parcela da fatura.
+- **Substituição Futura:** Substituir por chamadas a endpoints `/cards/...`.
+
+### 3.5. Funções Administrativas
+- `adminGetUserByCpf`, `blockUser`, `unblockUser`, `adminDeposit`, `adminGetPasswordRequests`, `adminApprovePasswordRequest`, etc.
+- **Descrição:** Simulam todas as ações disponíveis no Painel do Administrador.
+- `adminUpdateCardDetails`
+  - **Descrição:** Simula a alteração das datas de vencimento do cartão e da fatura pelo admin.
+  - **Regra de Negócio Crucial:** Contém a lógica que bloqueia o cartão do cliente automaticamente se a nova data de vencimento da fatura for mais de 7 dias no passado.
+- **Substituição Futura:** Substituir por chamadas a endpoints `/admin/...`.
 
 ## 4. Chamadas de API Reais no Frontend
 
-Existem componentes que, para fins de demonstração, fazem chamadas diretas a APIs públicas gratuitas.
+Existem chamadas de API que são feitas diretamente do frontend para serviços de terceiros. A recomendação é movê-las para o backend para proteger chaves de API e implementar caching.
 
-- **Localização**:
-  - `components/PromotionalBanner.tsx`
-  - `components/GuardianBanner.tsx`
-  - `components/NewsJournal.tsx`
-  - `components/PreLoginNewsBanner.tsx`
-- **APIs Consumidas**:
-  - **NewsAPI.org**: Para notícias gerais e financeiras do Brasil.
-  - **WorldNewsAPI.com**: Como fonte alternativa de notícias.
-  - **IBGE Notícias**: Para notícias oficiais.
-  - **The Guardian API**: Para notícias internacionais de tecnologia e negócios.
-- **Por que estão no Frontend**: Para demonstrar a capacidade da aplicação de se integrar com serviços externos e enriquecer a interface do usuário com conteúdo dinâmico.
-- **Futuro**: O ideal é que essas chamadas sejam movidas para o backend. O frontend faria uma única chamada para um endpoint do nosso backend (ex: `GET /external/news`), e o servidor seria responsável por se comunicar com as APIs externas. Isso oferece várias vantagens:
-  1. **Segurança**: As chaves de API (`API Keys`) não ficam expostas no código do frontend.
-  2. **Performance**: O backend pode implementar um cache para as notícias, reduzindo o número de chamadas às APIs externas e melhorando a velocidade de carregamento.
-  3. **Manutenibilidade**: Se uma API externa mudar, apenas o backend precisa ser atualizado, sem a necessidade de uma nova compilação do frontend.
+- **API de Notícias (IBGE):**
+  - **Localização:** `src/components/NewsSection.tsx`
+  - **Descrição:** Busca notícias de economia diretamente da API pública do IBGE.
+  - **Recomendação de Migração:** Criar um endpoint `GET /proxy/news` no backend.

@@ -1,4 +1,6 @@
+
 import React, { useState } from 'react';
+// FIX: Corrected import path for User type from parent directory.
 import { User } from '../types';
 
 interface PointsDashboardProps {
@@ -12,8 +14,8 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
   const [view, setView] = useState<PointsView>('redeem');
 
   const RedemptionOption: React.FC<{icon: React.ReactNode, title: string, description: string}> = ({ icon, title, description }) => (
-    <button className="w-full flex items-center p-4 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors text-left space-x-4">
-        <div className="flex-shrink-0 w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center">
+    <button className="w-full flex items-center p-4 bg-surface-dark rounded-lg hover:bg-white/10 transition-colors text-left space-x-4">
+        <div className="flex-shrink-0 w-12 h-12 bg-background-dark rounded-full flex items-center justify-center">
            {icon}
         </div>
         <div className="flex-grow">
@@ -27,16 +29,16 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
   const iconClasses = "w-6 h-6 text-orange-400";
 
   return (
-    <div className="bg-black text-white min-h-full flex flex-col">
+    <div className="bg-background-dark text-white min-h-full flex flex-col">
       <header className="flex items-center p-4">
-          <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-gray-800">
+          <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
           </button>
         <div className="text-center flex-grow">
             <h2 className="text-lg font-bold text-white">Fintech Loop</h2>
         </div>
         <div className="w-10">
-             <button className="p-2 rounded-full hover:bg-gray-800">
+             <button className="p-2 rounded-full hover:bg-white/10">
                 <svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.79 4 4s-1.79 4-4 4-4-1.79-4-4c0-1.105.448-2.099 1.172-2.828M12 12V9.75M12 15.75V15.75M12 21a9 9 0 100-18 9 9 0 000 18z" /></svg>
              </button>
         </div>
@@ -44,7 +46,7 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
 
       <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-6">
         <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-12 bg-surface-dark rounded-lg flex items-center justify-center">
                 <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
             </div>
             <div>
@@ -54,7 +56,7 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-700">
+        <div className="flex border-b border-subtle-dark">
             <button 
                 onClick={() => setView('earn')}
                 className={`flex-1 py-3 text-sm font-semibold text-center transition-colors ${view === 'earn' ? 'text-orange-400 border-b-2 border-orange-400' : 'text-gray-400 hover:text-white'}`}
@@ -73,17 +75,42 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
         {view === 'earn' && (
             <div className="space-y-4 animate-fade-in">
                 <p className="text-gray-300">Acumule pontos pagando sua fatura com débito automático ativo. Os pontos serão creditados em até 10 dias úteis, após a data de vencimento da fatura.</p>
-                <div className="bg-gray-900 rounded-lg p-4 text-center font-bold text-white">
-                    Você ganha 1 ponto a cada R$ 2,50
+                <div className="bg-surface-dark rounded-lg p-4 text-center font-bold text-white">
+                    Você ganha 1 ponto a cada R$ 10,00 em compras no crédito.
                 </div>
-                 <div className="bg-gray-800 rounded-lg p-4 flex items-center space-x-4">
+                 <div className="bg-surface-dark rounded-lg p-4 flex items-center space-x-4">
                     <img src="https://i.imgur.com/2sfh1cS.png" alt="Coin" className="w-16 h-16" />
                     <div className="flex-grow">
                         <p className="font-bold text-white">Débito Automático</p>
                         <p className="text-sm text-gray-400">Ative o Débito Automático da fatura para ganhar pontos no Fintech Loop.</p>
                     </div>
-                    <button className="px-4 py-2 bg-orange-500 text-black font-bold text-sm rounded-lg hover:bg-orange-600">Ativar agora</button>
+                    <button className="px-4 py-2 bg-orange-500 text-background-dark font-bold text-sm rounded-lg hover:bg-orange-600">Ativar agora</button>
                 </div>
+
+                <div className="pt-4">
+                    <h3 className="text-lg font-bold text-white mb-3">Histórico de Pontos</h3>
+                    <div className="space-y-2">
+                        {user.purchasedItems && user.purchasedItems.length > 0 ? (
+                            user.purchasedItems.slice(0, 10).map((item, index) => (
+                                <div key={`${item.id}-${index}`} className="bg-surface-dark p-3 rounded-lg flex items-center space-x-4">
+                                    <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-md flex-shrink-0" />
+                                    <div className="flex-grow overflow-hidden">
+                                        <p className="font-semibold text-white text-sm truncate">{item.name}</p>
+                                        <p className="text-xs text-gray-400">{item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString('pt-BR') : ''}</p>
+                                    </div>
+                                    <div className="text-right flex-shrink-0">
+                                        <p className={`font-bold text-sm ${item.pointsEarned && item.pointsEarned > 0 ? 'text-orange-400' : 'text-gray-500'}`}>
+                                            +{item.pointsEarned || 0} pts
+                                        </p>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <p className="text-sm text-gray-500 text-center py-4">Nenhuma compra registrada ainda para exibir o histórico de pontos.</p>
+                        )}
+                    </div>
+                </div>
+
             </div>
         )}
 

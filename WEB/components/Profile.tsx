@@ -1,19 +1,26 @@
-
 import React, { useState } from 'react';
+// FIX: Corrected import path for useAuth from parent directory.
 import { useAuth } from '../App';
+// FIX: Corrected import path for User type from parent directory.
 import { User } from '../types';
 import MyData from './MyData';
 import EditProfile from './EditProfile';
 import Security from './Security';
 import Limits from './Limits';
-import Admin from './Admin';
 import Notifications from './Notifications';
+// FIX: Removed unused import for Admin component.
 import Settings from './Settings';
 import PointsDashboard from './PointsDashboard';
 
-type ProfileView = 'main' | 'myData' | 'editProfile' | 'security' | 'limits' | 'admin' | 'notifications' | 'points';
+// FIX: Removed 'admin' from ProfileView as it's now a top-level view handled by Dashboard.
+type ProfileView = 'main' | 'myData' | 'editProfile' | 'security' | 'limits' | 'notifications' | 'points';
 
-const Profile: React.FC = () => {
+// FIX: Added ProfileProps interface to accept `onNavigate` from the parent component.
+interface ProfileProps {
+    onNavigate: (view: string) => void;
+}
+
+const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
     const { user, logout, updateUser } = useAuth();
     const [view, setView] = useState<ProfileView>('main');
     
@@ -27,33 +34,11 @@ const Profile: React.FC = () => {
         setView('myData');
     };
 
-    const renderContent = () => {
-        switch (view) {
-            case 'myData':
-                return <MyData user={user} onBack={() => setView('main')} onNavigateToEdit={() => setView('editProfile')} />;
-            case 'editProfile':
-                return <EditProfile user={user} onBack={() => setView('myData')} onSave={onSaveProfile} />;
-            case 'security':
-                return <Security onBack={() => setView('main')} onNavigateToLimits={() => setView('limits')} />;
-            case 'limits':
-                return <Limits currentUser={user} onUpdate={() => {}} onClose={() => setView('security')} />;
-            case 'admin':
-                return <Admin onBack={() => setView('main')} />;
-            case 'notifications':
-                return <Notifications onBack={() => setView('main')} />;
-            case 'points':
-                return <PointsDashboard user={user} onBack={() => setView('main')} />;
-            case 'main':
-            default:
-                return <Settings user={user} onLogout={logout} onBack={() => {}} onNavigateToAdmin={() => setView('admin')} />;
-        }
-    };
-
     const MainView = () => {
         const SettingButton: React.FC<{label: string, icon: React.ReactNode, onClick: () => void, notification?: boolean }> = ({ label, icon, onClick, notification }) => (
-            <button onClick={onClick} className="w-full text-left p-4 bg-gray-900 rounded-lg font-medium text-white hover:bg-gray-800 flex justify-between items-center relative">
+            <button onClick={onClick} className="w-full text-left p-4 bg-surface-dark rounded-lg font-medium text-white hover:bg-white/10 flex justify-between items-center relative">
                 <div className="flex items-center space-x-4">
-                    <div className="text-green-400">{icon}</div>
+                    <div className="text-primary">{icon}</div>
                     <span>{label}</span>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -66,14 +51,14 @@ const Profile: React.FC = () => {
         const iconClasses = "w-6 h-6";
 
         return (
-             <div className="bg-black min-h-full">
+             <div className="bg-background-dark min-h-full">
                 <header className="p-4 flex items-center">
                     <h2 className="text-2xl font-bold text-white">Meu Perfil</h2>
                 </header>
 
                 <div className="p-4 space-y-4">
                      <div className="text-center">
-                        <div className="w-24 h-24 rounded-full bg-gray-700 text-white flex items-center justify-center font-bold text-4xl mx-auto mb-3 border-4 border-gray-800">
+                        <div className="w-24 h-24 rounded-full bg-surface-dark text-white flex items-center justify-center font-bold text-4xl mx-auto mb-3 border-4 border-subtle-dark">
                             {user.fullName.charAt(0)}
                         </div>
                         <p className="font-bold text-xl text-white">{user.fullName}</p>
@@ -86,7 +71,8 @@ const Profile: React.FC = () => {
                         <SettingButton label="Notificações" notification icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>} onClick={() => setView('notifications')} />
                         <SettingButton label="Fintech Loop" icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v1h- опасен.5V5a.5.5 0 00-.5-.5H7a.5.5 0 00-.5.5v.5H2v10a2 2 0 002 2h10a2 2 0 002-2V19h.5v.5a.5.5 0 01-.5.5H7a.5.5 0 01-.5-.5v-1H5v1z" /></svg>} onClick={() => setView('points')} />
                         {user.role === 'admin' && (
-                            <SettingButton label="Painel do Admin" icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>} onClick={() => setView('admin')} />
+                            // FIX: Used the `onNavigate` prop to switch to the admin view, which is handled by the parent Dashboard.
+                            <SettingButton label="Painel do Admin" icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>} onClick={() => onNavigate('admin')} />
                         )}
                     </div>
 
@@ -109,9 +95,8 @@ const Profile: React.FC = () => {
             case 'security':
                 return <Security onBack={() => setView('main')} onNavigateToLimits={() => setView('limits')} />;
             case 'limits':
-                return <Limits currentUser={user} onUpdate={() => {}} onClose={() => setView('security')} isModal={false} />;
-            case 'admin':
-                return <Admin onBack={() => setView('main')} />;
+                // FIX: Removed incorrect props ('currentUser', 'onUpdate', 'onClose') and passed the required 'onBack' prop to the Limits component.
+                return <Limits onBack={() => setView('security')} />;
             case 'notifications':
                 return <Notifications onBack={() => setView('main')} />;
              case 'points':
@@ -123,7 +108,7 @@ const Profile: React.FC = () => {
     }
 
 
-    return <div className="h-full flex flex-col bg-black">{renderView()}</div>;
+    return <div className="h-full flex flex-col bg-background-dark">{renderView()}</div>;
 };
 
 export default Profile;

@@ -1,40 +1,55 @@
-
 import React from 'react';
-import PreLoginNewsBanner from './PreLoginNewsBanner';
 
 interface PreLoginDashboardProps {
-  onNavigateToLogin: () => void;
+    onNavigateToLogin: () => void;
+    onNavigateToSignUp: () => void;
 }
 
-const Logo: React.FC = () => (
-    <div className="flex items-center justify-center mb-10">
-        <svg className="w-12 h-12 text-green-400" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-        </svg>
-        <span className="ml-4 text-4xl font-bold text-white tracking-wider">Fintech</span>
-    </div>
-);
+const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin, onNavigateToSignUp }) => {
 
+    const GridItem: React.FC<{ icon: string; label: string; className?: string; onClick: () => void; }> = ({ icon, label, className = '', onClick }) => (
+        <button onClick={onClick} className={`flex flex-col items-center justify-center p-4 rounded-xl bg-surface-dark hover:bg-gray-800 transition-colors duration-200 w-full h-full aspect-square ${className}`}>
+            <span className="material-symbols-outlined text-3xl text-primary mb-2">{icon}</span>
+            <span className="text-xs sm:text-sm font-medium text-subtle-dark text-center">{label}</span>
+        </button>
+    );
 
-const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin }) => {
-  return (
-    <div className="min-h-screen flex flex-col justify-between bg-black p-8 text-white">
-        <main className="flex-grow flex flex-col items-center justify-center text-center">
-            <Logo />
-            <h1 className="text-2xl font-semibold mb-4">A evolução da sua vida financeira começa aqui.</h1>
-            <p className="text-gray-400 max-w-xs">Controle total, segurança e as melhores soluções em um só lugar.</p>
-        </main>
-        <footer className="space-y-4">
-             <PreLoginNewsBanner />
-             <button
-                onClick={onNavigateToLogin}
-                className="w-full py-4 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500"
-            >
-                acessar
-            </button>
-        </footer>
-    </div>
-  );
+    return (
+        <div className="text-dark flex flex-col items-center justify-between min-h-full p-4 sm:p-6 lg:p-8">
+            <div className="w-full max-w-md mx-auto text-center flex-grow flex flex-col justify-center">
+                <header className="mb-10">
+                    <h1 className="text-2xl font-semibold text-white">
+                        Olá!
+                    </h1>
+                </header>
+                <main>
+                    <div className="grid grid-cols-3 gap-3 mb-12">
+                        <GridItem icon="swap_horiz" label="PIX e transferir" onClick={onNavigateToLogin} />
+                        <GridItem icon="barcode_scanner" label="Pagar" onClick={onNavigateToLogin} />
+                        <GridItem icon="receipt_long" label="Extrato" onClick={onNavigateToLogin} />
+                        <GridItem icon="credit_card" label="Cartões" className="col-span-2" onClick={onNavigateToLogin} />
+                        <GridItem icon="storefront" label="Marketplace" onClick={onNavigateToLogin} />
+                    </div>
+                </main>
+            </div>
+            <div className="w-full max-w-md mx-auto text-center">
+                <div className="flex flex-col items-center gap-4">
+                    <button
+                        onClick={onNavigateToLogin}
+                        className="w-full max-w-xs px-8 py-4 font-semibold text-background-dark transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50"
+                    >
+                        Acessar minha conta
+                    </button>
+                    <button
+                        onClick={onNavigateToSignUp}
+                        className="w-full max-w-xs px-8 py-3 font-semibold transition-colors duration-300 border border-subtle-dark rounded-lg text-subtle-dark hover:text-primary hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    >
+                        Não é cliente? Abra uma conta
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 export default PreLoginDashboard;

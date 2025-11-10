@@ -1,7 +1,13 @@
 
+
+
 import React from 'react';
+// FIX: Corrected import path for useAuth from parent directory.
 import { useAuth } from '../App';
+// FIX: Corrected import path for User type from parent directory.
 import { User } from '../types';
+// FIX: Imported formatCPF for consistency and removed local implementation.
+import { formatCPF } from '../utils/formatters';
 
 interface SettingsProps {
     user: User;
@@ -59,14 +65,5 @@ const Settings: React.FC<SettingsProps> = ({ user, onLogout, onBack, onNavigateT
         </div>
     );
 };
-
-// Add formatCPF function if it's not globally available
-const formatCPF = (cpf: string): string => {
-  const cleaned = cpf.replace(/\D/g, '');
-  const match = cleaned.match(/^(\d{0,3})(\d{0,3})(\d{0,3})(\d{0,2})$/);
-  if (!match) return cpf;
-  return [match[1], match[2], match[3]].filter(Boolean).join('.') + (match[4] ? `-${match[4]}` : '');
-};
-
 
 export default Settings;

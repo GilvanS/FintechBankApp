@@ -9,6 +9,19 @@ const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 const path = require('path');
 const { body, validationResult } = require('express-validator');
+const { users, products, stories } = require('./data/mockSeed');
+
+// --- Repositórios / Contexto ---
+const repoContext = require('./repositories/context');
+const notificationsRepo = require('./repositories/notificationsRepo');
+const shopRepo = require('./repositories/shopRepo');
+const pixRepo = require('./repositories/pixRepo');
+const { addContact } = require('./repositories/pixRepo');
+const usersRepo = require('./repositories/usersRepo');
+const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword } = require('./repositories/usersRepo');
+const limitRequestsRepo = require('./repositories/limitRequestsRepo');
+const cardRepo = require('./repositories/cardRepo');
+const { bearerAuth, requireScope, pinGuard, withReqId, auditLog } = require('./middlewares/auth');
 
 // --- Configurações ---
 const PORT = process.env.PORT || 3001;
@@ -41,12 +54,9 @@ class DatabricksService {
 
     async connect() {
         if (!databricksConfig.serverHostname || !databricksConfig.httpPath || !databricksConfig.token) {
-            console.warn("⚠️  Configurações do Databricks incompletas. Executando em modo MOCK para desenvolvimento.");
-            console.warn("⚠️  Para produção, configure as variáveis: DATABRICKS_SERVER_HOSTNAME, DATABRICKS_HTTP_PATH, DATABRICKS_TOKEN");
-            this.mockMode = true;
-            return;
+            throw new Error("Configurações do Databricks incompletas. Defina DATABRICKS_SERVER_HOSTNAME, DATABRICKS_HTTP_PATH e DATABRICKS_TOKEN.");
         }
-        
+
         try {
             this.client = new DBSQLClient();
             const connectedClient = await this.client.connect({
@@ -59,13 +69,13 @@ class DatabricksService {
                 initialSchema: databricksConfig.schema,
             });
             console.log("✅ Conectado ao Databricks com sucesso.");
-            
+
             // Detectar catálogo disponível automaticamente
             await this.detectAvailableCatalog();
             this.mockMode = false;
         } catch (error) {
-            console.warn("⚠️  Falha ao conectar com Databricks. Executando em modo MOCK:", error.message);
-            this.mockMode = true;
+            console.error("❌ Falha ao conectar com Databricks:", error.message);
+            throw error;
         }
     }
 
@@ -118,20 +128,8 @@ class DatabricksService {
     }
 
     async executeQuery(query) {
-        if (this.mockMode) {
-            console.log("🔧 MODO MOCK - Query:", query.substring(0, 100) + "...");
-            // Retorna dados mock baseados no tipo de query
-            if (query.includes('SELECT') && query.includes('users')) {
-                return []; // Lista vazia de usuários
-            }
-            if (query.includes('INSERT') || query.includes('UPDATE') || query.includes('DELETE')) {
-                return { affectedRows: 1 }; // Simula sucesso
-            }
-            return [];
-        }
-        
         if (!this.session) throw new Error("Não conectado ao Databricks");
-        console.log("Executing Query:", query); // Log para debug
+        console.log("Executing Query:", query);
         const operation = await this.session.executeStatement(query, { runAsync: false, maxRows: 10000 });
         const result = await operation.fetchAll();
         await operation.close();
@@ -156,6 +154,20 @@ const normalizeUser = (dbUser) => {
         loginAttempts: dbUser.login_attempts || 0,
         pixDailyLimit: parseFloat(dbUser.pix_daily_limit) || 0,
         passwordResetRequested: dbUser.password_reset_requested,
+        // Novos campos de perfil
+        username: dbUser.username,
+        profileDescription: dbUser.profile_description,
+        showStoriesPopup: dbUser.show_stories_popup,
+        // Estado do cartao de credito
+        creditCard: {
+            dueDate: dbUser.credit_card_due_date,
+            invoiceDueDate: dbUser.credit_card_invoice_due_date,
+            availableLimit: dbUser.credit_card_available_limit ? parseFloat(dbUser.credit_card_available_limit) : null,
+            totalLimit: dbUser.credit_card_total_limit ? parseFloat(dbUser.credit_card_total_limit) : null,
+            pointsBalance: dbUser.credit_card_points_balance ? parseInt(dbUser.credit_card_points_balance, 10) : 0,
+            isBlocked: !!dbUser.credit_card_is_blocked,
+            // Observacao: transacoes do cartao sao representadas em `transactions` com tipos INVOICE_*
+        }
     };
 };
 
@@ -189,38 +201,29 @@ const asyncHandler = fn => (req, res, next) => {
 const databricksService = new DatabricksService();
 const app = express();
 
+// Injetar contexto para repositories
+repoContext.setDb(databricksService);
+
 // --- Middlewares ---
 app.use(cors());
 app.use(express.json());
+app.use(withReqId);
 
 const apiRouter = express.Router();
 
 const handleValidationErrors = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        return res.status(400).json({ success: false, message: errors.array()[0].msg });
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
     }
     next();
 };
 
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ success: false, message: 'Token de acesso requerido.' });
-
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ success: false, message: 'Token inválido.' });
-        req.user = user;
-        next();
-    });
-};
-
 const authenticateAdmin = asyncHandler(async (req, res, next) => {
-    const users = await databricksService.executeQuery(`SELECT role FROM ${databricksService.fq('users')} WHERE cpf = '${req.user.cpf}'`);
-    if (users.length > 0 && users[0].role === 'admin') {
-        return next();
+    if (!req.user || req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
-    res.status(403).json({ success: false, message: 'Acesso negado. Privilégios de administrador necessários.' });
+    next();
 });
 
 // --- Regras de Validação ---
@@ -234,6 +237,12 @@ const signupValidationRules = [
 const loginValidationRules = [
     body('cpf').isString().isLength({ min: 11, max: 11 }).withMessage('CPF deve ter 11 dígitos.').isNumeric().withMessage('CPF deve conter apenas números.'),
     body('password').isString().isLength({ min: 6, max: 12 }).withMessage('A senha deve ter entre 6 e 12 caracteres.')
+];
+
+const resetPasswordValidationRules = [
+    body('cpf').isString().isLength({ min: 11, max: 11 }).withMessage('CPF deve ter 11 dígitos.').isNumeric().withMessage('CPF deve conter apenas números.'),
+    body('token').isString().isLength({ min: 4, max: 4 }).withMessage('Token deve ter 4 dígitos.').isNumeric().withMessage('Token deve conter apenas números.'),
+    body('newPassword').isString().isLength({ min: 6, max: 12 }).withMessage('A senha deve ter entre 6 e 12 caracteres.')
 ];
 
 // --- Endpoints de Diagnóstico ---
@@ -257,7 +266,7 @@ apiRouter.get('/health', asyncHandler(async (req, res) => {
     res.json({ success: true, data: health });
 }));
 
-apiRouter.get('/debug/tables', authenticateToken, authenticateAdmin, asyncHandler(async (req, res) => {
+apiRouter.get('/debug/tables', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     console.log('🔍 Verificação de tabelas solicitada');
     
     try {
@@ -291,13 +300,13 @@ apiRouter.get('/debug/tables', authenticateToken, authenticateAdmin, asyncHandle
     }
 }));
 
-apiRouter.get('/debug/user/:cpf', authenticateToken, authenticateAdmin, asyncHandler(async (req, res) => {
+apiRouter.get('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf } = req.params;
     console.log(`🔍 Debug do usuário ${cpf} solicitado`);
     
     try {
-        const query = `SELECT * FROM ${databricksService.fq('users')} WHERE cpf = ?`;
-        const result = await databricksService.executeQuery(query, [cpf]);
+        const query = `SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`;
+        const result = await databricksService.executeQuery(query);
         
         if (result.length === 0) {
             return res.json({ success: true, data: { exists: false, user: null } });
@@ -325,7 +334,7 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     const { fullName, cpf, email, password } = req.body;
     const existingUser = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}' OR email = '${email}'`);
     if (existingUser.length > 0) {
-        return res.status(400).json({ success: false, message: 'CPF ou e-mail já cadastrado.' });
+        return res.status(400).json({ success: false, message: 'CPF ou email ja cadastrado.' });
     }
     const hashedPassword = await bcrypt.hash(password, 10);
     
@@ -352,20 +361,33 @@ apiRouter.post('/auth/login', loginValidationRules, handleValidationErrors, asyn
     const users = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
     const user = users[0];
     
-    console.log(`👤 Usuário encontrado:`, user ? `CPF: ${user.cpf}, Role: ${user.role}, Email: ${user.email}` : 'Nenhum usuário encontrado');
+    console.log(`👤 Usuario encontrado:`, user ? `CPF: ${user.cpf}, Role: ${user.role}, Email: ${user.email}` : 'Nenhum usuario encontrado');
 
-    if (!user) return res.status(401).json({ success: false, message: 'CPF ou senha inválidos.' });
-    if (user.is_blocked) return res.status(401).json({ success: false, message: 'Sua conta está bloqueada. Por favor, solicite uma nova senha.' });
+    if (!user) return res.status(401).json({ success: false, code: 'AUTH_USER_NOT_FOUND', message: 'CPF ou senha invalida.' });
+    if (user.is_blocked) return res.status(401).json({ success: false, code: 'AUTH_BLOCKED', message: 'Conta bloqueada. Solicite nova senha.' });
 
-    console.log(`🔐 Verificando senha para usuário ${user.cpf}...`);
+    console.log(`🔐 Verificando senha para usuario ${user.cpf}...`);
     const isMatch = await bcrypt.compare(password, user.password_hash);
-    console.log(`🔐 Senha ${isMatch ? 'CORRETA' : 'INCORRETA'} para usuário ${user.cpf}`);
+    console.log(`🔐 Senha ${isMatch ? 'CORRETA' : 'INCORRETA'} para usuario ${user.cpf}`);
     
-    if (!isMatch) return res.status(401).json({ success: false, message: 'CPF ou senha inválidos.' });
+    if (!isMatch) {
+        await databricksService.executeQuery(`
+            UPDATE ${databricksService.fq('users')}
+            SET login_attempts = COALESCE(login_attempts, 0) + 1, updated_at = current_timestamp()
+            WHERE cpf = '${cpf}'
+        `);
+        return res.status(401).json({ success: false, code: 'AUTH_INVALID_CREDENTIALS', message: 'CPF ou senha invalida.' });
+    }
     
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET login_attempts = 0, updated_at = current_timestamp()
+        WHERE cpf = '${cpf}'
+    `);
+
     const token = jwt.sign({ cpf: user.cpf, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
     console.log(`✅ Login bem-sucedido para ${user.cpf} (${user.role})`);
-    res.json({ success: true, user: normalizeUser(user), token, message: 'Login bem-sucedido!' });
+    res.json({ success: true, user: normalizeUser(user), token, message: 'Login realizado com sucesso.' });
 }));
 
 apiRouter.post('/auth/request-password-reset', asyncHandler(async (req, res) => {
@@ -373,22 +395,65 @@ apiRouter.post('/auth/request-password-reset', asyncHandler(async (req, res) => 
     // Em um app real, aqui você enviaria um e-mail. Vamos apenas simular.
     const users = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
     if (users.length > 0) {
-        await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET password_reset_requested = true WHERE cpf = '${cpf}'`);
+        await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET password_reset_requested = true, updated_at = current_timestamp() WHERE cpf = '${cpf}'`);
         res.json({ success: true, message: 'Instruções para nova senha enviadas ao seu e-mail.' });
     } else {
-        res.status(404).json({ success: false, message: 'CPF não encontrado.' });
+        res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     }
+}));
+
+apiRouter.post('/auth/reset-password', resetPasswordValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
+    const { cpf, token, newPassword } = req.body;
+
+    const rows = await databricksService.executeQuery(`
+        SELECT cpf, password_reset_requested FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'
+    `);
+    if (!rows.length) {
+        return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    }
+    const user = rows[0];
+    const expectedToken = String(cpf).slice(-4);
+    if (String(token) !== expectedToken) {
+        return res.status(400).json({ success: false, message: 'Token invalido.' });
+    }
+    if (!user.password_reset_requested) {
+        return res.status(409).json({ success: false, message: 'Reset de senha nao solicitado.' });
+    }
+    const hash = await bcrypt.hash(newPassword, 10);
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET password_hash = '${hash}', password_reset_requested = false, is_blocked = false, login_attempts = 0, updated_at = current_timestamp()
+        WHERE cpf = '${cpf}'
+    `);
+    res.json({ success: true, message: 'Senha redefinida com sucesso.' });
 }));
 
 
 // --- Rotas de Usuário ---
+apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
+    const user = await usersRepo.findByCpf(req.user.cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    auditLog(req, 'users_me');
+    res.json({ success: true, user: normalizeUser(user) });
+}));
+
+apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    const user = await usersRepo.findByCpf(cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    auditLog(req, 'users_get', 'info', { cpf });
+    res.json({ success: true, user: normalizeUser(user) });
+}));
 // Rota: apiRouter.get('/user/me/:cpf', ...)
-apiRouter.get('/user/me/:cpf', authenticateToken, asyncHandler(async (req, res) => {
+apiRouter.get('/user/me/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
     if (req.user.cpf !== req.params.cpf && req.user.role !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
     const users = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    if (users.length === 0) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    if (users.length === 0) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     
     const user = users[0];
     const transactions = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('transactions')} WHERE cpf = '${req.params.cpf}' ORDER BY date DESC`);
@@ -401,14 +466,14 @@ apiRouter.get('/user/me/:cpf', authenticateToken, asyncHandler(async (req, res) 
     res.json(userData);
 }));
 
-apiRouter.put('/user/limits/pix-daily/:cpf', authenticateToken, asyncHandler(async (req, res) => {
+apiRouter.put('/user/limits/pix-daily/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
     const { newLimit } = req.body;
     const now = new Date().toISOString();
     await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET pix_daily_limit = ${newLimit}, updated_at = '${now}' WHERE cpf = '${req.params.cpf}'`);
     res.json({ success: true, message: 'Limite diário de PIX atualizado com sucesso!' });
 }));
 
-apiRouter.get('/user/pix-daily-usage/:cpf', authenticateToken, asyncHandler(async (req, res) => {
+apiRouter.get('/user/pix-daily-usage/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const result = await databricksService.executeQuery(`
         SELECT SUM(amount) as total FROM ${databricksService.fq('transactions')} 
@@ -419,18 +484,18 @@ apiRouter.get('/user/pix-daily-usage/:cpf', authenticateToken, asyncHandler(asyn
 }));
 
 // --- Rotas de Consulta ---
-apiRouter.get('/users/:cpf/balance', authenticateToken, asyncHandler(async (req, res) => {
+apiRouter.get('/users/:cpf/balance', bearerAuth(), asyncHandler(async (req, res) => {
     if (req.user.cpf !== req.params.cpf && req.user.role !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
     
     const users = await databricksService.executeQuery(`SELECT balance FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    if (users.length === 0) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    if (users.length === 0) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     
     res.json({ success: true, balance: parseFloat(users[0].balance) || 0 });
 }));
 
-apiRouter.get('/users/:cpf/statement', authenticateToken, asyncHandler(async (req, res) => {
+apiRouter.get('/users/:cpf/statement', bearerAuth(), asyncHandler(async (req, res) => {
     console.log(`📊 Solicitação de extrato para CPF: ${req.params.cpf}`);
     console.log(`👤 Usuário autenticado: ${req.user.cpf}, Role: ${req.user.role}`);
     
@@ -456,10 +521,139 @@ apiRouter.get('/users/:cpf/statement', authenticateToken, asyncHandler(async (re
     }
 }));
 
+apiRouter.put('/users/:cpf/profile', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    const { fullName, username, profileDescription, showStoriesPopup } = req.body || {};
+
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+
+    const fields = [];
+    if (typeof fullName === 'string') fields.push(`full_name = '${fullName.replace(/'/g, "''")}'`);
+    if (typeof username === 'string') fields.push(`username = '${username.replace(/'/g, "''")}'`);
+    if (typeof profileDescription === 'string') fields.push(`profile_description = '${profileDescription.replace(/'/g, "''")}'`);
+    if (typeof showStoriesPopup === 'boolean') fields.push(`show_stories_popup = ${showStoriesPopup}`);
+
+    if (!fields.length) return res.status(400).json({ success: false, message: 'Nenhum campo valido para atualizar.' });
+
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET ${fields.join(', ')}, updated_at = current_timestamp()
+        WHERE cpf = '${cpf}'
+    `);
+    const [user] = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf='${cpf}'`);
+    return res.json({ success: true, user: normalizeUser(user) });
+}));
+
+// --- Rotas de Notificações (via repositório) ---
+apiRouter.get('/users/:cpf/notifications', bearerAuth(), asyncHandler(async (req, res) => {
+    if (req.user.cpf !== req.params.cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    const list = await notificationsRepo.listByCpf(req.params.cpf);
+    res.json({ success: true, notifications: list });
+}));
+
+apiRouter.post('/users/:cpf/notifications/:id/read', bearerAuth(), asyncHandler(async (req, res) => {
+    if (req.user.cpf !== req.params.cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    const ok = await notificationsRepo.markRead(req.params.cpf, req.params.id);
+    if (!ok) return res.status(404).json({ success: false, message: 'Usuario ou notificacao nao encontrada' });
+    res.json({ success: true, message: 'Notificacao marcada como lida' });
+}));
+
+// --- Rotas de Loja ---
+apiRouter.get('/shop/products', asyncHandler(async (req, res) => {
+    const items = await shopRepo.listProducts();
+    res.json(items);
+}));
+
+apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => {
+    const { items, paymentMethod, cashbackUsed = 0, installments = 1, pin } = req.body || {};
+    if (!Array.isArray(items) || !items.length || !paymentMethod || !pin || pin.length !== 4) {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+    const catalog = await shopRepo.listProducts();
+    const prices = new Map(catalog.map(p => [p.id, p.price]));
+    const productById = new Map(catalog.map(p => [p.id, p]));
+    let total = 0;
+    for (const it of items) {
+        if (!prices.has(it.productId) || !Number.isInteger(it.quantity) || it.quantity < 1) {
+            return res.status(400).json({ success: false, message: 'Item invalido.' });
+        }
+        total += prices.get(it.productId) * it.quantity;
+    }
+
+    // Taxa de pontos por metodo: debit=1%, credit=2%
+    const pointsRate = paymentMethod === 'credit' ? 0.02 : 0.01;
+    const points = Math.floor(total * pointsRate);
+
+    // Cashback simples permitido apenas em debito
+    const cashback = paymentMethod === 'debit' ? Math.min(Math.max(cashbackUsed, 0), total * 0.05) : 0; // max 5%
+    const netDebit = total - cashback;
+
+    if (paymentMethod === 'debit') {
+        const user = await usersRepo.findByCpf(req.user.cpf);
+        const balance = parseFloat(user.balance || 0);
+        if (balance < netDebit) return res.status(400).json({ success: false, message: 'Saldo insuficiente' });
+        await usersRepo.updateBalance(req.user.cpf, (balance - netDebit).toFixed(2));
+        await databricksService.executeQuery(`
+            INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+            VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'SHOP_DEBIT', ${netDebit.toFixed(2)}, 'Compra shop (debito)', current_timestamp())
+        `);
+        if (cashback > 0) {
+            await databricksService.executeQuery(`
+                INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+                VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'CASHBACK_CREDIT', ${cashback.toFixed(2)}, 'Cashback shop', current_timestamp())
+            `);
+        }
+    } else if (paymentMethod === 'credit') {
+        if (!Number.isInteger(installments) || installments < 1 || installments > 24) {
+            return res.status(400).json({ success: false, message: 'Parcelas invalidas.' });
+        }
+        await cardRepo.createInstallments({ cpf: req.user.cpf, amount: total, installments });
+        await databricksService.executeQuery(`
+            INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+            VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'SHOP_CREDIT', ${total.toFixed(2)}, 'Compra shop (credito)', current_timestamp())
+        `);
+    } else {
+        return res.status(400).json({ success: false, message: 'Metodo de pagamento invalido.' });
+    }
+
+    // Persistir itens comprados e pontos por item
+    for (const it of items) {
+        const p = productById.get(it.productId);
+        const itemTotal = Number(p.price) * it.quantity;
+        const itemPoints = Math.floor(itemTotal * pointsRate);
+        await databricksService.executeQuery(`
+            INSERT INTO ${databricksService.fq('purchased_items')}
+            (id, cpf, product_id, name, description, price, image_url, quantity, points_earned, purchase_date, payment_method, cashback_used, installments)
+            VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', '${p.id}', '${p.name.replace(/'/g,"''")}', '${(p.description||'').replace(/'/g,"''")}', ${Number(p.price).toFixed(2)}, '${p.image_url || p.imageUrl || ''}', ${it.quantity}, ${itemPoints}, current_timestamp(), '${paymentMethod}', ${paymentMethod === 'debit' ? Number(cashback).toFixed(2) : 0}, ${paymentMethod === 'credit' ? installments : 'NULL'})
+        `);
+    }
+
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+        VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'POINTS_EARNED', ${points}, 'Pontos ganhos no shop', current_timestamp())
+    `);
+
+    res.status(201).json({ success: true, message: 'Compra realizada com sucesso' });
+}));
+
 // --- Rotas PIX ---
-apiRouter.post('/pix/transfer', authenticateToken, asyncHandler(async (req, res) => {
-    const { fromCpf, toKey, amount, description } = req.body;
+apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
+    const { toKey, amount, description, pin } = req.body || {};
+    if (!toKey || typeof amount !== 'number' || amount <= 0 || !pin || pin.length !== 4) {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+    if (!req.user?.cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
+
+    const fromCpf = req.user.cpf;
     const numericAmount = parseFloat(amount);
+
+    auditLog(req, 'pix_transfer', 'info', { toKey: req.body?.toKey, amount: req.body?.amount });
     
     const fromUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${fromCpf}'`);
     const fromUser = fromUsers[0];
@@ -468,6 +662,7 @@ apiRouter.post('/pix/transfer', authenticateToken, asyncHandler(async (req, res)
 
     if (!toUser) return res.status(400).json({ success: false, message: 'Chave PIX de destino não encontrada.' });
     if (fromUser.balance < numericAmount) return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
+    if (fromUser.cpf === toUser.cpf) return res.status(400).json({ success: false, message: 'Não é permitido transferir para si mesmo.' });
     
     const newFromBalance = fromUser.balance - numericAmount;
     const newToBalance = toUser.balance + numericAmount;
@@ -482,188 +677,393 @@ apiRouter.post('/pix/transfer', authenticateToken, asyncHandler(async (req, res)
     res.json({ success: true, message: 'PIX enviado com sucesso!' });
 }));
 
-apiRouter.get('/pix/contacts/:cpf', authenticateToken, asyncHandler(async (req, res) => {
-    console.log(`📋 Listando contatos PIX para ${req.params.cpf}`);
-    console.log(`👤 Usuário autenticado: ${req.user.cpf}, Role: ${req.user.role}`);
-    
-    try {
-        const query = `SELECT contact_name as name, contact_cpf as key FROM ${databricksService.fq('pix_contacts')} WHERE pix_account_id = '${req.params.cpf}' ORDER BY created_at DESC`;
-        console.log(`🔍 Executando query: ${query}`);
-        
-        const contacts = await databricksService.executeQuery(query);
-        console.log(`📋 Encontrados ${contacts.length} contatos para ${req.params.cpf}`);
-        
-        res.json({ success: true, contacts: contacts });
-    } catch (error) {
-        console.error(`❌ Erro ao listar contatos PIX para ${req.params.cpf}:`, error.message);
-        throw error;
-    }
+// PIX Contacts (mantido)
+apiRouter.get('/pix/contacts/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
+    if (req.user.cpf !== req.params.cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    const list = await pixRepo.listContacts(req.params.cpf);
+    auditLog(req, 'pix_contacts_list');
+    res.json({ success: true, contacts: list });
 }));
 
-apiRouter.post('/pix/contacts/:cpf', authenticateToken, asyncHandler(async (req, res) => {
-    const { name, key } = req.body;
+apiRouter.post('/pix/contacts/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
+    if (req.user.cpf !== req.params.cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    const { contactCpf, contactName } = req.body || {};
+    if (!contactCpf || !contactName) return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    await pixRepo.addContact(req.params.cpf, contactCpf, contactName);
+    auditLog(req, 'pix_contact_add', 'info');
+    res.status(201).json({ success: true, message: 'Contato adicionado' });
+}));
+
+apiRouter.delete('/pix/contacts/:cpf/:contactKey', bearerAuth(), asyncHandler(async (req, res) => {
+    if (req.user.cpf !== req.params.cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    const ok = await pixRepo.removeContact(req.params.cpf, req.params.contactKey);
+    if (!ok) return res.status(404).json({ success: false, message: 'Contato nao encontrado' });
+    auditLog(req, 'pix_contact_delete', 'warn');
+    res.json({ success: true, message: 'Contato removido' });
+}));
+
+// --- PIX Keys (novos endpoints via repositório) ---
+apiRouter.get('/pix/keys', bearerAuth(), asyncHandler(async (req, res) => {
+    const keys = await pixRepo.listKeys(req.user.cpf);
+    res.json({ success: true, keys });
+}));
+
+apiRouter.post('/pix/keys', bearerAuth(), asyncHandler(async (req, res) => {
+    const { type, key } = req.body || {};
+    if (!type || !key) return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    await pixRepo.addKey({ cpf: req.user.cpf, type, key });
+    res.status(201).json({ success: true, message: 'Chave cadastrada' });
+}));
+
+apiRouter.delete('/pix/keys/:key', bearerAuth(), asyncHandler(async (req, res) => {
+    const removed = await pixRepo.removeKey({ cpf: req.user.cpf, key: req.params.key });
+    if (!removed) return res.status(404).json({ success: false, message: 'Chave nao encontrada' });
+    res.json({ success: true, message: 'Chave removida' });
+}));
+
+apiRouter.post('/pix/recipient-info', bearerAuth(), asyncHandler(async (req, res) => {
+    const { type, key } = req.body || {};
+    if (!type || !key) return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    const recipient = await pixRepo.findRecipientByKey(type, key);
+    if (!recipient) return res.status(404).json({ success: false, message: 'Chave nao encontrada' });
+    auditLog(req, 'pix_recipient_info', 'info', { type });
+    res.json({ success: true, recipient });
+}));
+
+apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
+    const { fromCpf, toKey, amount, description, installments, interestRate } = req.body || {};
+    const numericAmount = parseFloat(amount);
+    const nInstallments = Number.isInteger(installments) ? installments : 12;
+    const rate = typeof interestRate === 'number' ? interestRate : 0.02;
+
+    if (!fromCpf || !toKey || !numericAmount || numericAmount <= 0) {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+    if (nInstallments < 2 || nInstallments > 24) {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+
+    const fromUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${fromCpf}'`);
+    const fromUser = fromUsers[0];
+    const toUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${toKey}' OR email = '${toKey}'`);
+    const toUser = toUsers[0];
+
+    if (!toUser) return res.status(400).json({ success: false, message: 'Chave PIX de destino não encontrada.' });
+    if (fromUser.cpf === toUser.cpf) return res.status(400).json({ success: false, message: 'Não é permitido transferir para si mesmo.' });
+
+    // Juros simples sobre o valor transferido
+    const totalWithInterest = numericAmount * (1 + rate * nInstallments);
+    const installmentValue = parseFloat((totalWithInterest / nInstallments).toFixed(2));
     const now = new Date().toISOString();
-    const contactId = databricksService.generateUUID();
-    
-    console.log(`📞 Adicionando contato PIX - Owner: ${req.params.cpf}, Nome: ${name}, Chave: ${key}`);
-    
-    // Verificar se o contato já existe (usando contact_cpf em vez de contact_key)
-    const existingContact = await databricksService.executeQuery(
-        `SELECT * FROM ${databricksService.fq('pix_contacts')} WHERE pix_account_id = '${req.params.cpf}' AND contact_cpf = '${key}'`
-    );
-    
-    if (existingContact.length > 0) {
-        console.log(`⚠️ Contato já existe para ${req.params.cpf}`);
-        return res.status(400).json({ success: false, message: 'Contato já existe.' });
-    }
-    
-    console.log(`💾 Inserindo contato na tabela pix_contacts...`);
-    // Inserir contato com a ordem correta das colunas: id, pix_account_id, contact_cpf, contact_name, created_at
-    await databricksService.executeQuery(
-        `INSERT INTO ${databricksService.fq('pix_contacts')} (id, pix_account_id, contact_cpf, contact_name, created_at) VALUES ('${contactId}', '${req.params.cpf}', '${key}', '${name}', '${now}')`
-    );
-    
-    console.log(`✅ Contato PIX adicionado com sucesso!`);
-    res.status(201).json({ success: true, message: 'Contato adicionado com sucesso!' });
-}));
+    const txId = databricksService.generateUUID();
 
-apiRouter.delete('/pix/contacts/:cpf/:contactKey', authenticateToken, asyncHandler(async (req, res) => {
-    await databricksService.executeQuery(
-        `DELETE FROM ${databricksService.fq('pix_contacts')} WHERE pix_account_id = '${req.params.cpf}' AND contact_cpf = '${req.params.contactKey}'`
-    );
-    res.json({ success: true, message: 'Contato removido com sucesso!' });
+    // Transferência imediata para o destinatário
+    const newFromBalance = fromUser.balance - numericAmount;
+    const newToBalance = toUser.balance + numericAmount;
+
+    if (newFromBalance < 0) {
+        return res.status(400).json({ success: false, message: 'Saldo insuficiente para realizar a transferência no modo crédito.' });
+    }
+
+    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance = ${newFromBalance} WHERE cpf = '${fromCpf}'`);
+    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance = ${newToBalance} WHERE cpf = '${toUser.cpf}'`);
+
+    await databricksService.executeQuery(`INSERT INTO ${databricksService.fq('transactions')} VALUES ('${txId}_credit_sent', '${fromCpf}', 'PIX_CREDIT_SENT', ${-numericAmount}, '${description || 'Transferência PIX Crédito'}', '${fromUser.full_name}', '${toUser.full_name}', '${toKey}', '${now}')`);
+    await databricksService.executeQuery(`INSERT INTO ${databricksService.fq('transactions')} VALUES ('${txId}_credit_received', '${toUser.cpf}', 'PIX_CREDIT_RECEIVED', ${numericAmount}, '${description || 'Transferência PIX Crédito'}', '${fromUser.full_name}', '${toUser.full_name}', '${toKey}', '${now}')`);
+
+    auditLog(req, 'pix_transfer_credit', 'info', { toKey: req.body?.toKey, amount: req.body?.amount, installments: req.body?.installments });
+
+    res.json({
+        success: true,
+        message: 'PIX crédito enviado com sucesso!',
+        creditPlan: {
+            installments: nInstallments,
+            rate,
+            totalWithInterest: parseFloat(totalWithInterest.toFixed(2)),
+            installmentValue
+        }
+    });
 }));
 
 // --- Rotas de Admin ---
-apiRouter.get('/admin/users', authenticateToken, authenticateAdmin, asyncHandler(async(req, res) => {
-    const users = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} ORDER BY created_at DESC`);
+apiRouter.get('/admin/users', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const users = await usersRepo.listUsers();
     res.json({ success: true, users: users.map(normalizeUser) });
 }));
 
-apiRouter.get('/admin/users/:cpf', authenticateToken, authenticateAdmin, asyncHandler(async(req, res) => {
-    const users = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    if(users.length === 0) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
-    res.json({ success: true, user: normalizeUser(users[0]) });
+apiRouter.get('/admin/users/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const user = await findByCpf(req.params.cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    res.json(normalizeUser(user));
 }));
 
-apiRouter.post('/admin/users/:cpf/deposit', authenticateToken, authenticateAdmin, asyncHandler(async(req, res) => {
-    const { amount } = req.body;
-    const users = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    if(users.length === 0) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
-
-    const user = users[0];
-    const newBalance = user.balance + parseFloat(amount);
-    const now = new Date().toISOString();
-    
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance = ${newBalance} WHERE cpf = '${req.params.cpf}'`);
-    await databricksService.executeQuery(`INSERT INTO ${databricksService.fq('transactions')} VALUES ('${databricksService.generateUUID()}', '${req.params.cpf}', 'ADMIN_DEPOSIT', ${amount}, 'Depósito administrativo', 'Admin', '${user.full_name}', '', '${now}')`);
-
-    const updatedUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    res.json({ success: true, message: 'Depósito realizado com sucesso!', user: normalizeUser(updatedUsers[0]) });
+apiRouter.post('/admin/users/:cpf/deposit', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { cpf } = req.params;
+    const { amount } = req.body || {};
+    if (typeof amount !== 'number' || amount <= 0) return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    await deposit(cpf, amount);
+    res.json({ success: true, message: 'Depósito realizado' });
 }));
 
-apiRouter.post('/admin/users/:cpf/block', authenticateToken, authenticateAdmin, asyncHandler(async(req, res) => {
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET is_blocked = true WHERE cpf = '${req.params.cpf}'`);
-    const updatedUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    res.json({ success: true, message: 'Usuário bloqueado.', user: normalizeUser(updatedUsers[0]) });
+apiRouter.post('/admin/users/:cpf/block', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { cpf } = req.params;
+    await setBlocked(cpf, true);
+    const updatedUser = await usersRepo.findByCpf(cpf);
+    res.json({ success: true, message: 'Usuário bloqueado com sucesso.', user: normalizeUser(updatedUser) });
 }));
 
-apiRouter.post('/admin/users/:cpf/unblock', authenticateToken, authenticateAdmin, asyncHandler(async(req, res) => {
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET is_blocked = false, login_attempts = 0 WHERE cpf = '${req.params.cpf}'`);
-    const updatedUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    res.json({ success: true, message: 'Usuário desbloqueado.', user: normalizeUser(updatedUsers[0]) });
+apiRouter.post('/admin/users/:cpf/unblock', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    await setBlocked(req.params.cpf, false);
+    res.json({ success: true, message: 'Usuário desbloqueado com sucesso' });
 }));
 
 // --- Endpoints Administrativos Adicionais ---
 
 // Alterar limite PIX de qualquer usuário (Admin)
-apiRouter.put('/admin/users/:cpf/pix-limit', authenticateToken, authenticateAdmin, asyncHandler(async(req, res) => {
-    const { newLimit } = req.body;
-    
-    if (!newLimit || newLimit < 0) {
-        return res.status(400).json({ success: false, message: 'Limite deve ser um valor positivo.' });
+apiRouter.put('/admin/users/:cpf/pix-limit', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { cpf } = req.params;
+    const { newLimit } = req.body || {};
+    if (typeof newLimit !== 'number' || newLimit < 0) {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
     }
-    
-    const users = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    if(users.length === 0) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
-    
-    const now = new Date().toISOString();
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET pix_daily_limit = ${newLimit}, updated_at = '${now}' WHERE cpf = '${req.params.cpf}'`);
-    
-    const updatedUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    res.json({ 
-        success: true, 
-        message: `Limite PIX alterado para R$ ${newLimit} com sucesso!`, 
-        user: normalizeUser(updatedUsers[0]) 
-    });
+    await updatePixLimit(cpf, newLimit);
+    res.json({ success: true, message: 'Limite PIX atualizado' });
 }));
 
 // Resetar senha de usuário (Admin)
-apiRouter.post('/admin/users/:cpf/reset-password', authenticateToken, authenticateAdmin, asyncHandler(async(req, res) => {
-    const { newPassword } = req.body;
-    
-    if (!newPassword || newPassword.length < 6 || newPassword.length > 12) {
-        return res.status(400).json({ success: false, message: 'Nova senha deve ter entre 6 e 12 caracteres.' });
-    }
-    
-    const users = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    if(users.length === 0) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
-    
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    const now = new Date().toISOString();
-    
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')} 
-        SET password_hash = '${hashedPassword}', 
-            password_reset_requested = false, 
-            is_blocked = false, 
-            login_attempts = 0, 
-            updated_at = '${now}' 
-        WHERE cpf = '${req.params.cpf}'
-    `);
-    
-    const updatedUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    res.json({ 
-        success: true, 
-        message: 'Senha resetada com sucesso! Usuário desbloqueado automaticamente.', 
-        user: normalizeUser(updatedUsers[0]) 
-    });
+apiRouter.post('/admin/users/:cpf/reset-password', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    await setPasswordResetRequested(req.params.cpf, true);
+    res.json({ success: true, message: 'Solicitação de reset registrada' });
 }));
 
 // Gerar nova senha temporária (Admin)
-apiRouter.post('/admin/users/:cpf/generate-temp-password', authenticateToken, authenticateAdmin, asyncHandler(async(req, res) => {
-    const users = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    if(users.length === 0) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
-    
-    // Gerar senha temporária de 8 dígitos
-    const tempPassword = Math.random().toString(36).slice(-8);
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
-    const now = new Date().toISOString();
-    
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')} 
-        SET password_hash = '${hashedPassword}', 
-            password_reset_requested = true, 
-            is_blocked = false, 
-            login_attempts = 0, 
-            updated_at = '${now}' 
-        WHERE cpf = '${req.params.cpf}'
-    `);
-    
-    const updatedUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
-    res.json({ 
-        success: true, 
-        message: 'Senha temporária gerada com sucesso!', 
-        tempPassword: tempPassword,
-        user: normalizeUser(updatedUsers[0]) 
+apiRouter.post('/admin/users/:cpf/generate-temp-password', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { cpf } = req.params;
+
+    // Verificar se usuário existe
+    const user = await findByCpf(cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+    // Gerar senha temporária fixa conforme regra atual
+    const tempPassword = 'temp1234';
+
+    // Persistir via repositório (responsável por hash e atualização)
+    await setTempPassword(cpf, tempPassword);
+
+    // Buscar usuário atualizado
+    const updatedUser = await findByCpf(cpf);
+
+    res.json({
+        success: true,
+        message: 'Senha temporária gerada com sucesso',
+        tempPassword,
+        user: normalizeUser(updatedUser)
     });
 }));
 
-app.use('/api/v1', apiRouter);
+// Atualizar detalhes do cartão de crédito de um usuário (Admin)
+apiRouter.post('/admin/users/:cpf/card-details', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    const { dueDate, invoiceDueDate, availableLimit, totalLimit, pointsBalance } = req.body || {};
+    if (!dueDate && !invoiceDueDate && availableLimit == null && totalLimit == null && pointsBalance == null) {
+        return res.status(400).json({ success: false, message: 'Nenhum campo informado.' });
+    }
+
+    const sets = [];
+    if (typeof dueDate === 'string') sets.push(`credit_card_due_date = '${dueDate.replace(/'/g, "''")}'`);
+    if (typeof invoiceDueDate === 'string') sets.push(`credit_card_invoice_due_date = '${invoiceDueDate.replace(/'/g, "''")}'`);
+    if (typeof availableLimit === 'number') sets.push(`credit_card_available_limit = ${Number(availableLimit).toFixed(2)}`);
+    if (typeof totalLimit === 'number') sets.push(`credit_card_total_limit = ${Number(totalLimit).toFixed(2)}`);
+    if (typeof pointsBalance === 'number') sets.push(`credit_card_points_balance = ${Math.floor(pointsBalance)}`);
+
+    // Regra de bloqueio: se invoiceDueDate estiver >7 dias no passado, bloqueia cartao
+    let blockCard = false;
+    if (typeof invoiceDueDate === 'string') {
+        const inv = new Date(invoiceDueDate);
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        blockCard = inv < sevenDaysAgo;
+    }
+    if (blockCard) {
+        sets.push('credit_card_is_blocked = true');
+        await notificationsRepo.addNotification({
+            cpf,
+            title: 'Cartao bloqueado',
+            message: 'Seu cartao foi bloqueado por inadimplencia.',
+            actionUrl: '/cards'
+        });
+    }
+
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET ${sets.join(', ')}, updated_at = current_timestamp()
+        WHERE cpf = '${cpf}'
+    `);
+
+    const [user] = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf='${cpf}'`);
+    res.json({ success: true, user: normalizeUser(user) });
+}));
+
+// --- Solicitações de aumento de limite PIX (via repositório) ---
+apiRouter.post('/pix/limit/request', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf, amount } = req.body || {};
+    if (!cpf || cpf.length !== 11 || typeof amount !== 'number' || amount <= 0) {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+    if (req.user.cpf !== cpf) {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+
+    const request = await limitRequestsRepo.create({ cpf, amount });
+    res.json({ success: true, message: 'Solicitação criada', request });
+}));
+
+apiRouter.get('/admin/requests/limit', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const list = await limitRequestsRepo.listAll();
+    res.json(list);
+}));
+
+apiRouter.post('/admin/requests/limit/:cpf/approve', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    if (!cpf || cpf.length !== 11) return res.status(400).json({ success: false, message: 'Payload invalido.' });
+
+    const result = await limitRequestsRepo.approve({ cpf, adminCpf: req.user.cpf });
+    if (!result) return res.status(404).json({ success: false, message: 'Solicitação não encontrada' });
+    res.json({ success: true, message: 'Solicitação aprovada' });
+}));
+
+apiRouter.post('/admin/requests/limit/:cpf/deny', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    const { reason } = req.body || {};
+    if (!cpf || cpf.length !== 11) return res.status(400).json({ success: false, message: 'Payload invalido.' });
+
+    await limitRequestsRepo.deny({ cpf, adminCpf: req.user.cpf, reason });
+    res.json({ success: true, message: 'Solicitação negada' });
+}));
+
+apiRouter.get('/admin/requests/password', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const rows = await databricksService.executeQuery(`
+        SELECT cpf, full_name, email, password_reset_requested
+        FROM ${databricksService.fq('users')}
+        WHERE password_reset_requested = true
+        ORDER BY updated_at DESC
+    `);
+    res.json({ success: true, requests: rows.map(r => ({ cpf: r.cpf, fullName: r.full_name, email: r.email })) });
+}));
+
+apiRouter.post('/admin/requests/password/:cpf/approve', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    const tempPassword = 'temp1234';
+    await setTempPassword(cpf, tempPassword);
+    await setPasswordResetRequested(cpf, false);
+    await notificationsRepo.addNotification({
+        cpf,
+        title: 'Senha temporária',
+        message: 'Uma senha temporária foi gerada por um administrador.',
+        actionUrl: '/login'
+    });
+    res.json({ success: true, message: 'Pedido aprovado e senha temporária gerada.' });
+}));
+
+apiRouter.post('/admin/requests/password/:cpf/deny', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    await setPasswordResetRequested(cpf, false);
+    await notificationsRepo.addNotification({
+        cpf,
+        title: 'Pedido negado',
+        message: 'Seu pedido de reset de senha foi negado.',
+        actionUrl: '/dashboard'
+    });
+    res.json({ success: true, message: 'Pedido negado e flag removida.' });
+}));
+
+// --- Cartões (via repositório) ---
+apiRouter.post('/cards/invoice/parcel', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf, amount, installments, pin } = req.body || {};
+    if (!cpf || cpf.length !== 11 || typeof amount !== 'number' || amount <= 0 || !Number.isInteger(installments) || installments < 2 || installments > 24 || !pin || pin.length !== 4) {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+    if (req.user.cpf !== cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
+
+    await cardRepo.createInstallments({ cpf, amount, installments });
+    res.json({ success: true, message: 'Parcelamento realizado' });
+}));
+
+apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf, pin } = req.body || {};
+    if (!cpf || cpf.length !== 11 || !pin || pin.length !== 4) {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+    if (req.user.cpf !== cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
+
+    const user = await usersRepo.findByCpf(cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+    const result = await cardRepo.payDueInstallments({ cpf });
+    const balance = parseFloat(user.balance || 0);
+    if (balance < result.totalDue) return res.status(400).json({ success: false, message: 'Saldo insuficiente' });
+
+    await usersRepo.updateBalance(cpf, (balance - result.totalDue).toFixed(2));
+    res.json({ success: true, message: 'Fatura paga com sucesso.' });
+}));
+
+apiRouter.post('/cards/invoice/anticipate', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf, transactionIds, pin } = req.body || {};
+    if (!cpf || cpf.length !== 11 || !Array.isArray(transactionIds) || !transactionIds.length || !pin || pin.length !== 4) {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+    if (req.user.cpf !== cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
+
+    await cardRepo.anticipateInstallments({ cpf, transactionIds });
+    auditLog(req, 'card_anticipate', 'info', { count: transactionIds.length });
+    res.json({ success: true, message: 'Parcelas antecipadas com sucesso' });
+}));
+
+apiRouter.get('/users/:cpf/purchases', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    const rows = await databricksService.executeQuery(`
+        SELECT id, product_id, name, description, price, image_url, quantity, points_earned, purchase_date, payment_method, cashback_used, installments
+        FROM ${databricksService.fq('purchased_items')}
+        WHERE cpf='${cpf}'
+        ORDER BY purchase_date DESC
+    `);
+    res.json(rows);
+}));
+
+apiRouter.get('/stories', bearerAuth(), asyncHandler(async (req, res) => {
+    const rows = await databricksService.executeQuery(`
+        SELECT id, cpf, image_url, caption, created_at
+        FROM ${databricksService.fq('stories')}
+        ORDER BY created_at DESC
+    `);
+    res.json(rows);
+}));
 
 // --- Swagger, Inicialização e Tratamento de Erro Global ---
+
+// Proxy de noticias com cache simples em memoria
+let newsCache = { data: null, expiresAt: 0 };
+
+apiRouter.get('/proxy/news', bearerAuth(), asyncHandler(async (req, res) => {
+    const now = Date.now();
+    if (newsCache.data && newsCache.expiresAt > now) {
+        auditLog(req, 'proxy_news_cache_hit');
+        return res.json({ success: true, news: newsCache.data, cached: true });
+    }
+    // Conteudo mockado; em producao, faria fetch externo com timeout
+    const data = [
+        { id: 'n1', title: 'Mercado aquecido', summary: 'Acoes sobem no dia...' },
+        { id: 'n2', title: 'Selic mantida', summary: 'Copom decide manter taxa...' }
+    ];
+    newsCache = { data, expiresAt: now + (5 * 60 * 1000) }; // 5 minutos
+    auditLog(req, 'proxy_news_cache_fill');
+    res.json({ success: true, news: data, cached: false });
+}));
+
 const swaggerDocument = YAML.load(path.join(__dirname, 'swagger.yaml'));
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 app.use((err, req, res, next) => {
     console.error('==================== ERRO NÃO TRATADO ====================');
@@ -679,7 +1079,6 @@ app.use((err, req, res, next) => {
         error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
 });
-
 
 async function initializeDatabase() {
     try {
@@ -759,6 +1158,28 @@ async function initializeDatabase() {
         `);
         console.log('✅ Tabela users verificada/criada com sucesso.');
 
+        // Adicionar colunas extras se faltarem
+        const currentCols = await databricksService.executeQuery(`DESCRIBE TABLE ${databricksService.fq('users')}`);
+        const colSet = new Set(currentCols.map(c => c.col_name));
+        const addIfMissing = async (name, type) => {
+            if (!colSet.has(name)) {
+                console.log(`🔧 Adicionando coluna users.${name}...`);
+                await databricksService.executeQuery(`
+                    ALTER TABLE ${databricksService.fq('users')}
+                    ADD COLUMNS (${name} ${type})
+                `);
+            }
+        };
+        await addIfMissing('username', 'STRING');
+        await addIfMissing('profile_description', 'STRING');
+        await addIfMissing('show_stories_popup', 'BOOLEAN');
+        await addIfMissing('credit_card_due_date', 'STRING');
+        await addIfMissing('credit_card_invoice_due_date', 'TIMESTAMP');
+        await addIfMissing('credit_card_available_limit', 'DECIMAL(15,2)');
+        await addIfMissing('credit_card_total_limit', 'DECIMAL(15,2)');
+        await addIfMissing('credit_card_points_balance', 'INT');
+        await addIfMissing('credit_card_is_blocked', 'BOOLEAN');
+
         // Criar tabela transactions se não existir (sem DEFAULT values para compatibilidade com Databricks)
         await databricksService.executeQuery(`
             CREATE TABLE IF NOT EXISTS ${databricksService.fq('transactions')} (
@@ -786,6 +1207,90 @@ async function initializeDatabase() {
             ) USING DELTA
         `);
         console.log('✅ Tabela pix_contacts verificada/criada com sucesso.');
+
+        // Criar tabela notifications (AppNotification) se não existir
+        await databricksService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${databricksService.fq('notifications')} (
+                id STRING NOT NULL,
+                cpf STRING NOT NULL,
+                title STRING NOT NULL,
+                message STRING NOT NULL,
+                action_url STRING,
+                is_read BOOLEAN,
+                created_at TIMESTAMP NOT NULL
+            ) USING DELTA
+        `);
+        console.log('✅ Tabela notifications verificada/criada com sucesso.');
+
+        // Criar tabela limit_increase_requests se não existir
+        await databricksService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${databricksService.fq('limit_increase_requests')} (
+                id STRING NOT NULL,
+                cpf STRING NOT NULL,
+                requested_limit DECIMAL(15,2) NOT NULL,
+                status STRING,
+                requested_at TIMESTAMP NOT NULL,
+                decided_at TIMESTAMP,
+                admin_cpf STRING
+            ) USING DELTA
+        `);
+        console.log('✅ Tabela limit_increase_requests verificada/criada com sucesso.');
+
+        // Criar tabela products
+        await databricksService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${databricksService.fq('products')} (
+                id STRING NOT NULL,
+                name STRING NOT NULL,
+                description STRING,
+                price DECIMAL(15,2) NOT NULL,
+                image_url STRING
+            ) USING DELTA
+        `);
+        console.log('✅ Tabela products verificada/criada com sucesso.');
+
+        // Criar tabela pix_keys
+        await databricksService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${databricksService.fq('pix_keys')} (
+                id STRING NOT NULL,
+                cpf STRING NOT NULL,
+                type STRING NOT NULL,
+                key STRING NOT NULL,
+                created_at TIMESTAMP NOT NULL
+            ) USING DELTA
+        `);
+        console.log('✅ Tabela pix_keys verificada/criada com sucesso.');
+
+        // Criar tabela purchased_items
+        await databricksService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${databricksService.fq('purchased_items')} (
+                id STRING NOT NULL,
+                cpf STRING NOT NULL,
+                product_id STRING NOT NULL,
+                name STRING NOT NULL,
+                description STRING,
+                price DECIMAL(15,2) NOT NULL,
+                image_url STRING,
+                quantity INT NOT NULL,
+                points_earned INT NOT NULL,
+                purchase_date TIMESTAMP NOT NULL,
+                payment_method STRING NOT NULL,
+                cashback_used DECIMAL(15,2),
+                installments INT
+            ) USING DELTA
+        `);
+        console.log('✅ Tabela purchased_items verificada/criada com sucesso.');
+
+        // Criar tabela stories
+        await databricksService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${databricksService.fq('stories')} (
+                id STRING NOT NULL,
+                cpf STRING NOT NULL,
+                image_url STRING NOT NULL,
+                caption STRING,
+                created_at TIMESTAMP NOT NULL
+            ) USING DELTA
+        `);
+        console.log('✅ Tabela stories verificada/criada com sucesso.');
 
         console.log('🎉 Estrutura do banco de dados inicializada com sucesso!');
     } catch (error) {
@@ -837,53 +1342,133 @@ async function ensureAdminUser() {
     }
 }
 
-async function bootstrap() {
-    await databricksService.connect();
-    
-    if (databricksService.mockMode) {
-        console.log("🔧 MODO DESENVOLVIMENTO - Databricks não configurado");
-        console.log("📋 Para testar o Swagger: http://localhost:3001/api-docs");
-        console.log("⚠️  APIs retornarão dados mock. Configure Databricks para dados reais.");
-    } else {
-        console.log("🏗️  Inicializando estrutura do Databricks...");
-        try {
-            await initializeDatabase();
-            await ensureAdminUser();
-            console.log("🎯 Servidor pronto para uso com Databricks!");
-            console.log("📋 Swagger disponível em: http://localhost:3001/api-docs");
-        } catch (error) {
-            console.error("❌ Erro ao inicializar Databricks, continuando em modo mock:", error.message);
-            console.log("🔧 Servidor funcionará em modo mock para desenvolvimento");
-            databricksService.mockMode = true;
+async function seedDatabase() {
+    const cpf = '12345678901';
+    const passwordHash = bcrypt.hashSync('123456', 10);
+
+    await usersRepo.upsertSeed({
+        cpf,
+        fullName: 'Joao Silva',
+        email: 'joao.silva@example.com',
+        passwordHash,
+        balance: 1500.00,
+        role: 'user'
+    });
+
+    // Semear produtos e dados mockados do frontend
+    const existingProducts = await databricksService.executeQuery(`SELECT id FROM ${databricksService.fq('products')}`);
+    const existingIds = new Set(existingProducts.map(p => p.id));
+    for (const p of products) {
+        if (!existingIds.has(p.id)) {
+            await databricksService.executeQuery(`
+                INSERT INTO ${databricksService.fq('products')}
+                (id, name, description, price, image_url)
+                VALUES ('${p.id}', '${p.name.replace(/'/g,"''")}', '${p.description.replace(/'/g,"''")}', ${p.price}, '${p.imageUrl}')
+            `);
         }
+    }
+
+    // Usuarios, chaves PIX, contatos, transacoes e notificacoes
+    for (const u of users) {
+        const hashed = bcrypt.hashSync(u.password, 10);
+        const now = new Date().toISOString();
+
+        const exists = await databricksService.executeQuery(`
+            SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf='${u.cpf}'
+        `);
+        if (!exists.length) {
+            await databricksService.executeQuery(`
+                INSERT INTO ${databricksService.fq('users')}
+                (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
+                VALUES ('${u.cpf}', '${u.fullName.replace(/'/g,"''")}', '${u.email}', '${hashed}', ${u.balance}, '${u.role}', false, 0, ${u.pixDailyLimit}, false, '${now}', '${now}')
+            `);
+        }
+
+        // Chaves PIX (corrigido: passar objeto)
+        for (const k of (u.pixKeys || [])) {
+            if (k && k.type && k.key) {
+                await pixRepo.addKey({ cpf: u.cpf, type: k.type, key: k.key });
+            }
+        }
+        await pixRepo.ensureSeedKey(u.cpf);
+
+        // Contatos PIX (corrigido: passar objeto)
+        for (const c of (u.pixContacts || [])) {
+            if (c && c.key && c.name) {
+                await pixRepo.addContact({ cpf: u.cpf, contactKey: c.key, contactName: c.name });
+            }
+        }
+
+        // Transacoes
+        for (const t of (u.transactions || [])) {
+            const id = t.id || databricksService.generateUUID();
+            const desc = (t.description || '').replace(/'/g, "''");
+            const amt = parseFloat(t.amount);
+            await databricksService.executeQuery(`
+                INSERT INTO ${databricksService.fq('transactions')}
+                (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+                VALUES ('${id}', '${u.cpf}', '${t.type}', ${amt}, '${desc}', ${t.from ? `'${t.from}'` : 'NULL'}, ${t.to ? `'${t.to}'` : 'NULL'}, ${t.toKey ? `'${t.toKey}'` : 'NULL'}, '${t.date}')
+            `);
+        }
+
+        // Notificacoes (mock adicional)
+        for (const n of (u.notifications || [])) {
+            const nid = databricksService.generateUUID();
+            await databricksService.executeQuery(`
+                INSERT INTO ${databricksService.fq('notifications')}
+                (id, cpf, title, message, action_url, is_read, created_at)
+                VALUES ('${nid}', '${u.cpf}', '${(n.title||'').replace(/'/g,"''")}', '${(n.message||'').replace(/'/g,"''")}', ${n.actionUrl ? `'${n.actionUrl}'` : 'NULL'}, false, '${new Date().toISOString()}')
+            `);
+        }
+    }
+
+    // Seeds anteriores mantidos
+    await shopRepo.ensureSeed();
+    await pixRepo.ensureSeedKey(cpf);
+    await notificationsRepo.ensureSeed(cpf);
+
+    // Semear stories (se fornecidos pelo frontend)
+    if (Array.isArray(stories) && stories.length) {
+        const existingStories = await databricksService.executeQuery(`SELECT id FROM ${databricksService.fq('stories')}`);
+        const storyIds = new Set(existingStories.map(s => s.id));
+        for (const s of stories) {
+            const sid = s.id || databricksService.generateUUID();
+            if (storyIds.has(sid)) continue;
+            await databricksService.executeQuery(`
+                INSERT INTO ${databricksService.fq('stories')}
+                (id, cpf, image_url, caption, created_at)
+                VALUES ('${sid}', '${s.cpf}', '${(s.imageUrl || s.image_url || '').replace(/'/g,"''")}', '${(s.caption || '').replace(/'/g,"''")}', '${s.createdAt || new Date().toISOString()}')
+            `);
+        }
+    }
+
+    // Criar parcelas iniciais para o usuario (cartao)
+    await cardRepo.createInstallments({ cpf, amount: 1200.00, installments: 6 });
+    console.log('✅ Seeds aplicados com sucesso.');
+}
+
+async function bootstrap() {
+    try {
+        await databricksService.connect();
+        await initializeDatabase();
+        await ensureAdminUser();
+        await seedDatabase();
+        console.log("🎯 Servidor pronto para uso com Databricks!");
+        console.log("📋 Swagger disponível em: http://localhost:3001/api-docs");
+    } catch (error) {
+        console.error("❌ Erro ao inicializar Databricks:", error.message);
+        process.exit(1);
     }
 }
 
-bootstrap()
-    .then(() => {
-        app.listen(PORT, () => {
-            console.log(`🚀 Servidor rodando na porta ${PORT}`);
-            console.log(`📋 Health Check: http://localhost:${PORT}/api/v1/health`);
-            console.log(`📋 Swagger: http://localhost:${PORT}/api-docs`);
-        });
-    })
-    .catch(err => {
-        console.error('❌ Falha crítica ao inicializar servidor:', err.message);
-        console.log('🔄 Tentando iniciar servidor em modo de emergência...');
-        
-        // Tentar iniciar o servidor mesmo com falhas
-        try {
-            app.listen(PORT, () => {
-                console.log(`🚀 Servidor de emergência rodando na porta ${PORT}`);
-                console.log(`📋 Health Check: http://localhost:${PORT}/api/v1/health`);
-            });
-        } catch (emergencyError) {
-            console.error('💥 Falha total:', emergencyError.message);
-            process.exit(1);
-        }
-    });
+app.use('/api', apiRouter);
+app.use('/api/v1', apiRouter);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-process.on('SIGINT', async () => {
-    await databricksService.disconnect();
-    process.exit(0);
+bootstrap().catch((err) => {
+    console.error("❌ Erro no bootstrap:", err.message);
+});
+
+app.listen(PORT, () => {
+    console.log(`🚀 Servidor FintechBankApp rodando na porta ${PORT}`);
 });

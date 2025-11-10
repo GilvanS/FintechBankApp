@@ -1,105 +1,143 @@
 
 import React, { useState } from 'react';
+// FIX: Corrected import path for useAuth from parent directory.
 import { useAuth } from '../App';
-import { login } from '../services/mockApi';
+import { login, requestNewPassword } from '../services/api';
 import { formatCPF } from '../utils/formatters';
-import LoginNewsBanner from './LoginNewsBanner';
 
 interface LoginProps {
-  onNavigateToSignUp: () => void;
-  onNavigateToPreLogin: () => void;
+    onNavigateToSignUp: () => void;
+    onNavigateToPreLogin: () => void;
+    onNavigateToResetPassword: () => void;
 }
 
-const Logo: React.FC = () => (
-    <div className="flex items-center justify-center mb-10">
-        <svg className="w-10 h-10 text-green-400" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-        </svg>
-        <span className="ml-3 text-3xl font-bold text-white tracking-wider">Fintech</span>
-    </div>
-);
+const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin, onNavigateToResetPassword }) => {
+    const auth = useAuth();
+    const [cpf, setCpf] = useState('');
+    const [password, setPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [resetPasswordMessage, setResetPasswordMessage] = useState('');
 
-
-const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin }) => {
-  const [cpf, setCpf] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const { login: authLogin } = useAuth();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-    const result = await login(cpf.replace(/\D/g, ''), password);
-    setIsLoading(false);
-    if (result.success && result.user) {
-      authLogin(result.user);
-    } else {
-      setError(result.message);
+    function mapLoginError(code?: string): string {
+        switch (code) {
+            case 'AUTH_USER_NOT_FOUND': return 'CPF ou senha invalida.';
+            case 'AUTH_BLOCKED': return 'Conta bloqueada. Solicite nova senha.';
+            case 'AUTH_INVALID_CREDENTIALS': return 'CPF ou senha invalida.';
+            default: return 'Falha no login.';
+        }
     }
-  };
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
+        const result = await login(cpf.replace(/\D/g, ''), password);
+        setIsLoading(false);
+        if (result.success && result.user) {
+            if (result.token) {
+                localStorage.setItem('authToken', result.token);
+            }
+            auth.login(result.user);
+        } else {
+            setError(mapLoginError(result.code));
+        }
+    };
 
-  return (
-    <div className="min-h-screen flex flex-col justify-between bg-black p-6">
-        <header className="absolute top-6 left-6">
-            <Logo />
-        </header>
-        <main className="flex-grow flex flex-col justify-center">
-            <h2 className="text-3xl font-bold text-white mb-8">acesse sua conta</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-                <label className="text-sm font-medium text-gray-400">CPF</label>
-                <input
-                    type="text"
-                    value={formatCPF(cpf)}
-                    onChange={(e) => setCpf(e.target.value)}
-                    required
-                    maxLength={14}
-                    className="w-full px-4 py-3 mt-1 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-            </div>
-            <div>
-                <label className="text-sm font-medium text-gray-400">Senha</label>
-                <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="w-full px-4 py-3 mt-1 bg-gray-900 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-            </div>
-            
-            {error && <p className="text-sm text-red-400">{error}</p>}
+    const handlePasswordReset = async () => {
+        if (!cpf) {
+            setError('Por favor, digite seu CPF para solicitar uma nova senha.');
+            return;
+        }
+        setError('');
+        setResetPasswordMessage('');
+        setIsLoading(true);
+        const result = await requestNewPassword(cpf.replace(/\D/g, ''));
+        setResetPasswordMessage(result.message);
+        setIsLoading(false);
+    };
 
-            <div>
-                <button type="submit" disabled={isLoading} className="w-full py-3 mt-2 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500 disabled:bg-green-700">
-                    {isLoading ? 'Entrando...' : 'Entrar'}
+    return (
+        <div className="bg-background-dark text-text-dark h-full flex flex-col justify-between p-6 sm:p-8">
+            <header>
+                <button onClick={onNavigateToPreLogin} className="flex items-center space-x-2 text-subtle-dark hover:text-text-dark">
+                    <span className="material-symbols-outlined">arrow_back</span>
                 </button>
-            </div>
-            </form>
-            <div className="text-center mt-6 space-y-3">
-                <button type="button" onClick={() => alert('Funcionalidade de esqueci a senha em desenvolvimento')} className="text-sm font-semibold text-green-400 hover:underline">
-                    Esqueci minha senha
-                </button>
-                 <p className="text-sm text-gray-400">
+            </header>
+
+            <main className="flex-grow flex flex-col justify-center -mt-16">
+                <div className="w-full max-w-sm mx-auto">
+                    <div className="text-center mb-10">
+                         <div className="flex items-center justify-center space-x-2 mb-4">
+                            <span className="material-symbols-outlined text-primary text-3xl">verified_user</span>
+                            <h1 className="text-3xl font-bold text-text-dark">Fintech</h1>
+                        </div>
+                        <h2 className="text-2xl font-semibold">Acesse sua conta</h2>
+                    </div>
+
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <div>
+                            <label htmlFor="cpf" className="block text-sm font-medium text-subtle-dark mb-1">CPF</label>
+                            <input
+                                id="cpf"
+                                type="text"
+                                value={formatCPF(cpf)}
+                                onChange={(e) => setCpf(e.target.value)}
+                                placeholder="000.000.000-00"
+                                maxLength={14}
+                                required
+                                className="w-full px-4 py-3 bg-surface-dark border-2 border-surface-dark rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                            />
+                        </div>
+                        <div>
+                            <div className="flex justify-between items-center mb-1">
+                                <label htmlFor="password-login" className="block text-sm font-medium text-subtle-dark">Senha</label>
+                                 <button type="button" onClick={handlePasswordReset} className="text-sm font-medium text-primary hover:underline">
+                                    Esqueci minha senha
+                                </button>
+                            </div>
+                            <input
+                                id="password-login"
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                className="w-full px-4 py-3 bg-surface-dark border-2 border-surface-dark rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                            />
+                        </div>
+                        
+                        {error && <p className="text-sm text-red-400">{error}</p>}
+                        {resetPasswordMessage && (
+                            <div className="p-3 bg-primary/10 rounded-lg text-center">
+                                <p className="text-sm text-primary">{resetPasswordMessage}</p>
+                                <button type="button" onClick={onNavigateToResetPassword} className="mt-2 text-sm font-bold text-primary hover:underline">
+                                    Já foi aprovado? Redefinir Senha
+                                </button>
+                            </div>
+                        )}
+
+                        <div>
+                            <button type="submit" disabled={isLoading} className="w-full mt-4 py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity">
+                                {isLoading ? 'Entrando...' : 'Entrar'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </main>
+
+            <footer className="text-center">
+                <p className="text-sm text-subtle-dark">
                     Não tem uma conta?{' '}
-                    <button type="button" onClick={onNavigateToSignUp} className="font-semibold text-green-400 hover:underline">
+                    <button onClick={onNavigateToSignUp} className="font-semibold text-primary hover:underline">
                         Cadastre-se
                     </button>
                 </p>
-                <p className="text-sm text-gray-400">
-                    <button type="button" onClick={onNavigateToPreLogin} className="font-semibold text-green-400 hover:underline">
-                        Voltar
-                    </button>
-                </p>
-            </div>
-        </main>
-        <footer className="pb-4">
-            <LoginNewsBanner />
-        </footer>
-    </div>
-  );
+                <div className="mt-4 p-3 bg-surface-dark rounded-lg flex items-center justify-center space-x-2 text-xs text-subtle-dark">
+                    <span className="material-symbols-outlined text-sm">shield</span>
+                    <span>Sua segurança em primeiro lugar.</span>
+                </div>
+            </footer>
+        </div>
+    );
 };
 
 export default Login;

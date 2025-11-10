@@ -1,4 +1,5 @@
 import React from 'react';
+// FIX: Corrected import path for types from parent directory.
 import { User, PurchasedItem } from '../types';
 
 interface PaymentMethodsProps {
@@ -12,9 +13,9 @@ const PaymentMethods: React.FC<PaymentMethodsProps> = ({ user, item, onBack, onS
     if (!item) {
         // Handle case where no item is selected, maybe navigate back or show an error.
         return (
-            <div className="bg-black text-white p-4 min-h-full flex flex-col items-center justify-center">
+            <div className="bg-background-dark text-white p-4 min-h-full flex flex-col items-center justify-center">
                 <p>Nenhum item selecionado para compra.</p>
-                <button onClick={onBack} className="mt-4 px-4 py-2 bg-green-500 text-black rounded">Voltar</button>
+                <button onClick={onBack} className="mt-4 px-4 py-2 bg-primary text-background-dark rounded">Voltar</button>
             </div>
         );
     }
@@ -24,20 +25,20 @@ const PaymentMethods: React.FC<PaymentMethodsProps> = ({ user, item, onBack, onS
     const formattedCreditLimit = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(user.creditCard.availableLimit);
 
     return (
-        <div className="bg-black text-white min-h-full flex flex-col">
+        <div className="bg-background-dark text-white min-h-full flex flex-col">
             <header className="flex items-center p-4">
-                <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-gray-800">
+                <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
                 <h2 className="text-xl font-bold text-white">Como você quer pagar?</h2>
             </header>
 
             <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-6">
-                <div className="bg-gray-900 rounded-lg p-4 flex items-center space-x-4">
+                <div className="bg-surface-dark rounded-lg p-4 flex items-center space-x-4">
                     <img src={item.imageUrl} alt={item.name} className="w-20 h-20 object-cover rounded-md" />
                     <div className="flex-grow">
                         <p className="font-semibold text-white">{item.name}</p>
-                        <p className="text-lg font-bold text-green-400">{formattedPrice}</p>
+                        <p className="text-lg font-bold text-primary">{formattedPrice}</p>
                     </div>
                 </div>
 
@@ -45,7 +46,7 @@ const PaymentMethods: React.FC<PaymentMethodsProps> = ({ user, item, onBack, onS
                     <button 
                         onClick={() => onSelectMethod('debit')}
                         disabled={user.balance < item.price}
-                        className="w-full text-left p-4 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full text-left p-4 bg-surface-dark rounded-lg hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <div className="flex justify-between items-center">
                             <div>
@@ -60,7 +61,7 @@ const PaymentMethods: React.FC<PaymentMethodsProps> = ({ user, item, onBack, onS
                     <button 
                         onClick={() => onSelectMethod('credit')}
                         disabled={user.creditCard.availableLimit < item.price}
-                        className="w-full text-left p-4 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full text-left p-4 bg-surface-dark rounded-lg hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                          <div className="flex justify-between items-center">
                             <div>

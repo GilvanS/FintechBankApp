@@ -1,192 +1,241 @@
 
-
-import React, { useState, useEffect } from 'react';
-import { User, Transaction, PixContact } from '../types';
-import TransferForm from './TransferForm';
-import PixReceipt from './PixReceipt';
-import PixKeyManagement from './PixKeyManagement';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../App';
+import { getPixContacts, getPixRecipientInfo, performPixTransfer, performPixCreditTransfer, getUserByCpf } from '../services/api';
+import { PixContact, Transaction, User } from '../types';
 import Contacts from './Contacts';
-// FIX: Removed .ts extension from import path.
-import { getPixContacts } from '../services/mockApi';
+import PixKeyManagement from './PixKeyManagement';
+import PixSidebar from './PixSidebar';
+import PasswordModal from './PasswordModal';
+import PixConfirmation from './PixConfirmation';
 
-interface PixProps {
-    currentUser: User;
-    onDataRefresh: () => void;
-    onBack: () => void;
-    onGoToInstallmentDetails: (details: any) => void;
-    isTabRoot?: boolean;
+type PixSubView = 'transfer' | 'keyManagement' | 'contacts' | 'confirmation';
+
+interface TransferViewProps {
+    user: User;
+    contacts: PixContact[];
+    onInitiateTransfer: (details: { key: string, amount: number, description: string, useCredit: boolean }) => void;
+    onNavigate: (view: PixSubView) => void;
+    isProcessing: boolean;
+    error: string;
+    selectedContact: PixContact | null;
+    onClearSelectedContact: () => void;
 }
 
-type PixView = 'main' | 'transfer' | 'receipt' | 'keyManagement' | 'contacts';
 
-const Pix: React.FC<PixProps> = ({ currentUser, onDataRefresh, onBack, onGoToInstallmentDetails, isTabRoot = false }) => {
-    const [view, setView] = useState<PixView>('main');
-    const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-    const [pixTransactions, setPixTransactions] = useState<Transaction[]>([]);
-    const [contacts, setContacts] = useState<PixContact[]>([]);
-    const [initialPixKeyForTransfer, setInitialPixKeyForTransfer] = useState<string | undefined>();
-
-    const fetchData = async () => {
-        const filtered = currentUser.transactions.filter(
-            t => t.type === 'PIX_SENT' || t.type === 'PIX_RECEIVED' || t.type === 'PIX_CREDIT_SENT'
-        );
-        setPixTransactions(filtered);
-        const userContacts = await getPixContacts(currentUser.cpf);
-        setContacts(userContacts);
-    };
+const TransferView: React.FC<TransferViewProps> = ({ user, contacts, onInitiateTransfer, onNavigate, isProcessing, error, selectedContact, onClearSelectedContact }) => {
+    const [pixKey, setPixKey] = useState('');
+    const [amount, setAmount] = useState('');
+    const [description, setDescription] = useState('');
+    const [useCredit, setUseCredit] = useState(false);
+    const [localError, setLocalError] = useState('');
 
     useEffect(() => {
-        fetchData();
-    }, [currentUser]);
-
-    const handleTransactionSuccess = (transaction: Transaction) => {
-        onDataRefresh();
-        setSelectedTransaction(transaction);
-        setView('receipt');
-        setInitialPixKeyForTransfer(undefined);
-    };
-
-    const handleViewTransaction = (transaction: Transaction) => {
-        setSelectedTransaction(transaction);
-        setView('receipt');
-    };
-
-    const handleSelectFavorite = (contact: PixContact) => {
-        setInitialPixKeyForTransfer(contact.key);
-        setView('transfer');
-    };
-
-    const handleContactsUpdate = () => {
-        fetchData();
-        onDataRefresh();
-    };
-
-    const renderMainView = () => {
-        const ActionButton: React.FC<{label: string, icon: React.ReactNode, onClick: () => void}> = ({label, icon, onClick}) => (
-            <div className="flex flex-col items-center space-y-2">
-                <button onClick={onClick} className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center text-green-400 hover:bg-gray-700 transition-colors">
-                    {icon}
-                </button>
-                <span className="text-sm text-center text-white">{label}</span>
-            </div>
-        );
-
-        const iconClasses = "w-7 h-7";
-
-        return (
-            <>
-                <header className="flex items-center mb-6">
-                    {!isTabRoot && (
-                        <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-gray-800">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
-                        </button>
-                    )}
-                    <h2 className="text-2xl font-bold text-white">Área Pix</h2>
-                </header>
-
-                <main className="flex-grow overflow-y-auto no-scrollbar space-y-8">
-                    <div>
-                        <h3 className="text-lg font-semibold text-gray-300 mb-4">Enviar</h3>
-                        <div className="flex justify-around">
-                            <ActionButton label="Transferir" onClick={() => setView('transfer')} icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>} />
-                            <ActionButton label="Pix Copia e Cola" onClick={() => setView('transfer')} icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>} />
-                            <ActionButton label="Ler QR code" onClick={() => alert('Em desenvolvimento')} icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m-4-12v10M8 4v16m8-14v12m-4-10v8" /></svg>} />
-                        </div>
-                    </div>
-
-                    {contacts.length > 0 && (
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-300 mb-4">Contatos Favoritos</h3>
-                            <div className="flex space-x-4 overflow-x-auto no-scrollbar pb-2">
-                                {contacts.map(contact => (
-                                    <button key={contact.key} onClick={() => handleSelectFavorite(contact)} className="flex flex-col items-center flex-shrink-0 w-20 text-center group">
-                                        <div className="w-16 h-16 text-2xl flex items-center justify-center rounded-full bg-gray-800 group-hover:bg-gray-700 transition-colors mb-2">
-                                            {contact.name.charAt(0)}
-                                        </div>
-                                        <span className="text-xs font-medium text-white truncate w-full">{contact.name}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                    
-                    <div>
-                         <h3 className="text-lg font-semibold text-gray-300 mb-4">Receber</h3>
-                         <div className="flex justify-around">
-                             <ActionButton label="Cobrar" onClick={() => alert('Em desenvolvimento')} icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm-5-12v-2m4 2v-2m-2-4h-2" /></svg>} />
-                             <ActionButton label="Depositar" onClick={() => alert('Em desenvolvimento')} icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>} />
-                        </div>
-                    </div>
-                    
-                    <div className="space-y-3">
-                        <button onClick={() => setView('keyManagement')} className="w-full flex justify-between items-center bg-gray-900 p-4 rounded-lg hover:bg-gray-800 transition-colors">
-                            <span className="font-semibold text-white">Minhas Chaves Pix</span>
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
-                        </button>
-                        <button onClick={() => setView('contacts')} className="w-full flex justify-between items-center bg-gray-900 p-4 rounded-lg hover:bg-gray-800 transition-colors">
-                            <span className="font-semibold text-white">Gerenciar Contatos Favoritos</span>
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
-                        </button>
-                    </div>
-
-                    <div>
-                        <h3 className="text-lg font-semibold text-gray-300 mb-2">Movimentações</h3>
-                        {pixTransactions.length > 0 ? (
-                            <ul className="space-y-2">
-                                {pixTransactions.slice(0, 3).map(tx => (
-                                    <li key={tx.id}>
-                                        <button onClick={() => handleViewTransaction(tx)} className="w-full flex items-center p-3 rounded-lg bg-gray-900 hover:bg-gray-800 transition-colors">
-                                            <div className="flex-grow text-left">
-                                                <p className="font-semibold text-md text-white">{tx.type.includes('SENT') ? 'Pix - Pagamento' : 'Pix - Recebimento'}</p>
-                                                <p className="text-sm text-gray-400">{tx.type.includes('SENT') ? tx.to : tx.from}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className={`font-semibold ${tx.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
-                                                </p>
-                                                <p className="text-sm text-gray-500">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
-                                            </div>
-                                        </button>
-                                    </li>
-                                ))}
-                                {pixTransactions.length > 3 && (
-                                     <button onClick={onDataRefresh} className="text-sm w-full text-center py-2 font-semibold text-green-400 hover:text-green-300">Acessar todas</button>
-                                )}
-                            </ul>
-                        ) : (
-                            <p className="text-gray-500 text-center py-4">Nenhuma movimentação Pix ainda.</p>
-                        )}
-                    </div>
-                </main>
-            </>
-        );
-    };
-
-    const renderView = () => {
-        switch (view) {
-            case 'transfer':
-                return <TransferForm 
-                    currentUser={currentUser} 
-                    onTransactionSuccess={handleTransactionSuccess} 
-                    onBack={() => { setView('main'); setInitialPixKeyForTransfer(undefined); }}
-                    initialPixKey={initialPixKeyForTransfer}
-                    onGoToInstallmentDetails={onGoToInstallmentDetails}
-                />;
-            case 'receipt':
-                return selectedTransaction ? <PixReceipt transaction={selectedTransaction} onBack={() => { setView('main'); setSelectedTransaction(null); }} /> : renderMainView();
-            case 'keyManagement':
-                return <PixKeyManagement currentUser={currentUser} onBack={() => setView('main')} onUpdate={onDataRefresh} />;
-            case 'contacts':
-                return <Contacts currentUser={currentUser} onContactsUpdate={handleContactsUpdate} onBack={() => setView('main')} />;
-            case 'main':
-            default:
-                return renderMainView();
+        if (selectedContact) {
+            setPixKey(selectedContact.key);
+            onClearSelectedContact();
         }
+    }, [selectedContact, onClearSelectedContact]);
+    
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        setLocalError('');
+        const numericAmount = parseFloat(amount.replace(',', '.'));
+        if (isNaN(numericAmount) || numericAmount <= 0) {
+            setLocalError("Por favor, insira um valor válido.");
+            return;
+        }
+        if (!pixKey.trim()) {
+            setLocalError("Por favor, insira uma chave PIX.");
+            return;
+        }
+        onInitiateTransfer({ key: pixKey, amount: numericAmount, description, useCredit });
     };
 
     return (
-        <div className="p-4 bg-black min-h-full text-white flex flex-col">
-            {renderView()}
+        <div className="lg:col-span-2 flex flex-col gap-8">
+            <div className="bg-surface-dark rounded-xl p-6">
+                <h1 className="text-white text-2xl font-bold leading-tight pb-1">Enviar PIX</h1>
+                <p className="text-white/60 text-base font-normal leading-normal pb-6">Para quem você quer transferir?</p>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-key">Chave PIX</label>
+                        <div className="relative">
+                            <input value={pixKey} onChange={e => setPixKey(e.target.value)} className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" id="pix-key" placeholder="Digite CPF/CNPJ, celular, e-mail ou chave aleatória" type="text" />
+                            {contacts.length > 0 && (
+                                <button type="button" title="Usar contato salvo" onClick={() => onNavigate('contacts')} className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full text-white/60 hover:bg-white/10 hover:text-primary transition-colors">
+                                    <span className="material-symbols-outlined">contact_page</span>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-amount">Valor</label>
+                        <input value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" id="pix-amount" placeholder="R$ 0,00" type="text" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-description">Descrição (Opcional)</label>
+                         <input value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" id="pix-description" placeholder="Ex: Pagamento do aluguel" type="text" />
+                    </div>
+                    <div className="border-t border-subtle-dark/50 pt-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="text-white font-medium">PIX no Crédito</h3>
+                                <p className="text-white/60 text-sm">Use seu limite de crédito para fazer o PIX.</p>
+                            </div>
+                            <label className="flex items-center cursor-pointer" htmlFor="pix-credit-toggle">
+                                <div className="relative">
+                                    <input checked={useCredit} onChange={(e) => setUseCredit(e.target.checked)} className="sr-only peer" id="pix-credit-toggle" type="checkbox" />
+                                    <div className="w-11 h-6 bg-subtle-dark rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                                </div>
+                            </label>
+                        </div>
+                        <p className="text-white/50 text-xs mt-2">Sujeito a taxas. O valor será adicionado à sua próxima fatura.</p>
+                    </div>
+                    {(error || localError) && <p className="text-sm text-red-400 p-2 bg-red-900/50 rounded-md">{error || localError}</p>}
+                    <button className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-background-dark font-bold py-3 px-8 rounded-lg transition-colors disabled:opacity-50" type="submit" disabled={isProcessing}>
+                        {isProcessing ? 'Verificando...' : 'Continuar'}
+                        <span className="material-symbols-outlined">arrow_forward</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+
+const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+    const { user, updateUser, logout } = useAuth();
+    const [subView, setSubView] = useState<PixSubView>('transfer');
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+    const [passwordModalInfo, setPasswordModalInfo] = useState({ title: '', description: '' });
+    const [pendingPinAction, setPendingPinAction] = useState<null | ((pin: string) => Promise<void>)>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [transferDetails, setTransferDetails] = useState<{ key: string, amount: number, description: string, useCredit: boolean } | null>(null);
+    const [recipientInfo, setRecipientInfo] = useState<{ name: string; cpf: string } | null>(null);
+    const [transferError, setTransferError] = useState('');
+    const [contacts, setContacts] = useState<PixContact[]>([]);
+    const [selectedContact, setSelectedContact] = useState<PixContact | null>(null);
+
+    useEffect(() => {
+        const fetchContacts = async () => {
+            if (user) {
+                const result = await getPixContacts(user.cpf);
+                if (result.success) setContacts(result.contacts!);
+            }
+        };
+        fetchContacts();
+    }, [user]);
+
+
+    const handleInitiateTransfer = async (details: { key: string, amount: number, description: string, useCredit: boolean }) => {
+        if(!user) return;
+        setIsProcessing(true);
+        setTransferError('');
+        const recipientResult = await getPixRecipientInfo(details.key, user.cpf);
+        if (recipientResult.success && recipientResult.name && recipientResult.cpf) {
+            setTransferDetails(details);
+            setRecipientInfo({ name: recipientResult.name, cpf: recipientResult.cpf });
+            setSubView('confirmation');
+        } else {
+            setTransferError(recipientResult.message || 'Chave PIX inválida ou não encontrada.');
+        }
+        setIsProcessing(false);
+    };
+    
+    const handleConfirmFromConfirmationScreen = () => {
+        setPasswordModalInfo({ title: 'Confirmar Transferência', description: 'Digite seu PIN para autorizar.' });
+        setPendingPinAction(() => async (pin: string) => {
+            if (!user || !transferDetails) return;
+            setIsProcessing(true);
+            let result;
+            if (transferDetails.useCredit) {
+                result = await performPixCreditTransfer(user.cpf, transferDetails.key, transferDetails.amount, transferDetails.description, 1, pin);
+            } else {
+                result = await performPixTransfer(transferDetails.key, transferDetails.amount, transferDetails.description, pin);
+            }
+            if (result.success) {
+                const refreshed = await getUserByCpf(user.cpf);
+                if (refreshed.success && refreshed.user) updateUser(refreshed.user);
+                alert('Transferencia realizada com sucesso!');
+                setSubView('transfer');
+            } else {
+                alert(`Falha na transferencia: ${result.message}`);
+            }
+            setIsProcessing(false);
+            setIsPasswordModalOpen(false);
+            setTransferDetails(null);
+            setRecipientInfo(null);
+        });
+        setIsPasswordModalOpen(true);
+    };
+
+    const handlePasswordConfirm = async (pin: string) => {
+        if (pendingPinAction) {
+            await pendingPinAction(pin);
+            setPendingPinAction(null);
+        } else {
+            setIsPasswordModalOpen(false);
+        }
+    };
+    
+    const handleSelectContact = (contact: PixContact) => {
+        setSelectedContact(contact);
+        setSubView('transfer');
+    };
+    
+    if (!user) return null;
+
+    return (
+        <div className="h-full w-full flex flex-col">
+            <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-subtle-dark/50 px-6 sm:px-10 py-3 bg-background-dark/80 backdrop-blur-sm sticky top-0 z-20">
+                <div className="flex items-center gap-4 text-white">
+                    <button onClick={onBack} className="hidden sm:block"><span className="material-symbols-outlined">arrow_back</span></button>
+                    <div className="size-6 text-primary">
+                        <svg fill="currentColor" viewBox="0 0 48 48"><path d="M24 18.4228L42 11.475V34.3663C42 34.7796 41.7457 35.1504 41.3601 35.2992L24 42V18.4228Z" /><path d="M24 8.18819L33.4123 11.574L24 15.2071L14.5877 11.574L24 8.18819ZM9 15.8487L21 20.4805V37.6263L9 32.9945V15.8487ZM27 37.6263V20.4805L39 15.8487V32.9945L27 37.6263ZM25.354 2.29885C24.4788 1.98402 23.5212 1.98402 22.646 2.29885L4.98454 8.65208C3.7939 9.08038 3 10.2097 3 11.475V34.3663C3 36.0196 4.01719 37.5026 5.55962 38.098L22.9197 44.7987C23.6149 45.0671 24.3851 45.0671 25.0803 44.7987L42.4404 38.098C43.9828 37.5026 45 36.0196 45 34.3663V11.475C45 10.2097 44.2061 9.08038 43.0155 8.65208L25.354 2.29885Z" /></svg>
+                    </div>
+                    <h2 className="text-white text-lg font-bold">Área PIX</h2>
+                </div>
+                 <div className="flex items-center gap-4">
+                    <p className="text-sm text-white/70 hidden sm:block">Olá, {user.fullName.split(' ')[0]}</p>
+                    <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" style={{ backgroundImage: `url("https://api.dicebear.com/8.x/initials/svg?seed=${user.fullName}")` }}></div>
+                </div>
+            </header>
+            <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div className="flex flex-col gap-4 mb-8">
+                    <p className="text-white text-4xl font-black">Área PIX</p>
+                    <p className="text-white/60 text-base">Envie, receba e gerencie suas chaves com facilidade.</p>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {subView === 'transfer' && <TransferView user={user} contacts={contacts} onInitiateTransfer={handleInitiateTransfer} onNavigate={setSubView} isProcessing={isProcessing} error={transferError} selectedContact={selectedContact} onClearSelectedContact={() => setSelectedContact(null)} />}
+                    {subView === 'confirmation' && recipientInfo && transferDetails && (
+                        <PixConfirmation 
+                            details={{
+                                amount: transferDetails.amount,
+                                description: transferDetails.description,
+                                recipientName: recipientInfo.name,
+                                recipientCpf: recipientInfo.cpf,
+                            }}
+                            onConfirm={handleConfirmFromConfirmationScreen}
+                            onBack={() => setSubView('transfer')}
+                        />
+                    )}
+                    {subView === 'keyManagement' && <PixKeyManagement onBack={() => setSubView('transfer')} />}
+                    {subView === 'contacts' && <Contacts onBack={() => setSubView('transfer')} onSelectContact={handleSelectContact} />}
+                    
+                    <div className="hidden lg:block">
+                        <PixSidebar onNavigate={setSubView} currentView={subView} />
+                    </div>
+                </div>
+            </main>
+            <PasswordModal
+                isOpen={isPasswordModalOpen}
+                onClose={() => setIsPasswordModalOpen(false)}
+                onConfirm={handleConfirmTransfer}
+                title="Confirmar Transferência"
+                description="Digite sua senha para autorizar."
+                isLoading={isProcessing}
+            />
         </div>
     );
 };

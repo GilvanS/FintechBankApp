@@ -1,73 +1,76 @@
-full contents of FRONT_I.md# Documentação do Frontend - Fintech Bank App
+# Documentação Frontend - Fintech Bank (FRONT_I.md)
 
-## 1. Visão Geral da Arquitetura
+Este documento detalha a arquitetura, os componentes e as regras de negócio implementadas no frontend da aplicação Fintech Bank.
 
-A aplicação é um **Single Page Application (SPA)** construído com **React** e **TypeScript**. A estrutura é componentizada, visando a reutilização e a manutenibilidade do código.
+## 1. Tecnologias e Arquitetura
 
-- **`App.tsx`**: É o componente raiz. Ele gerencia o estado de autenticação global através de um `AuthContext` e controla a navegação entre as telas principais: pré-login, login, cadastro e o dashboard do usuário logado.
-- **`Dashboard.tsx`**: Após o login, este componente se torna o "cérebro" da aplicação. Ele gerencia a navegação interna entre todas as funcionalidades (PIX, Cartões, Shop, etc.) e controla a exibição de modais e telas de fluxo, como o processo de compra e a confirmação por senha.
-- **`services/mockApi.ts`**: Simula todas as chamadas de backend. Ele utiliza o `localStorage` do navegador para persistir os dados, permitindo que a aplicação funcione de forma independente.
-- **`components/`**: Diretório que contém todos os componentes reutilizáveis e as telas da aplicação.
-- **`types.ts`**: Define todas as interfaces e tipos de dados (User, Transaction, etc.), garantindo a segurança de tipos em todo o projeto.
-- **Estilização**: Realizada com **Tailwind CSS** para um desenvolvimento ágil e um design consistente.
+- **Framework:** React com TypeScript
+- **Estilização:** Tailwind CSS para um design responsivo e moderno.
+- **Estado Global:** O estado de autenticação e os dados do usuário logado são gerenciados através do `React Context API` (`AuthContext`), acessível em toda a aplicação pelo hook `useAuth`.
+- **Estrutura de Componentes:** O aplicativo é dividido em componentes reutilizáveis, localizados em `src/components`. A navegação principal após o login é controlada pelo componente `Dashboard.tsx`, que funciona como um roteador de visualizações.
 
-## 2. Fluxos e Telas Principais
+## 2. Fluxo de Navegação e Componentes
 
 ### 2.1. Experiência Pré-Login
-- **`PreLoginDashboard.tsx`**: A tela de entrada inicial. Apresenta a marca e um botão para acessar a tela de login.
-- **Banner de Notícias Dinâmico**: Nesta tela, o componente **`PreLoginNewsBanner.tsx`** consome a **NewsAPI** em tempo real para exibir um carrossel com as últimas manchetes, demonstrando a capacidade de integração do app.
-- **`Login.tsx`**: Formulário de login com campos para CPF e senha. Inclui navegação para cadastro e recuperação de senha (ainda em desenvolvimento).
-- **`SignUp.tsx`**: Formulário para criação de novas contas.
 
-### 2.2. Dashboard Principal (Pós-Login)
-A navegação principal é controlada pelo **`BottomNavBar.tsx`**, que contém 5 abas:
+- **`PreLoginDashboard.tsx`:** A tela de boas-vindas do aplicativo. Apresenta uma demonstração visual das funcionalidades e dois botões de ação principais: "Acessar minha conta" e "Abra uma conta".
+- **`Login.tsx`:** A tela de login, onde o usuário insere CPF e senha. Inclui:
+  - Validação de formulário.
+  - Link para a tela de cadastro (`SignUp`).
+  - Funcionalidade de "Esqueci minha senha", que inicia o fluxo de recuperação.
+- **`SignUp.tsx`:** A tela de cadastro de novos usuários, com campos para nome completo, e-mail, CPF e senha.
+- **`ResetPassword.tsx`:** Tela dedicada para a redefinição de senha, onde o usuário insere CPF, o token recebido (últimos 4 dígitos do CPF) e a nova senha.
 
-#### a. Início (`home`)
-É a tela principal, composta por vários widgets:
-- **`Header.tsx`**: Saudação ao usuário e atalhos.
-- **`AccountBalance.tsx`**: Exibe o saldo em conta com um botão para ocultar/mostrar o valor.
-- **`MainActions.tsx`**: Um carrossel horizontal expansível com atalhos para todas as principais funcionalidades do app.
-- **`CreditCardInfo.tsx`**: Um resumo da fatura atual do cartão de crédito.
-- **Banners Dinâmicos**:
-  - **`PromotionalBanner.tsx`**: Um carrossel que consome múltiplas APIs de notícias (IBGE, NewsAPI, WorldNewsAPI) para exibir manchetes com imagens.
-  - **`GuardianBanner.tsx`**: Um banner similar que consome a API do jornal The Guardian.
+### 2.2. Experiência Pós-Login (`Dashboard.tsx`)
 
-#### b. Cartões (`cards`)
-- **`CardDashboard.tsx`**: Tela principal para gerenciamento do cartão de crédito. Exibe a fatura aberta, o limite e os últimos lançamentos.
-- **Fluxos Acessíveis**:
-  - **`ClosedInvoice.tsx`**: Tela para visualizar a fatura fechada, com opções de **pagar** ou **parcelar**.
-  - **`PointsDashboard.tsx`**: Tela do programa de pontos "Fintech Loop".
-  - **`AnticipateInstallments.tsx`**: Área para antecipar o pagamento de compras parceladas.
-- **Lógica de Bloqueio**: O cartão é visualmente marcado como bloqueado se a fatura estiver vencida há mais de 7 dias.
+O `Dashboard.tsx` é o coração da aplicação após o login. Ele controla a visualização do conteúdo principal e a renderização da barra de navegação.
 
-#### c. Shop (`shop`)
-- **`Shop.tsx`**: Uma vitrine de marketplace com banners, categorias e uma grade de produtos.
-- **`ProductPage.tsx`**: Página de detalhes de um produto, com descrição, preço e botão "Comprar".
-- **Fluxo de Compra**:
-  1. **`PaymentMethods.tsx`**: O usuário é direcionado para esta tela para escolher entre **Débito (Saldo em Conta)** ou **Cartão de Crédito**.
-  2. **Débito**: Se escolhido, o fluxo segue para a confirmação com PIN.
-  3. **Crédito**: Se escolhido, o **`InstallmentModal.tsx`** é aberto.
-     - **Uso de Cashback**: O modal primeiro oferece a opção de usar o saldo de pontos para abater o valor. Se o valor for zerado, o fluxo segue para a confirmação com PIN.
-     - **Seleção de Parcelas**: O usuário escolhe o número de parcelas.
-  4. **`PasswordModal.tsx`**: Tela de segurança que solicita o PIN de 4 dígitos (`9898`) para autorizar a transação.
-  5. **`PurchaseConfirmation.tsx`**: Tela de sucesso que exibe o comprovante da compra.
+- **`BottomNavBar.tsx` (Navegação Principal):** Uma barra de navegação fixa na parte inferior que permite alternar entre as seções principais: Início, Cartões, Shop, Produtos e Perfil.
 
-#### d. Investir (`invest`)
-- **`Investments.tsx`**: Exibe o total investido e uma lista de produtos de investimento, como Renda Fixa.
+- **`HomeView.tsx` (Tela de Início):** A tela principal do dashboard.
+  - **Regra de Negócio:** Layout otimizado com o saldo em conta em destaque e um card consolidado para a "Fatura do Cartão", que integra o valor da fatura atual e o limite disponível. A visibilidade dos valores pode ser alternada para maior privacidade.
+  - **Conteúdo:**
+    - Card de "Saldo em conta" com opção de ocultar/exibir valor.
+    - Seção de "Acesso Rápido" para as principais funcionalidades (PIX, Shop, Cartões, Pagar Contas, Extrato) localizada em uma posição de destaque.
+    - Card consolidado da "Fatura do Cartão".
+    - Conteúdo dinâmico com banners de ofertas da loja e seção de "Últimas Notícias".
 
-#### e. Perfil (`profile`)
-- **`Profile.tsx`**: Hub de navegação para todas as áreas relacionadas ao usuário.
-- **Sub-telas**:
-  - **`MyData.tsx`**: Exibe os dados do perfil do usuário.
-  - **`EditProfile.tsx`**: Formulário para editar as informações do perfil.
-  - **`Security.tsx`**: Menu de opções de segurança.
-  - **`Limits.tsx`**: Tela para visualizar e solicitar alteração do limite diário do PIX.
-  - **`Admin.tsx`**: Painel de administração (visível apenas para usuários com a role `admin`).
-  - **`Notifications.tsx`**: Lista de notificações da conta.
+- **`Pix.tsx` (Área PIX):**
+  - **Regra de Negócio:** Centraliza todas as operações relacionadas ao PIX.
+  - **Fluxo de Transferência Seguro:** O processo inclui uma tela de confirmação (`PixConfirmation.tsx`) que exibe os dados do destinatário (nome e CPF mascarado) antes da solicitação do PIN, garantindo que o usuário valide a transação.
+  - **UX de Contatos Aprimorada:** O acesso aos contatos salvos é feito por um ícone intuitivo ao lado do campo de chave (visível apenas se houver contatos). Antes de adicionar um novo contato, um popup informativo (`InfoPopupBottom`) explica os benefícios da ação.
+  - **Gerenciamento:** Telas para gerenciar chaves PIX (`PixKeyManagement`) e contatos salvos (`Contacts`).
 
-## 3. Regras de Negócio do Frontend
+- **`Shop.tsx` (Marketplace) e Carrinho de Compras:**
+  - **Regra de Negócio:** Uma loja completa com vitrine de produtos, carrinho de compras e fluxo de checkout.
+  - **Fluxo de Compra:**
+    - **Adicionar ao Carrinho:** Permite continuar navegando.
+    - **Comprar Agora:** Adiciona o item e leva o usuário diretamente para o carrinho (`ShoppingCart.tsx`).
+  - **Fluxo de Checkout Completo:**
+    - **Pagamento:** Escolha entre débito (`purchaseWithDebit`) e crédito (`purchaseWithCard`), com opção de parcelamento e uso de cashback (`InstallmentModal.tsx`).
+    - **Confirmação:** Após a confirmação com PIN (`PasswordModal.tsx`), uma tela de sucesso (`PurchaseConfirmation.tsx`) exibe o comprovante e redireciona o usuário automaticamente para a tela de Início após 4 segundos.
 
-- **Validação de Formulários**: Todos os formulários (login, cadastro, PIX) possuem validação de entrada para garantir que os dados estejam no formato correto.
-- **Formatação de Dados**: Funções utilitárias em `utils/formatters.ts` são usadas para formatar valores como CPF e moeda.
-- **Gerenciamento de Estado**: O estado global do usuário é gerenciado pelo `AuthContext`. A navegação e os estados de modais são controlados localmente no `Dashboard.tsx`, garantindo que apenas os componentes relevantes sejam re-renderizados.
-- **Segurança**: A lógica para acionar o `PasswordModal.tsx` é centralizada no `Dashboard.tsx` e é chamada antes de qualquer operação que modifique dados financeiros sensíveis.
+- **`CardDashboard.tsx` (Gerenciamento de Cartão de Crédito):**
+  - **Regra de Negócio:** Oferece uma visão completa do cartão de crédito.
+  - **Visualização de Faturas:**
+      - **Fatura Atual:** O card é clicável e leva a uma tela de detalhamento (`CurrentInvoice.tsx`) com todos os lançamentos do ciclo atual.
+      - **Lançamentos Futuros:** Uma aba dedicada ("Futuros") exibe as parcelas dos meses seguintes, proporcionando clareza no planejamento financeiro.
+  - **Regras de Inadimplência:** O sistema aplica automaticamente o status de "Fatura Atrasada" e "Cartão Bloqueado" com avisos claros. O modal de bloqueio agora possui um botão "Voltar" para evitar loops de navegação.
+  - **Ações da Fatura:** Opções completas para Pagar, Parcelar a fatura fechada (`InstallmentOptions.tsx`) ou Antecipar parcelas (`AnticipateInstallments.tsx`).
+
+- **`Admin.tsx` (Painel do Administrador):**
+  - **Regra de Negócio:** Acessível apenas por usuários com `role: 'admin'`.
+  - **Conteúdo:**
+    - Ferramentas para buscar clientes, visualizar detalhes, bloquear/desbloquear contas e realizar depósitos.
+    - Fila para aprovar/negar solicitações de redefinição de senha e aumento de limite.
+    - **Gerenciamento de Cartão do Cliente:** Permite ao administrador alterar a data de vencimento do cartão e da fatura de um cliente. O sistema aplica automaticamente as regras de bloqueio se a nova data de vencimento da fatura estiver mais de 7 dias no passado.
+
+- **`PointsDashboard.tsx` (Programa de Pontos - Fintech Loop):**
+  - **Regra de Negócio:** Centraliza as informações do programa de recompensas.
+  - **Conteúdo:** Exibe o saldo de pontos e oferece abas para "Ganhar Pontos" e "Resgatar".
+  - **Histórico de Pontos:** A aba "Ganhar Pontos" agora exibe um histórico das últimas compras com os pontos acumulados em cada transação, tornando o programa mais transparente.
+
+## 3. Integração com APIs Externas
+
+- **API de Notícias (IBGE):** Utilizada no `NewsSection.tsx` para buscar e exibir notícias sobre economia na tela inicial.
+- **Regra de Negócio:** A chamada é feita diretamente do frontend. A recomendação é que essa chamada seja intermediada por um endpoint de backend (proxy) para proteger futuras chaves de API e implementar caching.

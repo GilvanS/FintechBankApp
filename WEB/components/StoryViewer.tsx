@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+// FIX: Corrected import path for Story type from parent directory.
 import { Story } from '../types';
 
 interface StoryViewerProps {

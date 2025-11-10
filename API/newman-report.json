@@ -1,0 +1,4988 @@
+{
+  "collection": {
+    "item": [
+      {
+        "id": "03242355-657b-429b-b76c-f07da66403c9",
+        "name": "Auth - Login",
+        "request": {
+          "url": {
+            "path": [
+              "auth",
+              "login"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"cpf\":\"{{cpf}}\",\"password\":\"senha123\"}"
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "80a34d64-5db9-487f-947c-9189a78f5445",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 200', () => pm.response.code === 200);",
+                "const json = pm.response.json();",
+                "pm.environment.set('token', json.token);",
+                "pm.expect(json.success).to.be.true;"
+              ],
+              "_lastExecutionId": "7e9e9551-0470-4936-a837-b3033d175889"
+            }
+          }
+        ]
+      },
+      {
+        "id": "749cbcec-3147-414d-9c61-f51b2c095d1c",
+        "name": "Users - Me (401 sem token)",
+        "request": {
+          "url": {
+            "path": [
+              "users",
+              "me"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "22643f45-4d8f-40d2-b4bb-7ecbc9d7d5d2",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 401', () => pm.response.code === 401);"
+              ],
+              "_lastExecutionId": "2ad3237c-9707-4473-97f6-3a5fc670d99a"
+            }
+          }
+        ]
+      },
+      {
+        "id": "0a0d8470-5fba-488e-acf0-fb15bd7cf08b",
+        "name": "Users - Me (200)",
+        "request": {
+          "url": {
+            "path": [
+              "users",
+              "me"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer {{token}}"
+            }
+          ],
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "6b149b78-783c-4d05-b4d7-2f2c796193c3",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 200', () => pm.response.code === 200);",
+                "pm.expect(pm.response.json().success).to.be.true;"
+              ],
+              "_lastExecutionId": "d836bce9-d996-4e89-88eb-cf29cb589637"
+            }
+          }
+        ]
+      },
+      {
+        "id": "6cbf6789-b0d1-4e1f-a665-1a75afed766b",
+        "name": "PIX - Recipient Info (404 chave inexistente)",
+        "request": {
+          "url": {
+            "path": [
+              "pix",
+              "recipient-info"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer {{token}}"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"type\":\"EMAIL\",\"key\":\"nao@existe.com\"}"
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "33eafcbb-09dd-4bbc-ba3d-bbebc2ed1156",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 404', () => pm.response.code === 404);"
+              ],
+              "_lastExecutionId": "00169efa-d314-46bd-a4ee-62b1ae3810bd"
+            }
+          }
+        ]
+      },
+      {
+        "id": "b1da48a3-2a19-4b21-bffe-c97905da2932",
+        "name": "PIX - Transfer (400 sem PIN)",
+        "request": {
+          "url": {
+            "path": [
+              "pix",
+              "transfer"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer {{token}}"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"toKey\":\"EMAIL:user@example.com\",\"amount\":10}"
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "03da1b2e-da19-4dbe-86ef-acff11539cf1",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 400', () => pm.response.code === 400);"
+              ],
+              "_lastExecutionId": "4c71543d-95b3-4643-8426-523a49bb4691"
+            }
+          }
+        ]
+      },
+      {
+        "id": "636e752a-ea0c-4fa9-835c-8f568d978ea5",
+        "name": "PIX - Transfer (200)",
+        "request": {
+          "url": {
+            "path": [
+              "pix",
+              "transfer"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer {{token}}"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"toKey\":\"EMAIL:dest@example.com\",\"amount\":5,\"pin\":\"1234\",\"description\":\"Teste\"}"
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "83ae5c94-3d5b-4188-a975-8f22ac54efcc",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 200', () => pm.response.code === 200);"
+              ],
+              "_lastExecutionId": "3be02e3e-b24d-42f9-b1b7-c26371f4ff22"
+            }
+          }
+        ]
+      },
+      {
+        "id": "937b1b4f-3de3-4d26-a201-688c1e796562",
+        "name": "Cartão - Pay (400 sem PIN)",
+        "request": {
+          "url": {
+            "path": [
+              "cards",
+              "invoice",
+              "pay"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer {{token}}"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"cpf\":\"{{cpf}}\"}"
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "bca69412-6f29-4ff5-bf80-bffee606b8d3",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 400', () => pm.response.code === 400);"
+              ],
+              "_lastExecutionId": "91a68c7e-1bba-4e02-82f6-429914c67342"
+            }
+          }
+        ]
+      },
+      {
+        "id": "f0bb5d83-82a3-4098-a7a6-af05545822fb",
+        "name": "Cartão - Pay (200)",
+        "request": {
+          "url": {
+            "path": [
+              "cards",
+              "invoice",
+              "pay"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer {{token}}"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"cpf\":\"{{cpf}}\",\"pin\":\"1234\"}"
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "083c8ae5-fe09-4f06-9819-7aa38e64ffbe",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 200/400 dinamico', () => [200,400].includes(pm.response.code));"
+              ],
+              "_lastExecutionId": "88100534-96ba-455b-94eb-eb539474a91f"
+            }
+          }
+        ]
+      },
+      {
+        "id": "b8643da8-14ef-4773-9826-538a217f9a88",
+        "name": "Shop - Checkout (400 sem PIN)",
+        "request": {
+          "url": {
+            "path": [
+              "shop",
+              "checkout"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer {{token}}"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":1}],\"paymentMethod\":\"debit\"}"
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "9badc33e-5f3c-4291-8c9e-03ff80dd83cb",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 400', () => pm.response.code === 400);"
+              ],
+              "_lastExecutionId": "1c82f38c-3255-4d87-9f3e-c20a0881b319"
+            }
+          }
+        ]
+      },
+      {
+        "id": "8d766047-cac8-4296-b352-87e9b9148d5e",
+        "name": "Shop - Checkout (201 débito)",
+        "request": {
+          "url": {
+            "path": [
+              "shop",
+              "checkout"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer {{token}}"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":2}],\"paymentMethod\":\"debit\",\"cashbackUsed\":1.5,\"pin\":\"1234\"}"
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "d4ef8fac-fe45-4ee7-9839-bc29c9d73857",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 201', () => pm.response.code === 201);"
+              ],
+              "_lastExecutionId": "ff480251-56b9-404f-8c0c-752752ae478f"
+            }
+          }
+        ]
+      },
+      {
+        "id": "63ef1a8c-1a33-4ed1-9bbe-ced03258956e",
+        "name": "Admin - List Users (403 sem admin)",
+        "request": {
+          "url": {
+            "path": [
+              "admin",
+              "users"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer {{token}}"
+            }
+          ],
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "a9238ec9-212a-43da-8935-3670a9d0b93a",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 403', () => pm.response.code === 403);"
+              ],
+              "_lastExecutionId": "f51eeca4-b008-4fc3-a588-453c389cca17"
+            }
+          }
+        ]
+      },
+      {
+        "id": "be6f6968-7b6e-4b28-a660-7b8f06b896a7",
+        "name": "Proxy - News (200 cache)",
+        "request": {
+          "url": {
+            "path": [
+              "proxy",
+              "news"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer {{token}}"
+            }
+          ],
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "3f99bf3f-6b31-435e-8d0c-1a12d630306e",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 200', () => pm.response.code === 200);"
+              ],
+              "_lastExecutionId": "79719667-f5ae-4edc-aad7-fa823d506c94"
+            }
+          }
+        ]
+      }
+    ],
+    "event": [],
+    "variable": [
+      {
+        "type": "any",
+        "value": "http://localhost:3001/api/v1",
+        "key": "baseUrl"
+      },
+      {
+        "type": "any",
+        "value": "12345678901",
+        "key": "cpf"
+      },
+      {
+        "type": "any",
+        "value": "",
+        "key": "token"
+      }
+    ],
+    "info": {
+      "_postman_id": "8021d01f-8537-4d6f-9c04-02d304646192",
+      "name": "FintechBankApp API Tests",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    }
+  },
+  "environment": {
+    "id": "6d92bb85-a5f5-4ea8-a64e-999b6346e78a",
+    "values": [
+      {
+        "type": "any",
+        "value": null,
+        "key": "token"
+      }
+    ]
+  },
+  "globals": {
+    "id": "a1f445db-909f-41ed-9e66-08d893bf871b",
+    "values": []
+  },
+  "run": {
+    "stats": {
+      "iterations": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "items": {
+        "total": 12,
+        "pending": 0,
+        "failed": 0
+      },
+      "scripts": {
+        "total": 12,
+        "pending": 0,
+        "failed": 2
+      },
+      "prerequests": {
+        "total": 12,
+        "pending": 0,
+        "failed": 0
+      },
+      "requests": {
+        "total": 12,
+        "pending": 0,
+        "failed": 0
+      },
+      "tests": {
+        "total": 12,
+        "pending": 0,
+        "failed": 0
+      },
+      "assertions": {
+        "total": 12,
+        "pending": 0,
+        "failed": 0
+      },
+      "testScripts": {
+        "total": 12,
+        "pending": 0,
+        "failed": 2
+      },
+      "prerequestScripts": {
+        "total": 0,
+        "pending": 0,
+        "failed": 0
+      }
+    },
+    "timings": {
+      "responseAverage": 298.6666666666667,
+      "responseMin": 3,
+      "responseMax": 3516,
+      "responseSd": 970.0690983407087,
+      "dnsAverage": 0,
+      "dnsMin": 0,
+      "dnsMax": 0,
+      "dnsSd": 0,
+      "firstByteAverage": 0,
+      "firstByteMin": 0,
+      "firstByteMax": 0,
+      "firstByteSd": 0,
+      "started": 1762745600279,
+      "completed": 1762745611133
+    },
+    "executions": [
+      {
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 12,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "8e2b4828-14e6-4932-a4c5-a8b11b2ab7ae",
+          "httpRequestId": "c882531c-8d0f-4e39-b5fe-89a73801611c"
+        },
+        "item": {
+          "id": "03242355-657b-429b-b76c-f07da66403c9",
+          "name": "Auth - Login",
+          "request": {
+            "url": {
+              "path": [
+                "auth",
+                "login"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"cpf\":\"{{cpf}}\",\"password\":\"senha123\"}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "80a34d64-5db9-487f-947c-9189a78f5445",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('token', json.token);",
+                  "pm.expect(json.success).to.be.true;"
+                ],
+                "_lastExecutionId": "7e9e9551-0470-4936-a837-b3033d175889"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "auth",
+              "login"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "5d4cfff4-17fc-4660-984d-9c018967c609",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "43",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"cpf\":\"12345678901\",\"password\":\"senha123\"}"
+          }
+        },
+        "response": {
+          "id": "d2dbb8e9-f7db-4a3e-9915-f39ab6a3ebab",
+          "status": "Unauthorized",
+          "code": 401,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl7ukb-pwf4ow"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "86"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"56-GS5m3jOLIapamgWXOSs4OqzZdmE\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:24 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              99,
+              111,
+              100,
+              101,
+              34,
+              58,
+              34,
+              65,
+              85,
+              84,
+              72,
+              95,
+              73,
+              78,
+              86,
+              65,
+              76,
+              73,
+              68,
+              95,
+              67,
+              82,
+              69,
+              68,
+              69,
+              78,
+              84,
+              73,
+              65,
+              76,
+              83,
+              34,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              67,
+              80,
+              70,
+              32,
+              111,
+              117,
+              32,
+              115,
+              101,
+              110,
+              104,
+              97,
+              32,
+              105,
+              110,
+              118,
+              97,
+              108,
+              105,
+              100,
+              97,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 3516,
+          "responseSize": 86
+        },
+        "id": "03242355-657b-429b-b76c-f07da66403c9",
+        "assertions": [
+          {
+            "assertion": "Status 200",
+            "skipped": false
+          }
+        ],
+        "testScript": [
+          {
+            "error": {
+              "name": "AssertionError",
+              "message": "expected false to be true",
+              "showDiff": true,
+              "actual": false,
+              "expected": true,
+              "operator": "strictEqual",
+              "stack": "Error: expected false to be true\n    at Object.eval (eval at exec (evalmachine.<anonymous>:66:1819788), <anonymous>:7:30)\n    at u.exec (evalmachine.<anonymous>:66:1819823)\n    at t.exports (evalmachine.<anonymous>:66:5848)\n    at Object.<anonymous> (evalmachine.<anonymous>:66:8247)\n    at evalmachine.<anonymous>:15:26\n    at Array.forEach (<anonymous>)\n    at Object.emit (evalmachine.<anonymous>:14:59)\n    at evalmachine.<anonymous>:59:24\n    at evalmachine.<anonymous>:5:21\n    at evalmachine.<anonymous>:6:18",
+              "checksum": "e70d301c3a982f900642444d429d2e14",
+              "id": "71e56f74-4db7-4874-9474-948e5b4cef18",
+              "timestamp": 1762745604402,
+              "stacktrace": [
+                {
+                  "fileName": "<anonymous>",
+                  "lineNumber": 7,
+                  "functionName": "Object.eval (eval at exec (evalmachine.<anonymous>:66:1819788),",
+                  "typeName": "Object",
+                  "methodName": "eval (eval at exec (evalmachine.<anonymous>:66:1819788),",
+                  "columnNumber": 30,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 66,
+                  "functionName": "u.exec",
+                  "typeName": "u",
+                  "methodName": "exec",
+                  "columnNumber": 1819823,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 66,
+                  "functionName": "t.exports",
+                  "typeName": "t",
+                  "methodName": "exports",
+                  "columnNumber": 5848,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 66,
+                  "functionName": "",
+                  "typeName": "Object",
+                  "methodName": null,
+                  "columnNumber": 8247,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 15,
+                  "functionName": null,
+                  "typeName": null,
+                  "methodName": null,
+                  "columnNumber": 26,
+                  "native": false
+                },
+                {
+                  "fileName": null,
+                  "lineNumber": null,
+                  "functionName": "Array.forEach",
+                  "typeName": "Array",
+                  "methodName": "forEach",
+                  "columnNumber": null,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 14,
+                  "functionName": "Object.emit",
+                  "typeName": "Object",
+                  "methodName": "emit",
+                  "columnNumber": 59,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 59,
+                  "functionName": null,
+                  "typeName": null,
+                  "methodName": null,
+                  "columnNumber": 24,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 5,
+                  "functionName": null,
+                  "typeName": null,
+                  "methodName": null,
+                  "columnNumber": 21,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 6,
+                  "functionName": null,
+                  "typeName": null,
+                  "methodName": null,
+                  "columnNumber": 18,
+                  "native": false
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "4c9eb909-cd01-4be6-93d4-be629dcfc97b",
+          "length": 12,
+          "cycles": 1,
+          "position": 1,
+          "iteration": 0,
+          "httpRequestId": "460eedb8-4a39-4cb0-a3e4-ca2895f32fa0"
+        },
+        "item": {
+          "id": "749cbcec-3147-414d-9c61-f51b2c095d1c",
+          "name": "Users - Me (401 sem token)",
+          "request": {
+            "url": {
+              "path": [
+                "users",
+                "me"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "22643f45-4d8f-40d2-b4bb-7ecbc9d7d5d2",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.code === 401);"
+                ],
+                "_lastExecutionId": "2ad3237c-9707-4473-97f6-3a5fc670d99a"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "users",
+              "me"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "0cafebc9-e8b0-4b3f-8c79-cb6fc08806bb",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "d8c2589c-f9a9-4835-af35-eadf28c1bf87",
+          "status": "Unauthorized",
+          "code": 401,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl7xq6-dfetk8"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "56"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"38-LEjzbZwEpF+pokGK2mysvCM2Ffc\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:24 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              84,
+              111,
+              107,
+              101,
+              110,
+              32,
+              100,
+              101,
+              32,
+              97,
+              99,
+              101,
+              115,
+              115,
+              111,
+              32,
+              114,
+              101,
+              113,
+              117,
+              101,
+              114,
+              105,
+              100,
+              111,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 5,
+          "responseSize": 56
+        },
+        "id": "749cbcec-3147-414d-9c61-f51b2c095d1c",
+        "assertions": [
+          {
+            "assertion": "Status 401",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "17a76d56-0858-4382-bab9-717765c9552c",
+          "length": 12,
+          "cycles": 1,
+          "position": 2,
+          "iteration": 0,
+          "httpRequestId": "fe4375b1-4b30-4d21-9fe0-70e476e24b2a"
+        },
+        "item": {
+          "id": "0a0d8470-5fba-488e-acf0-fb15bd7cf08b",
+          "name": "Users - Me (200)",
+          "request": {
+            "url": {
+              "path": [
+                "users",
+                "me"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "6b149b78-783c-4d05-b4d7-2f2c796193c3",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);",
+                  "pm.expect(pm.response.json().success).to.be.true;"
+                ],
+                "_lastExecutionId": "d836bce9-d996-4e89-88eb-cf29cb589637"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "users",
+              "me"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer null"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "39cfe55e-e820-4d50-b798-1417fe00fe17",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "8ce0a86a-8836-4e86-82ba-df6e9cb44055",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl7y7a-t77asz"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "45"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"2d-JNrAhlL7OpBiM2hrN5WAYHmIvG8\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:25 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              84,
+              111,
+              107,
+              101,
+              110,
+              32,
+              105,
+              110,
+              118,
+              97,
+              108,
+              105,
+              100,
+              111,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 4,
+          "responseSize": 45
+        },
+        "id": "0a0d8470-5fba-488e-acf0-fb15bd7cf08b",
+        "assertions": [
+          {
+            "assertion": "Status 200",
+            "skipped": false
+          }
+        ],
+        "testScript": [
+          {
+            "error": {
+              "name": "AssertionError",
+              "message": "expected false to be true",
+              "showDiff": true,
+              "actual": false,
+              "expected": true,
+              "operator": "strictEqual",
+              "stack": "Error: expected false to be true\n    at Object.eval (eval at exec (evalmachine.<anonymous>:66:1819788), <anonymous>:5:44)\n    at u.exec (evalmachine.<anonymous>:66:1819823)\n    at t.exports (evalmachine.<anonymous>:66:5848)\n    at Object.<anonymous> (evalmachine.<anonymous>:66:8247)\n    at evalmachine.<anonymous>:15:26\n    at Array.forEach (<anonymous>)\n    at Object.emit (evalmachine.<anonymous>:14:59)\n    at evalmachine.<anonymous>:59:24\n    at evalmachine.<anonymous>:5:21\n    at evalmachine.<anonymous>:6:18",
+              "checksum": "f3c9903e49c621045a3a59685443fdaa",
+              "id": "f6ef188b-8282-4936-bbcc-356b1aaaacb5",
+              "timestamp": 1762745605626,
+              "stacktrace": [
+                {
+                  "fileName": "<anonymous>",
+                  "lineNumber": 5,
+                  "functionName": "Object.eval (eval at exec (evalmachine.<anonymous>:66:1819788),",
+                  "typeName": "Object",
+                  "methodName": "eval (eval at exec (evalmachine.<anonymous>:66:1819788),",
+                  "columnNumber": 44,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 66,
+                  "functionName": "u.exec",
+                  "typeName": "u",
+                  "methodName": "exec",
+                  "columnNumber": 1819823,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 66,
+                  "functionName": "t.exports",
+                  "typeName": "t",
+                  "methodName": "exports",
+                  "columnNumber": 5848,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 66,
+                  "functionName": "",
+                  "typeName": "Object",
+                  "methodName": null,
+                  "columnNumber": 8247,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 15,
+                  "functionName": null,
+                  "typeName": null,
+                  "methodName": null,
+                  "columnNumber": 26,
+                  "native": false
+                },
+                {
+                  "fileName": null,
+                  "lineNumber": null,
+                  "functionName": "Array.forEach",
+                  "typeName": "Array",
+                  "methodName": "forEach",
+                  "columnNumber": null,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 14,
+                  "functionName": "Object.emit",
+                  "typeName": "Object",
+                  "methodName": "emit",
+                  "columnNumber": 59,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 59,
+                  "functionName": null,
+                  "typeName": null,
+                  "methodName": null,
+                  "columnNumber": 24,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 5,
+                  "functionName": null,
+                  "typeName": null,
+                  "methodName": null,
+                  "columnNumber": 21,
+                  "native": false
+                },
+                {
+                  "fileName": "evalmachine.<anonymous>",
+                  "lineNumber": 6,
+                  "functionName": null,
+                  "typeName": null,
+                  "methodName": null,
+                  "columnNumber": 18,
+                  "native": false
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "95529e15-0ccb-4209-9369-c6be52f71ecf",
+          "length": 12,
+          "cycles": 1,
+          "position": 3,
+          "iteration": 0,
+          "httpRequestId": "0303074a-f723-45cd-a215-0ecbdda13210"
+        },
+        "item": {
+          "id": "6cbf6789-b0d1-4e1f-a665-1a75afed766b",
+          "name": "PIX - Recipient Info (404 chave inexistente)",
+          "request": {
+            "url": {
+              "path": [
+                "pix",
+                "recipient-info"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"type\":\"EMAIL\",\"key\":\"nao@existe.com\"}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "33eafcbb-09dd-4bbc-ba3d-bbebc2ed1156",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.code === 404);"
+                ],
+                "_lastExecutionId": "00169efa-d314-46bd-a4ee-62b1ae3810bd"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "pix",
+              "recipient-info"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer null"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "8e81e9a1-dcb9-4129-970f-30126ea92000",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "39",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"type\":\"EMAIL\",\"key\":\"nao@existe.com\"}"
+          }
+        },
+        "response": {
+          "id": "0eb26924-30cd-4389-a5c6-7b4c49d4af1d",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl7yon-1z11jr"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "45"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"2d-JNrAhlL7OpBiM2hrN5WAYHmIvG8\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:26 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              84,
+              111,
+              107,
+              101,
+              110,
+              32,
+              105,
+              110,
+              118,
+              97,
+              108,
+              105,
+              100,
+              111,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 5,
+          "responseSize": 45
+        },
+        "id": "6cbf6789-b0d1-4e1f-a665-1a75afed766b",
+        "assertions": [
+          {
+            "assertion": "Status 404",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "d0f0de22-16b7-4a7b-999e-9fe23b65745e",
+          "length": 12,
+          "cycles": 1,
+          "position": 4,
+          "iteration": 0,
+          "httpRequestId": "19b6a905-0930-4a27-8d44-ec5c1a7eaeff"
+        },
+        "item": {
+          "id": "b1da48a3-2a19-4b21-bffe-c97905da2932",
+          "name": "PIX - Transfer (400 sem PIN)",
+          "request": {
+            "url": {
+              "path": [
+                "pix",
+                "transfer"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"toKey\":\"EMAIL:user@example.com\",\"amount\":10}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "03da1b2e-da19-4dbe-86ef-acff11539cf1",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.code === 400);"
+                ],
+                "_lastExecutionId": "4c71543d-95b3-4643-8426-523a49bb4691"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "pix",
+              "transfer"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer null"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "9ddbfdf6-a1f6-4403-8c30-1b9b9b5dbcaa",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "46",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"toKey\":\"EMAIL:user@example.com\",\"amount\":10}"
+          }
+        },
+        "response": {
+          "id": "1df03f7d-2746-4c9e-8a0e-81c0c7dc88b1",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl7z5a-jcikru"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "45"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"2d-JNrAhlL7OpBiM2hrN5WAYHmIvG8\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:26 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              84,
+              111,
+              107,
+              101,
+              110,
+              32,
+              105,
+              110,
+              118,
+              97,
+              108,
+              105,
+              100,
+              111,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 7,
+          "responseSize": 45
+        },
+        "id": "b1da48a3-2a19-4b21-bffe-c97905da2932",
+        "assertions": [
+          {
+            "assertion": "Status 400",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "13192140-6d27-4694-baec-93f6820f4cf7",
+          "length": 12,
+          "cycles": 1,
+          "position": 5,
+          "iteration": 0,
+          "httpRequestId": "26d5c55d-cc8d-4c43-981f-4a44b5d85cfd"
+        },
+        "item": {
+          "id": "636e752a-ea0c-4fa9-835c-8f568d978ea5",
+          "name": "PIX - Transfer (200)",
+          "request": {
+            "url": {
+              "path": [
+                "pix",
+                "transfer"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"toKey\":\"EMAIL:dest@example.com\",\"amount\":5,\"pin\":\"1234\",\"description\":\"Teste\"}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "83ae5c94-3d5b-4188-a975-8f22ac54efcc",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);"
+                ],
+                "_lastExecutionId": "3be02e3e-b24d-42f9-b1b7-c26371f4ff22"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "pix",
+              "transfer"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer null"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "9c6dd323-78cd-45a0-8092-0c50559526b2",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "80",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"toKey\":\"EMAIL:dest@example.com\",\"amount\":5,\"pin\":\"1234\",\"description\":\"Teste\"}"
+          }
+        },
+        "response": {
+          "id": "5f12e068-c33c-401b-afa3-e485dda4d916",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl7zm6-dnxl93"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "45"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"2d-JNrAhlL7OpBiM2hrN5WAYHmIvG8\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:27 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              84,
+              111,
+              107,
+              101,
+              110,
+              32,
+              105,
+              110,
+              118,
+              97,
+              108,
+              105,
+              100,
+              111,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 4,
+          "responseSize": 45
+        },
+        "id": "636e752a-ea0c-4fa9-835c-8f568d978ea5",
+        "assertions": [
+          {
+            "assertion": "Status 200",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "17285343-3b1b-4631-8f71-671ac35d4e1a",
+          "length": 12,
+          "cycles": 1,
+          "position": 6,
+          "iteration": 0,
+          "httpRequestId": "5f289369-76d5-46ae-88da-86aea930fd93"
+        },
+        "item": {
+          "id": "937b1b4f-3de3-4d26-a201-688c1e796562",
+          "name": "Cartão - Pay (400 sem PIN)",
+          "request": {
+            "url": {
+              "path": [
+                "cards",
+                "invoice",
+                "pay"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"cpf\":\"{{cpf}}\"}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "bca69412-6f29-4ff5-bf80-bffee606b8d3",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.code === 400);"
+                ],
+                "_lastExecutionId": "91a68c7e-1bba-4e02-82f6-429914c67342"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "cards",
+              "invoice",
+              "pay"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer null"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "ad0d0e43-95ed-492a-8699-777a501947cc",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "21",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"cpf\":\"12345678901\"}"
+          }
+        },
+        "response": {
+          "id": "1eb02329-d090-4d60-9eb6-fde99d47b9c9",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl803f-brrb5z"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "45"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"2d-JNrAhlL7OpBiM2hrN5WAYHmIvG8\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:28 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              84,
+              111,
+              107,
+              101,
+              110,
+              32,
+              105,
+              110,
+              118,
+              97,
+              108,
+              105,
+              100,
+              111,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 16,
+          "responseSize": 45
+        },
+        "id": "937b1b4f-3de3-4d26-a201-688c1e796562",
+        "assertions": [
+          {
+            "assertion": "Status 400",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "c07facdd-82a4-49f5-a446-c84e79289d25",
+          "length": 12,
+          "cycles": 1,
+          "position": 7,
+          "iteration": 0,
+          "httpRequestId": "1bf7717b-2120-482b-9006-36eb93228911"
+        },
+        "item": {
+          "id": "f0bb5d83-82a3-4098-a7a6-af05545822fb",
+          "name": "Cartão - Pay (200)",
+          "request": {
+            "url": {
+              "path": [
+                "cards",
+                "invoice",
+                "pay"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"cpf\":\"{{cpf}}\",\"pin\":\"1234\"}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "083c8ae5-fe09-4f06-9819-7aa38e64ffbe",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200/400 dinamico', () => [200,400].includes(pm.response.code));"
+                ],
+                "_lastExecutionId": "88100534-96ba-455b-94eb-eb539474a91f"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "cards",
+              "invoice",
+              "pay"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer null"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "563a38d2-f918-4b27-a9e4-580749a2abd7",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "34",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"cpf\":\"12345678901\",\"pin\":\"1234\"}"
+          }
+        },
+        "response": {
+          "id": "b20f86df-dd52-46bf-8e17-f21c88066f85",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl80jz-4gu0qb"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "45"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"2d-JNrAhlL7OpBiM2hrN5WAYHmIvG8\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:28 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              84,
+              111,
+              107,
+              101,
+              110,
+              32,
+              105,
+              110,
+              118,
+              97,
+              108,
+              105,
+              100,
+              111,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 4,
+          "responseSize": 45
+        },
+        "id": "f0bb5d83-82a3-4098-a7a6-af05545822fb",
+        "assertions": [
+          {
+            "assertion": "Status 200/400 dinamico",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "3858746e-0053-4b84-b482-d3ac01675109",
+          "length": 12,
+          "cycles": 1,
+          "position": 8,
+          "iteration": 0,
+          "httpRequestId": "59ff26d0-da1a-4dd6-8389-fd95b61ecc21"
+        },
+        "item": {
+          "id": "b8643da8-14ef-4773-9826-538a217f9a88",
+          "name": "Shop - Checkout (400 sem PIN)",
+          "request": {
+            "url": {
+              "path": [
+                "shop",
+                "checkout"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":1}],\"paymentMethod\":\"debit\"}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "9badc33e-5f3c-4291-8c9e-03ff80dd83cb",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.code === 400);"
+                ],
+                "_lastExecutionId": "1c82f38c-3255-4d87-9f3e-c20a0881b319"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "shop",
+              "checkout"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer null"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "93c91ede-68a1-4cbc-ab25-7eebb8c3f5ff",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "73",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":1}],\"paymentMethod\":\"debit\"}"
+          }
+        },
+        "response": {
+          "id": "10fe3d7a-516f-47bf-ad1f-ef35c1cea80a",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl810s-uryi1v"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "45"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"2d-JNrAhlL7OpBiM2hrN5WAYHmIvG8\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:29 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              84,
+              111,
+              107,
+              101,
+              110,
+              32,
+              105,
+              110,
+              118,
+              97,
+              108,
+              105,
+              100,
+              111,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 11,
+          "responseSize": 45
+        },
+        "id": "b8643da8-14ef-4773-9826-538a217f9a88",
+        "assertions": [
+          {
+            "assertion": "Status 400",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "caba2510-5180-450e-bee7-dcdd5fef9e6f",
+          "length": 12,
+          "cycles": 1,
+          "position": 9,
+          "iteration": 0,
+          "httpRequestId": "091eb7c9-d939-4256-b5a8-156962820e5f"
+        },
+        "item": {
+          "id": "8d766047-cac8-4296-b352-87e9b9148d5e",
+          "name": "Shop - Checkout (201 débito)",
+          "request": {
+            "url": {
+              "path": [
+                "shop",
+                "checkout"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":2}],\"paymentMethod\":\"debit\",\"cashbackUsed\":1.5,\"pin\":\"1234\"}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "d4ef8fac-fe45-4ee7-9839-bc29c9d73857",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.code === 201);"
+                ],
+                "_lastExecutionId": "ff480251-56b9-404f-8c0c-752752ae478f"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "shop",
+              "checkout"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer null"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "fa42c488-4601-4fdd-97c6-84f5e8cdfc16",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "105",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":2}],\"paymentMethod\":\"debit\",\"cashbackUsed\":1.5,\"pin\":\"1234\"}"
+          }
+        },
+        "response": {
+          "id": "f28b72fc-4b0c-4613-89e8-311028c65109",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl81hz-8iabpb"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "45"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"2d-JNrAhlL7OpBiM2hrN5WAYHmIvG8\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:29 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              84,
+              111,
+              107,
+              101,
+              110,
+              32,
+              105,
+              110,
+              118,
+              97,
+              108,
+              105,
+              100,
+              111,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 3,
+          "responseSize": 45
+        },
+        "id": "8d766047-cac8-4296-b352-87e9b9148d5e",
+        "assertions": [
+          {
+            "assertion": "Status 201",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "aca3df40-b0d7-4672-a80e-27131bdc108b",
+          "length": 12,
+          "cycles": 1,
+          "position": 10,
+          "iteration": 0,
+          "httpRequestId": "5998ede3-556b-4371-bf70-902c30188e5b"
+        },
+        "item": {
+          "id": "63ef1a8c-1a33-4ed1-9bbe-ced03258956e",
+          "name": "Admin - List Users (403 sem admin)",
+          "request": {
+            "url": {
+              "path": [
+                "admin",
+                "users"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "a9238ec9-212a-43da-8935-3670a9d0b93a",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 403', () => pm.response.code === 403);"
+                ],
+                "_lastExecutionId": "f51eeca4-b008-4fc3-a588-453c389cca17"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "admin",
+              "users"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer null"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "04830bbd-9997-452a-9daf-758309a2f7b8",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "b685c61d-ce22-4543-bcfa-7d5ed8be90cf",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl81yz-usojq9"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "45"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"2d-JNrAhlL7OpBiM2hrN5WAYHmIvG8\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:30 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              84,
+              111,
+              107,
+              101,
+              110,
+              32,
+              105,
+              110,
+              118,
+              97,
+              108,
+              105,
+              100,
+              111,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 4,
+          "responseSize": 45
+        },
+        "id": "63ef1a8c-1a33-4ed1-9bbe-ced03258956e",
+        "assertions": [
+          {
+            "assertion": "Status 403",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "60efbe5f-1e2d-4578-8ca8-48d620401e72",
+          "length": 12,
+          "cycles": 1,
+          "position": 11,
+          "iteration": 0,
+          "httpRequestId": "fdeeba10-929a-4696-8ffd-016e68183a2c"
+        },
+        "item": {
+          "id": "be6f6968-7b6e-4b28-a660-7b8f06b896a7",
+          "name": "Proxy - News (200 cache)",
+          "request": {
+            "url": {
+              "path": [
+                "proxy",
+                "news"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "3f99bf3f-6b31-435e-8d0c-1a12d630306e",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);"
+                ],
+                "_lastExecutionId": "79719667-f5ae-4edc-aad7-fa823d506c94"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "3001",
+            "path": [
+              "api",
+              "v1",
+              "proxy",
+              "news"
+            ],
+            "host": [
+              "localhost"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer null"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "3d34ea3e-c8c2-4918-94c7-0de9fe9e06ab",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "localhost:3001",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "795818ad-83aa-4d17-8e7c-04913b06b5a3",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [
+            {
+              "key": "X-Powered-By",
+              "value": "Express"
+            },
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "x-request-id",
+              "value": "req-mhsl82fm-ugj0y7"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "45"
+            },
+            {
+              "key": "ETag",
+              "value": "W/\"2d-JNrAhlL7OpBiM2hrN5WAYHmIvG8\""
+            },
+            {
+              "key": "Date",
+              "value": "Mon, 10 Nov 2025 03:33:31 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              117,
+              99,
+              99,
+              101,
+              115,
+              115,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              44,
+              34,
+              109,
+              101,
+              115,
+              115,
+              97,
+              103,
+              101,
+              34,
+              58,
+              34,
+              84,
+              111,
+              107,
+              101,
+              110,
+              32,
+              105,
+              110,
+              118,
+              97,
+              108,
+              105,
+              100,
+              111,
+              46,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 5,
+          "responseSize": 45
+        },
+        "id": "be6f6968-7b6e-4b28-a660-7b8f06b896a7",
+        "assertions": [
+          {
+            "assertion": "Status 200",
+            "skipped": false
+          }
+        ]
+      }
+    ],
+    "transfers": {
+      "responseTotal": 592
+    },
+    "failures": [
+      {
+        "error": {
+          "name": "AssertionError",
+          "message": "expected false to be true",
+          "showDiff": true,
+          "actual": false,
+          "expected": true,
+          "operator": "strictEqual",
+          "stack": "Error: expected false to be true\n    at Object.eval (eval at exec (evalmachine.<anonymous>:66:1819788), <anonymous>:7:30)\n    at u.exec (evalmachine.<anonymous>:66:1819823)\n    at t.exports (evalmachine.<anonymous>:66:5848)\n    at Object.<anonymous> (evalmachine.<anonymous>:66:8247)\n    at evalmachine.<anonymous>:15:26\n    at Array.forEach (<anonymous>)\n    at Object.emit (evalmachine.<anonymous>:14:59)\n    at evalmachine.<anonymous>:59:24\n    at evalmachine.<anonymous>:5:21\n    at evalmachine.<anonymous>:6:18",
+          "checksum": "e70d301c3a982f900642444d429d2e14",
+          "id": "71e56f74-4db7-4874-9474-948e5b4cef18",
+          "timestamp": 1762745604402,
+          "stacktrace": [
+            {
+              "fileName": "<anonymous>",
+              "lineNumber": 7,
+              "functionName": "Object.eval (eval at exec (evalmachine.<anonymous>:66:1819788),",
+              "typeName": "Object",
+              "methodName": "eval (eval at exec (evalmachine.<anonymous>:66:1819788),",
+              "columnNumber": 30,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 66,
+              "functionName": "u.exec",
+              "typeName": "u",
+              "methodName": "exec",
+              "columnNumber": 1819823,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 66,
+              "functionName": "t.exports",
+              "typeName": "t",
+              "methodName": "exports",
+              "columnNumber": 5848,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 66,
+              "functionName": "",
+              "typeName": "Object",
+              "methodName": null,
+              "columnNumber": 8247,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 15,
+              "functionName": null,
+              "typeName": null,
+              "methodName": null,
+              "columnNumber": 26,
+              "native": false
+            },
+            {
+              "fileName": null,
+              "lineNumber": null,
+              "functionName": "Array.forEach",
+              "typeName": "Array",
+              "methodName": "forEach",
+              "columnNumber": null,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 14,
+              "functionName": "Object.emit",
+              "typeName": "Object",
+              "methodName": "emit",
+              "columnNumber": 59,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 59,
+              "functionName": null,
+              "typeName": null,
+              "methodName": null,
+              "columnNumber": 24,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 5,
+              "functionName": null,
+              "typeName": null,
+              "methodName": null,
+              "columnNumber": 21,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 6,
+              "functionName": null,
+              "typeName": null,
+              "methodName": null,
+              "columnNumber": 18,
+              "native": false
+            }
+          ]
+        },
+        "at": "test-script:5:30",
+        "source": {
+          "id": "03242355-657b-429b-b76c-f07da66403c9",
+          "name": "Auth - Login",
+          "request": {
+            "url": {
+              "path": [
+                "auth",
+                "login"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"cpf\":\"{{cpf}}\",\"password\":\"senha123\"}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "80a34d64-5db9-487f-947c-9189a78f5445",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('token', json.token);",
+                  "pm.expect(json.success).to.be.true;"
+                ],
+                "_lastExecutionId": "7e9e9551-0470-4936-a837-b3033d175889"
+              }
+            }
+          ]
+        },
+        "parent": {
+          "item": [
+            {
+              "id": "03242355-657b-429b-b76c-f07da66403c9",
+              "name": "Auth - Login",
+              "request": {
+                "url": {
+                  "path": [
+                    "auth",
+                    "login"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"cpf\":\"{{cpf}}\",\"password\":\"senha123\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "80a34d64-5db9-487f-947c-9189a78f5445",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.code === 200);",
+                      "const json = pm.response.json();",
+                      "pm.environment.set('token', json.token);",
+                      "pm.expect(json.success).to.be.true;"
+                    ],
+                    "_lastExecutionId": "7e9e9551-0470-4936-a837-b3033d175889"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "749cbcec-3147-414d-9c61-f51b2c095d1c",
+              "name": "Users - Me (401 sem token)",
+              "request": {
+                "url": {
+                  "path": [
+                    "users",
+                    "me"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "22643f45-4d8f-40d2-b4bb-7ecbc9d7d5d2",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 401', () => pm.response.code === 401);"
+                    ],
+                    "_lastExecutionId": "2ad3237c-9707-4473-97f6-3a5fc670d99a"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "0a0d8470-5fba-488e-acf0-fb15bd7cf08b",
+              "name": "Users - Me (200)",
+              "request": {
+                "url": {
+                  "path": [
+                    "users",
+                    "me"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "6b149b78-783c-4d05-b4d7-2f2c796193c3",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.code === 200);",
+                      "pm.expect(pm.response.json().success).to.be.true;"
+                    ],
+                    "_lastExecutionId": "d836bce9-d996-4e89-88eb-cf29cb589637"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "6cbf6789-b0d1-4e1f-a665-1a75afed766b",
+              "name": "PIX - Recipient Info (404 chave inexistente)",
+              "request": {
+                "url": {
+                  "path": [
+                    "pix",
+                    "recipient-info"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"type\":\"EMAIL\",\"key\":\"nao@existe.com\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "33eafcbb-09dd-4bbc-ba3d-bbebc2ed1156",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 404', () => pm.response.code === 404);"
+                    ],
+                    "_lastExecutionId": "00169efa-d314-46bd-a4ee-62b1ae3810bd"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "b1da48a3-2a19-4b21-bffe-c97905da2932",
+              "name": "PIX - Transfer (400 sem PIN)",
+              "request": {
+                "url": {
+                  "path": [
+                    "pix",
+                    "transfer"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"toKey\":\"EMAIL:user@example.com\",\"amount\":10}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "03da1b2e-da19-4dbe-86ef-acff11539cf1",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.code === 400);"
+                    ],
+                    "_lastExecutionId": "4c71543d-95b3-4643-8426-523a49bb4691"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "636e752a-ea0c-4fa9-835c-8f568d978ea5",
+              "name": "PIX - Transfer (200)",
+              "request": {
+                "url": {
+                  "path": [
+                    "pix",
+                    "transfer"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"toKey\":\"EMAIL:dest@example.com\",\"amount\":5,\"pin\":\"1234\",\"description\":\"Teste\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "83ae5c94-3d5b-4188-a975-8f22ac54efcc",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.code === 200);"
+                    ],
+                    "_lastExecutionId": "3be02e3e-b24d-42f9-b1b7-c26371f4ff22"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "937b1b4f-3de3-4d26-a201-688c1e796562",
+              "name": "Cartão - Pay (400 sem PIN)",
+              "request": {
+                "url": {
+                  "path": [
+                    "cards",
+                    "invoice",
+                    "pay"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"cpf\":\"{{cpf}}\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "bca69412-6f29-4ff5-bf80-bffee606b8d3",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.code === 400);"
+                    ],
+                    "_lastExecutionId": "91a68c7e-1bba-4e02-82f6-429914c67342"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "f0bb5d83-82a3-4098-a7a6-af05545822fb",
+              "name": "Cartão - Pay (200)",
+              "request": {
+                "url": {
+                  "path": [
+                    "cards",
+                    "invoice",
+                    "pay"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"cpf\":\"{{cpf}}\",\"pin\":\"1234\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "083c8ae5-fe09-4f06-9819-7aa38e64ffbe",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200/400 dinamico', () => [200,400].includes(pm.response.code));"
+                    ],
+                    "_lastExecutionId": "88100534-96ba-455b-94eb-eb539474a91f"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "b8643da8-14ef-4773-9826-538a217f9a88",
+              "name": "Shop - Checkout (400 sem PIN)",
+              "request": {
+                "url": {
+                  "path": [
+                    "shop",
+                    "checkout"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":1}],\"paymentMethod\":\"debit\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "9badc33e-5f3c-4291-8c9e-03ff80dd83cb",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.code === 400);"
+                    ],
+                    "_lastExecutionId": "1c82f38c-3255-4d87-9f3e-c20a0881b319"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "8d766047-cac8-4296-b352-87e9b9148d5e",
+              "name": "Shop - Checkout (201 débito)",
+              "request": {
+                "url": {
+                  "path": [
+                    "shop",
+                    "checkout"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":2}],\"paymentMethod\":\"debit\",\"cashbackUsed\":1.5,\"pin\":\"1234\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "d4ef8fac-fe45-4ee7-9839-bc29c9d73857",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 201', () => pm.response.code === 201);"
+                    ],
+                    "_lastExecutionId": "ff480251-56b9-404f-8c0c-752752ae478f"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "63ef1a8c-1a33-4ed1-9bbe-ced03258956e",
+              "name": "Admin - List Users (403 sem admin)",
+              "request": {
+                "url": {
+                  "path": [
+                    "admin",
+                    "users"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a9238ec9-212a-43da-8935-3670a9d0b93a",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 403', () => pm.response.code === 403);"
+                    ],
+                    "_lastExecutionId": "f51eeca4-b008-4fc3-a588-453c389cca17"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "be6f6968-7b6e-4b28-a660-7b8f06b896a7",
+              "name": "Proxy - News (200 cache)",
+              "request": {
+                "url": {
+                  "path": [
+                    "proxy",
+                    "news"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "3f99bf3f-6b31-435e-8d0c-1a12d630306e",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.code === 200);"
+                    ],
+                    "_lastExecutionId": "79719667-f5ae-4edc-aad7-fa823d506c94"
+                  }
+                }
+              ]
+            }
+          ],
+          "event": [],
+          "variable": [
+            {
+              "type": "any",
+              "value": "http://localhost:3001/api/v1",
+              "key": "baseUrl"
+            },
+            {
+              "type": "any",
+              "value": "12345678901",
+              "key": "cpf"
+            },
+            {
+              "type": "any",
+              "value": "",
+              "key": "token"
+            }
+          ],
+          "info": {
+            "_postman_id": "8021d01f-8537-4d6f-9c04-02d304646192",
+            "name": "FintechBankApp API Tests",
+            "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+          }
+        },
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 12,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "8e2b4828-14e6-4932-a4c5-a8b11b2ab7ae",
+          "httpRequestId": "c882531c-8d0f-4e39-b5fe-89a73801611c",
+          "scriptId": "80a34d64-5db9-487f-947c-9189a78f5445"
+        }
+      },
+      {
+        "error": {
+          "name": "AssertionError",
+          "message": "expected false to be true",
+          "showDiff": true,
+          "actual": false,
+          "expected": true,
+          "operator": "strictEqual",
+          "stack": "Error: expected false to be true\n    at Object.eval (eval at exec (evalmachine.<anonymous>:66:1819788), <anonymous>:5:44)\n    at u.exec (evalmachine.<anonymous>:66:1819823)\n    at t.exports (evalmachine.<anonymous>:66:5848)\n    at Object.<anonymous> (evalmachine.<anonymous>:66:8247)\n    at evalmachine.<anonymous>:15:26\n    at Array.forEach (<anonymous>)\n    at Object.emit (evalmachine.<anonymous>:14:59)\n    at evalmachine.<anonymous>:59:24\n    at evalmachine.<anonymous>:5:21\n    at evalmachine.<anonymous>:6:18",
+          "checksum": "f3c9903e49c621045a3a59685443fdaa",
+          "id": "f6ef188b-8282-4936-bbcc-356b1aaaacb5",
+          "timestamp": 1762745605626,
+          "stacktrace": [
+            {
+              "fileName": "<anonymous>",
+              "lineNumber": 5,
+              "functionName": "Object.eval (eval at exec (evalmachine.<anonymous>:66:1819788),",
+              "typeName": "Object",
+              "methodName": "eval (eval at exec (evalmachine.<anonymous>:66:1819788),",
+              "columnNumber": 44,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 66,
+              "functionName": "u.exec",
+              "typeName": "u",
+              "methodName": "exec",
+              "columnNumber": 1819823,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 66,
+              "functionName": "t.exports",
+              "typeName": "t",
+              "methodName": "exports",
+              "columnNumber": 5848,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 66,
+              "functionName": "",
+              "typeName": "Object",
+              "methodName": null,
+              "columnNumber": 8247,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 15,
+              "functionName": null,
+              "typeName": null,
+              "methodName": null,
+              "columnNumber": 26,
+              "native": false
+            },
+            {
+              "fileName": null,
+              "lineNumber": null,
+              "functionName": "Array.forEach",
+              "typeName": "Array",
+              "methodName": "forEach",
+              "columnNumber": null,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 14,
+              "functionName": "Object.emit",
+              "typeName": "Object",
+              "methodName": "emit",
+              "columnNumber": 59,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 59,
+              "functionName": null,
+              "typeName": null,
+              "methodName": null,
+              "columnNumber": 24,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 5,
+              "functionName": null,
+              "typeName": null,
+              "methodName": null,
+              "columnNumber": 21,
+              "native": false
+            },
+            {
+              "fileName": "evalmachine.<anonymous>",
+              "lineNumber": 6,
+              "functionName": null,
+              "typeName": null,
+              "methodName": null,
+              "columnNumber": 18,
+              "native": false
+            }
+          ]
+        },
+        "at": "test-script:3:44",
+        "source": {
+          "id": "0a0d8470-5fba-488e-acf0-fb15bd7cf08b",
+          "name": "Users - Me (200)",
+          "request": {
+            "url": {
+              "path": [
+                "users",
+                "me"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "6b149b78-783c-4d05-b4d7-2f2c796193c3",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);",
+                  "pm.expect(pm.response.json().success).to.be.true;"
+                ],
+                "_lastExecutionId": "d836bce9-d996-4e89-88eb-cf29cb589637"
+              }
+            }
+          ]
+        },
+        "parent": {
+          "item": [
+            {
+              "id": "03242355-657b-429b-b76c-f07da66403c9",
+              "name": "Auth - Login",
+              "request": {
+                "url": {
+                  "path": [
+                    "auth",
+                    "login"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"cpf\":\"{{cpf}}\",\"password\":\"senha123\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "80a34d64-5db9-487f-947c-9189a78f5445",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.code === 200);",
+                      "const json = pm.response.json();",
+                      "pm.environment.set('token', json.token);",
+                      "pm.expect(json.success).to.be.true;"
+                    ],
+                    "_lastExecutionId": "7e9e9551-0470-4936-a837-b3033d175889"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "749cbcec-3147-414d-9c61-f51b2c095d1c",
+              "name": "Users - Me (401 sem token)",
+              "request": {
+                "url": {
+                  "path": [
+                    "users",
+                    "me"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "22643f45-4d8f-40d2-b4bb-7ecbc9d7d5d2",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 401', () => pm.response.code === 401);"
+                    ],
+                    "_lastExecutionId": "2ad3237c-9707-4473-97f6-3a5fc670d99a"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "0a0d8470-5fba-488e-acf0-fb15bd7cf08b",
+              "name": "Users - Me (200)",
+              "request": {
+                "url": {
+                  "path": [
+                    "users",
+                    "me"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "6b149b78-783c-4d05-b4d7-2f2c796193c3",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.code === 200);",
+                      "pm.expect(pm.response.json().success).to.be.true;"
+                    ],
+                    "_lastExecutionId": "d836bce9-d996-4e89-88eb-cf29cb589637"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "6cbf6789-b0d1-4e1f-a665-1a75afed766b",
+              "name": "PIX - Recipient Info (404 chave inexistente)",
+              "request": {
+                "url": {
+                  "path": [
+                    "pix",
+                    "recipient-info"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"type\":\"EMAIL\",\"key\":\"nao@existe.com\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "33eafcbb-09dd-4bbc-ba3d-bbebc2ed1156",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 404', () => pm.response.code === 404);"
+                    ],
+                    "_lastExecutionId": "00169efa-d314-46bd-a4ee-62b1ae3810bd"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "b1da48a3-2a19-4b21-bffe-c97905da2932",
+              "name": "PIX - Transfer (400 sem PIN)",
+              "request": {
+                "url": {
+                  "path": [
+                    "pix",
+                    "transfer"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"toKey\":\"EMAIL:user@example.com\",\"amount\":10}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "03da1b2e-da19-4dbe-86ef-acff11539cf1",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.code === 400);"
+                    ],
+                    "_lastExecutionId": "4c71543d-95b3-4643-8426-523a49bb4691"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "636e752a-ea0c-4fa9-835c-8f568d978ea5",
+              "name": "PIX - Transfer (200)",
+              "request": {
+                "url": {
+                  "path": [
+                    "pix",
+                    "transfer"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"toKey\":\"EMAIL:dest@example.com\",\"amount\":5,\"pin\":\"1234\",\"description\":\"Teste\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "83ae5c94-3d5b-4188-a975-8f22ac54efcc",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.code === 200);"
+                    ],
+                    "_lastExecutionId": "3be02e3e-b24d-42f9-b1b7-c26371f4ff22"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "937b1b4f-3de3-4d26-a201-688c1e796562",
+              "name": "Cartão - Pay (400 sem PIN)",
+              "request": {
+                "url": {
+                  "path": [
+                    "cards",
+                    "invoice",
+                    "pay"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"cpf\":\"{{cpf}}\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "bca69412-6f29-4ff5-bf80-bffee606b8d3",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.code === 400);"
+                    ],
+                    "_lastExecutionId": "91a68c7e-1bba-4e02-82f6-429914c67342"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "f0bb5d83-82a3-4098-a7a6-af05545822fb",
+              "name": "Cartão - Pay (200)",
+              "request": {
+                "url": {
+                  "path": [
+                    "cards",
+                    "invoice",
+                    "pay"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"cpf\":\"{{cpf}}\",\"pin\":\"1234\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "083c8ae5-fe09-4f06-9819-7aa38e64ffbe",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200/400 dinamico', () => [200,400].includes(pm.response.code));"
+                    ],
+                    "_lastExecutionId": "88100534-96ba-455b-94eb-eb539474a91f"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "b8643da8-14ef-4773-9826-538a217f9a88",
+              "name": "Shop - Checkout (400 sem PIN)",
+              "request": {
+                "url": {
+                  "path": [
+                    "shop",
+                    "checkout"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":1}],\"paymentMethod\":\"debit\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "9badc33e-5f3c-4291-8c9e-03ff80dd83cb",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.code === 400);"
+                    ],
+                    "_lastExecutionId": "1c82f38c-3255-4d87-9f3e-c20a0881b319"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "8d766047-cac8-4296-b352-87e9b9148d5e",
+              "name": "Shop - Checkout (201 débito)",
+              "request": {
+                "url": {
+                  "path": [
+                    "shop",
+                    "checkout"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":2}],\"paymentMethod\":\"debit\",\"cashbackUsed\":1.5,\"pin\":\"1234\"}"
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "d4ef8fac-fe45-4ee7-9839-bc29c9d73857",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 201', () => pm.response.code === 201);"
+                    ],
+                    "_lastExecutionId": "ff480251-56b9-404f-8c0c-752752ae478f"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "63ef1a8c-1a33-4ed1-9bbe-ced03258956e",
+              "name": "Admin - List Users (403 sem admin)",
+              "request": {
+                "url": {
+                  "path": [
+                    "admin",
+                    "users"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "a9238ec9-212a-43da-8935-3670a9d0b93a",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 403', () => pm.response.code === 403);"
+                    ],
+                    "_lastExecutionId": "f51eeca4-b008-4fc3-a588-453c389cca17"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "be6f6968-7b6e-4b28-a660-7b8f06b896a7",
+              "name": "Proxy - News (200 cache)",
+              "request": {
+                "url": {
+                  "path": [
+                    "proxy",
+                    "news"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "method": "GET"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "id": "3f99bf3f-6b31-435e-8d0c-1a12d630306e",
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.code === 200);"
+                    ],
+                    "_lastExecutionId": "79719667-f5ae-4edc-aad7-fa823d506c94"
+                  }
+                }
+              ]
+            }
+          ],
+          "event": [],
+          "variable": [
+            {
+              "type": "any",
+              "value": "http://localhost:3001/api/v1",
+              "key": "baseUrl"
+            },
+            {
+              "type": "any",
+              "value": "12345678901",
+              "key": "cpf"
+            },
+            {
+              "type": "any",
+              "value": "",
+              "key": "token"
+            }
+          ],
+          "info": {
+            "_postman_id": "8021d01f-8537-4d6f-9c04-02d304646192",
+            "name": "FintechBankApp API Tests",
+            "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+          }
+        },
+        "cursor": {
+          "ref": "17a76d56-0858-4382-bab9-717765c9552c",
+          "length": 12,
+          "cycles": 1,
+          "position": 2,
+          "iteration": 0,
+          "httpRequestId": "fe4375b1-4b30-4d21-9fe0-70e476e24b2a",
+          "scriptId": "6b149b78-783c-4d05-b4d7-2f2c796193c3"
+        }
+      }
+    ],
+    "error": null
+  }
+}

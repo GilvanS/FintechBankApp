@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User } from './types';
-import { login, requestNewPassword } from './services/mockApi';
+import { login, requestNewPassword } from './services/api';
 
 interface LoginProps {
   onLogin: (user: Omit<User, 'password'>) => void;

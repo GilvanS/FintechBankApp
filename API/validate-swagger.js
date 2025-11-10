@@ -1,12 +1,15 @@
 const yaml = require('js-yaml');
 const fs = require('fs');
+const path = require('path');
 
 console.log('🔍 Validando arquivo swagger.yaml...');
 
 try {
     // Ler e parsear o arquivo YAML
-    const fileContents = fs.readFileSync('swagger.yaml', 'utf8');
-    const doc = yaml.load(fileContents);
+    const swaggerPath = path.resolve(__dirname, 'swagger.yaml');
+    console.log(`🔍 Validando arquivo swagger.yaml em: ${swaggerPath}`);
+    const content = fs.readFileSync(swaggerPath, 'utf8');
+    const doc = yaml.load(content);
     
     console.log('✅ Arquivo YAML é válido!');
     console.log('📊 Estatísticas:');
@@ -15,7 +18,8 @@ try {
     console.log(`   - Endpoints: ${Object.keys(doc.paths || {}).length}`);
     
     // Verificar padrões regex
-    const content = fileContents;
+    // (REMOVIDO) Linha duplicada que causava SyntaxError:
+    // const content = fileContents;
     const regexPatterns = content.match(/pattern:\s*['"][^'"]*['"]/g) || [];
     console.log(`   - Padrões regex encontrados: ${regexPatterns.length}`);
     

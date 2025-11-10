@@ -1,88 +1,49 @@
+
 import React, { useState } from 'react';
 
 interface PasswordModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: (password: string) => void;
     title: string;
-    onConfirm: () => void;
-    onCancel: () => void;
+    description?: string;
+    isLoading: boolean;
 }
 
-const PasswordModal: React.FC<PasswordModalProps> = ({ title, onConfirm, onCancel }) => {
-    const [pressedSequence, setPressedSequence] = useState<string[]>([]);
-    const [error, setError] = useState('');
+const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfirm, title, description, isLoading }) => {
+    const [password, setPassword] = useState('');
 
-    const handleKeyPress = (buttonId: string) => {
-        setError('');
-        if (pressedSequence.length < 4) {
-            setPressedSequence(prev => [...prev, buttonId]);
-        }
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onConfirm(password);
     };
-
-    const handleDelete = () => {
-        setError('');
-        setPressedSequence(prev => prev.slice(0, -1));
-    };
-
-    const handleConfirm = () => {
-        // PIN 9898 corresponds to this sequence of button presses:
-        // '9' is on button 'B4' ("4 ou 9")
-        // '8' is on button 'B1' ("1 ou 8")
-        const correctSequence = ['B4', 'B1', 'B4', 'B1'];
-        
-        const isCorrect = pressedSequence.length === correctSequence.length &&
-                          pressedSequence.every((value, index) => value === correctSequence[index]);
-
-        if (isCorrect) {
-            onConfirm();
-        } else {
-            setError('Senha incorreta. Tente novamente.');
-            setPressedSequence([]);
-        }
-    };
-
-    const pinDots = Array(4).fill(0).map((_, i) => (
-        <div key={i} className={`w-4 h-4 rounded-full transition-colors ${i < pressedSequence.length ? 'bg-orange-400' : 'bg-gray-600'}`}></div>
-    ));
-
-    const KeyButton: React.FC<{ value: string, double?: boolean, onClick: () => void }> = ({ value, double = false, onClick }) => (
-        <button onClick={onClick} className={`rounded-lg h-14 flex items-center justify-center font-semibold text-2xl transition-colors ${double ? 'text-lg' : ''} text-white bg-gray-700/50 hover:bg-gray-700`}>
-            {value}
-        </button>
-    );
+    
+    if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-end sm:items-center justify-center z-50 animate-fade-in">
-            <div className="bg-gray-900 w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 flex flex-col items-center">
-                <button onClick={onCancel} className="absolute top-4 right-4 text-gray-500 hover:text-white">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-                <h2 className="text-xl font-bold text-white mb-2">{title}</h2>
-                <p className="text-sm text-gray-400">senha eletrônica</p>
-
-                <div className="my-6 flex space-x-4">
-                    {pinDots}
-                </div>
-                {error && <p className="text-sm text-red-400 mb-4 h-5">{error}</p>}
-                {!error && <div className="h-5 mb-4"></div>}
-                
-                <div className="w-full grid grid-cols-3 gap-3">
-                    <KeyButton value="1 ou 8" double onClick={() => handleKeyPress('B1')} />
-                    <KeyButton value="2 ou 7" double onClick={() => handleKeyPress('B2')} />
-                    <KeyButton value="3 ou 6" double onClick={() => handleKeyPress('B3')} />
-                    <KeyButton value="4 ou 9" double onClick={() => handleKeyPress('B4')} />
-                    <KeyButton value="5 ou 0" double onClick={() => handleKeyPress('B5')} />
-                    <button onClick={handleDelete} className="rounded-lg h-14 flex items-center justify-center text-white bg-gray-700/50 hover:bg-gray-700">
-                        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 002.828 0L21 9.828a2 2 0 000-2.828l-2.828-2.828a2 2 0 00-2.828 0L3 12z" /></svg>
-                    </button>
-                </div>
-
-                <button onClick={handleConfirm} disabled={pressedSequence.length !== 4} className="w-full mt-6 py-4 font-semibold text-black bg-orange-500 rounded-lg hover:bg-orange-600 disabled:bg-gray-600 disabled:cursor-not-allowed">
-                    acessar
-                </button>
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+            <div className="bg-surface-dark p-8 rounded-lg shadow-xl w-full max-w-sm">
+                <h2 className="text-2xl font-bold mb-2 text-white">{title}</h2>
+                {description && <p className="text-subtle-dark mb-4">{description}</p>}
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                       <label className="text-sm font-medium text-subtle-dark">Senha</label>
+                       <input 
+                           type="password" 
+                           value={password} 
+                           onChange={e => setPassword(e.target.value)} 
+                           required 
+                           className="w-full bg-white/5 border border-white/20 rounded-lg py-3 px-4 mt-1 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" 
+                       />
+                    </div>
+                    <div className="flex justify-end space-x-4 pt-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-white bg-white/10 rounded-md hover:bg-white/20">Cancelar</button>
+                        <button type="submit" disabled={isLoading} className="px-4 py-2 text-black bg-primary font-semibold rounded-md hover:bg-primary/90 disabled:opacity-50">
+                            {isLoading ? 'Confirmando...' : 'Confirmar'}
+                        </button>
+                    </div>
+                </form>
             </div>
-             <style>{`
-                @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-                .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
-            `}</style>
         </div>
     );
 };

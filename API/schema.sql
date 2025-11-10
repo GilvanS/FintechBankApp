@@ -22,26 +22,30 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
 ) USING DELTA;
 
--- Tabela de transações
+-- Tabela de transacoes (alinhada ao bootstrap do backend)
 CREATE TABLE IF NOT EXISTS transactions (
     id STRING NOT NULL,
-    from_cpf STRING NOT NULL,
-    to_cpf STRING NOT NULL,
+    cpf STRING NOT NULL,
+    type STRING NOT NULL,
     amount DECIMAL(15,2) NOT NULL,
-    transaction_type STRING NOT NULL,
-    status STRING DEFAULT 'completed',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+    description STRING,
+    from_user STRING,
+    to_user STRING,
+    to_key STRING,
+    date TIMESTAMP NOT NULL
 ) USING DELTA;
 
--- Tabela de contatos PIX
+-- Tabela de contatos PIX (harmonizada com backend)
 CREATE TABLE IF NOT EXISTS pix_contacts (
     id STRING NOT NULL,
     pix_account_id STRING NOT NULL,
-    contact_key STRING NOT NULL,
-    key_type STRING NOT NULL,
+    contact_cpf STRING NOT NULL,
     contact_name STRING NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
 ) USING DELTA;
+
+-- Índice unico corrigido com chave composta (owner + cpf do contato)
+ALTER TABLE pix_contacts ADD CONSTRAINT pix_contacts_unique UNIQUE (pix_account_id, contact_cpf);
 
 -- Índices únicos
 ALTER TABLE users ADD CONSTRAINT users_cpf_unique UNIQUE (cpf);
@@ -59,3 +63,29 @@ VALUES (
     10000.00,
     'admin'
 ) ON CONFLICT (cpf) DO NOTHING;
+
+-- Tabela de notificacoes de aplicativo (AppNotification)
+CREATE TABLE IF NOT EXISTS notifications (
+    id STRING NOT NULL,
+    cpf STRING NOT NULL,
+    title STRING NOT NULL,
+    message STRING NOT NULL,
+    action_url STRING,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+) USING DELTA;
+
+ALTER TABLE notifications ADD CONSTRAINT notifications_pk UNIQUE (id);
+
+-- Tabela de solicitacoes de aumento de limite PIX
+CREATE TABLE IF NOT EXISTS limit_increase_requests (
+    id STRING NOT NULL,
+    cpf STRING NOT NULL,
+    requested_limit DECIMAL(15,2) NOT NULL,
+    status STRING DEFAULT 'PENDING',      -- PENDING | APPROVED | DENIED
+    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+    decided_at TIMESTAMP,
+    admin_cpf STRING
+) USING DELTA;
+
+ALTER TABLE limit_increase_requests ADD CONSTRAINT limit_requests_pk UNIQUE (id);

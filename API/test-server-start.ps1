@@ -30,18 +30,16 @@ if ($serverProcess.HasExited) {
     
     # Testar endpoint de health
     try {
-        $response = Invoke-RestMethod -Uri "http://localhost:3001/health" -Method GET -TimeoutSec 10
-        Write-Host "✅ Health check passou: $($response.status)" -ForegroundColor Green
+        $response = Invoke-RestMethod -Uri "http://localhost:3001/api/v1/health" -Method GET -TimeoutSec 10
+        Write-Host "OK Health check passou: $($response.status)" -ForegroundColor Green
     } catch {
-        Write-Host "⚠️  Health check falhou, mas servidor está rodando" -ForegroundColor Yellow
+        Write-Host "Aviso: Health check falhou, mas servidor está rodando" -ForegroundColor Yellow
     }
     
-    # Parar o servidor de teste
     Stop-Process -Id $serverProcess.Id -Force
-    Write-Host "🛑 Servidor de teste parado." -ForegroundColor Blue
-}
+    Write-Host "Servidor de teste parado." -ForegroundColor Blue
 
-Write-Host "🎉 Teste de inicialização concluído!" -ForegroundColor Green
+    Write-Host "Teste de inicializacao concluido!" -ForegroundColor Green
 Write-Host ""
 Write-Host "📋 Próximos passos:" -ForegroundColor Cyan
 Write-Host "1. Execute: npm run dev" -ForegroundColor White
