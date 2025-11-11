@@ -19,12 +19,13 @@ async function createInstallments({ cpf, amount, installments }) {
     return { parcela };
 }
 
-async function payDueInstallments({ cpf }) {
+async function payDueInstallments({ cpf, cutoffIso }) {
     const db = getDb();
-    const now = new Date().toISOString();
+    const nowIso = cutoffIso || new Date().toISOString();
+
     const dueRows = await db.executeQuery(`
         SELECT amount FROM ${db.fq('transactions')}
-        WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(now)}
+        WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(nowIso)}
     `);
     const totalDue = dueRows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
 
@@ -32,12 +33,12 @@ async function payDueInstallments({ cpf }) {
     await db.executeQuery(`
         INSERT INTO ${db.fq('transactions')}
         (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-        VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-totalDue).toFixed(2))}, ${esc('Pagamento fatura')}, NULL, NULL, NULL, ${esc(now)})
+        VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-totalDue).toFixed(2))}, ${esc('Pagamento fatura')}, NULL, NULL, NULL, ${esc(nowIso)})
     `);
 
     await db.executeQuery(`
         DELETE FROM ${db.fq('transactions')}
-        WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(now)}
+        WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(nowIso)}
     `);
 
     return { totalDue };
