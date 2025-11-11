@@ -1975,3 +1975,199 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Story'
+
+  /admin/invoices/{cpf}/{invoiceId}/status:
+    post:
+      tags: [Administração]
+      summary: Alterar status da fatura (Admin)
+      description: Atualiza o status de uma fatura do cliente. Somente ADMIN.
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]{11}$'
+          description: CPF do cliente
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID da fatura (UUID ou chave mensal)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [FECHADA, ABERTA, FECHADA_COM_ATRASO, BLOQUEADA]
+                  description: Novo status da fatura
+      responses:
+        '200':
+          description: Fatura atualizada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  invoice:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      cpf: { type: string }
+                      status:
+                        type: string
+                        enum: [FECHADA, ABERTA, FECHADA_COM_ATRASO, BLOQUEADA]
+                      due_date: { type: string, format: date-time }
+        '400':
+          description: Payload invalido ou transicao proibida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Token invalido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Acesso negado (nao-admin)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Usuario ou fatura nao encontrados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /admin/users/{cpf}/card/purchase/open:
+    post:
+      tags: [Administração]
+      summary: Inserir compra na fatura aberta (Admin)
+      description: |
+        Regras CREDIT:
+        - installments = 1 => a vista com desconto 10% (sem gerar parcelas)
+        - installments 2..12 => sem juros (gera INVOICE_INSTALLMENT mensais)
+        - installments 13..24 => com juros 1%..7% (gera INVOICE_INSTALLMENT; interestRate obrigatorio)
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]{11}$'
+          description: CPF do usuário
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                description:
+                  type: string
+                installments:
+                  type: integer
+                  minimum: 1
+                  maximum: 24
+                  description: "1=a vista; 2..12=sem juros; 13..24=com juros"
+                interestRate:
+                  type: number
+                  minimum: 0.01
+                  maximum: 0.07
+                  description: "Obrigatorio quando installments >= 13 (1%..7%)"
+              required: [amount, description]
+            example:
+              amount: 199.90
+              description: "Compra teste fatura aberta"
+              installments: 6
+      responses:
+        '201':
+          description: Compra registrada na fatura aberta
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "Compra registrada na fatura aberta." }
+                  transactionId: { type: string, example: "tx-abc123" }
+        '400': { description: Payload invalido }
+        '401': { description: Token invalido }
+        '403': { description: Acesso negado (nao-admin) }
+        '404': { description: Usuario nao encontrado }
+
+  /admin/users/{cpf}/card/purchase/closed:
+    post:
+      tags: [Administração]
+      summary: Inserir compra na fatura fechada (Admin)
+      description: |
+        Regras CREDIT:
+        - installments = 1 => a vista com desconto 10% (1 parcela negativa vencendo agora)
+        - installments 2..12 => sem juros (1a parcela agora, demais mensais)
+        - installments 13..24 => com juros 1%..7% (interestRate obrigatorio; 1a parcela agora, demais mensais)
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]{11}$'
+          description: CPF do usuário
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                description:
+                  type: string
+                installments:
+                  type: integer
+                  minimum: 1
+                  maximum: 24
+                  description: "1=a vista; 2..12=sem juros; 13..24=com juros"
+                interestRate:
+                  type: number
+                  minimum: 0.01
+                  maximum: 0.07
+                  description: "Obrigatorio quando installments >= 13 (1%..7%)"
+              required: [amount, description]
+            example:
+              amount: 120.00
+              description: "Compra teste fatura fechada"
+              installments: 3
+      responses:
+        '201':
+          description: Compra registrada na fatura fechada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "Compra registrada na fatura fechada." }
+                  transactionId: { type: string, example: "tx-xyz789" }
+        '400': { description: Payload invalido }
+        '401': { description: Token invalido }
+        '403': { description: Acesso negado (nao-admin) }
+        '404': { description: Usuario nao encontrado }

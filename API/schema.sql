@@ -57,9 +57,9 @@ INSERT INTO users (id, full_name, cpf, email, password_hash, balance, role)
 VALUES (
     'admin-uuid-001',
     'Administrador Sistema',
-    '00000000000',
+    '99999999999',
     'admin@fintechbank.com',
-    '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', -- senha: admin123
+    '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', -- placeholder; backend recria com admin999
     10000.00,
     'admin'
 ) ON CONFLICT (cpf) DO NOTHING;
@@ -89,3 +89,15 @@ CREATE TABLE IF NOT EXISTS limit_increase_requests (
 ) USING DELTA;
 
 ALTER TABLE limit_increase_requests ADD CONSTRAINT limit_requests_pk UNIQUE (id);
+
+-- Tabela de faturas (admin controla status por fatura)
+CREATE TABLE IF NOT EXISTS invoices (
+    id STRING NOT NULL,
+    cpf STRING NOT NULL,
+    status STRING NOT NULL,             -- FECHADA | ABERTA | FECHADA_COM_ATRASO | BLOQUEADA
+    due_date TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+) USING DELTA;
+
+ALTER TABLE invoices ADD CONSTRAINT invoices_pk UNIQUE (id);

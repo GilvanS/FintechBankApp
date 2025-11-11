@@ -9,7 +9,7 @@ const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 const path = require('path');
 const { body, validationResult } = require('express-validator');
-const { users, products, stories } = require('./data/mockSeed');
+const { products } = require('./data/mockSeed');
 
 // --- Repositórios / Contexto ---
 const repoContext = require('./repositories/context');
@@ -21,6 +21,7 @@ const usersRepo = require('./repositories/usersRepo');
 const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword } = require('./repositories/usersRepo');
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const cardRepo = require('./repositories/cardRepo');
+const invoiceRepo = require('./repositories/invoiceRepo');
 const { bearerAuth, requireScope, pinGuard, withReqId, auditLog } = require('./middlewares/auth');
 
 // --- Configurações ---
@@ -434,7 +435,10 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
     const user = await usersRepo.findByCpf(req.user.cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     auditLog(req, 'users_me');
-    res.json({ success: true, user: normalizeUser(user) });
+    const normalized = normalizeUser(user);
+    const latestInvoice = await invoiceRepo.findLatestByCpf(req.user.cpf);
+    if (latestInvoice) normalized.invoiceStatus = latestInvoice.status;
+    res.json({ success: true, user: normalized });
 }));
 
 apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
@@ -445,7 +449,10 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
     const user = await usersRepo.findByCpf(cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     auditLog(req, 'users_get', 'info', { cpf });
-    res.json({ success: true, user: normalizeUser(user) });
+    const normalized = normalizeUser(user);
+    const latestInvoice = await invoiceRepo.findLatestByCpf(cpf);
+    if (latestInvoice) normalized.invoiceStatus = latestInvoice.status;
+    res.json({ success: true, user: normalized });
 }));
 // Rota: apiRouter.get('/user/me/:cpf', ...)
 apiRouter.get('/user/me/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
@@ -904,6 +911,180 @@ apiRouter.post('/admin/users/:cpf/card-details', bearerAuth(), authenticateAdmin
     res.json({ success: true, user: normalizeUser(user) });
 }));
 
+// Inserir compra na fatura ABERTA (Admin)
+apiRouter.post('/admin/users/:cpf/card/purchase/open', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    const { amount, description, installments } = req.body || {};
+    if (!cpf || cpf.length !== 11 || typeof amount !== 'number' || amount <= 0 || !description || typeof description !== 'string') {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+    if (installments != null && (!Number.isInteger(installments) || installments < 1 || installments > 24)) {
+        return res.status(400).json({ success: false, message: 'Parcelas invalidas.' });
+    }
+    const user = await usersRepo.findByCpf(cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+    const qty = Number.isInteger(installments) ? installments : 1;
+    if (qty < 1 || qty > 24) {
+        return res.status(400).json({ success: false, message: 'Parcelas invalidas.' });
+    }
+
+    // Validar interestRate quando >= 13
+    let rate = 0;
+    if (qty >= 13) {
+        const ir = req.body?.interestRate;
+        if (typeof ir !== 'number' || ir < 0.01 || ir > 0.07) {
+            return res.status(400).json({ success: false, message: 'interestRate obrigatorio entre 0.01 e 0.07 para >= 13 parcelas.' });
+        }
+        rate = ir;
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // Regras:
+    // - 1 parcela (a vista): aplica desconto 10% e nao gera parcelas
+    // - 2..12 parcelas: sem juros (parcelas iguais a partir do proximo mes)
+    // - 13..24 parcelas: com juros escolhido (parcelas iguais a partir do proximo mes)
+    const creditAmount = qty === 1 ? (amount * 0.90) : amount;
+
+    // Registrar a compra de credito visivel na fatura aberta (sempre)
+    const txId = databricksService.generateUUID();
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('transactions')}
+        (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+        VALUES ('${txId}', '${cpf}', 'CREDIT', ${creditAmount.toFixed(2)}, '${description.replace(/'/g,"''")}', NULL, NULL, NULL, '${nowIso}')
+    `);
+
+    // Gerar parcelas apenas quando qty >= 2
+    if (qty >= 2) {
+        const baseDate = new Date();
+        const totalParcelado = qty >= 13 ? amount * (1 + rate) : amount;
+        const parcela = totalParcelado / qty;
+
+        for (let i = 1; i <= qty; i++) {
+            const dueDate = new Date(baseDate);
+            dueDate.setMonth(baseDate.getMonth() + i); // fatura aberta: comeca proximo mes
+            const instId = databricksService.generateUUID();
+            await databricksService.executeQuery(`
+                INSERT INTO ${databricksService.fq('transactions')}
+                (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+                VALUES ('${instId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${`${description.replace(/'/g,"''")} (${i}/${qty})`}', NULL, NULL, NULL, '${dueDate.toISOString()}')
+            `);
+        }
+    }
+
+    auditLog(req, 'admin_card_purchase_open', 'info', { cpf, amount, description, installments: qty, interestRate: rate || undefined });
+    return res.status(201).json({ success: true, message: 'Compra registrada na fatura aberta.', transactionId: txId });
+}));
+
+// Inserir compra na fatura FECHADA (Admin) — parcelas: primeira vence agora
+apiRouter.post('/admin/users/:cpf/card/purchase/closed', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    const { amount, description, installments } = req.body || {};
+    if (!cpf || cpf.length !== 11 || typeof amount !== 'number' || amount <= 0 || !description || typeof description !== 'string') {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+    const user = await usersRepo.findByCpf(cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+    const qty = Number.isInteger(installments) ? installments : 1;
+    if (qty < 1 || qty > 24) {
+        return res.status(400).json({ success: false, message: 'Parcelas invalidas.' });
+    }
+
+    // Validar interestRate quando >= 13
+    let rate = 0;
+    if (qty >= 13) {
+        const ir = req.body?.interestRate;
+        if (typeof ir !== 'number' || ir < 0.01 || ir > 0.07) {
+            return res.status(400).json({ success: false, message: 'interestRate obrigatorio entre 0.01 e 0.07 para >= 13 parcelas.' });
+        }
+        rate = ir;
+    }
+
+    const now = new Date();
+
+    if (qty === 1) {
+        // Compra a vista na fatura fechada: aplica desconto 10% e 1 unica parcela negativa vencendo agora
+        const valorVista = amount * 0.90;
+        const txId = databricksService.generateUUID();
+        await databricksService.executeQuery(`
+            INSERT INTO ${databricksService.fq('transactions')}
+            (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+            VALUES ('${txId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-valorVista).toFixed(2)}, '${description.replace(/'/g,"''")}', NULL, NULL, NULL, '${now.toISOString()}')
+        `);
+        auditLog(req, 'admin_card_purchase_closed', 'info', { cpf, amount, description, installments: qty });
+        return res.status(201).json({ success: true, message: 'Compra a vista registrada na fatura fechada.', installments: qty });
+    }
+
+    // Parcelado: 2..12 sem juros; 13..24 com juros selecionado (1..7%)
+    const totalParcelado = qty >= 13 ? amount * (1 + rate) : amount;
+    const parcela = totalParcelado / qty;
+
+    for (let i = 1; i <= qty; i++) {
+        const dueDate = new Date(now);
+        dueDate.setMonth(dueDate.getMonth() + (i - 1)); // 1a agora, demais mensais
+        const txId = databricksService.generateUUID();
+        await databricksService.executeQuery(`
+            INSERT INTO ${databricksService.fq('transactions')}
+            (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+            VALUES ('${txId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${`${description.replace(/'/g,"''")} (${i}/${qty})`}', NULL, NULL, NULL, '${dueDate.toISOString()}')
+        `);
+    }
+
+    auditLog(req, 'admin_card_purchase_closed', 'info', { cpf, amount, description, installments: qty, interestRate: rate || undefined });
+    return res.status(201).json({ success: true, message: 'Compra parcelada registrada na fatura fechada.', installments: qty });
+}));
+
+// --- Endpoints de Faturas (Admin) ---
+apiRouter.post('/admin/invoices/:cpf/:invoiceId/status', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf, invoiceId } = req.params;
+    const { status } = req.body || {};
+    const allowed = ['FECHADA', 'ABERTA', 'FECHADA_COM_ATRASO', 'BLOQUEADA'];
+
+    if (!cpf || cpf.length !== 11 || !invoiceId || !status || !allowed.includes(status)) {
+        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+
+    const user = await usersRepo.findByCpf(cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+    const invoice = await invoiceRepo.findById({ cpf, invoiceId });
+    if (!invoice) return res.status(404).json({ success: false, message: 'Fatura nao encontrada' });
+
+    if (invoice.status === 'FECHADA' && status === 'ABERTA') {
+        const rows = await databricksService.executeQuery(`
+            SELECT COUNT(*) as cnt FROM ${databricksService.fq('transactions')}
+            WHERE cpf='${cpf}' AND type='INVOICE_INSTALLMENT'
+        `);
+        const cnt = parseInt(rows[0]?.cnt || 0, 10);
+        if (cnt > 0) {
+            auditLog(req, 'admin_invoice_status_denied', 'warn', { cpf, invoiceId, from: invoice.status, to: status, reason: 'installments_exist' });
+            return res.status(400).json({ success: false, message: 'Transicao invalida: existem parcelas da fatura.' });
+        }
+    }
+
+    if (status === 'BLOQUEADA') {
+        await databricksService.executeQuery(`
+            UPDATE ${databricksService.fq('users')}
+            SET credit_card_is_blocked = true, updated_at = current_timestamp()
+            WHERE cpf = '${cpf}'
+        `);
+    }
+    if (status === 'ABERTA') {
+        await databricksService.executeQuery(`
+            UPDATE ${databricksService.fq('users')}
+            SET credit_card_is_blocked = false, updated_at = current_timestamp()
+            WHERE cpf = '${cpf}'
+        `);
+    }
+
+    const updated = await invoiceRepo.updateStatus({ cpf, invoiceId, newStatus: status });
+    auditLog(req, 'admin_invoice_status_change', 'info', { cpf, invoiceId, from: invoice.status, to: status });
+
+    return res.json({ success: true, invoice: updated });
+}));
+
 // --- Solicitações de aumento de limite PIX (via repositório) ---
 apiRouter.post('/pix/limit/request', bearerAuth(), asyncHandler(async (req, res) => {
     const { cpf, amount } = req.body || {};
@@ -975,6 +1156,19 @@ apiRouter.post('/admin/requests/password/:cpf/deny', bearerAuth(), authenticateA
         actionUrl: '/dashboard'
     });
     res.json({ success: true, message: 'Pedido negado e flag removida.' });
+}));
+
+apiRouter.post('/admin/reset/users', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const adminCpf = '99999999999';
+    // Apaga todos os dados associados a CPFs diferentes do admin
+    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('transactions')} WHERE cpf <> '${adminCpf}'`);
+    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('pix_contacts')} WHERE pix_account_id <> '${adminCpf}'`);
+    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('pix_keys')} WHERE cpf <> '${adminCpf}'`);
+    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('notifications')} WHERE cpf <> '${adminCpf}'`);
+    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('limit_increase_requests')} WHERE cpf <> '${adminCpf}'`);
+    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('users')} WHERE cpf <> '${adminCpf}'`);
+    await ensureAdminUser();
+    res.json({ success: true, message: 'Base resetada. Apenas admin mantido.' });
 }));
 
 // --- Cartões (via repositório) ---
@@ -1301,20 +1495,17 @@ async function initializeDatabase() {
 
 async function ensureAdminUser() {
     const adminEmail = 'admin@fintechbank.com';
-    const adminCpf = '00000000000';
+    const adminCpf = '99999999999';
     
-    // Forçar recriação do admin para debug
     console.log("🔄 Verificando/recriando usuário administrador...");
     
-    // Deletar admin existente se houver
+    // Deletar admin existente se houver (mesmo email/CPF)
     await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('users')} WHERE cpf = '${adminCpf}' OR email = '${adminEmail}'`);
     
     console.log("Criando usuário administrador padrão...");
-    const adminPassword = 'admin123';  // Senha simples para testes
+    const adminPassword = 'admin999';
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
     const now = new Date().toISOString();
-    
-    console.log(`🔐 Hash gerado para senha '${adminPassword}': ${hashedPassword.substring(0, 20)}...`);
     
     await databricksService.executeQuery(`
         INSERT INTO ${databricksService.fq('users')} (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
@@ -1322,40 +1513,14 @@ async function ensureAdminUser() {
     `);
     console.log(`✅ Usuário Admin criado. CPF: ${adminCpf}, Senha: ${adminPassword}`);
     
-    // Verificar se foi criado corretamente
     const createdAdmin = await databricksService.executeQuery(`SELECT cpf, email, role FROM ${databricksService.fq('users')} WHERE cpf = '${adminCpf}'`);
     console.log(`🔍 Admin criado:`, createdAdmin[0]);
-    
-    // Criar usuário de teste se não existir
-    const testUserCpf = '12345678901';
-    const testUserExists = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${testUserCpf}'`);
-    
-    if (testUserExists.length === 0) {
-        const testPasswordHash = await bcrypt.hash('123456', 10);
-        const testUserTimestamp = new Date().toISOString();
-        
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('users')} (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
-            VALUES ('${testUserCpf}', 'João Silva', 'joao@email.com', '${testPasswordHash}', 1000.00, 'customer', false, 0, 2000.00, false, '${testUserTimestamp}', '${testUserTimestamp}')
-        `);
-        console.log('✅ Usuário de teste criado com sucesso.');
-    }
 }
 
 async function seedDatabase() {
-    const cpf = '12345678901';
-    const passwordHash = bcrypt.hashSync('123456', 10);
-
-    await usersRepo.upsertSeed({
-        cpf,
-        fullName: 'Joao Silva',
-        email: 'joao.silva@example.com',
-        passwordHash,
-        balance: 1500.00,
-        role: 'user'
-    });
-
-    // Semear produtos e dados mockados do frontend
+    const SEED_NON_ADMIN_USERS = false; // manter apenas admin
+    
+    // Seed de produtos permanece
     const existingProducts = await databricksService.executeQuery(`SELECT id FROM ${databricksService.fq('products')}`);
     const existingIds = new Set(existingProducts.map(p => p.id));
     for (const p of products) {
@@ -1368,82 +1533,48 @@ async function seedDatabase() {
         }
     }
 
-    // Usuarios, chaves PIX, contatos, transacoes e notificacoes
-    for (const u of users) {
-        const hashed = bcrypt.hashSync(u.password, 10);
-        const now = new Date().toISOString();
+    if (SEED_NON_ADMIN_USERS) {
+        const demoCpf = '12345678901';
+        const passwordHash = bcrypt.hashSync('123456', 10);
+        await usersRepo.upsertSeed({
+            cpf: demoCpf,
+            fullName: 'Joao Silva',
+            email: 'joao.silva@example.com',
+            passwordHash,
+            balance: 1500.00,
+            role: 'user'
+        });
 
-        const exists = await databricksService.executeQuery(`
-            SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf='${u.cpf}'
-        `);
-        if (!exists.length) {
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('users')}
-                (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
-                VALUES ('${u.cpf}', '${u.fullName.replace(/'/g,"''")}', '${u.email}', '${hashed}', ${u.balance}, '${u.role}', false, 0, ${u.pixDailyLimit}, false, '${now}', '${now}')
+        for (const u of users) {
+            const hashed = bcrypt.hashSync(u.password, 10);
+            const now = new Date().toISOString();
+            const exists = await databricksService.executeQuery(`
+                SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf='${u.cpf}'
             `);
-        }
-
-        // Chaves PIX (corrigido: passar objeto)
-        for (const k of (u.pixKeys || [])) {
-            if (k && k.type && k.key) {
-                await pixRepo.addKey({ cpf: u.cpf, type: k.type, key: k.key });
+            if (!exists.length) {
+                await databricksService.executeQuery(`
+                    INSERT INTO ${databricksService.fq('users')}
+                    (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
+                    VALUES ('${u.cpf}', '${u.fullName.replace(/'/g,"''")}', '${u.email}', '${hashed}', ${u.balance}, '${u.role}', false, 0, ${u.pixDailyLimit}, false, '${now}', '${now}')
+                `);
             }
-        }
-        await pixRepo.ensureSeedKey(u.cpf);
-
-        // Contatos PIX (corrigido: passar objeto)
-        for (const c of (u.pixContacts || [])) {
-            if (c && c.key && c.name) {
-                await pixRepo.addContact({ cpf: u.cpf, contactKey: c.key, contactName: c.name });
+            for (const k of (u.pixKeys || [])) {
+                if (k && k.type && k.key) {
+                    await pixRepo.addKey({ cpf: u.cpf, type: k.type, key: k.key });
+                }
             }
-        }
-
-        // Transacoes
-        for (const t of (u.transactions || [])) {
-            const id = t.id || databricksService.generateUUID();
-            const desc = (t.description || '').replace(/'/g, "''");
-            const amt = parseFloat(t.amount);
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('transactions')}
-                (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-                VALUES ('${id}', '${u.cpf}', '${t.type}', ${amt}, '${desc}', ${t.from ? `'${t.from}'` : 'NULL'}, ${t.to ? `'${t.to}'` : 'NULL'}, ${t.toKey ? `'${t.toKey}'` : 'NULL'}, '${t.date}')
-            `);
-        }
-
-        // Notificacoes (mock adicional)
-        for (const n of (u.notifications || [])) {
-            const nid = databricksService.generateUUID();
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('notifications')}
-                (id, cpf, title, message, action_url, is_read, created_at)
-                VALUES ('${nid}', '${u.cpf}', '${(n.title||'').replace(/'/g,"''")}', '${(n.message||'').replace(/'/g,"''")}', ${n.actionUrl ? `'${n.actionUrl}'` : 'NULL'}, false, '${new Date().toISOString()}')
-            `);
+            await pixRepo.ensureSeedKey(u.cpf);
+            for (const c of (u.pixContacts || [])) {
+                if (c && c.key && c.name) {
+                    await pixRepo.addContact({ cpf: u.cpf, contactKey: c.key, contactName: c.name });
+                }
+            }
+            await notificationsRepo.ensureSeed(u.cpf);
+            await cardRepo.createInstallments({ cpf: demoCpf, amount: 1200.00, installments: 6 });
         }
     }
 
-    // Seeds anteriores mantidos
     await shopRepo.ensureSeed();
-    await pixRepo.ensureSeedKey(cpf);
-    await notificationsRepo.ensureSeed(cpf);
-
-    // Semear stories (se fornecidos pelo frontend)
-    if (Array.isArray(stories) && stories.length) {
-        const existingStories = await databricksService.executeQuery(`SELECT id FROM ${databricksService.fq('stories')}`);
-        const storyIds = new Set(existingStories.map(s => s.id));
-        for (const s of stories) {
-            const sid = s.id || databricksService.generateUUID();
-            if (storyIds.has(sid)) continue;
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('stories')}
-                (id, cpf, image_url, caption, created_at)
-                VALUES ('${sid}', '${s.cpf}', '${(s.imageUrl || s.image_url || '').replace(/'/g,"''")}', '${(s.caption || '').replace(/'/g,"''")}', '${s.createdAt || new Date().toISOString()}')
-            `);
-        }
-    }
-
-    // Criar parcelas iniciais para o usuario (cartao)
-    await cardRepo.createInstallments({ cpf, amount: 1200.00, installments: 6 });
     console.log('✅ Seeds aplicados com sucesso.');
 }
 
