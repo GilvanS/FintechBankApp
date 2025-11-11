@@ -26,8 +26,18 @@ const getIconForTx = (merchant: string) => {
 const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
   const { creditCard } = user;
 
-  const invoiceDueDate = new Date(creditCard.invoiceDueDate);
-  const currentTransactions = creditCard.transactions.filter(tx => new Date(tx.date) <= invoiceDueDate);
+  const hasInvoiceDueDate = !!creditCard.invoiceDueDate && !isNaN(new Date(creditCard.invoiceDueDate).getTime());
+  const invoiceDueDate = hasInvoiceDueDate ? new Date(creditCard.invoiceDueDate) : null;
+  const endOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
+  if (endOfDay) endOfDay.setHours(23, 59, 59, 999);
+
+  const currentTransactions = hasInvoiceDueDate
+    ? creditCard.transactions.filter(tx => new Date(tx.date) <= (endOfDay as Date))
+    : creditCard.transactions;
+
+  const vencimentoLabel = hasInvoiceDueDate
+    ? new Date(creditCard.invoiceDueDate).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})
+    : '--';
 
   return (
     <div className="bg-background-dark text-white min-h-full flex flex-col">
@@ -41,7 +51,7 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
       <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-6">
         <div className="bg-surface-dark rounded-lg divide-y divide-subtle-dark/50 px-4">
             <InfoRow label="Fatura atual" value={creditCard.currentInvoice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} valueColor="text-blue-400" />
-            <InfoRow label="Vencimento" value={new Date(creditCard.invoiceDueDate).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})} />
+            <InfoRow label="Vencimento" value={vencimentoLabel} />
             <InfoRow label="Limite disponível" value={creditCard.availableLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
             <InfoRow label="Limite total" value={creditCard.totalLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
         </div>

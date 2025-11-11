@@ -21,7 +21,7 @@ const InfoRow: React.FC<{ label: string; value: string; valueColor?: string; has
 );
 
 
-const ClosedInvoice: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayInvoice, onParcel }) => {
+function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }) {
   const { creditCard, balance } = user;
   const [isLoading, setIsLoading] = useState(false);
   const isOverdue = creditCard.closedInvoice > 0 && creditCard.closedInvoiceDueDate && new Date() > new Date(creditCard.closedInvoiceDueDate);
@@ -31,8 +31,11 @@ const ClosedInvoice: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayInvoic
 
   const handlePay = async () => {
     setIsLoading(true);
-    await onPayInvoice();
-    // No need to set isLoading to false if navigation happens on success
+    try {
+        await onPayInvoice();
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   const handleParcel = () => {

@@ -6,6 +6,10 @@ import { useAuth } from '../App';
 import { login, requestNewPassword } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useToast, ToastContainer } from './Toast';
+import { getUserByCpf } from '../services/api';
+// Substituir o import acima por getUserMe
+import { getUserMe } from '../services/api';
+import { getUserStatement } from '../services/api';
 
 interface LoginProps {
     onNavigateToSignUp: () => void;
@@ -45,6 +49,20 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
             }
             auth.login(result.user);
             showSuccess('Login efetuado com sucesso');
+
+            // Pré-carregamento imediato
+            (async () => {
+                const refreshed = await getUserMe();
+                if (refreshed.success && refreshed.user) {
+                    auth.updateUser(refreshed.user);
+                }
+                // NOVO: carregar extrato da conta na sequencia do login
+                const cpfToUse = (refreshed.user?.cpf) || result.user.cpf;
+                const stmt = await getUserStatement(cpfToUse);
+                if (stmt.success && stmt.transactions) {
+                    auth.updateUser({ transactions: stmt.transactions });
+                }
+            })();
         } else {
             const msg = result.message || mapLoginError(result.code);
             setError(msg);

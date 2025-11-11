@@ -1775,16 +1775,16 @@ paths:
                 $ref: '#/components/schemas/SuccessResponse'
 
   /admin/users/{cpf}/card-details:
-    put:
-      tags: [Administração]
-      summary: Atualizar detalhes do cartão do cliente
-      description: Atualiza vencimento do cartão e da fatura. Se `invoiceDueDate` (fatura fechada) estiver mais de 7 dias no passado e não paga, o cartão é bloqueado.
+    post:
+      summary: Atualiza detalhes do cartao de credito do usuario (Admin)
+      tags: [Admin]
       parameters:
-        - name: cpf
-          in: path
+        - in: path
+          name: cpf
           required: true
-          schema: { type: string, pattern: '^[0-9]{11}$' }
-      security: [{ bearerAuth: [] }]
+          schema:
+            type: string
+          description: CPF do usuario (11 digitos)
       requestBody:
         required: true
         content:
@@ -1792,22 +1792,56 @@ paths:
             schema:
               type: object
               properties:
-                dueDate: { type: string, example: "12/28" }
+                dueDate:
+                  type: string
+                  description: Vencimento do cartao (MM/YY)
+                  example: "12/28"
                 invoiceDueDate:
                   type: string
                   format: date-time
-                  example: "2024-04-15T03:00:00.000Z"
+                  description: Data de vencimento da fatura (TIMESTAMP)
+                  example: "2025-12-10 00:00:00"
+                availableLimit:
+                  type: number
+                  format: float
+                  description: Limite disponivel do cartao
+                  example: 5000.00
+                totalLimit:
+                  type: number
+                  format: float
+                  description: Limite total do cartao
+                  example: 8000.00
+                pointsBalance:
+                  type: number
+                  description: Pontos do programa de fidelidade
+                  example: 1500
+            examples:
+              ajustarLimiteDisponivel:
+                summary: Ajustar apenas limite disponivel
+                value:
+                  availableLimit: 5000.00
+              ajustarLimites:
+                summary: Ajustar limite disponivel e total
+                value:
+                  availableLimit: 5000.00
+                  totalLimit: 8000.00
       responses:
         '200':
-          description: Detalhes atualizados
+          description: Detalhes do cartao atualizados
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  success: { type: boolean }
-                  message: { type: string }
-                  user: { $ref: '#/components/schemas/User' }
+                  success:
+                    type: boolean
+                    example: true
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Requisicao invalida (nenhum campo informado)
+      security:
+        - bearerAuth: []
 
   /proxy/news:
     get:

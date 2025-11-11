@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../App';
 import { PurchasedItem, Transaction, User } from '../types';
-import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf } from '../services/api';
+import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement } from '../services/api';
 
 import HomeView from './HomeView';
 import Profile from './Profile';
@@ -94,6 +94,49 @@ const Dashboard: React.FC = () => {
         }
     }, [currentView, user]);
 
+    // Refresh automatico ao entrar em telas de cartoes
+    useEffect(() => {
+        let cancelled = false;
+
+        const refreshUserIfNeeded = async () => {
+            if (!user) return;
+
+            const viewsToRefresh: View[] = [
+                'cards',
+                'currentInvoice',
+                'closedInvoice',
+                'installmentOptions',
+                'anticipateInstallments',
+                'points'
+            ];
+
+            if (!viewsToRefresh.includes(currentView)) return;
+
+            const refreshed = await getUserByCpf(user.cpf);
+            if (refreshed.success && refreshed.user && !cancelled) {
+                updateUser(refreshed.user);
+            }
+        };
+
+        refreshUserIfNeeded();
+        return () => { cancelled = true; };
+    }, [currentView, user, updateUser]);
+
+    // NOVO: Refresh do extrato quando entrar na view 'statement'
+    useEffect(() => {
+        let cancelled = false;
+
+        const refreshStatementIfNeeded = async () => {
+            if (!user || currentView !== 'statement') return;
+            const stmt = await getUserStatement(user.cpf);
+            if (stmt.success && stmt.transactions && !cancelled) {
+                updateUser({ transactions: stmt.transactions });
+            }
+        };
+
+        refreshStatementIfNeeded();
+        return () => { cancelled = true; };
+    }, [currentView, user, updateUser]);
     const handleGoToPaymentFromModal = () => {
         setIsBlockedModalOpen(false);
         handleNavigate('closedInvoice');
@@ -206,10 +249,28 @@ const Dashboard: React.FC = () => {
         }
 
         if (result.success) {
-            const refreshed = await getUserByCpf(user.cpf);
-            if (refreshed.success && refreshed.user) {
-                updateUser(refreshed.user);
+            // 1) Atualiza o usuario priorizando dados completos do cartao
+            let latestUser = user;
+            const refreshedMe = await getUserMe();
+            if (refreshedMe.success && refreshedMe.user) {
+                latestUser = refreshedMe.user as User;
+            } else {
+                const byCpf = await getUserByCpf(user.cpf);
+                if (byCpf.success && byCpf.user) {
+                    latestUser = byCpf.user as User;
+                }
             }
+
+            // 2) Atualiza o extrato da conta SOMENTE para compras no debito
+            if (details.method === 'debit') {
+                const stmt = await getUserStatement(latestUser.cpf);
+                if (stmt.success && stmt.transactions) {
+                    latestUser = { ...latestUser, transactions: stmt.transactions as Transaction[] };
+                }
+            }
+
+            updateUser(latestUser);
+
             const totalAmount = details.items.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
             const finalAmount = totalAmount - details.cashbackUsed;
 
@@ -252,17 +313,21 @@ const Dashboard: React.FC = () => {
         const amountToPay = user.creditCard.closedInvoice;
         setIsProcessing(true);
         const pin = (passwordActionPayload.current as any)?.pin;
+
+        // Prepara dados do recibo antes do refresh - evita perder o comprovante se o refresh falhar
+        const fallbackCardLast4 = user.creditCard?.number?.slice(-4) || '----';
+        setInvoicePaymentDetails({
+            amountPaid: amountToPay,
+            date: new Date().toISOString(),
+            cardLast4: fallbackCardLast4,
+            transactionId: `inv-pay-${Date.now()}`
+        });
+
         const result = await payCreditCardInvoice(user.cpf, pin);
         if (result.success) {
             const refreshed = await getUserByCpf(user.cpf);
             if (refreshed.success && refreshed.user) {
                 updateUser(refreshed.user);
-                setInvoicePaymentDetails({
-                    amountPaid: amountToPay,
-                    date: new Date().toISOString(),
-                    cardLast4: refreshed.user.creditCard.number.slice(-4),
-                    transactionId: `inv-pay-${Date.now()}`
-                });
             }
             handleNavigate('invoicePaymentReceipt');
         } else {
@@ -270,6 +335,7 @@ const Dashboard: React.FC = () => {
         }
         setIsProcessing(false);
         setIsPasswordModalOpen(false);
+        passwordActionPayload.current = null;
     };
     
     const handleParcelInvoice = () => {
@@ -325,7 +391,8 @@ const Dashboard: React.FC = () => {
         const pin = (passwordActionPayload.current as any)?.pin;
         const result = await anticipateCreditCardInstallments(user.cpf, transactionIds, pin);
         if (result.success) {
-            const refreshed = await getUserByCpf(user.cpf);
+            // const refreshed = await getUserByCpf(user.cpf);
+            const refreshed = await getUserMe();
             if (refreshed.success && refreshed.user) {
                 updateUser(refreshed.user);
             }
@@ -385,7 +452,7 @@ const Dashboard: React.FC = () => {
                 return <InstallmentReview type="invoice" user={user} details={parcelDetails} onConfirm={handleConfirmParcelInvoice} onBack={() => handleNavigate('installmentOptions')} />;
             case 'invoicePaymentReceipt':
                 if (!invoicePaymentDetails) return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
-                return <PaymentReceipt details={invoicePaymentDetails} onClose={() => handleNavigate('cards')} />;
+                return <PaymentReceipt details={invoicePaymentDetails} onClose={() => handleNavigate('home')} />;
              case 'products':
                 return <Products onNavigate={handleNavigate} />;
             case 'closedInvoice':

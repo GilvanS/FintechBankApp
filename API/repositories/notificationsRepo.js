@@ -45,4 +45,16 @@ async function ensureSeed(cpf) {
     }
 }
 
-module.exports = { listByCpf, markRead, ensureSeed };
+// Novo: inserir notificação genérica
+async function addNotification({ cpf, title, message, actionUrl }) {
+    const db = getDb();
+    const id = db.generateUUID();
+    const now = new Date().toISOString();
+    await db.executeQuery(`
+        INSERT INTO ${db.fq('notifications')}
+        (id, cpf, title, message, action_url, is_read, created_at)
+        VALUES (${esc(id)}, ${esc(cpf)}, ${esc(title)}, ${esc(message)}, ${esc(actionUrl || null)}, false, ${esc(now)})
+    `);
+}
+
+module.exports = { listByCpf, markRead, ensureSeed, addNotification };

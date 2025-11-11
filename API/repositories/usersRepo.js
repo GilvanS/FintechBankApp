@@ -3,7 +3,7 @@ const { getDb, esc } = require('./context');
 async function findByCpf(cpf) {
     const db = getDb();
     const rows = await db.executeQuery(`
-        SELECT cpf, full_name, email, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested
+        SELECT *
         FROM ${db.fq('users')}
         WHERE cpf=${esc(cpf)}
     `);
@@ -37,7 +37,7 @@ async function updateBalance(cpf, newBalance) {
 async function listUsers() {
     const db = getDb();
     return db.executeQuery(`
-        SELECT cpf, full_name, email, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested
+        SELECT *
         FROM ${db.fq('users')}
         ORDER BY created_at DESC
     `);
@@ -49,6 +49,13 @@ async function deposit(cpf, amount) {
         UPDATE ${db.fq('users')}
         SET balance = COALESCE(balance, 0) + ${esc(amount)}
         WHERE cpf=${esc(cpf)}
+    `);
+    const id = db.generateUUID();
+    const now = new Date().toISOString();
+    await db.executeQuery(`
+        INSERT INTO ${db.fq('transactions')}
+        (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+        VALUES (${esc(id)}, ${esc(cpf)}, 'DEPOSIT', ${esc(Number(amount).toFixed(2))}, ${esc('Deposito administrativo')}, NULL, NULL, NULL, ${esc(now)})
     `);
 }
 

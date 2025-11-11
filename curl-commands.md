@@ -2,6 +2,13 @@
 
 ## 📋 FASE 1: DIAGNÓSTICO E PREPARAÇÃO
 
+### 1.0 Criar Usuário de Teste (Signup)
+```bash
+curl -X POST "http://localhost:3001/api/v1/auth/signup" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"fullName\":\"Joao Teste\",\"email\":\"joao.teste@example.com\",\"cpf\":\"12345678901\",\"password\":\"123456\"}"
+```
+
 ### 1.1 Health Check
 ```bash
 curl -X GET "http://localhost:3001/api/v1/health"
@@ -9,21 +16,25 @@ curl -X GET "http://localhost:3001/api/v1/health"
 
 ### 1.2 Login do Administrador
 ```bash
-curl -X POST "http://localhost:3001/api/v1/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"cpf":"00000000000","password":"admin123"}'
+curl -X POST "http://localhost:3001/api/v1/auth/login" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"cpf\":\"00000000000\",\"password\":\"admin123\"}"
 ```
-**Salve o token retornado como ADMIN_TOKEN**
+**Defina o token:**
+```bash
+set ADMIN_TOKEN=COLE_AQUI_O_TOKEN_ADMIN
+```
 
 ### 1.3 Login do Usuário de Teste
 ```bash
-curl -X POST "http://localhost:3001/api/v1/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"cpf":"12345678901","password":"123456"}'
+curl -X POST "http://localhost:3001/api/v1/auth/login" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"cpf\":\"12345678901\",\"password\":\"123456\"}"
 ```
-**Salve o token retornado como USER_TOKEN**
-
-## 📊 FASE 2: VALIDAÇÃO POR CATEGORIA
+**Defina o token:**
+```bash
+set USER_TOKEN=COLE_AQUI_O_TOKEN
+```
 
 ### 2.1 Endpoints de Diagnóstico (Admin)
 
@@ -41,16 +52,22 @@ curl -X GET "http://localhost:3001/api/v1/debug/user/12345678901" \
 
 ### 2.2 Endpoints de Usuário
 
+#### Consultar Meus Dados
+```bash
+curl -X GET "http://localhost:3001/api/v1/users/me" ^
+  -H "Authorization: Bearer %USER_TOKEN%"
+```
+
 #### Consultar Saldo
 ```bash
-curl -X GET "http://localhost:3001/api/v1/users/12345678901/balance" \
-  -H "Authorization: Bearer USER_TOKEN"
+curl -X GET "http://localhost:3001/api/v1/users/12345678901/balance" ^
+  -H "Authorization: Bearer %USER_TOKEN%"
 ```
 
 #### Consultar Extrato
 ```bash
-curl -X GET "http://localhost:3001/api/v1/users/12345678901/statement" \
-  -H "Authorization: Bearer USER_TOKEN"
+curl -X GET "http://localhost:3001/api/v1/users/12345678901/statement" ^
+  -H "Authorization: Bearer %USER_TOKEN%"
 ```
 
 ### 2.3 Endpoints PIX
@@ -79,20 +96,20 @@ curl -X GET "http://localhost:3001/api/v1/pix/contacts/12345678901" \
 
 #### Listar Todos os Usuários
 ```bash
-curl -X GET "http://localhost:3001/api/v1/admin/users" \
-  -H "Authorization: Bearer ADMIN_TOKEN"
+curl -X GET "http://localhost:3001/api/v1/admin/users" ^
+  -H "Authorization: Bearer %ADMIN_TOKEN%"
 ```
 
 #### Consultar Usuário Específico
 ```bash
-curl -X GET "http://localhost:3001/api/v1/admin/users/12345678901" \
-  -H "Authorization: Bearer ADMIN_TOKEN"
+curl -X GET "http://localhost:3001/api/v1/admin/users/12345678901" ^
+  -H "Authorization: Bearer %ADMIN_TOKEN%"
 ```
 
 ## 🔧 Como Usar
 
 1. **Inicie o servidor**: `cd server && npm start`
-2. **Execute os comandos na ordem**: Comece pela Fase 1, depois Fase 2
+2. **Execute os comandos na ordem**: Signup → Logins → Chamadas autenticadas
 3. **Substitua os tokens**: Use os tokens reais obtidos nos logins
 4. **Observe os logs**: Verifique o console do servidor para detalhes
 

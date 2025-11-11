@@ -67,6 +67,23 @@ export async function getUserByCpf(cpf: string) {
     }
 }
 
+// Método: getUserMe
+export async function getUserMe() {
+    try {
+        const res = await fetch(`${API_BASE}/users/me`, {
+            method: 'GET',
+            headers: getAuthHeaders('none'),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) {
+            return { success: false, message: data.message || 'Falha ao buscar usuario.' };
+        }
+        return { success: true, user: data.user || data };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao buscar usuario.' };
+    }
+}
+
 // Método: requestNewPassword
 export async function requestNewPassword(cpf: string) {
     try {
@@ -468,12 +485,18 @@ export async function adminDenyLimitRequest(cpf: string, reason?: string) {
 
 export async function adminUpdateCardDetails(cpf: string, payload: { dueDate?: string; invoiceDueDate?: string; availableLimit?: number; totalLimit?: number; pointsBalance?: number }) {
     try {
-        const res = await fetch(`${API_BASE}/admin/users/${cpf}/card-details`, { method: 'POST', headers: getAuthHeaders('json'), body: JSON.stringify(payload) });
+        const res = await fetch(`${API_BASE}/admin/users/${cpf}/card-details`, {
+            method: 'POST',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify(payload),
+        });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.success) return { success: false, message: data.message || 'Falha ao atualizar cartao.' };
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao atualizar detalhes do cartao.' };
+        }
         return data;
     } catch (error) {
-        return { success: false, message: 'Erro de conexao ao atualizar cartao.' };
+        return { success: false, message: 'Erro de conexao ao atualizar detalhes do cartao.' };
     }
 }
 
@@ -603,5 +626,66 @@ export async function performPixCreditTransfer(cpf: string, toKey: string, amoun
         return { success: true, message: data?.message || 'PIX no credito realizado com sucesso.' };
     } catch (error) {
         return { success: false, message: 'Erro de conexao no PIX no credito.' };
+    }
+}
+
+// NOVO: Método - getUserStatement
+export async function getUserStatement(cpf: string): Promise<{ success: boolean; message?: string; transactions?: any[] }> {
+    try {
+        const res = await fetch(`${API_BASE}/users/${cpf}/statement`, {
+            method: 'GET',
+            headers: getAuthHeaders('none'),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) {
+            return { success: false, message: data.message || 'Falha ao buscar extrato.' };
+        }
+        return { success: true, transactions: data.transactions || [] };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao buscar extrato.' };
+    }
+}
+
+export async function adminCreateCardPurchaseOpen(cpf: string, payload: { amount: number; description: string; installments?: number; interestRate?: number }): Promise<{ success: boolean; message: string; transactionId?: string }> {
+    try {
+        const res = await fetch(`${API_BASE}/admin/users/${cpf}/card/purchase/open`, {
+            method: 'POST',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify({
+                amount: payload.amount,
+                description: payload.description,
+                installments: payload.installments,
+                interestRate: payload.interestRate
+            }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao inserir compra na fatura aberta.' };
+        }
+        return data;
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao inserir compra na fatura aberta.' };
+    }
+}
+
+export async function adminCreateCardPurchaseClosed(cpf: string, payload: { amount: number; description: string; installments?: number; interestRate?: number }): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await fetch(`${API_BASE}/admin/users/${cpf}/card/purchase/closed`, {
+            method: 'POST',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify({
+                amount: payload.amount,
+                description: payload.description,
+                installments: payload.installments,
+                interestRate: payload.interestRate
+            }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao inserir compra na fatura fechada.' };
+        }
+        return data;
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao inserir compra na fatura fechada.' };
     }
 }

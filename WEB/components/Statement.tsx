@@ -7,7 +7,7 @@ interface StatementProps {
     onBack: () => void;
 }
 
-const Statement: React.FC<StatementProps> = ({ user, onNavigate, onBack }) => {
+function Statement({ user, onNavigate, onBack }: StatementProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterPeriod, setFilterPeriod] = useState('all');
 
@@ -47,6 +47,9 @@ const Statement: React.FC<StatementProps> = ({ user, onNavigate, onBack }) => {
             case 'PIX_CREDIT_SENT': return 'currency_exchange';
             case 'PAYMENT': return 'receipt_long';
             case 'DEPOSIT': return 'savings';
+            case 'SHOP_DEBIT': return 'shopping_cart';
+            case 'CASHBACK_CREDIT': return 'redeem';
+            case 'POINTS_EARNED': return 'star';
             default: return 'receipt_long';
         }
     };

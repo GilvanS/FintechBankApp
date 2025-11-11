@@ -16,12 +16,23 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
     const isOverdue = creditCard.closedInvoice > 0 && creditCard.closedInvoiceDueDate && new Date() > new Date(creditCard.closedInvoiceDueDate);
 
     // Filter transactions based on the invoice due date
-    const invoiceDueDate = new Date(creditCard.invoiceDueDate);
-    const currentTransactions = creditCard.transactions.filter(tx => new Date(tx.date) <= invoiceDueDate);
-    const futureTransactions = creditCard.transactions.filter(tx => new Date(tx.date) > invoiceDueDate);
+    const hasInvoiceDueDate = !!creditCard.invoiceDueDate && !isNaN(new Date(creditCard.invoiceDueDate).getTime());
+    const invoiceDueDate = hasInvoiceDueDate ? new Date(creditCard.invoiceDueDate) : null;
+    const endOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
+    if (endOfDay) endOfDay.setHours(23, 59, 59, 999);
+
+    const currentTransactions = hasInvoiceDueDate
+        ? creditCard.transactions.filter(tx => new Date(tx.date) <= (endOfDay as Date))
+        : creditCard.transactions;
+    const futureTransactions = hasInvoiceDueDate
+        ? creditCard.transactions.filter(tx => new Date(tx.date) > (endOfDay as Date))
+        : [];
 
     const transactionsToDisplay = activeTab === 'current' ? currentTransactions : futureTransactions;
 
+    const vencimentoLabel = hasInvoiceDueDate
+        ? new Date(creditCard.invoiceDueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+        : '--';
     const getIconForTx = (merchant: string) => {
         const lowerMerchant = merchant.toLowerCase();
         if (lowerMerchant.includes('supermercado')) return 'shopping_cart';
@@ -59,7 +70,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 >
                     <div className="flex justify-between items-start">
                         <span className="font-bold text-lg">Fatura Atual</span>
-                        <span className="font-mono text-sm bg-white/20 px-2 py-1 rounded">Venc. {new Date(creditCard.invoiceDueDate).toLocaleDateString('pt-BR', {day:'2-digit', month:'short'})}</span>
+                        <span className="font-mono text-sm bg-white/20 px-2 py-1 rounded">Venc. {vencimentoLabel}</span>
                     </div>
                     <p className="text-3xl font-bold text-blue-400">{creditCard.currentInvoice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                     <div className="text-sm">

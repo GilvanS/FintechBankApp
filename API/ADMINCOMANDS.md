@@ -204,7 +204,7 @@ Regras:
 
 ```bash
 curl -X POST "http://localhost:3001/api/v1/admin/users/12345678901/card/purchase/open" ^
- -H "Authorization: Bearer {TOKEN_ADMIN}" ^
+ -H "Authorization: Bearer %ADMIN_TOKEN%" ^
  -H "Content-Type: application/json" ^
  -d "{\"amount\":199.90,\"description\":\"Compra teste fatura aberta\",\"installments\":6}"
 ```

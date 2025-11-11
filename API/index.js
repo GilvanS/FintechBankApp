@@ -436,8 +436,109 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     auditLog(req, 'users_me');
     const normalized = normalizeUser(user);
-    const latestInvoice = await invoiceRepo.findLatestByCpf(req.user.cpf);
+    let latestInvoice = null;
+    try {
+        latestInvoice = await invoiceRepo.findLatestByCpf(req.user.cpf);
+    } catch (err) {
+        const msg = String((err && err.message) || '');
+        if (msg.includes('TABLE_OR_VIEW_NOT_FOUND') || msg.includes('invoices')) {
+            console.warn('Tabela invoices ausente; prosseguindo sem invoiceStatus');
+        } else {
+            throw err;
+        }
+    }
     if (latestInvoice) normalized.invoiceStatus = latestInvoice.status;
+
+    // Popular creditCard.transactions e currentInvoice
+    const cpf = req.user.cpf;
+    const cardRows = await databricksService.executeQuery(`
+        SELECT id, type, amount, description, date
+        FROM ${databricksService.fq('transactions')}
+        WHERE cpf = '${cpf}'
+          AND type IN ('SHOP_CREDIT','CREDIT','INVOICE_INSTALLMENT','INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+        ORDER BY date DESC
+        LIMIT 100
+    `);
+
+    const cardTransactions = cardRows.map(r => {
+        const base = {
+            id: r.id,
+            date: r.date,
+            amount: Math.abs(parseFloat(r.amount || 0)),
+        };
+        const desc = r.description || '';
+        if (r.type === 'SHOP_CREDIT' || r.type === 'CREDIT') {
+            return { ...base, merchant: desc || 'Compra credito', type: 'CREDIT' };
+        }
+        if (r.type === 'INVOICE_INSTALLMENT') {
+            const m = desc.match(/\((\d+)\/(\d+)\)/);
+            const currentInstallment = m ? parseInt(m[1], 10) : undefined;
+            const totalInstallments = m ? parseInt(m[2], 10) : undefined;
+            const installments = m ? `${m[1]}/${m[2]}` : undefined;
+            return { ...base, merchant: 'Parcelamento fatura', type: 'INVOICE_INSTALLMENT', installments, currentInstallment, totalInstallments };
+        }
+        if (r.type === 'INVOICE_PAYMENT' || r.type === 'INVOICE_ANTICIPATION') {
+            const merchant = r.type === 'INVOICE_PAYMENT' ? 'Pagamento fatura' : 'Antecipacao de parcelas';
+            return { ...base, merchant, type: 'PAYMENT' };
+        }
+        return null;
+    }).filter(Boolean);
+
+    const invoiceDueDate = normalized.creditCard?.invoiceDueDate ? new Date(normalized.creditCard.invoiceDueDate) : null;
+    let invoiceDueDateEndOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
+    if (invoiceDueDateEndOfDay) invoiceDueDateEndOfDay.setUTCHours(23, 59, 59, 999);
+
+    normalized.creditCard = normalized.creditCard || {};
+    normalized.creditCard.transactions = cardTransactions;
+    normalized.creditCard.currentInvoice = cardTransactions
+        .filter(tx => tx.type !== 'PAYMENT' && (!invoiceDueDateEndOfDay || new Date(tx.date).getTime() <= invoiceDueDateEndOfDay.getTime()))
+        .reduce((sum, tx) => sum + tx.amount, 0);
+
+    const isBlocked = Boolean(normalized.creditCard?.isBlocked);
+    const now = new Date();
+
+    // Se nao houver invoiceDueDate valido, usa hoje como fallback apenas para nao deixar vazio
+    const cutoff = invoiceDueDateEndOfDay && !isNaN(invoiceDueDateEndOfDay.getTime()) ? invoiceDueDateEndOfDay : new Date(now.setUTCHours(23, 59, 59, 999));
+
+    let closedTransactions;
+    if (isBlocked) {
+        // Bloqueado: fechar apenas debitos ate o vencimento (compra e parcela)
+        closedTransactions = cardTransactions.filter(tx => {
+            const txDate = new Date(tx.date);
+            return (tx.type === 'CREDIT' || tx.type === 'INVOICE_INSTALLMENT')
+                && !isNaN(txDate.getTime())
+                && txDate.getTime() <= cutoff.getTime();
+        });
+        normalized.creditCard.currentInvoice = 0;
+    } else {
+        // Nao bloqueado: manter comportamento anterior (parcelas vencidas)
+        closedTransactions = cardTransactions
+            .filter(tx => tx.type === 'INVOICE_INSTALLMENT' && new Date(tx.date).getTime() <= now.getTime());
+    }
+
+    normalized.creditCard.closedTransactions = closedTransactions;
+    normalized.creditCard.closedInvoice = closedTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+
+    // Adicionar purchasedItems do banco
+    const purchaseRows = await databricksService.executeQuery(`
+        SELECT id, name, description, price, image_url, quantity, points_earned, purchase_date
+        FROM ${databricksService.fq('purchased_items')}
+        WHERE cpf = '${cpf}'
+        ORDER BY purchase_date DESC
+        LIMIT 50
+    `);
+
+    normalized.purchasedItems = (purchaseRows || []).map(r => ({
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        price: r.price != null ? parseFloat(r.price) : 0,
+        imageUrl: r.image_url || r.imageUrl || '',
+        quantity: r.quantity != null ? parseInt(r.quantity, 10) : undefined,
+        pointsEarned: r.points_earned != null ? parseInt(r.points_earned, 10) : undefined,
+        purchaseDate: r.purchase_date
+    }));
+
     res.json({ success: true, user: normalized });
 }));
 
@@ -450,8 +551,108 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     auditLog(req, 'users_get', 'info', { cpf });
     const normalized = normalizeUser(user);
-    const latestInvoice = await invoiceRepo.findLatestByCpf(cpf);
+    let latestInvoice = null;
+    try {
+        latestInvoice = await invoiceRepo.findLatestByCpf(cpf);
+    } catch (err) {
+        const msg = String((err && err.message) || '');
+        if (msg.includes('TABLE_OR_VIEW_NOT_FOUND') || msg.includes('invoices')) {
+            console.warn('Tabela invoices ausente; prosseguindo sem invoiceStatus');
+        } else {
+            throw err;
+        }
+    }
     if (latestInvoice) normalized.invoiceStatus = latestInvoice.status;
+
+    // Popular creditCard.transactions e currentInvoice
+    const cardRows = await databricksService.executeQuery(`
+        SELECT id, type, amount, description, date
+        FROM ${databricksService.fq('transactions')}
+        WHERE cpf = '${cpf}'
+          AND type IN ('SHOP_CREDIT','CREDIT','INVOICE_INSTALLMENT','INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+        ORDER BY date DESC
+        LIMIT 100
+    `);
+
+    const cardTransactions = cardRows.map(r => {
+        const base = {
+            id: r.id,
+            date: r.date,
+            amount: Math.abs(parseFloat(r.amount || 0)),
+        };
+        const desc = r.description || '';
+        if (r.type === 'SHOP_CREDIT' || r.type === 'CREDIT') {
+            return { ...base, merchant: desc || 'Compra credito', type: 'CREDIT' };
+        }
+        if (r.type === 'INVOICE_INSTALLMENT') {
+            const m = desc.match(/\((\d+)\/(\d+)\)/);
+            const currentInstallment = m ? parseInt(m[1], 10) : undefined;
+            const totalInstallments = m ? parseInt(m[2], 10) : undefined;
+            const installments = m ? `${m[1]}/${m[2]}` : undefined;
+            return { ...base, merchant: 'Parcelamento fatura', type: 'INVOICE_INSTALLMENT', installments, currentInstallment, totalInstallments };
+        }
+        if (r.type === 'INVOICE_PAYMENT' || r.type === 'INVOICE_ANTICIPATION') {
+            const merchant = r.type === 'INVOICE_PAYMENT' ? 'Pagamento fatura' : 'Antecipacao de parcelas';
+            return { ...base, merchant, type: 'PAYMENT' };
+        }
+        return null;
+    }).filter(Boolean);
+
+    const invoiceDueDate = normalized.creditCard?.invoiceDueDate ? new Date(normalized.creditCard.invoiceDueDate) : null;
+    const invoiceDueDateEndOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
+    if (invoiceDueDateEndOfDay) invoiceDueDateEndOfDay.setUTCHours(23, 59, 59, 999);
+
+    normalized.creditCard = normalized.creditCard || {};
+    normalized.creditCard.transactions = cardTransactions;
+    normalized.creditCard.currentInvoice = cardTransactions
+        .filter(tx => tx.type !== 'PAYMENT' && (!invoiceDueDateEndOfDay || new Date(tx.date).getTime() <= invoiceDueDateEndOfDay.getTime()))
+        .reduce((sum, tx) => sum + tx.amount, 0);
+
+    const isBlocked = Boolean(normalized.creditCard?.isBlocked);
+    const now = new Date();
+
+    // Fallback para cutoff quando não houver invoiceDueDate válido: fim do dia UTC
+    const cutoff = invoiceDueDateEndOfDay && !isNaN(invoiceDueDateEndOfDay.getTime()) ? invoiceDueDateEndOfDay : new Date(now.setUTCHours(23, 59, 59, 999));
+
+    let closedTransactions;
+    if (isBlocked) {
+        // Bloqueado: fechar apenas débitos até o vencimento (compra crédito e parcelas)
+        closedTransactions = cardTransactions.filter(tx => {
+            const txDate = new Date(tx.date);
+            return (tx.type === 'CREDIT' || tx.type === 'INVOICE_INSTALLMENT')
+                && !isNaN(txDate.getTime())
+                && txDate.getTime() <= cutoff.getTime();
+        });
+        normalized.creditCard.currentInvoice = 0;
+    } else {
+        // Não bloqueado: manter comportamento anterior (parcelas vencidas)
+        closedTransactions = cardTransactions
+            .filter(tx => tx.type === 'INVOICE_INSTALLMENT' && new Date(tx.date).getTime() <= now.getTime());
+    }
+
+    normalized.creditCard.closedTransactions = closedTransactions;
+    normalized.creditCard.closedInvoice = closedTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+
+    // Adicionar purchasedItems do banco
+    const purchaseRows = await databricksService.executeQuery(`
+        SELECT id, name, description, price, image_url, quantity, points_earned, purchase_date
+        FROM ${databricksService.fq('purchased_items')}
+        WHERE cpf = '${cpf}'
+        ORDER BY purchase_date DESC
+        LIMIT 50
+    `);
+
+    normalized.purchasedItems = (purchaseRows || []).map(r => ({
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        price: r.price != null ? parseFloat(r.price) : 0,
+        imageUrl: r.image_url || r.imageUrl || '',
+        quantity: r.quantity != null ? parseInt(r.quantity, 10) : undefined,
+        pointsEarned: r.points_earned != null ? parseInt(r.points_earned, 10) : undefined,
+        purchaseDate: r.purchase_date
+    }));
+
     res.json({ success: true, user: normalized });
 }));
 // Rota: apiRouter.get('/user/me/:cpf', ...)
@@ -512,7 +713,17 @@ apiRouter.get('/users/:cpf/statement', bearerAuth(), asyncHandler(async (req, re
     }
     
     try {
-        const query = `SELECT * FROM ${databricksService.fq('transactions')} WHERE cpf = '${req.params.cpf}' ORDER BY date DESC LIMIT 50`;
+        // Apenas transacoes de conta corrente devem aparecer no extrato
+        const allowedTypes = [
+            'PIX_SENT',
+            'PIX_RECEIVED',
+            'DEPOSIT',
+            'SHOP_DEBIT',
+            'CASHBACK_CREDIT',
+            'INVOICE_PAYMENT',
+            'PAYMENT'
+        ];
+        const query = `SELECT * FROM ${databricksService.fq('transactions')} WHERE cpf = '${req.params.cpf}' AND type IN (${allowedTypes.map(t => `'${t}'`).join(',')}) ORDER BY date DESC LIMIT 50`;
         console.log(`🔍 Executando query: ${query}`);
         
         const transactions = await databricksService.executeQuery(query);
@@ -578,7 +789,7 @@ apiRouter.get('/shop/products', asyncHandler(async (req, res) => {
 }));
 
 apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => {
-    const { items, paymentMethod, cashbackUsed = 0, installments = 1, pin } = req.body || {};
+    const { items, paymentMethod, cashbackUsed = 0, installments = 1, pin, interestRate } = req.body || {};
     if (!Array.isArray(items) || !items.length || !paymentMethod || !pin || pin.length !== 4) {
         return res.status(400).json({ success: false, message: 'Payload invalido.' });
     }
@@ -620,11 +831,65 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         if (!Number.isInteger(installments) || installments < 1 || installments > 24) {
             return res.status(400).json({ success: false, message: 'Parcelas invalidas.' });
         }
-        await cardRepo.createInstallments({ cpf: req.user.cpf, amount: total, installments });
+        const qty = installments;
+        // Validar juros quando >= 13 parcelas (1% a 7%)
+        let rate = 0;
+        if (qty >= 13) {
+            if (typeof interestRate !== 'number' || interestRate < 0.01 || interestRate > 0.07) {
+                return res.status(400).json({ success: false, message: 'interestRate obrigatorio entre 0.01 e 0.07 para >= 13 parcelas.' });
+            }
+            rate = interestRate;
+        }
+
+        const user = await usersRepo.findByCpf(req.user.cpf);
+        if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+        if (user.credit_card_is_blocked) return res.status(403).json({ success: false, message: 'Cartao bloqueado.' });
+
+        const availableLimit = parseFloat(user.credit_card_available_limit || 0);
+        const creditAmount = qty === 1 ? (total * 0.90) : total; // 1x: 10% desconto, sem parcelas
+        const totalParcelado = qty >= 2 ? (qty >= 13 ? total * (1 + rate) : total) : 0; // 2..12: sem juros; 13..24: com juros
+        const consumoLimite = qty === 1 ? creditAmount : totalParcelado;
+
+        if (!Number.isFinite(availableLimit) || availableLimit < consumoLimite) {
+            return res.status(400).json({ success: false, message: 'Limite de credito insuficiente' });
+        }
+
+        // Debitar limite disponível
         await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
-            VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'SHOP_CREDIT', ${total.toFixed(2)}, 'Compra shop (credito)', current_timestamp())
+            UPDATE ${databricksService.fq('users')}
+            SET credit_card_available_limit = ${(availableLimit - consumoLimite).toFixed(2)}
+            WHERE cpf = '${req.user.cpf}'
         `);
+
+        const nowIso = new Date().toISOString();
+        // Registrar compra visível na fatura aberta
+        const txId = databricksService.generateUUID();
+        await databricksService.executeQuery(`
+            INSERT INTO ${databricksService.fq('transactions')}
+            (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+            VALUES ('${txId}', '${req.user.cpf}', 'SHOP_CREDIT', ${creditAmount.toFixed(2)}, 'Compra shop (credito)', NULL, NULL, NULL, '${nowIso}')
+        `);
+
+        // Gerar parcelas: 1a vence na fatura atual (invoiceDue) e demais mes a mes
+        if (qty >= 2) {
+            const invoiceDueStr = user.credit_card_invoice_due_date;
+            let firstDue = invoiceDueStr ? new Date(invoiceDueStr) : new Date();
+            const now = new Date();
+            if (firstDue < now) firstDue = now; // garante exibição na fatura vigente quando o vencimento está passado
+
+            const parcela = totalParcelado / qty;
+
+            for (let i = 1; i <= qty; i++) {
+                const dueDate = new Date(firstDue);
+                dueDate.setMonth(firstDue.getMonth() + (i - 1));
+                const instId = databricksService.generateUUID();
+                await databricksService.executeQuery(`
+                    INSERT INTO ${databricksService.fq('transactions')}
+                    (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+                    VALUES ('${instId}', '${req.user.cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${`Compra shop (credito) (${i}/${qty})`}', NULL, NULL, NULL, '${dueDate.toISOString()}')
+                `);
+            }
+        }
     } else {
         return res.status(400).json({ success: false, message: 'Metodo de pagamento invalido.' });
     }
@@ -799,9 +1064,42 @@ apiRouter.get('/admin/users', bearerAuth(), authenticateAdmin, asyncHandler(asyn
 }));
 
 apiRouter.get('/admin/users/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
-    const user = await findByCpf(req.params.cpf);
-    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
-    res.json(normalizeUser(user));
+    const cpf = req.params.cpf;
+    const userRow = await findByCpf(cpf);
+    if (!userRow) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+    const user = normalizeUser(userRow);
+
+    // Enriquecer com a fatura mais recente (se houver)
+    const latestInvoice = await invoiceRepo.findLatestByCpf(cpf);
+    if (latestInvoice && latestInvoice.due_date) {
+        // Opcional: apenas quando status indica fatura fechada
+        user.creditCard.closedInvoiceDueDate = latestInvoice.due_date;
+    } else {
+        user.creditCard.closedInvoiceDueDate = null;
+    }
+
+    // Incluir purchasedItems para consistencia nas telas administrativas
+    const purchaseRows = await databricksService.executeQuery(`
+        SELECT id, name, description, price, image_url, quantity, points_earned, purchase_date
+        FROM ${databricksService.fq('purchased_items')}
+        WHERE cpf='${cpf}'
+        ORDER BY purchase_date DESC
+        LIMIT 50
+    `);
+
+    user.purchasedItems = (purchaseRows || []).map(r => ({
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        price: r.price != null ? parseFloat(r.price) : 0,
+        imageUrl: r.image_url || r.imageUrl || '',
+        quantity: r.quantity != null ? parseInt(r.quantity, 10) : undefined,
+        pointsEarned: r.points_earned != null ? parseInt(r.points_earned, 10) : undefined,
+        purchaseDate: r.purchase_date
+    }));
+
+    res.json(user);
 }));
 
 apiRouter.post('/admin/users/:cpf/deposit', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
@@ -809,6 +1107,7 @@ apiRouter.post('/admin/users/:cpf/deposit', bearerAuth(), authenticateAdmin, asy
     const { amount } = req.body || {};
     if (typeof amount !== 'number' || amount <= 0) return res.status(400).json({ success: false, message: 'Payload invalido.' });
     await deposit(cpf, amount);
+    auditLog(req, 'admin_deposit', 'info', { cpf, amount });
     res.json({ success: true, message: 'Depósito realizado' });
 }));
 
@@ -1198,6 +1497,31 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
     if (balance < result.totalDue) return res.status(400).json({ success: false, message: 'Saldo insuficiente' });
 
     await usersRepo.updateBalance(cpf, (balance - result.totalDue).toFixed(2));
+
+    // Atualizacoes de cartao apos pagamento: restaurar limite, desbloquear e avançar vencimento
+    const availableLimit = parseFloat(user.credit_card_available_limit || 0);
+    const totalLimit = parseFloat(user.credit_card_total_limit || 0);
+    const restoredLimit = Math.min(totalLimit, availableLimit + result.totalDue);
+
+    const currentInvDue = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
+    const nextInvDue = new Date(currentInvDue);
+    nextInvDue.setMonth(currentInvDue.getMonth() + 1); // avanca para o proximo ciclo
+
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET credit_card_available_limit = ${restoredLimit.toFixed(2)},
+            credit_card_is_blocked = false,
+            credit_card_invoice_due_date = '${nextInvDue.toISOString()}'
+        WHERE cpf = '${cpf}'
+    `);
+
+    await notificationsRepo.addNotification({
+        cpf,
+        title: 'Pagamento de fatura',
+        message: 'Fatura paga com sucesso. Limite restaurado e novo vencimento definido.',
+        actionUrl: '/dashboard'
+    });
+
     res.json({ success: true, message: 'Fatura paga com sucesso.' });
 }));
 
@@ -1389,6 +1713,20 @@ async function initializeDatabase() {
             ) USING DELTA
         `);
         console.log('✅ Tabela transactions verificada/criada com sucesso.');
+
+        // Criar tabela invoices se não existir
+        await databricksService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${databricksService.fq('invoices')} (
+                id STRING NOT NULL,
+                cpf STRING NOT NULL,
+                status STRING NOT NULL,
+                amount DECIMAL(15,2) NOT NULL,
+                due_date TIMESTAMP NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP
+            ) USING DELTA
+        `);
+        console.log('✅ Tabela invoices verificada/criada com sucesso.');
 
         // Criar tabela pix_contacts se não existir (estrutura corrigida)
         await databricksService.executeQuery(`
