@@ -1,0 +1,7 @@
+{
+  "collection": "../postman-collection.json",
+  "reporters": ["cli"],
+  "timeoutRequest": 15000,
+  "insecure": true,
+  "bail": false
+}

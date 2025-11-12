@@ -1,0 +1,94 @@
+{
+  "info": {
+    "name": "FintechBankApp - Login Tests",
+    "description": "Testes de autenticação de login para 3 usuários (válidos e inválido).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001/api" }
+  ],
+  "item": [
+    {
+      "name": "Login Admin (00000000000 / admin123) - Esperado 200",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"cpf\": \"00000000000\", \"password\": \"admin123\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "const json = pm.response.json();",
+              "pm.test('success: true', function () { pm.expect(json.success).to.eql(true); });",
+              "pm.test('token presente', function () { pm.expect(json.token).to.be.a('string').and.not.empty; });",
+              "pm.test('CPF correto', function () { pm.expect(json.user && json.user.cpf).to.eql('00000000000'); });",
+              "pm.test('Mensagem de sucesso presente', function () { pm.expect(json.message).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login Usuario de Teste (12345678901 / 123456) - Esperado 200",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"cpf\": \"12345678901\", \"password\": \"123456\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "const json = pm.response.json();",
+              "pm.test('success: true', function () { pm.expect(json.success).to.eql(true); });",
+              "pm.test('token presente', function () { pm.expect(json.token).to.be.a('string').and.not.empty; });",
+              "pm.test('CPF correto', function () { pm.expect(json.user && json.user.cpf).to.eql('12345678901'); });",
+              "pm.test('Mensagem de sucesso presente', function () { pm.expect(json.message).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login Admin Frontend (11111111111 / admin) - Esperado 400",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"cpf\": \"11111111111\", \"password\": \"admin\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 400', function () { pm.response.to.have.status(400); });",
+              "const json = pm.response.json();",
+              "pm.test('success: false', function () { pm.expect(json.success).to.eql(false); });",
+              "pm.test('Mensagem payload invalido', function () { pm.expect(json.message).to.eql('Payload invalido.'); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
