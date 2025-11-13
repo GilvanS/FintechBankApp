@@ -43,6 +43,7 @@ class DatabricksService {
         this.session = null;
         this.catalog = databricksConfig.catalog;
         this.schema = databricksConfig.schema;
+        this.mockMode = false;
     }
 
     generateUUID() {
@@ -54,8 +55,21 @@ class DatabricksService {
     }
 
     async connect() {
-        if (!databricksConfig.serverHostname || !databricksConfig.httpPath || !databricksConfig.token) {
-            throw new Error("Configurações do Databricks incompletas. Defina DATABRICKS_SERVER_HOSTNAME, DATABRICKS_HTTP_PATH e DATABRICKS_TOKEN.");
+        const isMissingEnv =
+            !databricksConfig.serverHostname ||
+            !databricksConfig.httpPath ||
+            !databricksConfig.token;
+        const looksLikePlaceholder =
+            String(databricksConfig.token || '').toUpperCase().includes('PAT') ||
+            String(databricksConfig.token || '').includes('DATABRICKS_TOKEN') ||
+            String(databricksConfig.token || '').includes('CHANGE_ME');
+
+        if (isMissingEnv || looksLikePlaceholder) {
+            console.warn('⚠️ Configuracao Databricks ausente ou token placeholder. Ativando mockMode.');
+            this.mockMode = true;
+            this.client = null;
+            this.session = null;
+            return;
         }
 
         try {
@@ -75,8 +89,11 @@ class DatabricksService {
             await this.detectAvailableCatalog();
             this.mockMode = false;
         } catch (error) {
-            console.error("❌ Falha ao conectar com Databricks:", error.message);
-            throw error;
+            console.error('❌ Falha ao conectar com Databricks:', error.message);
+            console.warn('⚠️ Ativando mockMode para desenvolvimento local.');
+            this.mockMode = true;
+            this.client = null;
+            this.session = null;
         }
     }
 
@@ -129,7 +146,9 @@ class DatabricksService {
     }
 
     async executeQuery(query) {
-        if (!this.session) throw new Error("Não conectado ao Databricks");
+        if (this.mockMode) {
+            throw new Error('MockMode ativo: operacao de banco nao disponivel no desenvolvimento local.');
+        }
         console.log("Executing Query:", query);
         const operation = await this.session.executeStatement(query, { runAsync: false, maxRows: 10000 });
         const result = await operation.fetchAll();
@@ -1971,13 +1990,17 @@ async function seedDatabase() {
 async function bootstrap() {
     try {
         await databricksService.connect();
-        await initializeDatabase();
-        await ensureAdminUser();
-        await seedDatabase();
-        console.log("🎯 Servidor pronto para uso com Databricks!");
-        console.log("📋 Swagger disponível em: http://localhost:3001/api-docs");
+        if (databricksService.mockMode) {
+            console.log('🧪 Servidor iniciado em mockMode. Endpoints que dependem de DB retornarao erro controlado.');
+        } else {
+            await initializeDatabase();
+            await ensureAdminUser();
+            await seedDatabase();
+            console.log("🎯 Servidor pronto para uso com Databricks!");
+            console.log("📋 Swagger disponível em: http://localhost:3001/api-docs");
+        }
     } catch (error) {
-        console.error("❌ Erro ao inicializar Databricks:", error.message);
+        console.error("❌ Erro ao inicializar:", error.message);
         process.exit(1);
     }
 }
