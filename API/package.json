@@ -1,22 +1,29 @@
 {
-  "name": "fintech-bank-app",
-  "private": true,
-  "version": "0.0.0",
+  "name": "fintech-bank-app-api",
+  "version": "1.0.0",
+  "description": "Backend API for FintechBankApp",
+  "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "vite --config WEB\\vite.config.ts",
-    "build": "vite build --config WEB\\vite.config.ts",
-    "preview": "vite preview --config WEB\\vite.config.ts",
-    "test:no-mock": "node WEB\\scripts\\verify-no-mock.js"
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-validator": "^7.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.9.7",
+    "swagger-autogen": "^2.23.7",
+    "swagger-ui-express": "^5.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "newman": "^6.1.2"
   }
 }

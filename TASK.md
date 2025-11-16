@@ -9,7 +9,7 @@ Este documento detalha o planejamento e as etapas para transformar o projeto `WE
 ### **Fase 1: Preparação do Ambiente e Duplicação do Projeto**
 
 -   [x] **Tarefa 1.1:** Criar este documento de planejamento (`TASK.md`).
--   [ ] **Tarefa 1.2:** Duplicar o diretório `WEB` para um novo diretório `MOBILE` para isolar o ambiente de desenvolvimento móvel.
+-   [x] **Tarefa 1.2:** Duplicar o diretório `WEB` para um novo diretório `MOBILE` para isolar o ambiente de desenvolvimento móvel.
 
 **Possíveis Erros e Como Evitar:**
 *   **Erro:** Alterações no projeto `MOBILE` afetarem o projeto `WEB`.
@@ -21,9 +21,9 @@ Este documento detalha o planejamento e as etapas para transformar o projeto `WE
 
 O objetivo é "embrulhar" a aplicação web existente em um contêiner nativo Android.
 
--   [ ] **Tarefa 2.1:** Instalar as dependências do Capacitor (`@capacitor/core`, `@capacitor/cli`) no diretório `MOBILE`.
--   [ ] **Tarefa 2.2:** Inicializar o Capacitor no projeto `MOBILE` (`npx cap init`).
--   [ ] **Tarefa 2.3:** Adicionar a plataforma Android ao projeto (`npx cap add android`).
+-   [x] **Tarefa 2.1:** Instalar as dependências do Capacitor (`@capacitor/core`, `@capacitor/cli`) no diretório `MOBILE`.
+-   [x] **Tarefa 2.2:** Inicializar o Capacitor no projeto `MOBILE` (`npx cap init`).
+-   [x] **Tarefa 2.3:** Adicionar a plataforma Android ao projeto (`npx cap add android`).
 
 **Possíveis Erros e Como Evitar:**
 *   **Erro:** Falha na instalação de dependências por conflitos de versão do Node.js/npm.
@@ -56,10 +56,10 @@ O passo mais crítico para garantir que o APK se comunique com sua máquina.
 
 O processo final de empacotamento.
 
--   [ ] **Tarefa 4.1:** Gerar a build de produção da aplicação React (`npm run build`) dentro da pasta `MOBILE`.
--   [ ] **Tarefa 4.2:** Sincronizar os arquivos web com o projeto nativo (`npx cap sync`).
--   [ ] **Tarefa 4.3:** Abrir o projeto no Android Studio (`npx cap open android`).
--   [ ] **Tarefa 4.4:** Executar o processo de build do APK no Android Studio.
+-   [x] **Tarefa 4.1:** Gerar a build de produção da aplicação React (`npm run build`) dentro da pasta `MOBILE`.
+-   [x] **Tarefa 4.2:** Sincronizar os arquivos web com o projeto nativo (`npx cap sync`).
+-   [x] **Tarefa 4.3:** Abrir o projeto no Android Studio (`npx cap open android`).
+-   [x] **Tarefa 4.4:** Executar o processo de build do APK no Android Studio.
 
 **Possíveis Erros e Como Evitar:**
 *   **Erro:** A build do APK falha por problemas de `Gradle` (gerenciador de dependências do Android).
@@ -68,5 +68,49 @@ O processo final de empacotamento.
 *   **Prevenção:** O processo `npm run build` já otimiza os arquivos. Para produção, podemos habilitar `ProGuard` ou `R8` no Android para ofuscar e diminuir ainda mais o código.
 
 ---
+
+### **Guia de Setup para Novas Máquinas e Resolução de Problemas**
+
+Esta seção foi adicionada após o setup inicial para documentar o fluxo de trabalho correto ao clonar o projeto em um novo ambiente.
+
+**1. Clonando o Repositório:**
+   - Use `git clone <url_do_repositorio>`.
+
+**2. Resolvendo Conflitos Iniciais do Git (se ocorrer):**
+   - **Problema:** O histórico do repositório pode conter uma referência antiga onde a pasta `MOBILE` era um "submódulo" ou um "arquivo" em vez de um diretório.
+   - **Sintoma:** O `git pull` falha com um conflito de "file/directory".
+   - **Solução:** Forçar o repositório local a ser um espelho exato do servidor.
+     ```bash
+     # Joga fora todas as alterações locais e se alinha com o servidor
+     git reset --hard origin/developer
+     ```
+
+**3. Configurando o Projeto Mobile pela Primeira Vez:**
+   - O projeto é clonado sem a pasta `android/` (isso é intencional e definido no `.gitignore`). Você precisa gerá-la localmente.
+   - **Passo 1: Instalar Dependências do Node.js**
+     ```bash
+     cd mobile
+     npm install
+     ```
+   - **Passo 2: Adicionar a Plataforma Android**
+     ```bash
+     # Este comando cria a pasta /android
+     npx cap add android
+     ```
+   - **Passo 3: Compilar a Aplicação Web**
+     ```bash
+     # Este comando cria a pasta /dist
+     npm run build
+     ```
+   - **Passo 4: Sincronizar Web e Nativo**
+     ```bash
+     # Copia a pasta /dist para dentro de /android
+     npx cap sync android
+     ```
+
+**4. Gerando o APK:**
+   - Após a sincronização, abra a pasta `mobile/android` no Android Studio.
+   - Vá em **`Build` -> `Build Bundle(s) / APK(s)` -> `Build APK(s)`** para gerar o `app-debug.apk`.
+   - Clique em **"locate"** na notificação para encontrar o arquivo.
 
 Vou mantê-lo informado ao final de cada fase principal.
