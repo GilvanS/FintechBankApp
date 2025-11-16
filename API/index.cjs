@@ -1,5 +1,6 @@
 // Servidor da FintechBankApp integrado com Databricks
-require('dotenv').config();
+import dotenv from 'dotenv';
+dotenv.config();
 const express = require('express');
 const cors = require('cors');
 const { DBSQLClient } = require('@databricks/sql');
