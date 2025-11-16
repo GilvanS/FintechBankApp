@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FintechBank</string>
+    <string name="title_activity_main">FintechBank</string>
+    <string name="package_name">com.fintechbank.app</string>
+    <string name="custom_url_scheme">com.fintechbank.app</string>
+</resources>
