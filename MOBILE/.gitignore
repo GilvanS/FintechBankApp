@@ -1,0 +1,27 @@
+# Dependencies
+/node_modules
+
+# Build output
+/dist
+/www
+
+# Capacitor build files for native platforms
+/android/app/build
+/android/.gradle
+/android/build
+
+# IDE & editor files
+.idea
+.vscode
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Log files
+*.log
+
+# Keystore files (important for security)
+*.jks
+*.keystore

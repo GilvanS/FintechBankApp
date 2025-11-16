@@ -1,0 +1,579 @@
+openapi: 3.0.0
+info:
+  title: Fintech Bank API
+  description: API specification for the Fintech Bank application, handling user authentication, account management, PIX transfers, and administrative tasks.
+  version: "1.0.0"
+servers:
+  - url: http://localhost:3001/api/v1
+    description: Mock API Server
+
+tags:
+  - name: Auth
+    description: Authentication and session management
+  - name: User
+    description: User account operations
+  - name: PIX
+    description: PIX transfers and contacts management
+  - name: Admin
+    description: Administrative operations for managing users
+
+paths:
+  /auth/signup:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignUpRequest'
+      responses:
+        '200':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid input or user already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Log in a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAuthResponse'
+        '401':
+          description: Invalid credentials or account blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Log out the current user
+      responses:
+        '200':
+          description: Logout successful
+
+  /auth/request-password-reset:
+    post:
+      tags:
+        - Auth
+      summary: Request a password reset for a given CPF
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cpf:
+                  type: string
+                  example: '11122233344'
+      responses:
+        '200':
+          description: Password reset instructions sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: CPF not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /user/me/{cpf}:
+    get:
+      tags:
+        - User
+      summary: Get current user data by CPF
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          description: The CPF of the user to retrieve
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User data retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Not authenticated
+        '404':
+          description: User not found
+
+  /user/limits/pix-daily/{cpf}:
+    put:
+      tags:
+        - User
+      summary: Update the user's daily PIX limit
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                newLimit:
+                  type: number
+                  format: float
+                  example: 1500.00
+      responses:
+        '200':
+          description: Limit updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid limit value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pix/transfer:
+    post:
+      tags:
+        - PIX
+      summary: Perform a PIX transfer
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PixTransferRequest'
+      responses:
+        '200':
+          description: PIX transfer successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request (e.g., insufficient funds, limit exceeded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pix/contacts/{cpf}:
+    get:
+      tags:
+        - PIX
+      summary: Get all PIX contacts for the user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A list of PIX contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PixContact'
+    post:
+      tags:
+        - PIX
+      summary: Add a new PIX contact
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PixContact'
+      responses:
+        '201':
+          description: Contact created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Contact with this key already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pix/contacts/{cpf}/{contactKey}:
+    delete:
+      tags:
+        - PIX
+      summary: Delete a PIX contact
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: cpf
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: contactKey
+          required: true
+          schema:
+            type: string
+          description: The PIX key of the contact to delete
+      responses:
+        '200':
+          description: Contact deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Contact not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/users/{cpf}:
+    get:
+      tags:
+        - Admin
+      summary: Get user details by CPF (Admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          description: The CPF of the user to retrieve
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '403':
+          description: Forbidden
+        '404':
+          description: User not found
+
+  /admin/users/{cpf}/deposit:
+    post:
+      tags:
+        - Admin
+      summary: Make a deposit to a user's account (Admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                  format: float
+      responses:
+        '200':
+          description: Deposit successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Invalid amount
+        '403':
+          description: Forbidden
+
+  /admin/users/{cpf}/block:
+    post:
+      tags:
+        - Admin
+      summary: Block a user account (Admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '403':
+          description: Forbidden
+        '404':
+          description: User not found
+
+  /admin/users/{cpf}/unblock:
+    post:
+      tags:
+        - Admin
+      summary: Unblock a user account (Admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User unblocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '403':
+          description: Forbidden
+        '404':
+          description: User not found
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    PixContact:
+      type: object
+      properties:
+        key:
+          type: string
+          description: "The PIX key (CPF or email)"
+          example: "user@example.com"
+        name:
+          type: string
+          description: "Nickname for the contact"
+          example: "John Doe"
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [PIX_SENT, PIX_RECEIVED, DEPOSIT, ADMIN_DEPOSIT]
+        amount:
+          type: number
+          format: float
+        date:
+          type: string
+          format: date-time
+        description:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        toKey:
+          type: string
+
+    User:
+      type: object
+      properties:
+        fullName:
+          type: string
+        cpf:
+          type: string
+        email:
+          type: string
+          format: email
+        balance:
+          type: number
+          format: float
+          readOnly: true
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+          readOnly: true
+        loginAttempts:
+          type: integer
+          readOnly: true
+        isBlocked:
+          type: boolean
+          readOnly: true
+        pixDailyLimit:
+          type: number
+          format: float
+        passwordResetRequested:
+          type: boolean
+          readOnly: true
+        pixContacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/PixContact'
+        role:
+          type: string
+          enum: [customer, admin]
+          readOnly: true
+    
+    UserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Operation successful"
+        user:
+          $ref: '#/components/schemas/User'
+
+    UserAuthResponse:
+      allOf:
+        - $ref: '#/components/schemas/UserResponse'
+        - type: object
+          properties:
+            token:
+              type: string
+              example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              
+    SignUpRequest:
+      type: object
+      required:
+        - fullName
+        - cpf
+        - email
+        - password
+      properties:
+        fullName:
+          type: string
+          example: "Alice Silva"
+        cpf:
+          type: string
+          example: "11122233344"
+        email:
+          type: string
+          format: email
+          example: "alice@example.com"
+        password:
+          type: string
+          format: password
+          example: "password123"
+
+    LoginRequest:
+      type: object
+      required:
+        - cpf
+        - password
+      properties:
+        cpf:
+          type: string
+          example: "11122233344"
+        password:
+          type: string
+          format: password
+          example: "password123"
+
+    PixTransferRequest:
+      type: object
+      required:
+        - fromCpf
+        - toKey
+        - amount
+      properties:
+        fromCpf:
+          type: string
+          description: "Sender's CPF"
+          example: "11122233344"
+        toKey:
+          type: string
+          description: "Receiver's PIX key"
+          example: "55566677788"
+        amount:
+          type: number
+          format: float
+          example: 50.25
+        description:
+          type: string
+          example: "Dinner payment"
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Operation completed successfully."
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "An error occurred."
