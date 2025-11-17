@@ -1,4 +1,17 @@
-<?xml version='1.0' encoding='utf-8'?>
+// Top-level: base de API
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+
+// ... dezenas de funções usando fetch com essa variável ...
+<?xml version='1.0' encoding='utf// Serviço HTTP do mobile (axios) com baseURL da .env
+import axios from 'axios';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+
+export const api = axios.create({
+  baseURL: API_BASE,
+  // ...
+});
+-8'?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
