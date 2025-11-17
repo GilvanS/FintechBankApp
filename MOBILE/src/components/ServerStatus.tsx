@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-// A constante API_BASE é importada do serviço de API principal.
-import { API_BASE } from '../services/api';
+// A função getApiBase é importada do serviço de API principal.
+import { getApiBase } from '../services/api';
 
 const ServerStatus: React.FC = () => {
   const [status, setStatus] = useState<'loading' | 'online' | 'offline'>('loading');
+  const [apiBaseUrl, setApiBaseUrl] = useState<string>('');
 
   const checkStatus = useCallback(async () => {
     setStatus('loading');
+    const currentApiBase = getApiBase();
+    setApiBaseUrl(currentApiBase);
     try {
       // Usamos o endpoint /health que criamos no backend
-      const response = await fetch(`${API_BASE}/health`, {
+      const response = await fetch(`${currentApiBase}/health`, {
           method: 'GET',
           headers: {
               'Accept': 'application/json',
@@ -56,7 +59,7 @@ const ServerStatus: React.FC = () => {
   
   return (
     <div className="bg-gray-100 p-3 rounded-lg w-full text-sm font-sans">
-      <p className="text-gray-500 text-xs mb-2">Servidor: {API_BASE}</p>
+      <p className="text-gray-500 text-xs mb-2">Servidor: {apiBaseUrl}</p>
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           <StatusIndicator />

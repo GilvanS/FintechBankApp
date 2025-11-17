@@ -2,7 +2,7 @@
 // Dentro do componente Login
 import React, { useState } from 'react';
 import { useAuth } from '../App';
-import { login, requestNewPassword, API_BASE } from '../services/api';
+import { login, requestNewPassword, getApiBase } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useToast, ToastContainer } from './Toast';
 import { getUserMe } from '../services/api';
@@ -146,8 +146,8 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
 
                         {/* Botões de Teste */}
                         <div className="flex justify-around text-center pt-2">
-                           <button type="button" onClick={() => openInBrowser(`${API_BASE}/health`)} className="text-sm font-medium text-indigo-600 hover:underline">Testar Conexão Health</button>
-                           <button type="button" onClick={() => openInBrowser(`${API_BASE}/api-docs`)} className="text-sm font-medium text-indigo-600 hover:underline">Testar API Docs</button>
+                           <button type="button" onClick={() => openInBrowser(`${getApiBase()}/health`)} className="text-sm font-medium text-indigo-600 hover:underline">Testar Conexão Health</button>
+                           <button type="button" onClick={() => openInBrowser(`${getApiBase()}/api-docs`)} className="text-sm font-medium text-indigo-600 hover:underline">Testar API Docs</button>
                         </div>
 
                         <div>

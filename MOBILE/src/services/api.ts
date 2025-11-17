@@ -83,6 +83,204 @@ export async function login(cpf: string, password: string): Promise<{ success: b
     }
 }
 
+export async function signUp(userData: any): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await fetch(`${getApiBase()}/auth/signup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao criar conta.' };
+        }
+        return { success: true, message: data.message || 'Conta criada com sucesso.' };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexão ao criar conta.' };
+    }
+}
+
+export async function updateUserProfile(cpf: string, profileData: any): Promise<{ success: boolean; message: string; user?: any }> {
+    try {
+        const res = await fetch(`${getApiBase()}/users/${cpf}/profile`, {
+            method: 'PUT',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify(profileData),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao atualizar perfil.' };
+        }
+        return { success: true, message: 'Perfil atualizado com sucesso.', user: data.user };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexão ao atualizar perfil.' };
+    }
+}
+
+export async function updateUserPixDailyLimit(cpf: string, limit: number): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await fetch(`${getApiBase()}/users/${cpf}/limits/pix`, {
+            method: 'PUT',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify({ limit }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao atualizar limite PIX.' };
+        }
+        return { success: true, message: 'Limite PIX atualizado com sucesso.' };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexão ao atualizar limite PIX.' };
+    }
+}
+
+export async function requestLimitIncrease(cpf: string, requestedLimit: number): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await fetch(`${getApiBase()}/users/${cpf}/limits/request-increase`, {
+            method: 'POST',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify({ requestedLimit }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao solicitar aumento de limite.' };
+        }
+        return { success: true, message: 'Solicitação de aumento de limite enviada com sucesso.' };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexão ao solicitar aumento de limite.' };
+    }
+}
+
+export async function getNotifications(cpf: string): Promise<{ success: boolean; notifications?: any[] }> {
+    try {
+        const res = await fetch(`${getApiBase()}/users/${cpf}/notifications`, {
+            method: 'GET',
+            headers: getAuthHeaders('none'),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) {
+            return { success: false };
+        }
+        return { success: true, notifications: data.notifications || [] };
+    } catch (error) {
+        return { success: false };
+    }
+}
+
+export async function markNotificationAsRead(cpf: string, notificationId: number): Promise<{ success: boolean; message?: string }> {
+    try {
+        const res = await fetch(`${getApiBase()}/users/${cpf}/notifications/${notificationId}/read`, {
+            method: 'PUT',
+            headers: getAuthHeaders('json'),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao marcar notificação como lida.' };
+        }
+        return { success: true, message: 'Notificação marcada como lida.' };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexão.' };
+    }
+}
+
+export async function getPixContacts(cpf: string): Promise<{ success: boolean; contacts?: any[] }> {
+    try {
+        const res = await fetch(`${getApiBase()}/users/${cpf}/pix/contacts`, {
+            method: 'GET',
+            headers: getAuthHeaders('none'),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) {
+            return { success: false };
+        }
+        return { success: true, contacts: data.contacts || [] };
+    } catch (error) {
+        return { success: false };
+    }
+}
+
+export async function addPixContact(cpf: string, contactData: any): Promise<{ success: boolean; message?: string }> {
+    try {
+        const res = await fetch(`${getApiBase()}/users/${cpf}/pix/contacts`, {
+            method: 'POST',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify(contactData),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao adicionar contato.' };
+        }
+        return { success: true, message: 'Contato adicionado com sucesso.' };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexão.' };
+    }
+}
+
+export async function deletePixContact(cpf: string, key: string): Promise<{ success: boolean; message?: string }> {
+    try {
+        const res = await fetch(`${getApiBase()}/users/${cpf}/pix/contacts/${key}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders('none'),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao deletar contato.' };
+        }
+        return { success: true, message: 'Contato deletado com sucesso.' };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexão.' };
+    }
+}
+
+export async function getPixKeys(): Promise<{ success: boolean; keys?: any[] }> {
+    try {
+        const res = await fetch(`${getApiBase()}/pix/keys`, {
+            method: 'GET',
+            headers: getAuthHeaders('none'),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) {
+            return { success: false };
+        }
+        return { success: true, keys: data.keys || [] };
+    } catch (error) {
+        return { success: false };
+    }
+}
+
+export async function registerPixKey(type: string, key: string): Promise<{ success: boolean; message?: string }> {
+    try {
+        const res = await fetch(`${getApiBase()}/pix/keys`, {
+            method: 'POST',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify({ type, key }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao registrar chave PIX.' };
+        }
+        return { success: true, message: 'Chave PIX registrada com sucesso.' };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexão.' };
+    }
+}
+
+export async function deletePixKey(key: string): Promise<{ success: boolean; message?: string }> {
+    try {
+        const res = await fetch(`${getApiBase()}/pix/keys/${key}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders('none'),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao deletar chave PIX.' };
+        }
+        return { success: true, message: 'Chave PIX deletada com sucesso.' };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexão.' };
+    }
+}
+
 export async function getUserByCpf(cpf: string) {
     try {
         const res = await fetch(`${getApiBase()}/users/${cpf}`, {
@@ -132,11 +330,6 @@ export async function requestNewPassword(cpf: string) {
     }
 }
 
-// As demais funções (purchaseWithDebit, purchaseWithCard, etc.) continuarão funcionando, 
-// pois o `fetch` será feito para a URL correta através de `getApiBase()`.
-// ... (o resto do arquivo permanece igual, apenas trocando API_BASE por getApiBase())
-
-// Exemplo de como uma função fica:
 export async function getUserStatement(cpf: string): Promise<{ success: boolean; message?: string; transactions?: any[] }> {
     try {
         const res = await fetch(`${getApiBase()}/users/${cpf}/statement`, {
@@ -153,9 +346,6 @@ export async function getUserStatement(cpf: string): Promise<{ success: boolean;
     }
 }
 
-// ... (Repetir o padrão para todas as outras funções do arquivo)
-
-// Método: purchaseWithDebit
 export async function purchaseWithDebit(cpf: string, items: Array<{ id: string; quantity?: number }>, cashbackUsed: number, pin: string) {
     const payload = {
         items: items.map(i => ({ productId: i.id, quantity: i.quantity || 1 })),
@@ -175,7 +365,6 @@ export async function purchaseWithDebit(cpf: string, items: Array<{ id: string; 
     return data; // { success, message }
 }
 
-// Método: purchaseWithCard
 export async function purchaseWithCard(cpf: string, items: Array<{ id: string; quantity?: number }>, cashbackUsed: number, installments: number, pin: string) {
     const payload = {
         items: items.map(i => ({ productId: i.id, quantity: i.quantity || 1 })),
@@ -196,7 +385,6 @@ export async function purchaseWithCard(cpf: string, items: Array<{ id: string; q
     return data; // { success, message }
 }
 
-// Método: payCreditCardInvoice
 export async function payCreditCardInvoice(cpf: string, pin: string) {
     try {
         const res = await fetch(`${getApiBase()}/cards/invoice/pay`, {
@@ -214,7 +402,6 @@ export async function payCreditCardInvoice(cpf: string, pin: string) {
     }
 }
 
-// Método: anticipateCreditCardInstallments
 export async function anticipateCreditCardInstallments(cpf: string, transactionIds: string[], pin: string) {
     try {
         const res = await fetch(`${getApiBase()}/cards/invoice/anticipate`, {
@@ -232,7 +419,6 @@ export async function anticipateCreditCardInstallments(cpf: string, transactionI
     }
 }
 
-// Método: parcelCreditCardInvoice
 export async function parcelCreditCardInvoice(cpf: string, details: { amount: number; installments: number }, pin: string): Promise<{ success: boolean; message: string }> {
     try {
         const res = await fetch(`${getApiBase()}/cards/invoice/parcel`, {
@@ -250,5 +436,204 @@ export async function parcelCreditCardInvoice(cpf: string, details: { amount: nu
     }
 }
 
-// E assim por diante para todas as outras chamadas fetch... restante do arquivo omitido por brevidade mas segue o mesmo padrão.
+export async function getPixRecipientInfo(key: string, senderCpf?: string) {
+    try {
+        const payload = senderCpf ? { key, fromCpf: senderCpf } : { key };
+        const res = await fetch(`${getApiBase()}/pix/recipient-info`, {
+            method: 'POST',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao consultar destinatario.' };
+        }
+        return data; // { success, recipient }
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao consultar destinatario.' };
+    }
+}
 
+export async function performPixTransfer(toKey: string, amount: number, description: string, pin: string, fromCpf?: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const payload: Record<string, any> = { toKey, amount, description, pin };
+        if (fromCpf) payload.fromCpf = fromCpf;
+
+        const res = await fetch(`${getApiBase()}/pix/transfer`, {
+            method: 'POST',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+            return { success: false, message: data?.message || 'Falha na transferencia PIX.' };
+        }
+        return { success: true, message: data?.message || 'Transferencia PIX realizada com sucesso.' };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao na transferencia PIX.' };
+    }
+}
+
+export async function performPixCreditTransfer(cpf: string, toKey: string, amount: number, description: string, installments: number, pin: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await fetch(`${getApiBase()}/pix/transfer-credit`, {
+            method: 'POST',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify({ fromCpf: cpf, toKey, amount, description, installments, pin }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+            return { success: false, message: data?.message || 'Falha no PIX no credito.' };
+        }
+        return { success: true, message: data?.message || 'PIX no credito realizado com sucesso.' };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao no PIX no credito.' };
+    }
+}
+
+export async function adminGetUserByCpf(cpf: string) {
+    try {
+        const res = await fetch(`${getApiBase()}/admin/users/${cpf}`, { method: 'GET', headers: getAuthHeaders('none') });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return { success: false, message: data.message || 'Falha ao buscar usuario.' };
+        return { success: true, user: data };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao buscar usuario.' };
+    }
+}
+
+export async function blockUser(cpf: string) {
+    try {
+        const res = await fetch(`${getApiBase()}/admin/users/${cpf}/block`, { method: 'POST', headers: getAuthHeaders('json'), body: JSON.stringify({}) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return { success: false, message: data.message || 'Falha ao bloquear usuario.' };
+        return data;
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao bloquear usuario.' };
+    }
+}
+
+export async function unblockUser(cpf: string) {
+    try {
+        const res = await fetch(`${getApiBase()}/admin/users/${cpf}/unblock`, { method: 'POST', headers: getAuthHeaders('json'), body: JSON.stringify({}) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return { success: false, message: data.message || 'Falha ao desbloquear usuario.' };
+        return data;
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao desbloquear usuario.' };
+    }
+}
+
+export async function adminDeposit(cpf: string, amount: number) {
+    try {
+        const res = await fetch(`${getApiBase()}/admin/users/${cpf}/deposit`, { method: 'POST', headers: getAuthHeaders('json'), body: JSON.stringify({ amount }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return { success: false, message: data.message || 'Falha no deposito.' };
+        const u = await adminGetUserByCpf(cpf);
+        if (!u.success) return { success: false, message: 'Deposito realizado, mas falhou ao buscar usuario.' };
+        return { success: true, message: data.message, user: u.user };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao realizar deposito.' };
+    }
+}
+
+export async function adminGetPasswordRequests() {
+    try {
+        const res = await fetch(`${getApiBase()}/admin/requests/password`, { method: 'GET', headers: getAuthHeaders('none') });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return [];
+        return (data.requests || []).map((r: any) => ({ cpf: r.cpf, status: 'pending' }));
+    } catch (error) {
+        return [];
+    }
+}
+
+export async function adminApprovePasswordRequest(cpf: string) {
+    try {
+        const res = await fetch(`${getApiBase()}/admin/requests/password/${cpf}/approve`, { method: 'POST', headers: getAuthHeaders('json'), body: JSON.stringify({}) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return { success: false, message: data.message || 'Falha ao aprovar pedido.' };
+        return { success: true, message: data.message };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao aprovar pedido.' };
+    }
+}
+
+export async function adminDenyPasswordRequest(cpf: string, reason?: string) {
+    try {
+        const res = await fetch(`${getApiBase()}/admin/requests/password/${cpf}/deny`, { method: 'POST', headers: getAuthHeaders('json'), body: JSON.stringify({ reason }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return { success: false, message: data.message || 'Falha ao negar pedido.' };
+        return { success: true, message: data.message };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao negar pedido.' };
+    }
+}
+
+export async function adminGetLimitRequests() {
+    try {
+        const res = await fetch(`${getApiBase()}/admin/requests/limit`, { method: 'GET', headers: getAuthHeaders('none') });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return [];
+        return (Array.isArray(data) ? data : []).map((r: any) => ({ cpf: r.cpf, amount: r.amount, status: r.status || 'pending' }));
+    } catch (error) {
+        return [];
+    }
+}
+
+export async function adminApproveLimitRequest(cpf: string) {
+    try {
+        const res = await fetch(`${getApiBase()}/admin/requests/limit/${cpf}/approve`, { method: 'POST', headers: getAuthHeaders('json'), body: JSON.stringify({}) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return { success: false, message: data.message || 'Falha ao aprovar limite.' };
+        return { success: true, message: data.message };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao aprovar limite.' };
+    }
+}
+
+export async function adminDenyLimitRequest(cpf: string, reason?: string) {
+    try {
+        const res = await fetch(`${getApiBase()}/admin/requests/limit/${cpf}/deny`, { method: 'POST', headers: getAuthHeaders('json'), body: JSON.stringify({ reason }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return { success: false, message: data.message || 'Falha ao negar limite.' };
+        return { success: true, message: data.message };
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao negar limite.' };
+    }
+}
+
+export async function adminUpdateCardDetails(cpf: string, payload: { dueDate?: string; invoiceDueDate?: string; availableLimit?: number; totalLimit?: number; pointsBalance?: number }) {
+    try {
+        const res = await fetch(`${getApiBase()}/admin/users/${cpf}/card-details`, {
+            method: 'POST',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            return { success: false, message: data.message || 'Falha ao atualizar detalhes do cartao.' };
+        }
+        return data;
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao atualizar detalhes do cartao.' };
+    }
+}
+
+export async function resetPassword(cpf: string, token: string, newPassword: string) {
+    // swagger.yaml define /auth/reset-password
+    try {
+        const res = await fetch(`${getApiBase()}/auth/reset-password`, {
+            method: 'POST',
+            headers: getAuthHeaders('json'),
+            body: JSON.stringify({ cpf, token, newPassword }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+            return { success: false, message: data?.message || 'Reset de senha indisponivel no momento.' };
+        }
+        return data; // { success, message }
+    } catch (error) {
+        return { success: false, message: 'Erro de conexao ao redefinir senha.' };
+    }
+}
