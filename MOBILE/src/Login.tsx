@@ -76,11 +76,21 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
   };
   
   const handleSaveIp = () => {
-      const sanitizedIp = customIp.replace(/\/api.*$/, '').replace(/\/$/, '');
+    try {
+      // Garante que a URL seja bem formada antes de salvar
+      const url = new URL(customIp);
+      const sanitizedIp = `${url.protocol}//${url.host}`;
+      
       setCustomApiBase(sanitizedIp);
-      setCustomIp(sanitizedIp); 
+      setCustomIp(sanitizedIp);
       setShowIpConfig(false);
+      setError('');
+
+      // Força o componente de status a re-verificar a conexão imediatamente
       window.dispatchEvent(new Event('storage'));
+    } catch (e) {
+      setError('Endereço da API inválido. Use o formato http://ip:porta');
+    }
   };
 
   const handleResetIp = () => {
