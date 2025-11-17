@@ -3,11 +3,6 @@ import axios from 'axios';
 // A URL compilada no momento do build
 const COMPILED_API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
-/**
- * Obtém a URL base da API dinamicamente.
- * Prioriza uma URL customizada salva no localStorage (definida pelo usuário no app).
- * Se não houver URL customizada, usa a URL padrão compilada com o app.
- */
 export function getApiBase(): string {
     const customApiBase = localStorage.getItem('customApiBaseUrl');
     return customApiBase || COMPILED_API_BASE;
