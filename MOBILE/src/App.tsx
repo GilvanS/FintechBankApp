@@ -1,13 +1,12 @@
 
 import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
 import { User } from './types';
-import Login from './components/Login';
+import Login from './Login';
 import SignUp from './components/SignUp';
 import Dashboard from './components/Dashboard';
 import PreLoginDashboard from './components/PreLoginDashboard';
-import ResetPassword from './components/ResetPassword'; // Import the new component
+import ResetPassword from './components/ResetPassword';
 
-// FIX: Added view and navigateTo to the context to be consumed by child components like Dashboard.
 interface AuthContextType {
     user: User | null;
     login: (user: Omit<User, 'password'>) => void;
@@ -27,7 +26,6 @@ export const useAuth = () => {
     return context;
 };
 
-// Função de normalizacao do usuario vindo do backend
 function normalizeUserShape(input: Partial<User>): User {
     const nowIso = new Date().toISOString();
     const defaultCard = {
@@ -86,7 +84,6 @@ function normalizeUserShape(input: Partial<User>): User {
         creditCard,
     };
 
-    // Garantir consistencia em datas como strings
     user.creditCard.dueDate = toStr(user.creditCard.dueDate) || nowIso;
     user.creditCard.invoiceDueDate = toStr(user.creditCard.invoiceDueDate) || nowIso;
     user.creditCard.closedInvoiceDueDate = toStr(user.creditCard.closedInvoiceDueDate) || nowIso;
@@ -96,10 +93,9 @@ function normalizeUserShape(input: Partial<User>): User {
 
 function App() {
     const [user, setUser] = useState<User | null>(null);
-    const [view, setView] = useState('prelogin'); // prelogin, login, signup, dashboard, resetPassword
+    const [view, setView] = useState('prelogin');
 
     useEffect(() => {
-        // Removido initializeMockUsers para evitar dependencia de mockApi
     }, []);
 
     const handleLogin = (loggedInUser: Omit<User, 'password'>) => {
@@ -131,7 +127,6 @@ function App() {
         login: handleLogin,
         logout: handleLogout,
         updateUser: handleUpdateUser,
-        // FIX: Added view and navigateTo to the context value.
         view,
         navigateTo,
     };
@@ -139,13 +134,12 @@ function App() {
     const renderView = () => {
         switch (view) {
             case 'login':
-                return <Login onNavigateToSignUp={() => setView('signup')} onNavigateToPreLogin={() => setView('prelogin')} onNavigateToResetPassword={() => setView('resetPassword')} />;
+                return <Login onLogin={handleLogin} onNavigateToSignUp={() => setView('signup')} />;
             case 'signup':
                 return <SignUp onSignUpSuccess={() => setView('login')} onNavigateToLogin={() => setView('login')} />;
             case 'resetPassword':
                 return <ResetPassword onResetSuccess={() => setView('login')} onNavigateToLogin={() => setView('login')} />;
             case 'dashboard':
-            // FIX: Added 'admin' view to render the Dashboard component, which internally handles routing to the Admin panel.
             case 'admin':
                 return <Dashboard />;
             case 'prelogin':

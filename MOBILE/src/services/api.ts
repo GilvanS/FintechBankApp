@@ -1,23 +1,38 @@
 
 import axios from 'axios';
 
-// A URL base da API será injetada pelo Vite a partir do .env.local,
-// que é criado pelo script set-ip.js durante o build.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const defaultApiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
-// Cria a instância do Axios com a base URL
+// --- Funções de gerenciamento de IP da API ---
+
+export const getApiBase = () => {
+  return localStorage.getItem('customApiBase') || defaultApiBase;
+};
+
+export const setCustomApiBase = (ipAddress: string) => {
+  localStorage.setItem('customApiBase', ipAddress);
+  // Atualiza a instância do axios para usar o novo IP imediatamente
+  api.defaults.baseURL = ipAddress;
+};
+
+export const clearCustomApiBase = () => {
+  localStorage.removeItem('customApiBase');
+  api.defaults.baseURL = defaultApiBase;
+};
+
+// Cria a instância do Axios com a URL base dinâmica
 export const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 8000, // Aumentado o timeout para conexões mais lentas
+  baseURL: getApiBase(),
+  timeout: 8000,
 });
 
-// Interceptor para adicionar o token de autenticação
+// --- Interceptors ---
+
 api.interceptors.request.use(config => {
     const token = localStorage.getItem('authToken');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
-    // Garante que a requisição seja para o subdiretório /api/v1
     if (!config.url.startsWith('/api/v1')) {
         config.url = `/api/v1${config.url}`;
     }
@@ -26,12 +41,10 @@ api.interceptors.request.use(config => {
     return Promise.reject(error);
 });
 
-// Interceptor para tratar erros de resposta de forma global
 api.interceptors.response.use(
   response => response,
   error => {
     console.error("Erro na API:", error);
-    // Retorna um objeto de erro padronizado para a aplicação tratar
     return Promise.resolve({ 
         data: { 
             success: false, 
