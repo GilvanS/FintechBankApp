@@ -1,80 +1,48 @@
-import React, { useState, useEffect, useCallback } from 'react';
 
-// A função getApiBase é importada do serviço de API principal.
-import { getApiBase } from '../services/api';
+import React, { useState, useEffect, useCallback } from 'react';
+import { api } from '../services/api';
 
 const ServerStatus: React.FC = () => {
-  const [status, setStatus] = useState<'loading' | 'online' | 'offline'>('loading');
-  const [apiBaseUrl, setApiBaseUrl] = useState<string>('');
+    const [isServerOnline, setIsServerOnline] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const apiUrl = import.meta.env.VITE_API_BASE_URL;
 
-  const checkStatus = useCallback(async () => {
-    setStatus('loading');
-    const currentApiBase = getApiBase();
-    setApiBaseUrl(currentApiBase);
-    try {
-      // Usamos o endpoint /health que criamos no backend
-      const response = await fetch(`${currentApiBase}/health`, {
-          method: 'GET',
-          headers: {
-              'Accept': 'application/json',
-          }
-      });
-      // response.ok verifica se o status http é 2xx
-      if (response.ok) {
-        setStatus('online');
-      } else {
-        setStatus('offline');
-      }
-    } catch (error) {
-      // Qualquer erro de rede (CORS, servidor offline, etc) resulta em offline
-      setStatus('offline');
-    }
-  }, []);
+    const checkServerStatus = useCallback(async () => {
+        setLoading(true);
+        try {
+            await api.get('/health');
+            setIsServerOnline(true);
+        } catch (error) {
+            setIsServerOnline(false);
+            console.error("Health check failed:", error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-  useEffect(() => {
-    checkStatus();
-    // Re-testar automaticamente quando o IP customizado muda
-    const handler = () => checkStatus();
-    window.addEventListener('storage', handler);
-    return () => window.removeEventListener('storage', handler);
-  }, [checkStatus]);
+    useEffect(() => {
+        checkServerStatus();
+    }, [checkServerStatus]);
 
-  const StatusIndicator: React.FC = () => {
-    const baseClasses = "w-3 h-3 rounded-full mr-2";
-    if (status === 'loading') {
-      return <div className={`${baseClasses} bg-gray-400 animate-pulse`}></div>;
-    }
-    if (status === 'online') {
-      return <div className={`${baseClasses} bg-green-500`}></div>;
-    }
-    return <div className={`${baseClasses} bg-red-500`}></div>;
-  };
+    const statusColor = isServerOnline ? 'text-green-400' : 'text-red-400';
+    const statusText = isServerOnline ? 'Online' : 'Offline';
 
-  const StatusText: React.FC = () => {
-    const textClasses = "text-gray-700";
-    if (status === 'loading') {
-      return <p className={textClasses}>Verificando...</p>;
-    }
-    if (status === 'online') {
-      return <p className={textClasses}>Servidor Online</p>;
-    }
-    return <p className={textClasses}>Servidor fora do ar</p>;
-  };
-  
-  return (
-    <div className="bg-gray-100 p-3 rounded-lg w-full text-sm font-sans">
-      <p className="text-gray-500 text-xs mb-2">Servidor: {apiBaseUrl}</p>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <StatusIndicator />
-          <StatusText />
+    return (
+        <div className="bg-gray-800 p-3 rounded-lg text-center my-4 text-sm text-gray-300">
+            <p className="mb-2">
+                <span className="font-semibold">Servidor:</span> {apiUrl || 'N/A'}
+            </p>
+            <div className="flex items-center justify-center">
+                <span className={`h-3 w-3 rounded-full mr-2 ${isServerOnline ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                <span className={statusColor}>{statusText}</span>
+                {!loading && (
+                    <button onClick={checkServerStatus} className="ml-4 text-primary hover:underline text-xs">
+                        Re-testar
+                    </button>
+                )}
+            </div>
         </div>
-        <button onClick={checkStatus} className="text-indigo-600 hover:text-indigo-800 text-sm font-semibold">
-          Re-testar
-        </button>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default ServerStatus;
