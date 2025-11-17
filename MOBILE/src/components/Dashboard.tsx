@@ -25,6 +25,7 @@ import Products from './Products';
 import ClosedInvoice from './ClosedInvoice';
 import InstallmentOptions from './InstallmentOptions';
 import CurrentInvoice from './CurrentInvoice';
+import ServerStatus from './ServerStatus'; // Importa o componente
 
 const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; onClose: () => void; }> = ({ isOpen, onGoToPayment, onClose }) => {
     if (!isOpen) return null;
@@ -475,6 +476,9 @@ const Dashboard: React.FC = () => {
 
     return (
         <div className="h-full w-full flex flex-col bg-background-dark overflow-hidden">
+            <div className="p-4 bg-surface-dark-light rounded-b-lg shadow-md mb-2">
+                <ServerStatus />
+            </div>
             <div className="flex-grow overflow-y-auto no-scrollbar">
                 {renderContent()}
             </div>
