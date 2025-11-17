@@ -33,6 +33,10 @@ const ServerStatus: React.FC = () => {
 
   useEffect(() => {
     checkStatus();
+    // Re-testar automaticamente quando o IP customizado muda
+    const handler = () => checkStatus();
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
   }, [checkStatus]);
 
   const StatusIndicator: React.FC = () => {
