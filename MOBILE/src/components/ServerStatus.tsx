@@ -1,46 +1,70 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
-const API_BASE_URL = 'http://192.168.0.103:3001';
+// A constante API_BASE é importada do serviço de API principal.
+import { API_BASE } from '../services/api';
 
-const ServerStatus = () => {
-  const [isOnline, setIsOnline] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+const ServerStatus: React.FC = () => {
+  const [status, setStatus] = useState<'loading' | 'online' | 'offline'>('loading');
 
-  const checkStatus = async () => {
-    setIsLoading(true);
+  const checkStatus = useCallback(async () => {
+    setStatus('loading');
     try {
-      const response = await fetch(`${API_BASE_URL}/health`);
+      // Usamos o endpoint /health que criamos no backend
+      const response = await fetch(`${API_BASE}/health`, {
+          method: 'GET',
+          headers: {
+              'Accept': 'application/json',
+          }
+      });
+      // response.ok verifica se o status http é 2xx
       if (response.ok) {
-        setIsOnline(true);
+        setStatus('online');
       } else {
-        setIsOnline(false);
+        setStatus('offline');
       }
     } catch (error) {
-      setIsOnline(false);
+      // Qualquer erro de rede (CORS, servidor offline, etc) resulta em offline
+      setStatus('offline');
     }
-    setIsLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     checkStatus();
-  }, []);
+  }, [checkStatus]);
 
-  const openInBrowser = (url) => {
-    window.open(url, '_blank');
+  const StatusIndicator: React.FC = () => {
+    const baseClasses = "w-3 h-3 rounded-full mr-2";
+    if (status === 'loading') {
+      return <div className={`${baseClasses} bg-gray-400 animate-pulse`}></div>;
+    }
+    if (status === 'online') {
+      return <div className={`${baseClasses} bg-green-500`}></div>;
+    }
+    return <div className={`${baseClasses} bg-red-500`}></div>;
   };
 
+  const StatusText: React.FC = () => {
+    const textClasses = "text-gray-700";
+    if (status === 'loading') {
+      return <p className={textClasses}>Verificando...</p>;
+    }
+    if (status === 'online') {
+      return <p className={textClasses}>Servidor Online</p>;
+    }
+    return <p className={textClasses}>Servidor fora do ar</p>;
+  };
+  
   return (
-    <div className="bg-gray-800 p-4 rounded-lg text-white text-sm">
-      <p className="font-mono text-xs mb-2">Servidor: {API_BASE_URL}</p>
-      <div className="flex items-center mb-4">
-        <div className={`w-3 h-3 rounded-full mr-2 ${isOnline ? 'bg-green-500' : 'bg-red-500'}`}>
+    <div className="bg-gray-100 p-3 rounded-lg w-full text-sm font-sans">
+      <p className="text-gray-500 text-xs mb-2">Servidor: {API_BASE}</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <StatusIndicator />
+          <StatusText />
         </div>
-        <p>{isLoading ? 'Verificando...' : isOnline ? 'Servidor Online' : 'Servidor fora do ar'}</p>
-        <button onClick={checkStatus} className="ml-auto text-blue-400 hover:underline">Re-testar</button>
-      </div>
-      <div className="flex flex-col space-y-2 text-center">
-         <button onClick={() => openInBrowser(`${API_BASE_URL}/health`)} className="text-blue-400 hover:underline">Testar Conexão Health</button>
-        <button onClick={() => openInBrowser(`${API_BASE_URL}/api-docs`)} className="text-blue-400 hover:underline">Testar API Docs</button>
+        <button onClick={checkStatus} className="text-indigo-600 hover:text-indigo-800 text-sm font-semibold">
+          Re-testar
+        </button>
       </div>
     </div>
   );

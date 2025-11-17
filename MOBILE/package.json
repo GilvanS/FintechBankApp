@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:no-mock": "node scripts\\verify-no-mock.js"
+    "test:no-mock": "node scripts\\verify-no-mock.js",
+    "build:mobile": "node set-ip.js && vite build"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",
