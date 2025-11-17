@@ -2,10 +2,9 @@
   "name": "fintech-bank-app-api",
   "version": "1.0.0",
   "description": "Backend API for FintechBankApp",
-  "main": "index.js",
-  "type": "module",
+  "main": "index.cjs",
   "scripts": {
-    "start": "node index.js",
+    "start": "node index.cjs",
     "dev": "node --watch index.cjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -13,15 +12,18 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@databricks/sql": "^1.12.0",
     "bcrypt": "^5.1.1",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "express-validator": "^7.0.1",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "express-validator": "^7.3.0",
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.9.7",
     "swagger-autogen": "^2.23.7",
-    "swagger-ui-express": "^5.0.0"
+    "swagger-ui-express": "^5.0.1",
+    "yamljs": "^0.3.0"
   },
   "devDependencies": {
     "newman": "^6.1.2"
