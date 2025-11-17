@@ -1,4 +1,3 @@
-
 const os = require('os');
 const fs = require('fs');
 
@@ -24,9 +23,8 @@ for (const interfaceName in networkInterfaces) {
 }
 
 if (ipAddress) {
-  // ATENÇÃO: A porta deve ser a mesma onde seu servidor backend está rodando.
-  // Com base nas suas imagens, o servidor está na porta 3000.
-  const port = 3000;
+  // A porta CORRETA do backend é a 3001.
+  const port = 3001;
   const apiUrl = `http://${ipAddress}:${port}`;
   console.log(`Endereço IP encontrado: ${ipAddress}`);
   console.log(`URL da API configurada para: ${apiUrl}`);

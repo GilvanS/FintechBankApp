@@ -1,15 +1,13 @@
 
 // Dentro do componente Login
 import React, { useState } from 'react';
-// FIX: Corrected import path for useAuth from parent directory.
 import { useAuth } from '../App';
-import { login, requestNewPassword } from '../services/api';
+import { login, requestNewPassword, API_BASE } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useToast, ToastContainer } from './Toast';
-import { getUserByCpf } from '../services/api';
-// Substituir o import acima por getUserMe
 import { getUserMe } from '../services/api';
 import { getUserStatement } from '../services/api';
+import ServerStatus from './ServerStatus'; // Importe o componente
 
 interface LoginProps {
     onNavigateToSignUp: () => void;
@@ -25,6 +23,10 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
     const [error, setError] = useState('');
     const [resetPasswordMessage, setResetPasswordMessage] = useState('');
     const { toast, showSuccess, showError, showInfo, hide } = useToast();
+
+    const openInBrowser = (url: string) => {
+        window.open(url, '_blank');
+    };
 
     function mapLoginError(code?: string): string {
         switch (code) {
@@ -50,13 +52,11 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
             auth.login(result.user);
             showSuccess('Login efetuado com sucesso');
 
-            // Pré-carregamento imediato
             (async () => {
                 const refreshed = await getUserMe();
                 if (refreshed.success && refreshed.user) {
                     auth.updateUser(refreshed.user);
                 }
-                // NOVO: carregar extrato da conta na sequencia do login
                 const cpfToUse = (refreshed.user?.cpf) || result.user.cpf;
                 const stmt = await getUserStatement(cpfToUse);
                 if (stmt.success && stmt.transactions) {
@@ -89,26 +89,31 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
     };
 
     return (
-        <div className="bg-background-dark text-text-dark h-full flex flex-col justify-between p-6 sm:p-8">
+        <div className="bg-white text-gray-800 h-full flex flex-col p-6 sm:p-8">
             <header>
-                <button onClick={onNavigateToPreLogin} className="flex items-center space-x-2 text-subtle-dark hover:text-text-dark">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                <button onClick={onNavigateToPreLogin} className="flex items-center space-x-2 text-gray-600 hover:text-gray-900">
+                    {/* Ícone de voltar pode ser ajustado se necessário */}
+                    {/* <span className="material-symbols-outlined">arrow_back</span> */}
+                    <h1 className="text-xl font-semibold">Entrar</h1>
                 </button>
             </header>
 
-            <main className="flex-grow flex flex-col justify-center -mt-16">
+            <main className="flex-grow flex flex-col justify-center">
                 <div className="w-full max-w-sm mx-auto">
-                    <div className="text-center mb-10">
-                         <div className="flex items-center justify-center space-x-2 mb-4">
-                            <span className="material-symbols-outlined text-primary text-3xl">verified_user</span>
-                            <h1 className="text-3xl font-bold text-text-dark">Fintech</h1>
+                    
+                    {/* Server Status e Imagem do Banco */}
+                    <div className="mb-8 space-y-4">
+                        <ServerStatus />
+                        <img src="/bank-logo.png" alt="NeoBank" className="w-24 h-auto mx-auto" />
+                        <div className="text-center">
+                            <h2 className="text-2xl font-bold text-gray-900">NeoBank</h2>
+                            <p className="text-gray-600">Entre com seu CPF e senha</p>
                         </div>
-                        <h2 className="text-2xl font-semibold">Acesse sua conta</h2>
                     </div>
 
                     <form onSubmit={handleLogin} className="space-y-4">
                         <div>
-                            <label htmlFor="cpf" className="block text-sm font-medium text-subtle-dark mb-1">CPF</label>
+                            <label htmlFor="cpf" className="block text-sm font-medium text-gray-700 mb-1">CPF</label>
                             <input
                                 id="cpf"
                                 type="text"
@@ -117,13 +122,13 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                 placeholder="000.000.000-00"
                                 maxLength={14}
                                 required
-                                className="w-full px-4 py-3 bg-surface-dark border-2 border-surface-dark rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             />
                         </div>
                         <div>
                             <div className="flex justify-between items-center mb-1">
-                                <label htmlFor="password-login" className="block text-sm font-medium text-subtle-dark">Senha</label>
-                                 <button type="button" onClick={handlePasswordReset} className="text-sm font-medium text-primary hover:underline">
+                                <label htmlFor="password-login" className="block text-sm font-medium text-gray-700">Senha</label>
+                                 <button type="button" onClick={handlePasswordReset} className="text-sm font-medium text-indigo-600 hover:underline">
                                     Esqueci minha senha
                                 </button>
                             </div>
@@ -133,22 +138,20 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
-                                className="w-full px-4 py-3 bg-surface-dark border-2 border-surface-dark rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             />
                         </div>
                         
-                        {error && <p className="text-sm text-red-400">{error}</p>}
-                        {resetPasswordMessage && (
-                            <div className="p-3 bg-primary/10 rounded-lg text-center">
-                                <p className="text-sm text-primary">{resetPasswordMessage}</p>
-                                <button type="button" onClick={onNavigateToResetPassword} className="mt-2 text-sm font-bold text-primary hover:underline">
-                                    Já foi aprovado? Redefinir Senha
-                                </button>
-                            </div>
-                        )}
+                        {error && <p className="text-sm text-red-600">{error}</p>}
+
+                        {/* Botões de Teste */}
+                        <div className="flex justify-around text-center pt-2">
+                           <button type="button" onClick={() => openInBrowser(`${API_BASE}/health`)} className="text-sm font-medium text-indigo-600 hover:underline">Testar Conexão Health</button>
+                           <button type="button" onClick={() => openInBrowser(`${API_BASE}/api-docs`)} className="text-sm font-medium text-indigo-600 hover:underline">Testar API Docs</button>
+                        </div>
 
                         <div>
-                            <button type="submit" disabled={isLoading} className="w-full mt-4 py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity">
+                            <button type="submit" disabled={isLoading} className="w-full mt-2 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-opacity">
                                 {isLoading ? 'Entrando...' : 'Entrar'}
                             </button>
                         </div>
@@ -156,17 +159,13 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                 </div>
             </main>
 
-            <footer className="text-center">
-                <p className="text-sm text-subtle-dark">
+            <footer className="text-center py-4">
+                <p className="text-sm text-gray-600">
                     Não tem uma conta?{' '}
-                    <button onClick={onNavigateToSignUp} className="font-semibold text-primary hover:underline">
-                        Cadastre-se
+                    <button onClick={onNavigateToSignUp} className="font-semibold text-indigo-600 hover:underline">
+                        Criar agora
                     </button>
                 </p>
-                <div className="mt-4 p-3 bg-surface-dark rounded-lg flex items-center justify-center space-x-2 text-xs text-subtle-dark">
-                    <span className="material-symbols-outlined text-sm">shield</span>
-                    <span>Sua segurança em primeiro lugar.</span>
-                </div>
             </footer>
             <ToastContainer toast={toast} onClose={hide} />
         </div>
