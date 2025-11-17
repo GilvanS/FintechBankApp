@@ -1,14 +1,15 @@
 // Servidor da FintechBankApp integrado com Databricks
 const dotenv = require('dotenv');
 dotenv.config();
+
 const express = require('express');
 const cors = require('cors');
-const { DBSQLClient } = require('@databricks/sql');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 const path = require('path');
+const { DBSQLClient } = require('@databricks/sql');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { products } = require('./data/mockSeed');
 
@@ -226,7 +227,20 @@ const app = express();
 repoContext.setDb(databricksService);
 
 // --- Middlewares ---
-app.use(cors());
+const corsOptions = {
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Idempotency-Key',
+    'x-request-id'
+  ],
+  credentials: false
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(withReqId);
 
@@ -2014,6 +2028,10 @@ bootstrap().catch((err) => {
     console.error("❌ Erro no bootstrap:", err.message);
 });
 
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor FintechBankApp rodando na porta ${PORT}`);
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok' });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`API ouvindo em http://0.0.0.0:${PORT}`);
 });

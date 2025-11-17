@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Backend API for FintechBankApp",
   "main": "index.cjs",
+  "type": "", 
   "scripts": {
     "start": "node index.cjs",
     "dev": "node --watch index.cjs",
