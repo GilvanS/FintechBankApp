@@ -1,5 +1,21 @@
+import axios from 'axios';
+
 // Top-level: base de API
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+
+// Cliente axios opcional (para chamadas que o app queira fazer com axios)
+export const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 15000,
+});
+
+export function setAuthToken(token?: string) {
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common['Authorization'];
+  }
+}
 
 // Método: getAuthHeaders
 export function getAuthHeaders(contentType: 'json' | 'none' = 'json') {
@@ -688,22 +704,4 @@ export async function adminCreateCardPurchaseClosed(cpf: string, payload: { amou
     } catch (error) {
         return { success: false, message: 'Erro de conexao ao inserir compra na fatura fechada.' };
     }
-}
-
-// Serviço HTTP do mobile (axios) com baseURL da .env
-import axios from 'axios';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
-
-export const api = axios.create({
-  baseURL: API_BASE,
-  timeout: 15000,
-});
-
-export function setAuthToken(token?: string) {
-  if (token) {
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  } else {
-    delete api.defaults.headers.common['Authorization'];
-  }
 }
