@@ -1,4 +1,13 @@
+
 apply plugin: 'com.android.application'
+apply plugin: 'com.google.firebase.appdistribution' // Apply the plugin
+
+// Add this block to read the keystore properties
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
 
 android {
     namespace "com.fintechbank.app"
@@ -16,10 +25,28 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Add signingConfigs block
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.release // Set the signing config for the release build
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Add App Distribution configuration
+            firebaseAppDistribution {
+                artifactType = "APK"
+                releaseNotes = "Release inicial para homologação"
+                testers = "seu_email_de_teste@exemplo.com" // Substitua pelo email do testador
+            }
         }
     }
 }
