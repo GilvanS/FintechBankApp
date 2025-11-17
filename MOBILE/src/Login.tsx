@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import InputMask from 'react-input-mask';
+import { IMaskInput } from 'react-imask';
 import { User } from './types';
 import { login, requestNewPassword, getApiBase, setCustomApiBase, clearCustomApiBase } from './services/api';
 import ServerStatus from './components/ServerStatus';
@@ -32,7 +32,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
     setCustomIp(getApiBase());
   }, []);
   
-  const getRawCpf = () => cpf.replace(/[._-]/g, '');
+  // o react-imask já retorna o valor sem a máscara
+  const getRawCpf = () => cpf;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,22 +112,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="relative">
             <label className="text-sm font-medium text-gray-400" htmlFor="cpf">CPF</label>
-            <InputMask
-              mask="999.999.999-99"
-              value={cpf}
-              onChange={(e) => setCpf(e.target.value)}
-            >
-              {(inputProps: any) => (
-                <input
-                  {...inputProps}
-                  id="cpf"
-                  type="tel"
-                  className="w-full px-4 py-3 mt-1 bg-gray-800 border border-gray-700 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
-                  placeholder="000.000.000-00"
-                  required
-                />
-              )}
-            </InputMask>
+            <IMaskInput
+              mask="000.000.000-00"
+              unmask={true} // importante: retorna o valor sem a máscara
+              onAccept={(value) => setCpf(value.toString())}
+              id="cpf"
+              type="tel"
+              className="w-full px-4 py-3 mt-1 bg-gray-800 border border-gray-700 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
+              placeholder="000.000.000-00"
+              required
+            />
           </div>
           
           <div>
