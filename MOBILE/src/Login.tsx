@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import InputMask from 'react-input-mask';
 import { User } from './types';
 import { login, requestNewPassword, getApiBase, setCustomApiBase, clearCustomApiBase } from './services/api';
 import ServerStatus from './components/ServerStatus';
@@ -30,40 +31,54 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
   useEffect(() => {
     setCustomIp(getApiBase());
   }, []);
+  
+  const getRawCpf = () => cpf.replace(/[._-]/g, '');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
+
+    const rawCpf = getRawCpf();
+    if (rawCpf.length !== 11) {
+        setError('Por favor, preencha o CPF completo.');
+        return;
+    }
+
     setIsLoading(true);
     setError('');
     setResetMessage('');
-    const result = await login(cpf, password);
+    const result = await login(rawCpf, password);
     setIsLoading(false);
-    if (result.success && result.user) {
-      onLogin(result.user);
+    if (result.data.success && result.data.user) {
+      onLogin(result.data.user);
     } else {
-      setError(result.message);
+      setError(result.data.message);
     }
   };
 
   const handlePasswordReset = async () => {
-      if (!cpf) {
+      const rawCpf = getRawCpf();
+      if (!rawCpf) {
           setError('Por favor, informe o CPF para resetar a senha.');
           return;
       }
       setIsLoading(true);
       setError('');
       setResetMessage('');
-      const result = await requestNewPassword(cpf);
+      const result = await requestNewPassword(rawCpf);
       setIsLoading(false);
-      setResetMessage(result.message);
-      if(!result.success){
-        setError(result.message);
+      
+      if(result.data.success){
+        setResetMessage(result.data.message);
+      } else {
+        setError(result.data.message);
       }
   };
   
   const handleSaveIp = () => {
-      setCustomApiBase(customIp);
+      const sanitizedIp = customIp.replace(/\/api.*$/, '').replace(/\/$/, '');
+      setCustomApiBase(sanitizedIp);
+      setCustomIp(sanitizedIp); 
       setShowIpConfig(false);
       window.dispatchEvent(new Event('storage'));
   };
@@ -86,15 +101,22 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="relative">
             <label className="text-sm font-medium text-gray-400" htmlFor="cpf">CPF</label>
-            <input
-              id="cpf"
-              type="text"
+            <InputMask
+              mask="999.999.999-99"
               value={cpf}
               onChange={(e) => setCpf(e.target.value)}
-              className="w-full px-4 py-3 mt-1 bg-gray-800 border border-gray-700 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
-              placeholder="000.000.000-00"
-              required
-            />
+            >
+              {(inputProps: any) => (
+                <input
+                  {...inputProps}
+                  id="cpf"
+                  type="tel"
+                  className="w-full px-4 py-3 mt-1 bg-gray-800 border border-gray-700 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
+                  placeholder="000.000.000-00"
+                  required
+                />
+              )}
+            </InputMask>
           </div>
           
           <div>
