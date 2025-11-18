@@ -70,3 +70,23 @@ Todo o backend da aplicação é simulado através de uma API mockada, permitind
 ## Design e UX
 
 O aplicativo foi projetado com uma abordagem "mobile-first", mas é totalmente responsivo. A identidade visual utiliza um tema "dark mode" sofisticado, com uma paleta de cores "dark green" e detalhes em verde vibrante, proporcionando uma experiência de usuário moderna e agradável.
+
+---
+
+## Desenvolvimento Local: Conectando o App ao Servidor no PC
+
+Para testar o aplicativo em um celular Android físico, é necessário conectar o app ao servidor de backend que roda no seu computador.
+
+### Problema Comum: Falha de Conexão
+
+**Sintoma:** O aplicativo não consegue fazer login ou se comunicar com a API, mesmo com o servidor do PC ligado.
+
+**Causa:** A "ponte" de rede entre o celular e o PC, criada pelo Android Debug Bridge (ADB), foi perdida. Isso acontece ao reiniciar os dispositivos ou reconectar o cabo USB.
+
+**Solução:** Recrie a ponte com o seguinte comando no terminal:
+
+```bash
+adb reverse tcp:3001 tcp:3001
+```
+
+**Verificação:** Para confirmar se a ponte está ativa, use `adb reverse --list`. Se o comando listar `tcp:3001 tcp:3001`, a conexão está pronta.

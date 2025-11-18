@@ -113,4 +113,37 @@ Esta seção foi adicionada após o setup inicial para documentar o fluxo de tra
    - Vá em **`Build` -> `Build Bundle(s) / APK(s)` -> `Build APK(s)`** para gerar o `app-debug.apk`.
    - Clique em **"locate"** na notificação para encontrar o arquivo.
 
+---
+
+### **Problema Comum: Falha na Conexão do Celular com o Servidor Local**
+
+Esta seção documenta um problema recorrente encontrado durante os testes do aplicativo em um dispositivo Android físico conectado via USB.
+
+**Sintoma:**
+O aplicativo não consegue fazer login ou se comunicar com a API. As solicitações de rede falham, mesmo que o servidor esteja rodando corretamente no PC.
+
+**Causa Raiz:**
+Para que o aplicativo no celular consiga acessar o servidor local (backend) no seu computador através do endereço `localhost:3001`, é necessário criar uma "ponte" de rede. Essa ponte é um túnel de redirecionamento de porta criado com o **Android Debug Bridge (ADB)**.
+
+Essa ponte é **temporária** e se desfaz sempre que:
+- O cabo USB é desconectado.
+- O celular é reiniciado.
+- O computador é reiniciado.
+
+**Solução:**
+Sempre que a conexão falhar, você deve recriar a ponte executando o seguinte comando no seu terminal:
+
+```bash
+adb reverse tcp:3001 tcp:3001
+```
+
+**Como Verificar se a Ponte Está Ativa?**
+Para listar todas as pontes de rede ativas, use o comando:
+
+```bash
+adb reverse --list
+```
+
+Se o resultado estiver vazio, a ponte não existe e você precisa executar o comando de criação acima. Se ele mostrar `tcp:3001 tcp:3001`, a ponte está configurada corretamente.
+
 Vou mantê-lo informado ao final de cada fase principal.
