@@ -28,7 +28,7 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) 
     ];
 
     return (
-        <nav className="flex-shrink-0 bg-surface-dark border-t border-subtle-dark/20 flex justify-around items-center h-16">
+        <nav className="flex-shrink-0 bg-surface-dark border-t border-subtle-dark/20 flex justify-around items-center h-[74px] pb-[env(safe-area-inset-bottom)]">
            {navItems.map(item => (
                 <NavButton 
                     key={item.view}
