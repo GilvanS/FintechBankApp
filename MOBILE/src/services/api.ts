@@ -1,30 +1,32 @@
 
 import axios from 'axios';
 
-const defaultApiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+// Define a URL base da API diretamente. Isso ignora qualquer valor antigo ou 
+// variável de ambiente que possa estar causando conflitos.
+const API_BASE_URL = 'http://localhost:3001';
 
-// --- Funções de gerenciamento de IP da API ---
+// --- Funções de gerenciamento de IP da API (agora obsoletas, mas mantidas para compatibilidade) ---
 
+// Esta função agora simplesmente retorna a constante definida acima.
 export const getApiBase = () => {
-  // Removido o uso do localStorage para forçar o localhost
-  return defaultApiBase;
+  return API_BASE_URL;
 };
 
+// Estas funções não fazem mais nada, mas são mantidas para evitar que o aplicativo quebre
+// se alguma parte do código antigo ainda tentar chamá-las.
 export const setCustomApiBase = (ipAddress: string) => {
-  // Função mantida para não quebrar outras partes, mas não será usada
-  console.log("setCustomApiBase não tem mais efeito. Usando localhost via adb reverse.");
+  console.log("Configuração de IP customizado foi removida. Usando sempre localhost.");
 };
 
 export const clearCustomApiBase = () => {
-  // Função mantida para não quebrar outras partes, mas não será usada
-  console.log("clearCustomApiBase não tem mais efeito. Usando localhost via adb reverse.");
+  console.log("Configuração de IP customizado foi removida. Usando sempre localhost.");
 };
 
 // --- Instância e Interceptors do Axios ---
 
 export const api = axios.create({
-  baseURL: getApiBase(),
-  timeout: 5000, // Timeout mais curto para health check
+  baseURL: API_BASE_URL, // Usa a URL base constante
+  timeout: 5000, 
 });
 
 api.interceptors.request.use(config => {
@@ -32,7 +34,6 @@ api.interceptors.request.use(config => {
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
-    // Garante que a URL não seja prefixada duas vezes
     if (!config.url.startsWith('/api/v1')) {
         config.url = `/api/v1${config.url}`;
     }
@@ -41,43 +42,31 @@ api.interceptors.request.use(config => {
     return Promise.reject(error);
 });
 
-// Interceptor de resposta permanece o mesmo
 api.interceptors.response.use(
   response => response,
   error => {
     console.error("Erro na API:", error.message);
-    // Para erros de rede ou timeout, o `error.response` pode não existir
     return Promise.resolve({ 
         data: { 
             success: false, 
             message: error.response?.data?.message || error.message || "Erro de conexão",
-            code: error.response?.status || 500 // Código genérico para erro de rede
+            code: error.response?.status || 500
         } 
     });
   }
 );
 
-
 // --- FUNÇÕES DA API ---
 
-/**
- * Verifica a saúde do servidor.
- * Faz uma chamada leve à rota /health e retorna true se for bem-sucedida,
- * e false para qualquer tipo de erro (incluindo timeout ou erro de rede).
- */
 export const healthCheck = async (): Promise<boolean> => {
     try {
-        // Usa uma instância separada do axios ou uma configuração temporária
-        // para não passar pelo interceptor de resposta que mascara o erro.
         const healthApi = axios.create({
-            baseURL: getApiBase(),
+            baseURL: API_BASE_URL, // Usa a URL base constante
             timeout: 3000,
         });
         const response = await healthApi.get('/api/v1/health');
-        // Verifica se a resposta foi bem-sucedida (status 2xx)
         return response.status >= 200 && response.status < 300;
     } catch (error) {
-        // Qualquer erro (rede, timeout, 404, 500, etc.) significa que o servidor está offline.
         console.error("Health check failed:", error.message);
         return false;
     }
@@ -87,7 +76,6 @@ export const healthCheck = async (): Promise<boolean> => {
 // AUTH
 export const login = (cpf, password) => api.post('/auth/login', { cpf, password });
 export const signUp = (userData) => api.post('/auth/signup', userData);
-// ... resto das funções ...
 export const requestNewPassword = (cpf) => api.post('/auth/request-password-reset', { cpf });
 export const resetPassword = (cpf, token, newPassword) => api.post('/auth/reset-password', { cpf, token, newPassword });
 export const getUserMe = () => api.get('/auth/me');
