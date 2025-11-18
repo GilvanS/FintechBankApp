@@ -150,7 +150,7 @@ function App() {
     
     return (
         <AuthContext.Provider value={authContextValue}>
-            <div className="h-screen w-screen bg-background-dark font-sans overflow-hidden">
+            <div className="h-screen w-screen bg-background-dark font-sans overflow-hidden pb-[env(safe-area-inset-bottom)]">
                 {renderView()}
             </div>
         </AuthContext.Provider>
