@@ -1,10 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { IMaskInput } from 'react-imask';
 import { User } from './types';
-import { login, requestNewPassword, getApiBase, setCustomApiBase, clearCustomApiBase } from './services/api';
+import { login, requestNewPassword } from './services/api';
 import ServerStatus from './components/ServerStatus';
-import { CogIcon } from './components/Icons';
 
 interface LoginProps {
   onLogin: (user: Omit<User, 'password'>) => void;
@@ -24,13 +23,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState('');
-  
-  const [showIpConfig, setShowIpConfig] = useState(false);
-  const [customIp, setCustomIp] = useState('');
-
-  useEffect(() => {
-    setCustomIp(getApiBase());
-  }, []);
   
   // o react-imask já retorna o valor sem a máscara
   const getRawCpf = () => cpf;
@@ -75,31 +67,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
         setError(result.data.message);
       }
   };
-  
-  const handleSaveIp = () => {
-    try {
-      // Garante que a URL seja bem formada antes de salvar
-      const url = new URL(customIp);
-      const sanitizedIp = `${url.protocol}//${url.host}`;
-      
-      setCustomApiBase(sanitizedIp);
-      setCustomIp(sanitizedIp);
-      setShowIpConfig(false);
-      setError('');
-
-      // Força o componente de status a re-verificar a conexão imediatamente
-      window.dispatchEvent(new Event('storage'));
-    } catch (e) {
-      setError('Endereço da API inválido. Use o formato http://ip:porta');
-    }
-  };
-
-  const handleResetIp = () => {
-      clearCustomApiBase();
-      setCustomIp(getApiBase());
-      setShowIpConfig(false);
-      window.dispatchEvent(new Event('storage'));
-  };
 
   return (
     <div className="flex flex-col items-center justify-between min-h-screen bg-gray-900 text-white p-6">
@@ -114,7 +81,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
             <label className="text-sm font-medium text-gray-400" htmlFor="cpf">CPF</label>
             <IMaskInput
               mask="000.000.000-00"
-              unmask={true} // importante: retorna o valor sem a máscara
+              unmask={true}
               onAccept={(value) => setCpf(value.toString())}
               id="cpf"
               type="tel"
@@ -161,32 +128,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
       
       <div className="w-full max-w-md pb-4">
         <div className="mt-6 border-t border-gray-700 pt-4">
-            {showIpConfig ? (
-                <div className="space-y-4">
-                    <div>
-                        <label htmlFor="ip-config" className="text-sm font-medium text-gray-400">Endereço da API do Servidor</label>
-                        <input 
-                            id="ip-config"
-                            type="text"
-                            value={customIp}
-                            onChange={(e) => setCustomIp(e.target.value)}
-                            placeholder="http://192.168.x.x:3001"
-                            className="w-full px-3 py-2 mt-1 text-white bg-gray-800 border border-gray-600 rounded-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
-                        />
-                    </div>
-                    <div className="flex space-x-2">
-                        <button onClick={handleSaveIp} className="w-full px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-md hover:bg-emerald-700">Salvar</button>
-                        <button onClick={handleResetIp} className="w-full px-4 py-2 text-sm font-semibold text-gray-300 bg-gray-600 rounded-md hover:bg-gray-700">Resetar</button>
-                    </div>
-                </div>
-            ) : (
-                <div className="flex items-center justify-between text-sm text-gray-400">
-                    <ServerStatus />
-                    <button onClick={() => setShowIpConfig(true)} className="p-1 rounded-full hover:bg-gray-700">
-                        <CogIcon className="w-5 h-5" />
-                    </button>
-                </div>
-            )}
+            <ServerStatus />
         </div>
         <div className="flex items-center justify-center text-xs text-gray-500 mt-4">
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
