@@ -1,32 +1,16 @@
-
 import axios from 'axios';
 
-// Define a URL base da API diretamente. Isso ignora qualquer valor antigo ou 
-// variável de ambiente que possa estar causando conflitos.
-const API_BASE_URL = 'http://localhost:3001';
-
-// --- Funções de gerenciamento de IP da API (agora obsoletas, mas mantidas para compatibilidade) ---
-
-// Esta função agora simplesmente retorna a constante definida acima.
-export const getApiBase = () => {
-  return API_BASE_URL;
-};
-
-// Estas funções não fazem mais nada, mas são mantidas para evitar que o aplicativo quebre
-// se alguma parte do código antigo ainda tentar chamá-las.
-export const setCustomApiBase = (ipAddress: string) => {
-  console.log("Configuração de IP customizado foi removida. Usando sempre localhost.");
-};
-
-export const clearCustomApiBase = () => {
-  console.log("Configuração de IP customizado foi removida. Usando sempre localhost.");
-};
+// A URL base da API é lida diretamente das variáveis de ambiente do Vite.
+// Para desenvolvimento web (npm run dev), o vite.config.ts usa um proxy.
+// Para builds de produção/mobile (npm run build), o valor de .env é usado.
+const baseURL = import.meta.env.VITE_API_BASE_URL;
 
 // --- Instância e Interceptors do Axios ---
 
+// A instância principal do axios que será usada em toda a aplicação.
 export const api = axios.create({
-  baseURL: API_BASE_URL, // Usa a URL base constante
-  timeout: 5000, 
+  baseURL: baseURL, 
+  timeout: 10000, // Aumentado para 10s para acomodar a latência do ngrok
 });
 
 api.interceptors.request.use(config => {
@@ -34,9 +18,13 @@ api.interceptors.request.use(config => {
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
-    if (!config.url.startsWith('/api/v1')) {
+    
+    // Garante que a URL sempre comece com /api/v1, evitando duplicação.
+    // Isso é útil porque a baseURL pode ou não ter o caminho.
+    if (config.url && !config.url.startsWith('/api/v1')) {
         config.url = `/api/v1${config.url}`;
     }
+
     return config;
 }, error => {
     return Promise.reject(error);
@@ -46,6 +34,7 @@ api.interceptors.response.use(
   response => response,
   error => {
     console.error("Erro na API:", error.message);
+    // Retorna uma resposta padronizada para evitar que o app quebre em caso de erro de rede.
     return Promise.resolve({ 
         data: { 
             success: false, 
@@ -58,10 +47,13 @@ api.interceptors.response.use(
 
 // --- FUNÇÕES DA API ---
 
+// Função de verificação de saúde da API, útil para diagnósticos.
 export const healthCheck = async (): Promise<boolean> => {
     try {
+        // Usa uma instância separada para não poluir o interceptor principal se necessário,
+        // mas ainda usa a mesma baseURL e um timeout curto.
         const healthApi = axios.create({
-            baseURL: API_BASE_URL, // Usa a URL base constante
+            baseURL: baseURL,
             timeout: 3000,
         });
         const response = await healthApi.get('/api/v1/health');

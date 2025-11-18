@@ -57,36 +57,61 @@ O frontend é construído com React e TypeScript, utilizando Tailwind CSS para u
 ### 8. APIs Externas
 - **Notícias:** Integração com a API de Notícias do IBGE para manter o usuário informado com dados reais.
 
-## Estrutura de Dados e API Mockada
+---
 
-Todo o backend da aplicação é simulado através de uma API mockada, permitindo um desenvolvimento de frontend ágil e independente.
+## Desenvolvimento Local (Mobile): Conectando ao Backend com Ngrok
 
-- **`localStorage`:** Atua como o banco de dados da aplicação, armazenando todos os dados de usuários e estados em `localStorage.getItem('fintech_app_data')`.
-- **`src/services/mockApi.ts`:** Este arquivo é o coração da simulação. Ele contém a lógica de negócios para todas as operações, como cálculos de juros, validações de saldo, regras de bloqueio de cartão, entre outros.
-- **`src/data/mockData.ts`:** Contém os dados iniciais dos usuários, produtos da loja e stories, servindo como a base para os testes e a demonstração da aplicação.
+Para testar o aplicativo em um dispositivo móvel (Android/iOS), o app precisa se comunicar com o servidor da API que está rodando no seu computador. Como o celular e o computador estão em "máquinas" diferentes, não podemos usar `localhost`. Além disso, o endereço de IP do seu computador na rede Wi-Fi pode mudar, tornando essa abordagem instável.
 
-**Nota para o Desenvolvimento do Backend:** Os dados mockados em `src/data/mockData.ts` e a lógica de negócios em `src/services/mockApi.ts` servem como um contrato e um guia paralelo detalhado para a implementação da API de backend, garantindo que o comportamento esperado pelo frontend seja atendido. O arquivo `swagger.md` na raiz do projeto detalha os endpoints e regras de negócio esperados.
+A solução é usar o **ngrok**, que cria um endereço público e estável na internet e o redireciona para a sua API local.
 
-## Design e UX
+### Passo a Passo da Configuração
 
-O aplicativo foi projetado com uma abordagem "mobile-first", mas é totalmente responsivo. A identidade visual utiliza um tema "dark mode" sofisticado, com uma paleta de cores "dark green" e detalhes em verde vibrante, proporcionando uma experiência de usuário moderna e agradável.
+**Pré-requisito:** Você precisa ter o `ngrok` instalado e uma conta criada. Adicione seu token de autenticação (disponível no seu [dashboard do ngrok](https://dashboard.ngrok.com/get-started/your-authtoken)) com o comando (faça isso apenas uma vez):
+```bash
+ngrok config add-authtoken SEU_TOKEN_AQUI
+```
 
 ---
 
-## Desenvolvimento Local: Conectando o App ao Servidor no PC
+Siga estes passos **toda vez que for iniciar o desenvolvimento mobile**:
 
-Para testar o aplicativo em um celular Android físico, é necessário conectar o app ao servidor de backend que roda no seu computador.
+**1. Inicie o Servidor da API**
+   Em um terminal, navegue até a pasta da API e inicie o servidor. Ele rodará em `localhost:3001`.
+   ```bash
+   cd ../API
+   npm run dev
+   ```
 
-### Problema Comum: Falha de Conexão
+**2. Inicie o Ngrok**
+   Em um **segundo terminal**, inicie o ngrok para expor a porta `3001` da sua API.
+   ```bash
+   ngrok http 3001
+   ```
+   O ngrok exibirá uma URL na linha "Forwarding". Copie a URL **HTTPS**, que será algo como `https://<id-aleatorio>.ngrok-free.app`.
 
-**Sintoma:** O aplicativo não consegue fazer login ou se comunicar com a API, mesmo com o servidor do PC ligado.
+**3. Configure a URL no App Mobile**
+   Abra o arquivo `MOBILE/.env` e cole a URL do ngrok que você acabou de copiar no valor da variável `VITE_API_BASE_URL`.
+   ```
+   VITE_API_BASE_URL=https://<id-aleatorio>.ngrok-free.app
+   ```
+   **Importante:** A cada reinicialização do `ngrok` (no plano gratuito), uma nova URL é gerada. Portanto, os passos 2 e 3 precisam ser repetidos.
 
-**Causa:** A "ponte" de rede entre o celular e o PC, criada pelo Android Debug Bridge (ADB), foi perdida. Isso acontece ao reiniciar os dispositivos ou reconectar o cabo USB.
+**4. Compile e Execute o App no Dispositivo**
+   Com a URL do ngrok configurada, compile o app e sincronize-o com a plataforma nativa.
+   ```bash
+   # Navegue até a pasta do app mobile, caso não esteja nela
+   cd ../MOBILE
 
-**Solução:** Recrie a ponte com o seguinte comando no terminal:
+   # Compile o projeto React/Vite
+   npm run build
 
-```bash
-adb reverse tcp:3001 tcp:3001
-```
+   # Sincronize os arquivos web com o projeto nativo
+   npx cap sync android
 
-**Verificação:** Para confirmar se a ponte está ativa, use `adb reverse --list`. Se o comando listar `tcp:3001 tcp:3001`, a conexão está pronta.
+   # Abra o projeto no Android Studio
+   npx cap open android
+   ```
+   Dentro do Android Studio, clique no botão "Run" (▶️) para instalar e iniciar o aplicativo no seu dispositivo conectado.
+
+Agora o seu aplicativo se comunicará com a API através do túnel do `ngrok`, garantindo uma conexão estável durante todo o desenvolvimento.
