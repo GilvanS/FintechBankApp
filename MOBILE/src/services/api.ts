@@ -11,7 +11,6 @@ export const getApiBase = () => {
 
 export const setCustomApiBase = (ipAddress: string) => {
   localStorage.setItem('customApiBase', ipAddress);
-  // Atualiza a instância do axios para usar o novo IP imediatamente
   api.defaults.baseURL = ipAddress;
 };
 
@@ -20,19 +19,19 @@ export const clearCustomApiBase = () => {
   api.defaults.baseURL = defaultApiBase;
 };
 
-// Cria a instância do Axios com a URL base dinâmica
+// --- Instância e Interceptors do Axios ---
+
 export const api = axios.create({
   baseURL: getApiBase(),
-  timeout: 8000,
+  timeout: 5000, // Timeout mais curto para health check
 });
-
-// --- Interceptors ---
 
 api.interceptors.request.use(config => {
     const token = localStorage.getItem('authToken');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
+    // Garante que a URL não seja prefixada duas vezes
     if (!config.url.startsWith('/api/v1')) {
         config.url = `/api/v1${config.url}`;
     }
@@ -41,30 +40,53 @@ api.interceptors.request.use(config => {
     return Promise.reject(error);
 });
 
+// Interceptor de resposta permanece o mesmo
 api.interceptors.response.use(
   response => response,
   error => {
-    console.error("Erro na API:", error);
+    console.error("Erro na API:", error.message);
+    // Para erros de rede ou timeout, o `error.response` pode não existir
     return Promise.resolve({ 
         data: { 
             success: false, 
             message: error.response?.data?.message || error.message || "Erro de conexão",
-            code: error.response?.status
+            code: error.response?.status || 500 // Código genérico para erro de rede
         } 
     });
   }
 );
 
-console.log('API Service Initialized. Base URL:', api.defaults.baseURL);
 
 // --- FUNÇÕES DA API ---
 
-// HEALTH CHECK
-export const checkServerStatus = () => api.get('/health');
+/**
+ * Verifica a saúde do servidor.
+ * Faz uma chamada leve à rota /health e retorna true se for bem-sucedida,
+ * e false para qualquer tipo de erro (incluindo timeout ou erro de rede).
+ */
+export const healthCheck = async (): Promise<boolean> => {
+    try {
+        // Usa uma instância separada do axios ou uma configuração temporária
+        // para não passar pelo interceptor de resposta que mascara o erro.
+        const healthApi = axios.create({
+            baseURL: getApiBase(),
+            timeout: 3000,
+        });
+        const response = await healthApi.get('/api/v1/health');
+        // Verifica se a resposta foi bem-sucedida (status 2xx)
+        return response.status >= 200 && response.status < 300;
+    } catch (error) {
+        // Qualquer erro (rede, timeout, 404, 500, etc.) significa que o servidor está offline.
+        console.error("Health check failed:", error.message);
+        return false;
+    }
+};
+
 
 // AUTH
 export const login = (cpf, password) => api.post('/auth/login', { cpf, password });
 export const signUp = (userData) => api.post('/auth/signup', userData);
+// ... resto das funções ...
 export const requestNewPassword = (cpf) => api.post('/auth/request-password-reset', { cpf });
 export const resetPassword = (cpf, token, newPassword) => api.post('/auth/reset-password', { cpf, token, newPassword });
 export const getUserMe = () => api.get('/auth/me');
