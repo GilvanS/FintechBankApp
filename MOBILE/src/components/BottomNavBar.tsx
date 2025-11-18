@@ -11,8 +11,16 @@ const NavButton: React.FC<{
     isActive: boolean;
     onClick: () => void;
 }> = ({ label, icon, isActive, onClick }) => (
-    <button onClick={onClick} className={`flex flex-col items-center justify-center space-y-1 w-full transition-colors ${isActive ? 'text-primary' : 'text-subtle-dark hover:text-text-dark'}`}>
-        <span className="material-symbols-outlined">{icon}</span>
+    <button 
+        onClick={onClick} 
+        className={`flex flex-col items-center justify-center space-y-1 w-full h-full transition-colors ${isActive ? 'text-primary' : 'text-subtle-dark hover:text-text-dark'}`}
+    >
+        <span 
+            className="material-symbols-outlined"
+            style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
+        >
+            {icon}
+        </span>
         <span className="text-xs font-medium">{label}</span>
     </button>
 );
@@ -28,7 +36,7 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) 
     ];
 
     return (
-        <nav className="flex-shrink-0 bg-surface-dark border-t border-subtle-dark/20 flex justify-around items-center h-[74px] pb-[env(safe-area-inset-bottom)]">
+        <nav className="flex-shrink-0 bg-surface-dark border-t border-subtle-dark/20 flex justify-around items-start h-[calc(56px+env(safe-area-inset-bottom))] pt-2 pb-[env(safe-area-inset-bottom)]">
            {navItems.map(item => (
                 <NavButton 
                     key={item.view}
