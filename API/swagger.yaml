@@ -11,20 +11,8 @@ info:
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: http://localhost:3001
-    description: Servidor de desenvolvimento
   - url: http://localhost:3001/api/v1
-    description: Servidor de desenvolvimento (router /api/v1)
-
-tags:
-  - name: Sistema
-  - name: Autenticação
-  - name: Usuários
-  - name: PIX
-  - name: Shop
-  - name: Cartão
-  - name: Administração
-  - name: Proxy
+    description: Servidor de desenvolvimento
 
 components:
   securitySchemes:
@@ -36,350 +24,54 @@ components:
   schemas:
     User:
       type: object
-      required:
-        - cpf
-        - fullName
-        - email
-        - balance
-        - transactions
-        - isBlocked
-        - role
-        - pixDailyLimit
-        - pixKeys
-        - pixContacts
-        - purchasedItems
-        - creditCard
       properties:
-        cpf:
-          type: string
-          pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-          example: "12345678901"
+        id:
+          type: integer
+          description: ID único do usuário
+          example: 1
         fullName:
           type: string
-          description: Nome completo
+          description: Nome completo do usuário
           example: "João da Silva"
-        username:
+        cpf:
           type: string
-          description: Nome de usuário (opcional)
-          example: "joaosilva"
-        profileDescription:
-          type: string
-          description: Descrição do perfil (opcional)
-          example: "Cliente premium desde 2021"
+          description: CPF do usuário
+          example: "12345678901"
         email:
           type: string
           format: email
-          description: Email
+          description: Email do usuário
           example: "joao.silva@example.com"
         balance:
           type: number
           format: float
-          description: Saldo em conta
+          description: Saldo atual da conta
           example: 1500.75
-        transactions:
-          type: array
-          items:
-            $ref: '#/components/schemas/Transaction'
-        isBlocked:
-          type: boolean
-          description: Status de bloqueio da conta
-          example: false
-        role:
-          type: string
-          enum: [user, admin]
-          description: Papel no sistema
-          example: "user"
         pixDailyLimit:
           type: number
           format: float
-          description: Limite diário PIX
-          example: 2000
-        pixKeys:
-          type: array
-          items:
-            $ref: '#/components/schemas/PixKey'
-        pixContacts:
-          type: array
-          items:
-            $ref: '#/components/schemas/PixContact'
-        limitIncreaseRequest:
-          $ref: '#/components/schemas/LimitIncreaseRequest'
-          description: Última solicitação de aumento de limite PIX (quando existir)
-        showStoriesPopup:
-          type: boolean
-          description: Flag de UX para popup de stories
-          example: true
-        purchasedItems:
-          type: array
-          items:
-            $ref: '#/components/schemas/PurchasedItem'
-        creditCard:
-          $ref: '#/components/schemas/CreditCard'
-
-    Transaction:
-      type: object
-      required: [id, type, amount, date, description]
-      properties:
-        id:
-          type: string
-          example: "tx-1710171111"
-        type:
-          type: string
-          enum: [PIX_SENT, PIX_RECEIVED, DEPOSIT, PAYMENT, PIX_CREDIT_SENT]
-          example: "PIX_SENT"
-        amount:
-          type: number
-          format: float
-          example: -100.00
-        date:
-          type: string
-          format: date-time
-          example: "2024-03-20T10:30:00.000Z"
-        description:
-          type: string
-          example: "Transferência PIX"
-        to:
-          type: string
-          description: CPF de destino (quando aplicável)
-          example: "98765432100"
-        from:
-          type: string
-          description: CPF de origem (quando aplicável)
-          example: "12345678901"
-        recipientName:
-          type: string
-          description: Nome do destinatário (quando aplicável)
-          example: "Maria Oliveira"
-        senderName:
-          type: string
-          description: Nome do remetente (quando aplicável)
-          example: "João da Silva"
-
-    CardTransaction:
-      type: object
-      required: [id, date, merchant, amount, type]
-      properties:
-        id:
-          type: string
-          example: "ctx-1710172222-1"
-        date:
-          type: string
-          format: date-time
-          example: "2024-03-20T10:30:00.000Z"
-        merchant:
-          type: string
-          example: "Loja Online"
-        amount:
-          type: number
-          format: float
-          example: 199.90
-        type:
-          type: string
-          enum: [CREDIT, PAYMENT, INVOICE_INSTALLMENT]
-          example: "INVOICE_INSTALLMENT"
-        installments:
-          type: string
-          description: 'Ex.: "1/12"'
-          example: "1/12"
-        totalInstallments:
-          type: integer
-          example: 12
-        currentInstallment:
-          type: integer
-          example: 1
-
-    CreditCard:
-      type: object
-      required: [number, dueDate, invoiceDueDate, currentInvoice, closedInvoice, availableLimit, totalLimit, pointsBalance, isBlocked, transactions, closedTransactions]
-      properties:
-        number:
-          type: string
-          example: "**** **** **** 1234"
-        dueDate:
-          type: string
-          description: Vencimento do cartão (MM/YY)
-          example: "12/28"
-        invoiceDueDate:
-          type: string
-          format: date-time
-          description: Data de vencimento da fatura atual
-          example: "2024-04-15T03:00:00.000Z"
-        closedInvoiceDueDate:
-          type: string
-          format: date-time
-          description: Data de vencimento da fatura fechada (quando existir)
-          example: "2024-03-15T03:00:00.000Z"
-        currentInvoice:
-          type: number
-          format: float
-          example: 450.00
-        closedInvoice:
-          type: number
-          format: float
-          example: 1200.00
-        availableLimit:
-          type: number
-          format: float
-          example: 800.00
-        totalLimit:
-          type: number
-          format: float
+          description: Limite diário para PIX
           example: 1000.00
-        pointsBalance:
-          type: number
-          example: 1200
         isBlocked:
           type: boolean
+          description: Status de bloqueio do usuário
           example: false
-        transactions:
-          type: array
-          items:
-            $ref: '#/components/schemas/CardTransaction'
-        closedTransactions:
-          type: array
-          items:
-            $ref: '#/components/schemas/CardTransaction'
-
-    PixKey:
-      type: object
-      required: [type, key]
-      properties:
-        type:
+        role:
           type: string
-          enum: [CPF, EMAIL]
-          example: "CPF"
-        key:
-          type: string
-          example: "12345678901"
-
-    PixContact:
-      type: object
-      required: [name, key]
-      description: >
-        Contato PIX. Atenção: por compatibilidade com o schema atual do banco,
-        a chave PIX (CPF/EMAIL/TELEFONE/EVP) é persistida na coluna `contact_cpf`.
-        Conceitualmente, o nome correto seria `contact_key`. Este contrato usa `key`.
-      properties:
-        name:
-          type: string
-          example: "Maria Oliveira"
-        key:
-          type: string
-          description: "Chave PIX (CPF, EMAIL, TELEFONE ou EVP)."
-          example: "maria.oliveira@example.com"
-
-    PasswordResetRequest:
-      type: object
-      required: [cpf, status]
-      properties:
-        cpf:
-          type: string
-          pattern: '^[0-9]{11}$'
-          example: "12345678901"
-        status:
-          type: string
-          enum: [pending, approved, denied]
-          example: "pending"
-
-    LimitIncreaseRequest:
-      type: object
-      required: [cpf, amount, status]
-      properties:
-        cpf:
-          type: string
-          pattern: '^[0-9]{11}$'
-          example: "12345678901"
-        amount:
-          type: number
-          format: float
-          example: 3000.00
-        status:
-          type: string
-          enum: [pending, approved, denied]
-          example: "pending"
-
-    PurchasedItem:
-      type: object
-      required: [id, name, description, price, imageUrl]
-      properties:
-        id:
-          type: string
-          example: "prod-001"
-        name:
-          type: string
-          example: "Fone de Ouvido"
-        description:
-          type: string
-          example: "Fone Bluetooth"
-        price:
-          type: number
-          format: float
-          example: 199.90
-        imageUrl:
-          type: string
-          format: uri
-        quantity:
-          type: integer
-          example: 2
-        purchaseDate:
-          type: string
-          format: date-time
-          example: "2024-03-18T15:20:00.000Z"
-        pointsEarned:
-          type: integer
-          example: 20
-
-    Story:
-      type: object
-      required: [id, cpf, imageUrl, createdAt]
-      properties:
-        id:
-          type: string
-          example: "story-001"
-        cpf:
-          type: string
-          pattern: '^[0-9]{11}$'
-          example: "12345678901"
-        imageUrl:
-          type: string
-          format: uri
-          example: "https://example.com/story.jpg"
-        caption:
-          type: string
-          example: "Compra aprovada!"
-        createdAt:
-          type: string
-          format: date-time
-          example: "2024-03-18T12:00:00.000Z"
-
-    SignUpRequest:
-      type: object
-      required: [fullName, email, cpf, password]
-      properties:
-        fullName:
-          type: string
-          example: "João da Silva"
-        email:
-          type: string
-          format: email
-          example: "joao.silva@example.com"
-        cpf:
-          type: string
-          pattern: '^[0-9]{11}$'
-          example: "12345678901"
-        password:
-          type: string
-          minLength: 6
-          example: "MinhaSenh@123"
+          enum: [customer, admin]
+          description: Papel do usuário no sistema
+          example: "customer"
 
     LoginRequest:
       type: object
-      required: [cpf, password]
+      required:
+        - cpf
+        - password
       properties:
         cpf:
           type: string
           pattern: '^[0-9]{11}$'
+          description: CPF com 11 dígitos
           example: "12345678901"
         password:
           type: string
@@ -388,7 +80,6 @@ components:
 
     AuthResponse:
       type: object
-      required: [success, message, user, token]
       properties:
         success:
           type: boolean
@@ -422,64 +113,11 @@ components:
           type: string
           example: "Erro na operação"
 
-    AppNotification:
-      type: object
-      required:
-        - id
-        - message
-        - created_at
-        - is_read
-      properties:
-        id:
-          type: integer
-          format: int64
-          description: Identificador unico da notificacao
-          example: 101
-        message:
-          type: string
-          description: Mensagem detalhada da notificacao
-          example: 'Voce recebeu um PIX de R$ 120,00'
-        created_at:
-          type: string
-          format: date-time
-          description: Data/hora de criacao no formato ISO 8601
-          example: '2025-11-09T10:30:00Z'
-        is_read:
-          type: boolean
-          description: Indica se a notificacao foi lida
-          example: false
-        title:
-          type: string
-          nullable: true
-          description: Titulo curto da notificacao (opcional)
-          example: 'PIX recebido'
-        type:
-          type: string
-          nullable: true
-          description: Tipo da notificacao (opcional)
-          enum: [info, warning, error, success]
-          example: 'success'
-        actionUrl:
-          type: string
-          nullable: true
-          description: URL opcional para acao relacionada
-          example: '/cards/invoices/2025-11'
-        createdAt:
-          type: string
-          format: date-time
-          nullable: true
-          deprecated: true
-          description: Alias legado para created_at (nao preferencial)
-        read:
-          type: boolean
-          nullable: true
-          deprecated: true
-          description: Alias legado para is_read (nao preferencial)
-
 paths:
   /health:
     get:
-      tags: [Sistema]
+      tags:
+        - Sistema
       summary: Health Check
       description: Verifica se a API está funcionando
       responses:
@@ -497,45 +135,10 @@ paths:
                     type: string
                     example: "2024-03-20T10:30:00Z"
 
-  /auth/signup:
-    post:
-      tags: [Autenticação]
-      summary: Cadastro de usuário
-      description: Registra um novo usuário com cartão de crédito e limites padrão.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SignUpRequest'
-            example:
-              fullName: "João da Silva"
-              email: "joao.silva@example.com"
-              cpf: "12345678901"
-              password: "MinhaSenh@123"
-      responses:
-        '200':
-          description: Usuário criado com sucesso
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-              example:
-                success: true
-                message: "Usuário criado com sucesso."
-        '400':
-          description: Dados inválidos (CPF/email já existente)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                success: false
-                message: "CPF já cadastrado."
-
   /auth/login:
     post:
-      tags: [Autenticação]
+      tags:
+        - Autenticação
       summary: Fazer login
       description: Autentica um usuário no sistema
       requestBody:
@@ -544,9 +147,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/LoginRequest'
-            example:
-              cpf: "12345678901"
-              password: "MinhaSenh@123"
       responses:
         '200':
           description: Login realizado com sucesso
@@ -567,112 +167,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /auth/request-password-reset:
-    post:
-      tags: [Autenticação]
-      summary: Solicitar redefinição de senha
-      description: Cria uma solicitação pendente para redefinição de senha do usuário.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [cpf]
-              properties:
-                cpf:
-                  type: string
-                  pattern: '^[0-9]{11}$'
-            example:
-              cpf: "12345678901"
-      responses:
-        '200':
-          description: Solicitação criada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-              example:
-                success: true
-                message: "Solicitação enviada para aprovação."
-        '404':
-          description: Usuário não encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /auth/reset-password:
-    post:
-      tags: [Autenticação]
-      summary: Redefinir senha com token
-      description: Redefine a senha usando token (4 últimos dígitos do CPF).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [cpf, token, newPassword]
-              properties:
-                cpf:
-                  type: string
-                  pattern: '^[0-9]{11}$'
-                token:
-                  type: string
-                  minLength: 4
-                  maxLength: 4
-                newPassword:
-                  type: string
-                  minLength: 6
-                  maxLength: 12
-            example:
-              cpf: "12345678901"
-              token: "8901"
-              newPassword: "nova123"
-      responses:
-        '200':
-          description: Senha redefinida
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-              example:
-                success: true
-                message: "Senha redefinida com sucesso!"
-        '400':
-          description: Token inválido
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                success: false
-                message: "Token de redefinição inválido."
-
-  /users/me:
-    get:
-      tags: [Usuários]
-      summary: Dados do usuário autenticado
-      description: Retorna os dados completos do usuário autenticado.
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Dados do usuário
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '401':
-          description: Token inválido
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   /users/{cpf}:
     get:
-      tags: [Usuários]
+      tags:
+        - Usuários
       summary: Consultar usuário
       description: Retorna os dados de um usuário
       parameters:
@@ -713,7 +211,8 @@ paths:
 
   /users/{cpf}/statement:
     get:
-      tags: [Usuários]
+      tags:
+        - Usuários
       summary: Extrato do usuário
       description: Retorna o extrato de transações do usuário
       parameters:
@@ -736,633 +235,16 @@ paths:
                 properties:
                   success:
                     type: boolean
+                    example: true
                   transactions:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Transaction'
-              example:
-                success: true
-                transactions:
-                  - id: "tx-1"
-                    type: "PIX_SENT"
-                    amount: -100
-                    date: "2024-03-20T10:30:00.000Z"
-                    description: "Transferência PIX"
-                    to: "98765432100"
-
-  /users/{cpf}/notifications:
-    get:
-      tags: [Usuários]
-      summary: Listar notificações do usuário
-      description: Retorna a lista de notificações do usuário identificado pelo CPF.
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          description: CPF do usuário sem máscara.
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          example: '12345678901'
-      responses:
-        '200':
-          description: Lista de notificações do usuário
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AppNotification'
-              examples:
-                exemplo:
-                  summary: Lista de notificações
-                  value:
-                    - id: 101
-                      title: 'Fatura fechada'
-                      message: 'Sua fatura de cartão foi fechada'
-                      type: 'info'
-                      read: false
-                      createdAt: '2025-11-09T10:30:00Z'
-                      actionUrl: '/cards/invoices/2025-11'
-                    - id: 102
-                      title: 'PIX recebido'
-                      message: 'Você recebeu um PIX de R$ 120,00'
-                      type: 'success'
-                      read: true
-                      createdAt: '2025-11-08T18:45:00Z'
-
-  /users/{cpf}/notifications/{id}/read:
-    post:
-      tags: [Usuários]
-      summary: Marcar notificação como lida
-      description: Marca a notificação especificada como lida para o usuário.
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          description: CPF do usuário sem máscara.
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          example: '12345678901'
-        - name: id
-          in: path
-          required: true
-          description: ID da notificação.
-          schema:
-            type: integer
-            format: int64
-          example: 101
-      responses:
-        '200':
-          description: Notificação marcada como lida
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-              examples:
-                sucesso:
-                  summary: Operação realizada com sucesso
-                  value:
-                    success: true
-                    message: 'Notificação marcada como lida'
-        '404':
-          description: Notificação ou usuário não encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                naoEncontrado:
-                  value:
-                    success: false
-                    message: 'Usuário ou notificação não encontrada'
-
-  /pix/recipient-info:
-    post:
-      tags: [PIX]
-      summary: Validar chave PIX e obter destinatário
-      description: Valida a chave PIX e retorna nome e CPF mascarado. Não permite auto-transferência.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [key, senderCpf]
-              properties:
-                key: { type: string }
-                senderCpf:
-                  type: string
-                  pattern: '^[0-9]{11}$'
-            example:
-              key: "maria.oliveira@example.com"
-              senderCpf: "12345678901"
-      responses:
-        '200':
-          description: Destinatário
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success: { type: boolean }
-                  name: { type: string }
-                  cpf: { type: string, description: CPF mascarado }
-              example:
-                success: true
-                name: "Maria Oliveira"
-                cpf: "***.123.456-**"
-        '400':
-          description: Chave não encontrada ou auto-transferência
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /pix/transfer:
-    post:
-      tags: [PIX]
-      summary: Transferência PIX (débito)
-      description: Realiza transferência PIX com validação de limite diário e saldo. Requer PIN.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [toKey, amount, description, pin]
-              properties:
-                toKey: { type: string }
-                amount:
-                  type: number
-                  format: float
-                  minimum: 0.01
-                description: { type: string }
-                pin:
-                  type: string
-                  minLength: 4
-                  maxLength: 4
-            example:
-              toKey: "12345678901"
-              amount: 100.00
-              description: "Transferência PIX"
-              pin: "1234"
-      responses:
-        '200':
-          description: PIX enviado
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success: { type: boolean }
-                  message: { type: string }
-                  transaction: { $ref: '#/components/schemas/Transaction' }
-              example:
-                success: true
-                message: "PIX enviado com sucesso!"
-                transaction:
-                  id: "tx-pix-1710171111"
-                  type: "PIX_SENT"
-                  amount: -100
-                  date: "2024-03-20T10:30:00.000Z"
-                  description: "Transferência PIX"
-                  to: "98765432100"
-                  recipientName: "Maria Oliveira"
-        '400':
-          description: Saldo insuficiente ou limite excedido
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /pix/transfer-credit:
-    post:
-      tags: [PIX]
-      summary: Transferência PIX no crédito
-      description: Realiza PIX no crédito com juros simples (5% ao mês). Lança parcelas com datas futuras corretas. Requer PIN.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [toKey, amount, installments, pin]
-              properties:
-                toKey: { type: string }
-                amount:
-                  type: number
-                  format: float
-                  minimum: 0.01
-                installments:
-                  type: integer
-                  minimum: 1
-                  maximum: 24
-                pin:
-                  type: string
-                  minLength: 4
-                  maxLength: 4
-            example:
-              toKey: "12345678901"
-              amount: 300.00
-              installments: 6
-              pin: "1234"
-      responses:
-        '200':
-          description: PIX no crédito realizado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-              example:
-                success: true
-                message: "PIX no crédito realizado com sucesso!"
-        '400':
-          description: Limite insuficiente
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /pix/keys:
-    get:
-      tags: [PIX]
-      summary: Listar chaves PIX do usuário
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Lista de chaves
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/PixKey' }
-    post:
-      tags: [PIX]
-      summary: Registrar chave PIX
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [type, key]
-              properties:
-                type: { type: string, enum: [CPF, EMAIL] }
-                key: { type: string }
-            example:
-              type: "EMAIL"
-              key: "maria.oliveira@example.com"
-      responses:
-        '200':
-          description: Chave cadastrada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-              example:
-                success: true
-                message: "Chave PIX cadastrada com sucesso!"
-  /pix/keys/{key}:
-    delete:
-      tags: [PIX]
-      summary: Remover chave PIX
-      parameters:
-        - name: key
-          in: path
-          required: true
-          schema: { type: string }
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Chave removida
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /pix/contacts:
-    get:
-      tags: [PIX]
-      summary: Listar contatos PIX
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Lista de contatos
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/PixContact' }
-    post:
-      tags: [PIX]
-      summary: Adicionar contato PIX
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PixContact'
-            example:
-              name: "Maria Oliveira"
-              key: "maria.oliveira@example.com"
-      responses:
-        '200':
-          description: Contato adicionado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-  /pix/contacts/{key}:
-    delete:
-      tags: [PIX]
-      summary: Remover contato PIX
-      parameters:
-        - name: key
-          in: path
-          required: true
-          schema: { type: string }
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Contato removido
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /pix/limit/request:
-    post:
-      tags: [PIX]
-      summary: Solicitar aumento de limite diário PIX
-      description: Cria uma solicitação pendente de aumento de limite PIX para análise do admin.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [cpf, amount]
-              properties:
-                cpf:
-                  type: string
-                  pattern: '^[0-9]{11}$'
-                amount:
-                  type: number
-                  format: float
-                  minimum: 0
-            example:
-              cpf: "12345678901"
-              amount: 3000
-      responses:
-        '200':
-          description: Solicitação criada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /shop/products:
-    get:
-      tags: [Shop]
-      summary: Listar produtos do marketplace
-      responses:
-        '200':
-          description: Lista de produtos
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-              example:
-                - id: "prod-001"
-                  name: "Fone de Ouvido"
-                  description: "Fone Bluetooth"
-                  price: 199.90
-                  imageUrl: "https://example.com/fone.jpg"
-
-  /shop/checkout:
-    post:
-      tags: [Shop]
-      summary: Checkout de compra
-      description: Processa compra (debito ou credito), calcula pontos e salva itens com purchaseDate e pointsEarned. Parcelamento em credito cria transacoes futuras da fatura.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [items, paymentMethod]
-              properties:
-                items:
-                  type: array
-                  items:
-                    type: object
-                    required: [productId, quantity]
-                    properties:
-                      productId: { type: string }
-                      quantity: { type: integer, minimum: 1 }
-                paymentMethod:
-                  type: string
-                  enum: [debit, credit]
-                cashbackUsed:
-                  type: number
-                  format: float
-                  minimum: 0
-                installments:
-                  type: integer
-                  minimum: 1
-                  maximum: 24
-                pin:
-                  type: string
-                  minLength: 4
-                  maxLength: 4
-            example:
-              items:
-                - productId: "prod-001"
-                  quantity: 2
-              paymentMethod: "credit"
-              cashbackUsed: 20
-              installments: 6
-              pin: "1234"
-      responses:
-        '200':
-          description: Compra realizada
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success: { type: boolean }
-                  message: { type: string }
-                  orderId: { type: string }
-              example:
-                success: true
-                message: "Compra realizada com sucesso."
-                orderId: "ord-1710173333"
-        '400':
-          description: Limite insuficiente ou saldo insuficiente
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /cards/invoice/pay:
-    post:
-      tags: [Cartão]
-      summary: Pagar fatura fechada
-      description: Debita saldo da conta, restaura limite, zera closedInvoice e desbloqueia cartão se estava bloqueado. Requer PIN.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [cpf, pin]
-              properties:
-                cpf:
-                  type: string
-                  pattern: '^[0-9]{11}$'
-                pin:
-                  type: string
-                  minLength: 4
-                  maxLength: 4
-            example:
-              cpf: "12345678901"
-              pin: "1234"
-      responses:
-        '200':
-          description: Fatura paga
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-              example:
-                success: true
-                message: "Fatura paga com sucesso."
-        '400':
-          description: Saldo insuficiente ou sem fatura fechada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /cards/invoice/parcel:
-    post:
-      tags: [Cartão]
-      summary: Parcelar fatura fechada
-      description: Aplica juros (10% simples/mês conforme frontend), cria transações futuras `INVOICE_INSTALLMENT` e ajusta limites; desbloqueia se estava bloqueado. Requer PIN.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [cpf, amount, installments, pin]
-              properties:
-                cpf:
-                  type: string
-                  pattern: '^[0-9]{11}$'
-                amount:
-                  type: number
-                  format: float
-                  minimum: 0.01
-                installments:
-                  type: integer
-                  minimum: 2
-                  maximum: 24
-                pin:
-                  type: string
-                  minLength: 4
-                  maxLength: 4
-            example:
-              cpf: "12345678901"
-              amount: 1200.00
-              installments: 12
-              pin: "1234"
-      responses:
-        '200':
-          description: Parcelamento realizado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-        '400':
-          description: Inconsistência de valor ou sem fatura fechada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /cards/invoice/anticipate:
-    post:
-      tags: [Cartão]
-      summary: Antecipar parcelas da fatura do cartão
-      description: Antecipação de parcelas com aplicação de regra de desconto e atualização da fatura e transações.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [cpf, transactionIds]
-              properties:
-                cpf:
-                  type: string
-                  description: CPF do usuário sem máscara.
-                  pattern: '^[0-9]{11}$'
-                transactionIds:
-                  type: array
-                  description: IDs das transações de parcelas a antecipar
-                  items:
-                    type: string
-            example:
-              cpf: "12345678901"
-              transactionIds:
-                - "ctx-inst-001"
-                - "ctx-inst-002"
-      responses:
-        '200':
-          description: Parcelas antecipadas com sucesso
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-              example:
-                success: true
-                message: "Parcelas antecipadas com desconto aplicado."
-        '400':
-          description: Dados inválidos ou inconsistência nas parcelas
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Token inválido
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                      type: object
 
   /admin/users:
     get:
-      tags: [Administração]
+      tags:
+        - Administração
       summary: Listar usuários (Admin)
       description: Lista todos os usuários (apenas administradores)
       security:
@@ -1385,7 +267,8 @@ paths:
 
   /admin/users/{cpf}:
     get:
-      tags: [Administração]
+      tags:
+        - Administração
       summary: Consultar usuário (Admin)
       description: Consulta dados de um usuário (apenas administradores)
       parameters:
@@ -1414,7 +297,8 @@ paths:
 
   /admin/users/{cpf}/deposit:
     post:
-      tags: [Administração]
+      tags:
+        - Administração
       summary: Fazer depósito (Admin)
       description: Realiza um depósito na conta do usuário (apenas administradores)
       parameters:
@@ -1461,7 +345,8 @@ paths:
 
   /admin/users/{cpf}/block:
     put:
-      tags: [Administração]
+      tags:
+        - Administração
       summary: Bloquear usuário (Admin)
       description: Bloqueia um usuário (apenas administradores)
       parameters:
@@ -1493,7 +378,8 @@ paths:
 
   /admin/users/{cpf}/unblock:
     put:
-      tags: [Administração]
+      tags:
+        - Administração
       summary: Desbloquear usuário (Admin)
       description: Desbloqueia um usuário (apenas administradores)
       parameters:
@@ -1525,7 +411,8 @@ paths:
 
   /admin/users/{cpf}/pix-limit:
     put:
-      tags: [Administração]
+      tags:
+        - Administração
       summary: Alterar limite PIX (Admin)
       description: Altera o limite diário PIX de um usuário (apenas administradores)
       parameters:
@@ -1572,7 +459,8 @@ paths:
 
   /admin/users/{cpf}/reset-password:
     put:
-      tags: [Administração]
+      tags:
+        - Administração
       summary: Resetar senha (Admin)
       description: Reseta a senha de um usuário (apenas administradores)
       parameters:
@@ -1619,7 +507,8 @@ paths:
 
   /admin/users/{cpf}/generate-temp-password:
     post:
-      tags: [Administração]
+      tags:
+        - Administração
       summary: Gerar senha temporária (Admin)
       description: Gera uma senha temporária para um usuário (apenas administradores)
       parameters:
@@ -1652,281 +541,6 @@ paths:
                   user:
                     $ref: '#/components/schemas/User'
 
-  /admin/requests/password:
-    get:
-      tags: [Administração]
-      summary: Listar solicitações de redefinição de senha
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Lista de solicitações
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/PasswordResetRequest' }
-
-  /admin/requests/password/{cpf}/approve:
-    post:
-      tags: [Administração]
-      summary: Aprovar solicitação de senha
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema: { type: string, pattern: '^[0-9]{11}$' }
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Solicitação aprovada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /admin/requests/password/{cpf}/deny:
-    post:
-      tags: [Administração]
-      summary: Negar solicitação de senha
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema: { type: string, pattern: '^[0-9]{11}$' }
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [reason]
-              properties:
-                reason: { type: string }
-            example:
-              reason: "Documento inválido."
-      responses:
-        '200':
-          description: Solicitação negada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /admin/requests/limit:
-    get:
-      tags: [Administração]
-      summary: Listar solicitações de aumento de limite PIX
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Lista de solicitações
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/LimitIncreaseRequest' }
-
-  /admin/requests/limit/{cpf}/approve:
-    post:
-      tags: [Administração]
-      summary: Aprovar solicitação de aumento de limite PIX
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema: { type: string, pattern: '^[0-9]{11}$' }
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Solicitação aprovada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /admin/requests/limit/{cpf}/deny:
-    post:
-      tags: [Administração]
-      summary: Negar solicitação de aumento de limite PIX
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema: { type: string, pattern: '^[0-9]{11}$' }
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [reason]
-              properties:
-                reason: { type: string }
-            example:
-              reason: "Renda insuficiente."
-      responses:
-        '200':
-          description: Solicitação negada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /admin/users/{cpf}/card-details:
-    post:
-      summary: Atualiza detalhes do cartao de credito do usuario (Admin)
-      tags: [Admin]
-      parameters:
-        - in: path
-          name: cpf
-          required: true
-          schema:
-            type: string
-          description: CPF do usuario (11 digitos)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                dueDate:
-                  type: string
-                  description: Vencimento do cartao (MM/YY)
-                  example: "12/28"
-                invoiceDueDate:
-                  type: string
-                  format: date-time
-                  description: Data de vencimento da fatura (TIMESTAMP)
-                  example: "2025-12-10 00:00:00"
-                availableLimit:
-                  type: number
-                  format: float
-                  description: Limite disponivel do cartao
-                  example: 5000.00
-                totalLimit:
-                  type: number
-                  format: float
-                  description: Limite total do cartao
-                  example: 8000.00
-                pointsBalance:
-                  type: number
-                  description: Pontos do programa de fidelidade
-                  example: 1500
-            examples:
-              ajustarLimiteDisponivel:
-                summary: Ajustar apenas limite disponivel
-                value:
-                  availableLimit: 5000.00
-              ajustarLimites:
-                summary: Ajustar limite disponivel e total
-                value:
-                  availableLimit: 5000.00
-                  totalLimit: 8000.00
-      responses:
-        '200':
-          description: Detalhes do cartao atualizados
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  user:
-                    $ref: '#/components/schemas/User'
-        '400':
-          description: Requisicao invalida (nenhum campo informado)
-      security:
-        - bearerAuth: []
-
-  /proxy/news:
-    get:
-      tags: [Proxy]
-      summary: Proxy para noticias de economia
-      description: >
-        Faz chamada a API externa (ex.: IBGE), protege chaves e pode aplicar caching.
-        Retorna noticias em formato padronizado para o app.
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Noticias obtidas com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  source:
-                    type: string
-                    example: IBGE
-                  items:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        title:
-                          type: string
-                        url:
-                          type: string
-                          format: uri
-                        publishedAt:
-                          type: string
-                          format: date-time
-              examples:
-                exemplo:
-                  value:
-                    source: IBGE
-                    items:
-                      - title: 'Indice de Precos ao Consumidor sobe 0.45%'
-                        url: 'https://www.ibge.gov.br/noticia-1'
-                        publishedAt: '2025-11-09T12:00:00Z'
-
-  /user/me/{cpf}:
-    get:
-      tags: [Usuarios]
-      summary: Consultar dados do usuario (me)
-      description: Retorna os dados do usuario autenticado. Para compatibilidade, o CPF deve corresponder ao token.
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          description: CPF do usuario sem mascara.
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          example: '12345678901'
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Dados do usuario
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '401':
-          description: Token invalido
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Acesso negado (CPF nao corresponde ao usuario autenticado)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Usuario nao encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   /users/{cpf}/pix-daily-usage:
     get:
       tags: [PIX]
@@ -1936,272 +550,87 @@ paths:
         - name: cpf
           in: path
           required: true
-          description: CPF do usuario sem mascara.
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          example: '12345678901'
-      security:
-        - bearerAuth: []
+          schema: { type: string, pattern: '^[0-9]{11}$' }
       responses:
         '200':
-          description: Uso diario calculado com sucesso
+          description: Sucesso
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  success:
-                    type: boolean
-                    example: true
-                  dailyUsage:
-                    type: number
-                    format: float
-                    example: 250.75
-        '401':
-          description: Token invalido
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Usuario nao encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /users/{cpf}/purchases:
-    get:
-      tags: [Shop]
-      summary: Listar itens comprados do usuário
-      description: Retorna itens comprados com pontos por item, ordenados por data.
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-      responses:
-        '200':
-          description: Lista de itens comprados
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PurchasedItem'
-
-  /stories:
-    get:
-      tags: [Usuários]
-      summary: Listar stories
-      description: Lista stories disponíveis para exibição na UI, ordenados por `createdAt`.
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Lista de stories
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Story'
-
-  /admin/invoices/{cpf}/{invoiceId}/status:
-    post:
-      tags: [Administração]
-      summary: Alterar status da fatura (Admin)
-      description: Atualiza o status de uma fatura do cliente. Somente ADMIN.
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do cliente
-        - name: invoiceId
-          in: path
-          required: true
-          schema:
-            type: string
-          description: ID da fatura (UUID ou chave mensal)
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [status]
-              properties:
-                status:
-                  type: string
-                  enum: [FECHADA, ABERTA, FECHADA_COM_ATRASO, BLOQUEADA]
-                  description: Novo status da fatura
-      responses:
-        '200':
-          description: Fatura atualizada
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  invoice:
-                    type: object
-                    properties:
-                      id: { type: string }
-                      cpf: { type: string }
-                      status:
-                        type: string
-                        enum: [FECHADA, ABERTA, FECHADA_COM_ATRASO, BLOQUEADA]
-                      due_date: { type: string, format: date-time }
+                  success: { type: boolean, example: true }
+                  cpf: { type: string, example: '12345678901' }
+                  date: { type: string, format: date, example: '2025-11-10' }
+                  totalSentToday: { type: number, format: float, example: 250.00 }
         '400':
-          description: Payload invalido ou transicao proibida
+          description: Erro
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
         '401':
-          description: Token invalido
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '403':
-          description: Acesso negado (nao-admin)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '404':
-          description: Usuario ou fatura nao encontrados
+          description: Unauthorized
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
 
-  /admin/users/{cpf}/card/purchase/open:
+  /cards/invoice/anticipate:
     post:
-      tags: [Administração]
-      summary: Inserir compra na fatura aberta (Admin)
-      description: |
-        Regras CREDIT:
-        - installments = 1 => a vista com desconto 10% (sem gerar parcelas)
-        - installments 2..12 => sem juros (gera INVOICE_INSTALLMENT mensais)
-        - installments 13..24 => com juros 1%..7% (gera INVOICE_INSTALLMENT; interestRate obrigatorio)
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
+      tags: [Card]
+      summary: Antecipar parcelas da fatura do cartao
+      description: Antecipacao de parcelas com regra de desconto e atualizacao de fatura/transacoes.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [cpf, pin, installmentTransactionIds]
               properties:
-                amount:
-                  type: number
-                description:
-                  type: string
-                installments:
-                  type: integer
-                  minimum: 1
-                  maximum: 24
-                  description: "1=a vista; 2..12=sem juros; 13..24=com juros"
-                interestRate:
-                  type: number
-                  minimum: 0.01
-                  maximum: 0.07
-                  description: "Obrigatorio quando installments >= 13 (1%..7%)"
-              required: [amount, description]
-            example:
-              amount: 199.90
-              description: "Compra teste fatura aberta"
-              installments: 6
+                cpf: { type: string, pattern: '^[0-9]{11}$' }
+                pin: { type: string, minLength: 4, maxLength: 4 }
+                installmentTransactionIds:
+                  type: array
+                  items: { type: string }
+              example:
+                cpf: '12345678901'
+                pin: '1234'
+                installmentTransactionIds: ['tx-inv-001', 'tx-inv-002']
       responses:
-        '201':
-          description: Compra registrada na fatura aberta
+        '200':
+          description: Parcelas antecipadas com sucesso
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  success: { type: boolean, example: true }
-                  message: { type: string, example: "Compra registrada na fatura aberta." }
-                  transactionId: { type: string, example: "tx-abc123" }
-        '400': { description: Payload invalido }
-        '401': { description: Token invalido }
-        '403': { description: Acesso negado (nao-admin) }
-        '404': { description: Usuario nao encontrado }
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '400':
+          description: Dados invalidos ou inconsistencia nas parcelas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
-  /admin/users/{cpf}/card/purchase/closed:
-    post:
-      tags: [Administração]
-      summary: Inserir compra na fatura fechada (Admin)
-      description: |
-        Regras CREDIT:
-        - installments = 1 => a vista com desconto 10% (1 parcela negativa vencendo agora)
-        - installments 2..12 => sem juros (1a parcela agora, demais mensais)
-        - installments 13..24 => com juros 1%..7% (interestRate obrigatorio; 1a parcela agora, demais mensais)
+  /user/me/{cpf}:
+    get:
+      tags: [Users]
+      summary: Dados do usuario (compatibilidade)
+      description: Retorna dados do usuario, transacoes e contatos PIX (rota de compatibilidade).
       parameters:
         - name: cpf
           in: path
           required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                amount:
-                  type: number
-                description:
-                  type: string
-                installments:
-                  type: integer
-                  minimum: 1
-                  maximum: 24
-                  description: "1=a vista; 2..12=sem juros; 13..24=com juros"
-                interestRate:
-                  type: number
-                  minimum: 0.01
-                  maximum: 0.07
-                  description: "Obrigatorio quando installments >= 13 (1%..7%)"
-              required: [amount, description]
-            example:
-              amount: 120.00
-              description: "Compra teste fatura fechada"
-              installments: 3
+          schema: { type: string, pattern: '^[0-9]{11}$' }
       responses:
-        '201':
-          description: Compra registrada na fatura fechada
+        '200':
+          description: Sucesso
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  success: { type: boolean, example: true }
-                  message: { type: string, example: "Compra registrada na fatura fechada." }
-                  transactionId: { type: string, example: "tx-xyz789" }
-        '400': { description: Payload invalido }
-        '401': { description: Token invalido }
-        '403': { description: Acesso negado (nao-admin) }
-        '404': { description: Usuario nao encontrado }
+              schema: { $ref: '#/components/schemas/User' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
