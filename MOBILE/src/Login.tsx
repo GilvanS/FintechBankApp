@@ -106,7 +106,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToSignUp }) => {
       <div className="w-full max-w-md mt-10">
         <Logo />
         <p className="text-center text-lg text-gray-300 mb-8">
-          Login - VERSÃO NOVA
+          Acesse sua conta
         </p>
         
         <form onSubmit={handleLogin} className="space-y-6">
