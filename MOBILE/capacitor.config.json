@@ -1,5 +1,9 @@
 {
   "appId": "com.fintechbank.app",
   "appName": "FintechBank",
-  "webDir": "dist"
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  }
 }
