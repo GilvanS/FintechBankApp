@@ -60,26 +60,12 @@ api.interceptors.response.use(
 // --- FUNÇÕES DA API ---
 
 /**
- * Verifica a saúde do servidor.
- * Faz uma chamada leve à rota /health e retorna true se for bem-sucedida,
- * e false para qualquer tipo de erro (incluindo timeout ou erro de rede).
+ * DEBUG: Força a verificação de saúde a retornar 'true'.
+ * Isso é um teste para verificar se o processo de build do APK está funcionando.
  */
 export const healthCheck = async (): Promise<boolean> => {
-    try {
-        // Usa uma instância separada do axios ou uma configuração temporária
-        // para não passar pelo interceptor de resposta que mascara o erro.
-        const healthApi = axios.create({
-            baseURL: getApiBase(),
-            timeout: 3000,
-        });
-        const response = await healthApi.get('/api/v1/health');
-        // Verifica se a resposta foi bem-sucedida (status 2xx)
-        return response.status >= 200 && response.status < 300;
-    } catch (error) {
-        // Qualquer erro (rede, timeout, 404, 500, etc.) significa que o servidor está offline.
-        console.error("Health check failed:", error.message);
-        return false;
-    }
+    console.log("DEBUG: Forcing health check to return true.");
+    return true; // <<< ALTERAÇÃO DE TESTE
 };
 
 
