@@ -6,17 +6,18 @@ const defaultApiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:30
 // --- Funções de gerenciamento de IP da API ---
 
 export const getApiBase = () => {
-  return localStorage.getItem('customApiBase') || defaultApiBase;
+  // Removido o uso do localStorage para forçar o localhost
+  return defaultApiBase;
 };
 
 export const setCustomApiBase = (ipAddress: string) => {
-  localStorage.setItem('customApiBase', ipAddress);
-  api.defaults.baseURL = ipAddress;
+  // Função mantida para não quebrar outras partes, mas não será usada
+  console.log("setCustomApiBase não tem mais efeito. Usando localhost via adb reverse.");
 };
 
 export const clearCustomApiBase = () => {
-  localStorage.removeItem('customApiBase');
-  api.defaults.baseURL = defaultApiBase;
+  // Função mantida para não quebrar outras partes, mas não será usada
+  console.log("clearCustomApiBase não tem mais efeito. Usando localhost via adb reverse.");
 };
 
 // --- Instância e Interceptors do Axios ---
