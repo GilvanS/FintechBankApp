@@ -38,12 +38,12 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
                     <div className="flex overflow-x-auto pb-4 [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         <div className="flex items-stretch gap-4 px-4">
                             {/* PIX */}
-                            <div onClick={() => onNavigate('pix')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center">
+                            <button onClick={() => onNavigate('pix')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center border-none bg-transparent p-0">
                                 <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square transition-transform hover:scale-105">
                                     <span className="material-symbols-outlined text-4xl text-primary">qr_code_2</span>
                                 </div>
                                 <p className="text-sm font-medium leading-normal text-white">PIX</p>
-                            </div>
+                            </button>
                             {/* Marketplace */}
                              <div onClick={() => onNavigate('shop')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center">
                                 <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square transition-transform hover:scale-105">
