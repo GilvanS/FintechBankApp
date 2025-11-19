@@ -8,11 +8,10 @@ import {
   IonHeader,
   IonToolbar,
   IonTitle,
-  IonButtons
 } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
-import { arrowForward, scan, documentText, card, basket, settingsOutline } from 'ionicons/icons';
-import './PreLoginDashboard.css';
+import { arrowForward, scan, documentText, card, basket } from 'ionicons/icons';
+import './PreLoginDashboard.css'; // O CSS continua o mesmo
 
 const PreLoginDashboard: React.FC = () => {
   const history = useHistory();
@@ -23,16 +22,13 @@ const PreLoginDashboard: React.FC = () => {
 
   return (
     <IonPage>
+      {/* Header simplificado, sem botões */}
       <IonHeader className="ion-no-border">
         <IonToolbar color="dark">
           <IonTitle>Olá!</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={() => history.push('/login')}>
-              <IonIcon slot="icon-only" icon={settingsOutline} />
-            </IonButton>
-          </IonButtons>
         </IonToolbar>
       </IonHeader>
+
       <IonContent color="dark" className="ion-padding" fullscreen>
         <div className="grid-container">
             <div className="grid-item">

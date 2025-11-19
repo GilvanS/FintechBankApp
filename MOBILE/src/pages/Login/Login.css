@@ -1,55 +1,113 @@
-/* Estilo geral para a página de Login com tema escuro */
+/*
+  Estilo da Página de Login - Recriado para corresponder ao design de referência.
+*/
+
 :root {
-  --ion-background-color: #121212;
-  --ion-text-color: #ffffff;
-  --ion-item-background: #1e1e1e;
-  --ion-border-color: #333333;
-  --ion-color-primary: #25a244;
-  --ion-color-primary-contrast: #ffffff;
-  --ion-color-medium: #737373;
+  /* Cores primárias do design */
+  --cs-background: #0d1b2a; /* Azul bem escuro */
+  --cs-foreground: #1b263b; /* Azul escuro para inputs */
+  --cs-primary: #25a244;    /* VERDE, corrigido para ser consistente com o resto do app */
+  --cs-text-primary: #ffffff;   /* Branco para texto principal */
+  --cs-text-secondary: #e0e1dd; /* Cinza claro para subtítulos e labels */
+  --cs-text-tertiary: #778da9;  /* Cinza azulado para placeholders */
+  --cs-status-offline: #e63946; /* Vermelho para status offline */
 }
 
 .login-content {
-  --background: var(--ion-background-color);
+  --background: var(--cs-background);
 }
 
-.login-form {
+/* Remove o header padrão */
+ion-header {
+  display: none;
+}
+
+.login-container {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
   height: 100%;
-  padding: 0 16px;
+  padding: 0 32px;
 }
 
-/* Estilização dos campos de input */
-ion-item {
-  --background: var(--ion-item-background);
-  --color: var(--ion-text-color);
+.login-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.login-header .fintech-logo {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--cs-text-primary);
+}
+
+.login-header .fintech-logo ion-icon {
+  color: var(--cs-primary);
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+.login-header .access-account-text {
+  color: var(--cs-text-secondary);
+  font-size: 1.1rem;
+  margin-top: 8px;
+}
+
+/* Estilo dos campos de CPF e Senha */
+.input-item {
+  --background: var(--cs-foreground);
   --border-radius: 8px;
-  --border-color: var(--ion-border-color);
+  --padding-start: 16px;
+  --highlight-height: 0; /* Remove a linha de highlight */
   margin-bottom: 16px;
+  color: var(--cs-text-primary);
 }
 
-ion-label {
-  color: var(--ion-color-medium) !important;
+.input-item ion-label {
+  color: var(--cs-text-secondary) !important;
+  font-weight: 500;
 }
 
-ion-input {
-  --color: var(--ion-text-color);
+.input-item ion-input {
+  --color: var(--cs-text-primary);
+  --placeholder-color: var(--cs-text-tertiary);
 }
 
-.login-button {
-  --background: var(--ion-color-primary);
+/* Links */
+.forgot-password {
+  text-align: right;
+  margin-bottom: 24px;
+}
+
+.forgot-password a, .signup-link a {
+  color: var(--cs-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+/* Botão de Entrar */
+.login-button-container {
+    width: 100%;
+    margin-bottom: 24px;
+}
+
+.login-button-container ion-button {
+  --background: var(--cs-primary);
+  --color: var(--cs-background);
   --border-radius: 8px;
   height: 48px;
   font-weight: bold;
-  margin-top: 20px;
 }
 
-/* Rodapé de status */
+.signup-link {
+  text-align: center;
+}
+
+/* Rodapé de Status */
 .status-footer {
-  background-color: var(--ion-item-background);
-  border-top: 1px solid var(--ion-border-color);
+  background: var(--cs-foreground);
+  color: var(--cs-text-secondary);
 }
 
 .footer-content {
@@ -57,7 +115,7 @@ ion-input {
   align-items: center;
   justify-content: space-between;
   padding: 8px 16px;
-  height: 56px;
+  height: 50px;
 }
 
 .server-status {
@@ -67,76 +125,64 @@ ion-input {
 }
 
 .status-dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
 }
 
-.status-dot.online {
-  background-color: #25a244; /* Verde */
-}
-
-.status-dot.offline {
-  background-color: #eb445a; /* Vermelho */
-}
-
-.status-dot.checking {
-  background-color: #ffc409; /* Amarelo */
-}
-
-.footer-actions {
-  display: flex;
-  align-items: center;
-}
+.status-dot.online { background-color: #25a244; }
+.status-dot.offline { background-color: var(--cs-status-offline); }
+.status-dot.checking { background-color: #ffc409; }
 
 .footer-actions ion-button {
-  --color: var(--ion-color-primary);
+  --color: var(--cs-primary);
 }
 
-/* Modal de Configurações */
+/* Modal de Configuração */
 .settings-modal {
-    --background: rgba(0, 0, 0, 0.6);
+  --background: rgba(0, 0, 0, 0.7);
 }
 
 .settings-modal .modal-content {
-    background-color: #1e1e1e; /* Fundo escuro igual aos itens */
-    border-radius: 12px;
-    padding: 24px;
-    margin: auto;
-    width: 90%;
-    max-width: 400px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-    display: flex;
-    flex-direction: column;
+  background: #1b263b; /* Fundo escuro azulado */
+  border-radius: 12px;
+  padding: 24px;
+  margin: auto;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.4);
 }
 
 .modal-title {
-    color: var(--ion-text-color);
-    font-weight: bold;
-    font-size: 1.2rem;
-    text-align: left;
-    margin-bottom: 20px;
+  color: var(--cs-text-primary);
+  font-weight: bold;
+  font-size: 1.1rem;
+  margin-bottom: 20px;
 }
 
+/* Input da Modal */
 .modal-input {
-    margin-bottom: 24px;
+  --background: #ffffff; /* Fundo branco como na referência */
+  --border-radius: 8px;
+  --padding-start: 12px;
+  margin-bottom: 24px;
+}
+
+.modal-input ion-input {
+  --color: #000000; /* Texto preto para o input branco */
 }
 
 .modal-buttons {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
+  display: flex;
+  gap: 12px;
 }
 
-.save-button {
-    --background: var(--ion-color-primary);
-    --border-radius: 8px;
-    flex: 1;
+.save-button, .reset-button {
+  flex: 1;
+  --border-radius: 8px;
+  height: 44px;
+  font-weight: 500;
 }
 
-.reset-button {
-    --background: #333333;
-    --color: var(--ion-text-color);
-    --border-radius: 8px;
-    flex: 1;
-}
+.save-button { --background: var(--cs-primary); }
+.reset-button { --background: #778da9; --color: #ffffff; }

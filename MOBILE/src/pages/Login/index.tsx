@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   IonContent,
   IonPage,
@@ -9,19 +9,15 @@ import {
   IonText,
   IonSpinner,
   IonModal,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
   IonFooter,
   IonIcon,
   useIonViewWillEnter,
 } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
-import { settingsOutline } from 'ionicons/icons';
+import { settingsOutline, checkmarkCircle } from 'ionicons/icons';
 import { Preferences } from '@capacitor/preferences';
 import api, { setApiBaseUrl } from '../../services/api';
-import './Login.css'; // Importando o CSS para estilização
+import './Login.css'; // Carrega o novo CSS
 
 const Login: React.FC = () => {
   const [cpf, setCpf] = useState('');
@@ -42,7 +38,7 @@ const Login: React.FC = () => {
     }
     setServerStatus('checking');
     try {
-      // Usamos um endpoint genérico que deve sempre responder, como o raiz.
+      setApiBaseUrl(url); // Define a URL antes de testar
       await api.get('/', { timeout: 5000 });
       setServerStatus('online');
     } catch (err) {
@@ -55,7 +51,6 @@ const Login: React.FC = () => {
       const { value } = await Preferences.get({ key: 'apiBaseUrl' });
       setApiUrl(value || '');
       setTempApiUrl(value || '');
-      setApiBaseUrl(value || ''); // Configura a URL na api
       await checkServerStatus(value);
     };
     init();
@@ -63,21 +58,18 @@ const Login: React.FC = () => {
 
   const handleLogin = async () => {
     if (serverStatus !== 'online') {
-      setError('Não é possível fazer login. O servidor está offline ou não foi configurado.');
+      setError('Servidor offline. Verifique a conexão e a configuração da API.');
       return;
     }
     setLoading(true);
     setError('');
     try {
-      const response = await api.post('/auth/login', {
-        cpf,
-        password,
-      });
+      const response = await api.post('/auth/login', { cpf, password });
       const { token } = response.data;
       await Preferences.set({ key: 'token', value: token });
-      history.push('/home'); // Navega para a home após login
+      history.push('/home');
     } catch (err) {
-      setError('Falha no login. Verifique o CPF e a senha.');
+      setError('CPF ou senha inválidos.');
     } finally {
       setLoading(false);
     }
@@ -86,53 +78,54 @@ const Login: React.FC = () => {
   const handleSaveSettings = async () => {
     await Preferences.set({ key: 'apiBaseUrl', value: tempApiUrl });
     setApiUrl(tempApiUrl);
-    setApiBaseUrl(tempApiUrl);
     setShowSettings(false);
     await checkServerStatus(tempApiUrl);
   };
-  
+
   const handleResetSettings = async () => {
     await Preferences.remove({ key: 'apiBaseUrl' });
     setApiUrl('');
     setTempApiUrl('');
     setApiBaseUrl('');
-    setShowSettings(false);
     setServerStatus('offline');
-  };
-  
-  const handleRetest = () => {
-    checkServerStatus(apiUrl);
-  };
-
-  const openSettingsModal = () => {
-    setTempApiUrl(apiUrl); // Garante que a modal abra com a URL atualmente em uso
-    setShowSettings(true);
   };
 
   return (
     <IonPage>
-      <IonContent className="ion-padding login-content" scrollY={false}>
-        <div className="login-form">
-          <IonItem>
+      <IonContent className="login-content" scrollY={false}>
+        <div className="login-container">
+          <div className="login-header">
+            <div className="fintech-logo">
+              <IonIcon icon={checkmarkCircle} /> Fintech
+            </div>
+            <div className="access-account-text">Acesse sua conta</div>
+          </div>
+
+          <IonItem className="input-item">
             <IonLabel position="floating">CPF</IonLabel>
-            <IonInput
-              value={cpf}
-              onIonChange={(e) => setCpf(e.detail.value!)}
-              type="text"
-            />
+            <IonInput value={cpf} onIonChange={(e) => setCpf(e.detail.value!)} type="text" placeholder="999.999.999-99" />
           </IonItem>
-          <IonItem>
+
+          <IonItem className="input-item">
             <IonLabel position="floating">Senha</IonLabel>
-            <IonInput
-              value={password}
-              onIonChange={(e) => setPassword(e.detail.value!)}
-              type="password"
-            />
+            <IonInput value={password} onIonChange={(e) => setPassword(e.detail.value!)} type="password" placeholder="••••••••" />
           </IonItem>
+
+          <div className="forgot-password">
+            <a href="#">Esqueci minha senha</a>
+          </div>
+
           {error && <IonText color="danger"><p className="ion-text-center">{error}</p></IonText>}
-          <IonButton className="login-button" expand="full" onClick={handleLogin} disabled={loading || serverStatus !== 'online'}>
-            {loading ? <IonSpinner name="crescent" /> : 'Acessar minha conta'}
-          </IonButton>
+          
+          <div className="login-button-container">
+            <IonButton expand="full" onClick={handleLogin} disabled={loading}>
+              {loading ? <IonSpinner /> : 'Entrar'}
+            </IonButton>
+          </div>
+
+          <div className="signup-link">
+            <p>Não tem uma conta? <a href="#">Cadastre-se</a></p>
+          </div>
         </div>
       </IonContent>
 
@@ -140,34 +133,32 @@ const Login: React.FC = () => {
         <div className="footer-content">
           <div className="server-status">
             <div className={`status-dot ${serverStatus}`}></div>
-            <IonText>Servidor: {apiUrl ? apiUrl.substring(0, 25) + '...' : 'Não configurado'}</IonText>
+            <IonText>{apiUrl ? `Servidor: ${apiUrl}` : 'Servidor: Não configurado'}</IonText>
           </div>
           <div className="footer-actions">
-            <IonButton fill="clear" color="primary" onClick={handleRetest}>Re-testar</IonButton>
-            <IonButton fill="clear" onClick={openSettingsModal}>
+            <IonButton fill="clear" size="small" onClick={() => checkServerStatus(apiUrl)}>Re-testar</IonButton>
+            <IonButton fill="clear" onClick={() => setShowSettings(true)}>
               <IonIcon slot="icon-only" icon={settingsOutline} />
             </IonButton>
           </div>
         </div>
       </IonFooter>
 
-      {/* Modal de Configurações */}
-      <IonModal isOpen={showSettings} onDidDismiss={() => setShowSettings(false)} className="settings-modal">
-          <div className="modal-content">
-            <IonTitle className="modal-title">Endereço da API do Servidor</IonTitle>
-            <IonItem className="modal-input">
-                <IonInput
-                    placeholder="http://192.168.0.1:3001"
-                    value={tempApiUrl}
-                    onIonChange={(e) => setTempApiUrl(e.detail.value!)}
-                    type="url"
-                />
-            </IonItem>
-            <div className="modal-buttons">
-                <IonButton className="save-button" onClick={handleSaveSettings}>Salvar</IonButton>
-                <IonButton className="reset-button" onClick={handleResetSettings}>Resetar</IonButton>
-            </div>
+      <IonModal isOpen={showSettings} onDidDismiss={() => setShowSettings(false)} cssClass="settings-modal">
+        <div className="modal-content">
+          <h2 className="modal-title">Endereço da API do Servidor</h2>
+          <IonItem className="modal-input">
+            <IonInput
+              value={tempApiUrl}
+              onIonChange={(e) => setTempApiUrl(e.detail.value!)}
+              placeholder="https://seu-servidor.ngrok.io"
+            />
+          </IonItem>
+          <div className="modal-buttons">
+            <IonButton className="save-button" onClick={handleSaveSettings}>Salvar</IonButton>
+            <IonButton className="reset-button" onClick={handleResetSettings}>Resetar</IonButton>
           </div>
+        </div>
       </IonModal>
     </IonPage>
   );
