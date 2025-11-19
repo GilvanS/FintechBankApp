@@ -1,11 +1,3 @@
-// FIX: Removed unused import for Admin component.
-import Settings from './Settings';
-import PointsDashboard from './PointsDashboard';
-
-// FIX: Removed 'admin' from ProfileView as it's now a top-level view handled by Dashboard.
-type ProfileView = 'main' | 'myData' | 'editProfile' | 'security' | 'limits' | 'notifications' | 'points';
-
-// FIX: Added ProfileProps interface to accept `onNavigate` from the parent component.
 interface ProfileProps {
     onNavigate: (view: string) => void;
 }
