@@ -14,7 +14,7 @@ import {
     adminUpdateCardDetails
 } from '../services/api';
 import { formatCPF } from '../utils/formatters';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: string }> = ({ title, value, icon }) => (
     <div className="bg-surface-dark p-6 rounded-xl flex flex-col justify-between">

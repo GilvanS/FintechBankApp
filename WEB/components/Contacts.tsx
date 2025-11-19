@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { PixContact } from '../types';
 import { getPixContacts, addPixContact, deletePixContact } from '../services/api';
 import { formatCPF } from '../utils/formatters';

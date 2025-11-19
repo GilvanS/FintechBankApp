@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { updateUserPixDailyLimit, requestLimitIncrease, getUserByCpf } from '../services/api';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { useToast, ToastContainer } from './Toast';
 
 const Limits: React.FC<{ onBack: () => void; }> = ({ onBack }) => {

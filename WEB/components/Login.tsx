@@ -2,7 +2,7 @@
 // Dentro do componente Login
 import React, { useState } from 'react';
 // FIX: Corrected import path for useAuth from parent directory.
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { login, requestNewPassword } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useToast, ToastContainer } from './Toast';

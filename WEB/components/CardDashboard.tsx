@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 
 interface CardDashboardProps {
     onBack: () => void;

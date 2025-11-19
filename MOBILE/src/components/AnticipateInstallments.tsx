@@ -1,11 +1,3 @@
-import React, { useState, useMemo } from 'react';
-import { useAuth } from '../App';
-import { CardTransaction } from '../types';
-
-interface AnticipateInstallmentsProps {
-    onBack: () => void;
-    onConfirmAnticipation: (transactionIds: string[]) => void;
-    isProcessing: boolean;
 }
 
 const AnticipateInstallments: React.FC<AnticipateInstallmentsProps> = ({ onBack, onConfirmAnticipation, isProcessing }) => {

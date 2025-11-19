@@ -1,11 +1,3 @@
-import React, { useState } from 'react';
-import { useAuth } from '../App';
-
-interface CardDashboardProps {
-    onBack: () => void;
-    onNavigate: (view: 'closedInvoice' | 'anticipateInstallments' | 'points' | 'currentInvoice') => void;
-}
-
 const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'current' | 'future'>('current');

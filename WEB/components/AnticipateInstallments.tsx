@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { CardTransaction } from '../types';
 
 interface AnticipateInstallmentsProps {

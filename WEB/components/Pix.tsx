@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { getPixContacts, getPixRecipientInfo, performPixTransfer, performPixCreditTransfer, getUserByCpf } from '../services/api';
 import { PixContact, Transaction, User } from '../types';
 import Contacts from './Contacts';
@@ -213,6 +213,21 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <p className="text-white/60 text-base">Envie, receba e gerencie suas chaves com facilidade.</p>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Mobile Navigation */}
+                    <div className="lg:hidden col-span-1 grid grid-cols-3 gap-2 mb-2">
+                        <button onClick={() => setSubView('transfer')} className={`p-3 rounded-lg flex flex-col items-center justify-center gap-2 transition-colors ${subView === 'transfer' ? 'bg-primary text-background-dark' : 'bg-surface-dark text-white hover:bg-white/10'}`}>
+                            <span className="material-symbols-outlined">currency_exchange</span>
+                            <span className="text-xs font-bold">Transferir</span>
+                        </button>
+                        <button onClick={() => setSubView('contacts')} className={`p-3 rounded-lg flex flex-col items-center justify-center gap-2 transition-colors ${subView === 'contacts' ? 'bg-primary text-background-dark' : 'bg-surface-dark text-white hover:bg-white/10'}`}>
+                            <span className="material-symbols-outlined">contact_page</span>
+                            <span className="text-xs font-bold">Contatos</span>
+                        </button>
+                        <button onClick={() => setSubView('keyManagement')} className={`p-3 rounded-lg flex flex-col items-center justify-center gap-2 transition-colors ${subView === 'keyManagement' ? 'bg-primary text-background-dark' : 'bg-surface-dark text-white hover:bg-white/10'}`}>
+                            <span className="material-symbols-outlined">vpn_key</span>
+                            <span className="text-xs font-bold">Chaves</span>
+                        </button>
+                    </div>
                     {subView === 'transfer' && <TransferView user={user} contacts={contacts} onInitiateTransfer={handleInitiateTransfer} onNavigate={setSubView} isProcessing={isProcessing} error={transferError} selectedContact={selectedContact} onClearSelectedContact={() => setSelectedContact(null)} />}
                     {subView === 'confirmation' && recipientInfo && transferDetails && (
                         <PixConfirmation 

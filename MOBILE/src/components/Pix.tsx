@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { getPixContacts, getPixRecipientInfo, performPixTransfer, performPixCreditTransfer, getUserByCpf } from '../services/api';
 import { PixContact, Transaction, User } from '../types';
 import Contacts from './Contacts';
@@ -213,6 +213,11 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <p className="text-white/60 text-base">Envie, receba e gerencie suas chaves com facilidade.</p>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:hidden flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar">
+                        <button onClick={() => setSubView('transfer')} className={`px-4 py-2 rounded-full whitespace-nowrap transition-colors ${subView === 'transfer' ? 'bg-primary text-background-dark font-bold' : 'bg-surface-dark text-white hover:bg-white/10'}`}>Transferir</button>
+                        <button onClick={() => setSubView('contacts')} className={`px-4 py-2 rounded-full whitespace-nowrap transition-colors ${subView === 'contacts' ? 'bg-primary text-background-dark font-bold' : 'bg-surface-dark text-white hover:bg-white/10'}`}>Meus Contatos</button>
+                        <button onClick={() => setSubView('keyManagement')} className={`px-4 py-2 rounded-full whitespace-nowrap transition-colors ${subView === 'keyManagement' ? 'bg-primary text-background-dark font-bold' : 'bg-surface-dark text-white hover:bg-white/10'}`}>Minhas Chaves</button>
+                    </div>
                     {subView === 'transfer' && <TransferView user={user} contacts={contacts} onInitiateTransfer={handleInitiateTransfer} onNavigate={setSubView} isProcessing={isProcessing} error={transferError} selectedContact={selectedContact} onClearSelectedContact={() => setSelectedContact(null)} />}
                     {subView === 'confirmation' && recipientInfo && transferDetails && (
                         <PixConfirmation 

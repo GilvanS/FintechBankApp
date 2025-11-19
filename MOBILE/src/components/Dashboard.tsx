@@ -1,10 +1,3 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { useAuth } from '../App';
-import { PurchasedItem, Transaction, User } from '../types';
-import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement } from '../services/api';
-
-import HomeView from './HomeView';
-import Profile from './Profile';
 import Pix from './Pix';
 import Statement from './Statement';
 import CardDashboard from './CardDashboard';

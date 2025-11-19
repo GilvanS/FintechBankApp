@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 // FIX: Corrected import path for useAuth from parent directory.
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 // FIX: Corrected import path for types from parent directory.
 import { AppNotification } from '../types';
 import { getNotifications, markNotificationAsRead } from '../services/api';
@@ -12,7 +12,7 @@ import { useToast, ToastContainer } from './Toast';
 interface NotificationsProps {
     onBack: () => void;
 }
-function Notifications() {
+function Notifications({ onBack }: NotificationsProps) {
     const { user } = useAuth();
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [isLoading, setIsLoading] = useState(true);

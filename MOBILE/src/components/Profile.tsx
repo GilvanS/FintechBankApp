@@ -1,13 +1,3 @@
-import React, { useState } from 'react';
-// FIX: Corrected import path for useAuth from parent directory.
-import { useAuth } from '../App';
-// FIX: Corrected import path for User type from parent directory.
-import { User } from '../types';
-import MyData from './MyData';
-import EditProfile from './EditProfile';
-import Security from './Security';
-import Limits from './Limits';
-import Notifications from './Notifications';
 // FIX: Removed unused import for Admin component.
 import Settings from './Settings';
 import PointsDashboard from './PointsDashboard';

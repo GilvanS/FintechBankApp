@@ -1,31 +1,14 @@
 
-import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User } from './types';
 import Login from './components/Login';
 import SignUp from './components/SignUp';
 import Dashboard from './components/Dashboard';
 import PreLoginDashboard from './components/PreLoginDashboard';
-import ResetPassword from './components/ResetPassword'; // Import the new component
+import ResetPassword from './components/ResetPassword';
+import { AuthContext } from './context/AuthContext';
 
-// FIX: Added view and navigateTo to the context to be consumed by child components like Dashboard.
-interface AuthContextType {
-    user: User | null;
-    login: (user: Omit<User, 'password'>) => void;
-    logout: () => void;
-    updateUser: (user: Partial<Omit<User, 'password'>>) => void;
-    view: string;
-    navigateTo: (view: string) => void;
-}
-
-const AuthContext = createContext<AuthContextType | null>(null);
-
-export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
-    return context;
-};
+// Função de normalizacao do usuario vindo do backend
 
 // Função de normalizacao do usuario vindo do backend
 function normalizeUserShape(input: Partial<User>): User {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 // FIX: Corrected import path for useAuth from parent directory.
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 // FIX: Corrected import path for types from parent directory.
 import { PixKey } from '../types';
 import { getPixKeys, registerPixKey, deletePixKey } from '../services/api';

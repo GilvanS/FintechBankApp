@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { PurchasedItem, Transaction, User } from '../types';
 import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement } from '../services/api';
 
@@ -478,7 +478,7 @@ const Dashboard: React.FC = () => {
             <div className="flex-grow overflow-y-auto no-scrollbar">
                 {renderContent()}
             </div>
-            {['home', 'cards', 'shop', 'products', 'profile'].includes(currentView) && (
+            {['home', 'cards', 'shop', 'products', 'profile', 'pix'].includes(currentView) && (
                  <BottomNavBar currentView={currentView} onNavigate={(view) => handleNavigate(view)} />
             )}
             

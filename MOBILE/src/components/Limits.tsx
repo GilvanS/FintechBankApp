@@ -1,12 +1,5 @@
-import React, { useState } from 'react';
-import { User } from '../types';
-import { updateUserPixDailyLimit, requestLimitIncrease, getUserByCpf } from '../services/api';
-import { useAuth } from '../App';
-import { useToast, ToastContainer } from './Toast';
+import { useToast } from "./Toast";
 
-const Limits: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
-    const { user, updateUser } = useAuth();
-    const [newLimit, setNewLimit] = useState(user?.pixDailyLimit.toString() || '0');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');

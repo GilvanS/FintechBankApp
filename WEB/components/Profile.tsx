@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 // FIX: Corrected import path for useAuth from parent directory.
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 // FIX: Corrected import path for User type from parent directory.
 import { User } from '../types';
 import MyData from './MyData';
