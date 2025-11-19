@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
+import { PixContact, User } from '../types';
 
 const DEV_API_URL = '__NGROK_URL__'; // Substitua pelo seu URL ngrok
 
@@ -126,3 +127,83 @@ export async function performPixCreditTransfer(cpf: string, toKey: string, amoun
         return { success: false, message: error?.response?.data?.message || 'Erro de conexao no PIX no credito.' };
     }
 }
+
+// Métodos: PIX - Contatos
+export async function getPixContacts(cpf: string): Promise<{ success: boolean; contacts?: PixContact[]; message?: string; }> {
+  try {
+    const res = await api.get(`/users/${cpf}/pix-contacts`, {
+      headers: getAuthHeaders('none'),
+    });
+    const data = res.data;
+    if (data && Array.isArray(data)) {
+        return { success: true, contacts: data };
+    }
+    return { success: true, contacts: data.contacts || [] };
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao listar contatos.' };
+  }
+}
+
+export async function addPixContact(cpf: string, contact: { name: string, key: string }): Promise<{ success: boolean; message: string; }> {
+  try {
+    const res = await api.post(`/users/${cpf}/pix-contacts`, contact, {
+      headers: getAuthHeaders('json'),
+    });
+    const data = res.data;
+    if (!data?.success) {
+        return { success: false, message: data?.message || 'Falha ao adicionar contato.' };
+    }
+    return { success: true, message: data?.message || 'Contato adicionado com sucesso.' };
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao adicionar contato.' };
+  }
+}
+
+export async function deletePixContact(cpf: string, key: string): Promise<{ success: boolean; message: string; }> {
+  try {
+    const res = await api.delete(`/users/${cpf}/pix-contacts/${encodeURIComponent(key)}`, {
+      headers: getAuthHeaders('none'),
+    });
+    const data = res.data;
+    if (!data?.success) {
+        return { success: false, message: data?.message || 'Falha ao remover contato.' };
+    }
+    return { success: true, message: data?.message || 'Contato removido com sucesso.' };
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao remover contato.' };
+  }
+}
+
+// Método: getPixRecipientInfo
+export async function getPixRecipientInfo(key: string, fromCpf: string): Promise<{ success: boolean; name?: string; cpf?: string; message?: string; }> {
+  try {
+    const res = await api.get(`/pix/recipient-info/${encodeURIComponent(key)}?fromCpf=${fromCpf}`, {
+      headers: getAuthHeaders('none'),
+    });
+    const data = res.data;
+    if (data?.success) {
+      return { success: true, name: data.name, cpf: data.cpf };
+    }
+    return { success: false, message: data?.message || 'Chave PIX inválida ou não encontrada.' };
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao validar chave.' };
+  }
+}
+
+// Método: getUserByCpf
+export async function getUserByCpf(cpf: string): Promise<{ success: boolean; user?: User; message?: string; }> {
+  try {
+    const res = await api.get(`/admin/users/${cpf}`, { // Rota de admin para pegar qualquer usuário
+      headers: getAuthHeaders('none'),
+    });
+    const data = res.data;
+    if (data?.success) {
+      return { success: true, user: data.user };
+    }
+    return { success: false, message: data?.message || 'Usuário não encontrado.' };
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao buscar usuário.' };
+  }
+}
+
+export default api;
