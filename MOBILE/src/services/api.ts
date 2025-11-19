@@ -13,12 +13,9 @@ const api = axios.create({
  * Isso será chamado a partir da tela de login.
  */
 export const setApiBaseUrl = (url: string) => {
-  api.defaults.baseURL = url;
-  if (/ngrok-free\.app/.test(url)) {
-    api.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
-  } else {
-    delete (api.defaults.headers.common as any)['ngrok-skip-browser-warning'];
-  }
+  const normalized = url.replace(/\/$/, '');
+  const finalBase = /\/api\//.test(normalized) ? normalized : `${normalized}/api/v1`;
+  api.defaults.baseURL = finalBase;
 };
 
 /**

@@ -33,7 +33,7 @@ const Login: React.FC = () => {
     setServerStatus('checking');
     try {
       setApiBaseUrl(url);
-      await api.get('/api/health', { timeout: 5000, headers: { Accept: 'application/json' } });
+      await api.get('/health', { timeout: 5000, headers: { Accept: 'application/json' } });
       setServerStatus('online');
     } catch (err) {
       setServerStatus('offline');
@@ -182,7 +182,7 @@ const Login: React.FC = () => {
               type="text"
               value={tempApiUrl}
               onChange={(e) => setTempApiUrl(e.target.value)}
-              placeholder="http://192.168.0.10:3001"
+              placeholder="http://192.168.0.10:3001/api/v1"
               className="w-full px-4 py-3 bg-background-dark border border-subtle-dark/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-6"
             />
             <div className="flex items-center justify-between mb-6">
