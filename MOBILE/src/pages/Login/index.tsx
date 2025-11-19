@@ -98,6 +98,13 @@ const Login: React.FC = () => {
   return (
     <div className="font-display bg-background-dark text-text-dark antialiased">
       <div className="flex flex-col min-h-screen">
+        <header className="w-full p-4 safe-top">
+          <div className="w-full max-w-sm mx-auto flex justify-end">
+            <button onClick={() => setShowSettings(true)} className="text-subtle-dark hover:text-primary">
+              <span className="material-symbols-outlined text-2xl">settings</span>
+            </button>
+          </div>
+        </header>
         <main className="flex-grow flex flex-col items-center justify-center p-4">
           <div className="w-full max-w-sm mx-auto">
             <div className="text-center mb-10">
@@ -162,16 +169,13 @@ const Login: React.FC = () => {
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => checkServerStatus(apiUrl)} className="text-primary font-semibold">Re-testar</button>
-              <button onClick={() => setShowSettings(true)} className="text-subtle-dark hover:text-primary">
-                <span className="material-symbols-outlined">settings</span>
-              </button>
             </div>
           </div>
         </footer>
       </div>
 
       {showSettings && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-50 safe-top pt-24">
           <div className="w-full max-w-sm bg-surface-dark rounded-xl p-6 shadow-2xl">
             <h3 className="text-lg font-semibold text-center text-text-dark mb-4">Endereço da API do Servidor</h3>
             <input

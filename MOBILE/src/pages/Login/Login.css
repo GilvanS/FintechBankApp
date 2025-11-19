@@ -1,3 +1,5 @@
 :root { --safe-bottom-padding: env(safe-area-inset-bottom); }
 .safe-bottom { padding-bottom: calc(var(--safe-bottom-padding) + 32px); }
 .safe-bottom-strong { padding-bottom: calc(var(--safe-bottom-padding) + 56px); }
+:root { --safe-top-padding: env(safe-area-inset-top); }
+.safe-top { padding-top: calc(var(--safe-top-padding) + 12px); }
