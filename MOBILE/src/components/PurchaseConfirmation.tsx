@@ -14,7 +14,7 @@ const PurchaseConfirmation: React.FC<PurchaseConfirmationProps> = ({ details, on
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    // Set a timer to automatically close the confirmation screen after 4 seconds
+    // Set a timer to automatically close the confirmation screen after 10 seconds
     const timer = setInterval(() => {
       setProgress(oldProgress => {
         if (oldProgress >= 100) {
@@ -22,9 +22,9 @@ const PurchaseConfirmation: React.FC<PurchaseConfirmationProps> = ({ details, on
           onClose(); // Navigate away
           return 100;
         }
-        return oldProgress + 1;
+        return oldProgress + 0.4; // 0.4% per 40ms = 10 seconds total
       });
-    }, 40); // 40ms * 100 steps = 4000ms
+    }, 40); // 40ms * 250 steps = 10000ms
 
     return () => {
       clearInterval(timer); // Cleanup on unmount
@@ -50,7 +50,14 @@ const PurchaseConfirmation: React.FC<PurchaseConfirmationProps> = ({ details, on
                 </div>
             )}
 
-            <div className="w-full bg-white/10 rounded-full h-1 mt-4">
+        <button
+          onClick={onClose}
+          className="w-full py-3 mb-4 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 transition-opacity"
+        >
+          Fechar
+        </button>
+
+        <div className="w-full bg-white/10 rounded-full h-1">
                 <div 
                     className="bg-primary h-1 rounded-full" 
                     style={{ width: `${progress}%`, transition: 'width 40ms linear' }}

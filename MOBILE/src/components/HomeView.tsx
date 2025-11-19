@@ -59,9 +59,10 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
                                 <p className="text-sm font-medium leading-normal text-white">Cartões</p>
                             </div>
                             {/* Pagar Contas - Placeholder */}
-                            <div className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center">
-                                <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square transition-transform hover:scale-105">
+                            <div className="flex h-full w-28 flex-shrink-0 flex-col items-center gap-3 rounded-lg text-center opacity-50 cursor-not-allowed">
+                                <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square relative">
                                     <span className="material-symbols-outlined text-4xl text-white">receipt_long</span>
+                                    <span className="absolute top-1 right-1 text-[10px] bg-primary text-background-dark px-1.5 py-0.5 rounded-full font-bold">EM BREVE</span>
                                 </div>
                                 <p className="text-sm font-medium leading-normal text-white">Pagar Contas</p>
                             </div>
