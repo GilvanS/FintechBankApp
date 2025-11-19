@@ -14,6 +14,11 @@ const api = axios.create({
  */
 export const setApiBaseUrl = (url: string) => {
   api.defaults.baseURL = url;
+  if (/ngrok-free\.app/.test(url)) {
+    api.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
+  } else {
+    delete (api.defaults.headers.common as any)['ngrok-skip-browser-warning'];
+  }
 };
 
 /**

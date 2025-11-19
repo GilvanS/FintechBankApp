@@ -154,7 +154,7 @@ const Login: React.FC = () => {
           </div>
         </main>
 
-        <footer className="w-full bg-surface-dark p-3 safe-bottom">
+        <footer className="w-full bg-surface-dark p-3 safe-bottom-strong">
           <div className="w-full max-w-sm mx-auto flex justify-between items-center text-xs">
             <div className="flex items-center gap-2">
               <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
