@@ -13,9 +13,16 @@ const api = axios.create({
  * Isso será chamado a partir da tela de login.
  */
 export const setApiBaseUrl = (url: string) => {
-  const normalized = url.replace(/\/$/, '');
-  const finalBase = /\/api\//.test(normalized) ? normalized : `${normalized}/api/v1`;
-  api.defaults.baseURL = finalBase;
+  const t = url.trim().replace(/\/+$/, '');
+  let base = t;
+  if (t.endsWith('/api/v1')) {
+    base = t;
+  } else if (t.endsWith('/api')) {
+    base = t + '/v1';
+  } else {
+    base = t + '/api/v1';
+  }
+  api.defaults.baseURL = base;
 };
 
 /**
