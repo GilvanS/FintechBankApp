@@ -33,7 +33,7 @@ const Login: React.FC = () => {
     setServerStatus('checking');
     try {
       setApiBaseUrl(url);
-      await api.get('/', { timeout: 5000 });
+      await api.get('/api/health', { timeout: 5000, headers: { Accept: 'application/json' } });
       setServerStatus('online');
     } catch (err) {
       setServerStatus('offline');
@@ -87,6 +87,13 @@ const Login: React.FC = () => {
     await checkServerStatus(tempApiUrl);
   };
 
+  const openNgrokConsole = () => {
+    const url = 'http://127.0.0.1:4040';
+    try {
+      window.open(url, '_blank');
+    } catch (e) {}
+  };
+
   const handleResetSettings = async () => {
     await Preferences.remove({ key: 'apiBaseUrl' });
     setApiUrl('');
@@ -99,7 +106,7 @@ const Login: React.FC = () => {
     <div className="font-display bg-background-dark text-text-dark antialiased">
       <div className="flex flex-col min-h-screen">
         <header className="w-full p-4 safe-top">
-          <div className="w-full max-w-sm mx-auto flex justify-end">
+          <div className="w-full max-w-sm mx-auto flex justify-end mt-2">
             <button onClick={() => setShowSettings(true)} className="text-subtle-dark hover:text-primary">
               <span className="material-symbols-outlined text-2xl">settings</span>
             </button>
@@ -161,7 +168,7 @@ const Login: React.FC = () => {
         </main>
 
         <footer className="w-full bg-surface-dark p-3 safe-bottom-strong">
-          <div className="w-full max-w-sm mx-auto flex justify-end items-center text-xs">
+          <div className="w-full max-w-sm mx-auto flex justify-start items-center text-xs">
             <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
           </div>
         </footer>
@@ -183,7 +190,10 @@ const Login: React.FC = () => {
                 <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
                 <span className="text-subtle-dark">{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Offline' : 'Checando'}</span>
               </div>
-              <button onClick={() => checkServerStatus(tempApiUrl)} className="text-primary font-semibold">Testar</button>
+              <div className="flex items-center gap-4">
+                <button onClick={() => checkServerStatus(tempApiUrl)} className="text-primary font-semibold">Testar</button>
+                <button onClick={openNgrokConsole} className="text-subtle-dark hover:text-primary">Abrir console</button>
+              </div>
             </div>
             <div className="flex gap-4">
               <button onClick={handleResetSettings} className="w-full py-3 bg-subtle-dark/50 text-text-dark rounded-lg hover:bg-subtle-dark/70 font-semibold">Resetar</button>

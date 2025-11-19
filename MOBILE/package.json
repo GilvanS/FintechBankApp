@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:no-mock": "node scripts\\verify-no-mock.js",
-    "build:mobile": "node set-ip.js && vite build"
+    "build:mobile": "node set-ip.js && vite build",
+    "adb:reverse": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\adb-keep-reverse.ps1",
+    "adb:wifi": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\adb-keep-reverse.ps1 -Device"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",
