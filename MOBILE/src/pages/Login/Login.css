@@ -1,0 +1,142 @@
+/* Estilo geral para a página de Login com tema escuro */
+:root {
+  --ion-background-color: #121212;
+  --ion-text-color: #ffffff;
+  --ion-item-background: #1e1e1e;
+  --ion-border-color: #333333;
+  --ion-color-primary: #25a244;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-medium: #737373;
+}
+
+.login-content {
+  --background: var(--ion-background-color);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  padding: 0 16px;
+}
+
+/* Estilização dos campos de input */
+ion-item {
+  --background: var(--ion-item-background);
+  --color: var(--ion-text-color);
+  --border-radius: 8px;
+  --border-color: var(--ion-border-color);
+  margin-bottom: 16px;
+}
+
+ion-label {
+  color: var(--ion-color-medium) !important;
+}
+
+ion-input {
+  --color: var(--ion-text-color);
+}
+
+.login-button {
+  --background: var(--ion-color-primary);
+  --border-radius: 8px;
+  height: 48px;
+  font-weight: bold;
+  margin-top: 20px;
+}
+
+/* Rodapé de status */
+.status-footer {
+  background-color: var(--ion-item-background);
+  border-top: 1px solid var(--ion-border-color);
+}
+
+.footer-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  height: 56px;
+}
+
+.server-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.status-dot.online {
+  background-color: #25a244; /* Verde */
+}
+
+.status-dot.offline {
+  background-color: #eb445a; /* Vermelho */
+}
+
+.status-dot.checking {
+  background-color: #ffc409; /* Amarelo */
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+}
+
+.footer-actions ion-button {
+  --color: var(--ion-color-primary);
+}
+
+/* Modal de Configurações */
+.settings-modal {
+    --background: rgba(0, 0, 0, 0.6);
+}
+
+.settings-modal .modal-content {
+    background-color: #1e1e1e; /* Fundo escuro igual aos itens */
+    border-radius: 12px;
+    padding: 24px;
+    margin: auto;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-title {
+    color: var(--ion-text-color);
+    font-weight: bold;
+    font-size: 1.2rem;
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+.modal-input {
+    margin-bottom: 24px;
+}
+
+.modal-buttons {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.save-button {
+    --background: var(--ion-color-primary);
+    --border-radius: 8px;
+    flex: 1;
+}
+
+.reset-button {
+    --background: #333333;
+    --color: var(--ion-text-color);
+    --border-radius: 8px;
+    flex: 1;
+}

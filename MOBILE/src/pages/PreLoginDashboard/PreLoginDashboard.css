@@ -1,0 +1,60 @@
+/* Estilo geral para a página PreLoginDashboard */
+:root {
+  --ion-background-color: #121212;
+  --ion-text-color: #ffffff;
+  --ion-color-dark: #121212; /* Define a cor de fundo para toolbar */
+}
+
+ion-toolbar[color="dark"] {
+  --background: var(--ion-color-dark);
+  --color: var(--ion-text-color);
+}
+
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding: 16px;
+}
+
+.grid-item {
+  background: #1e1e1e;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-height: 120px;
+}
+
+.grid-item ion-icon {
+  font-size: 2rem;
+  margin-bottom: 24px;
+  color: #25a244;
+}
+
+.grid-item ion-text {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.bottom-buttons {
+  position: absolute;
+  bottom: 20px;
+  left: 16px;
+  right: 16px;
+}
+
+.login-main-button {
+  --background: #25a244;
+  --border-radius: 8px;
+  height: 48px;
+  font-weight: bold;
+}
+
+.signup-button {
+  --color: #ffffff;
+  margin-top: 8px;
+  text-transform: none;
+}
