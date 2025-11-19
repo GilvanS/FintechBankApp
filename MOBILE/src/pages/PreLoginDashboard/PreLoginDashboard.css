@@ -1,1 +1,2 @@
-/* Este arquivo foi intencionalmente deixado em branco, pois o estilo agora é gerenciado pelo Tailwind CSS no index.html e nas classes do componente. */
+:root { --safe-bottom-padding: env(safe-area-inset-bottom); }
+.safe-bottom { padding-bottom: calc(var(--safe-bottom-padding) + 16px); }

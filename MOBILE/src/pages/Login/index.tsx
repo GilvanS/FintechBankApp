@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import './Login.css';
 import { useHistory } from 'react-router-dom';
 import { Preferences } from '@capacitor/preferences';
 import api, { setApiBaseUrl } from '../../services/api';
@@ -15,6 +16,14 @@ const Login: React.FC = () => {
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
   const history = useHistory();
+
+  const formatCpf = (v: string) => {
+    const d = v.replace(/\D/g, '').slice(0, 11);
+    return d
+      .replace(/^(\d{3})(\d)/, '$1.$2')
+      .replace(/^(\d{3}\.\d{3})(\d)/, '$1.$2')
+      .replace(/^(\d{3}\.\d{3}\.\d{3})(\d{1,2})$/, '$1-$2');
+  };
 
   const checkServerStatus = useCallback(async (url: string | null) => {
     if (!url) {
@@ -51,6 +60,11 @@ const Login: React.FC = () => {
     setLoading(true);
     setError('');
     try {
+      if (cpf.length !== 11) {
+        setError('CPF deve ter 11 numeros');
+        setLoading(false);
+        return;
+      }
       const response = await api.post('/auth/login', { cpf, password });
       const { token } = response.data;
       await Preferences.set({ key: 'token', value: token });
@@ -101,8 +115,10 @@ const Login: React.FC = () => {
                   <input
                     id="cpf"
                     type="text"
-                    value={cpf}
-                    onChange={(e) => setCpf(e.target.value)}
+                    value={formatCpf(cpf)}
+                    onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     placeholder="999.999.999-99"
                     className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   />
@@ -138,7 +154,7 @@ const Login: React.FC = () => {
           </div>
         </main>
 
-        <footer className="w-full bg-surface-dark p-3">
+        <footer className="w-full bg-surface-dark p-3 safe-bottom">
           <div className="w-full max-w-sm mx-auto flex justify-between items-center text-xs">
             <div className="flex items-center gap-2">
               <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>

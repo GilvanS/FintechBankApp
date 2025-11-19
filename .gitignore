@@ -11,3 +11,4 @@ node_modules/
 
 # Pasta do React Native a ser ignorada
 mobileAppRN/
+gradle-home-clean/

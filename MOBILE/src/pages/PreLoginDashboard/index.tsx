@@ -1,4 +1,5 @@
 import React from 'react';
+import './PreLoginDashboard.css';
 import { useHistory } from 'react-router-dom';
 
 // Como estamos usando Tailwind CDN, não precisamos importar o CSS aqui se ele estiver vazio.
@@ -13,7 +14,7 @@ const PreLoginDashboard: React.FC = () => {
 
   return (
     <div className="font-display bg-background-dark text-text-dark antialiased">
-      <div className="flex flex-col items-center justify-between min-h-screen p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col items-center justify-between min-h-screen p-4 sm:p-6 lg:p-8 pb-24 safe-bottom">
         
         {/* Header com Olá e Engrenagem */}
         <div className="w-full max-w-md mx-auto flex justify-between items-center mb-10 pt-4">
