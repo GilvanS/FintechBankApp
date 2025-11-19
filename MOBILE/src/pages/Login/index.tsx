@@ -125,7 +125,6 @@ const Login: React.FC = () => {
                     value={formatCpf(cpf)}
                     onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
                     inputMode="numeric"
-                    pattern="[0-9]*"
                     placeholder="999.999.999-99"
                     className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   />
@@ -162,14 +161,8 @@ const Login: React.FC = () => {
         </main>
 
         <footer className="w-full bg-surface-dark p-3 safe-bottom-strong">
-          <div className="w-full max-w-sm mx-auto flex justify-between items-center text-xs">
-            <div className="flex items-center gap-2">
-              <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
-              <span className="text-subtle-dark">{apiUrl ? apiUrl : 'Servidor não configurado'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => checkServerStatus(apiUrl)} className="text-primary font-semibold">Re-testar</button>
-            </div>
+          <div className="w-full max-w-sm mx-auto flex justify-end items-center text-xs">
+            <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
           </div>
         </footer>
       </div>
@@ -185,6 +178,13 @@ const Login: React.FC = () => {
               placeholder="http://192.168.0.10:3001"
               className="w-full px-4 py-3 bg-background-dark border border-subtle-dark/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-6"
             />
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
+                <span className="text-subtle-dark">{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Offline' : 'Checando'}</span>
+              </div>
+              <button onClick={() => checkServerStatus(tempApiUrl)} className="text-primary font-semibold">Testar</button>
+            </div>
             <div className="flex gap-4">
               <button onClick={handleResetSettings} className="w-full py-3 bg-subtle-dark/50 text-text-dark rounded-lg hover:bg-subtle-dark/70 font-semibold">Resetar</button>
               <button onClick={handleSaveSettings} className="w-full py-3 bg-primary text-white rounded-lg hover:bg-primary/90 font-semibold">Salvar</button>
