@@ -12,7 +12,7 @@ interface CreditCardInfoProps {
 
 const CreditCardInfo: React.FC<CreditCardInfoProps> = ({ user, onNavigate }) => {
   // Encontra a fatura atual (aberta)
-  const currentInvoice = user.invoices.find(invoice => invoice.status === 'open');
+  const currentInvoice = user.invoices?.find(invoice => invoice.status === 'open');
 
   // Se não houver fatura atual, o componente não renderiza nada.
   if (!currentInvoice) {
