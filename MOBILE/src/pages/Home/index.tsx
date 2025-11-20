@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import HomeView from '../../components/HomeView';
 import BottomNavBar from '../../components/BottomNavBar';
+import { useAuth } from '../../context/AuthContext';
 
 import Pix from '../../components/Pix';
 import CardDashboard from '../../components/CardDashboard';
@@ -9,6 +10,7 @@ import Profile from '../../components/Profile';
 
 const Home: React.FC = () => {
   const [currentView, setCurrentView] = useState<'home' | 'cards' | 'products' | 'profile' | 'pix'>('home');
+  const { user: authUser, login } = useAuth();
   
   // Hardcoded user data to remove dependency on the deleted mockData.ts file
   const user = {
@@ -21,9 +23,9 @@ const Home: React.FC = () => {
       balance: 2580.50,
       transactions: [],
       isBlocked: false,
-      role: 'user',
+    role: 'user' as 'user' | 'admin',
       pixDailyLimit: 2000,
-      pixKeys: [{type: 'EMAIL', key: 'beatriz@example.com'}],
+    pixKeys: [{ type: 'EMAIL' as const, key: 'beatriz@example.com' }],
       pixContacts: [{name: 'Carlos Souza', key: 'carlos@example.com'}],
       limitIncreaseRequest: null,
       showStoriesPopup: true,
@@ -42,6 +44,13 @@ const Home: React.FC = () => {
           closedTransactions: [],
       }
   };
+
+  // Auto-login the hardcoded user when component mounts
+  useEffect(() => {
+    if (!authUser) {
+      login(user);
+    }
+  }, []);
 
   const handleNavigate = (view: any) => {
     setCurrentView(view);

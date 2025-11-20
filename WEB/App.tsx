@@ -8,6 +8,8 @@ import PreLoginDashboard from './components/PreLoginDashboard';
 import ResetPassword from './components/ResetPassword';
 import { AuthContext } from './context/AuthContext';
 
+console.log('📱 App.tsx loaded');
+
 // Função de normalizacao do usuario vindo do backend
 
 // Função de normalizacao do usuario vindo do backend

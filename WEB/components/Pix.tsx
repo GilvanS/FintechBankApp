@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getPixContacts, getPixRecipientInfo, performPixTransfer, performPixCreditTransfer, getUserByCpf } from '../services/api';
+import { getPixContacts, getPixRecipientInfo, performPix, performPixCreditInstallment, getUserByCpf } from '../services/api';
 import { PixContact, Transaction, User } from '../types';
 import Contacts from './Contacts';
 import PixKeyManagement from './PixKeyManagement';
@@ -122,8 +122,8 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     useEffect(() => {
         const fetchContacts = async () => {
             if (user) {
-                const result = await getPixContacts(user.cpf);
-                if (result.success) setContacts(result.contacts!);
+                const contacts = await getPixContacts(user.cpf);
+                setContacts(contacts);
             }
         };
         fetchContacts();
@@ -155,9 +155,9 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             setIsProcessing(true);
             let result;
             if (transferDetails.useCredit) {
-                result = await performPixCreditTransfer(user.cpf, transferDetails.key, transferDetails.amount, transferDetails.description, 1, pin);
+                result = await performPixCreditInstallment(user.cpf, transferDetails.amount, 1);
             } else {
-                result = await performPixTransfer(transferDetails.key, transferDetails.amount, transferDetails.description, pin);
+                result = await performPix(user.cpf, transferDetails.key, transferDetails.amount, transferDetails.description);
             }
             if (result.success) {
                 const refreshed = await getUserByCpf(user.cpf);

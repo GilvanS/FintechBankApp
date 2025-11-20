@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import NewsSection from './NewsSection';
 import HomeBanners from './HomeBanners';
-import ShopOffersBanner from './ShopOffersBanner';
 
 interface HomeViewProps {
     user: User;
@@ -108,8 +107,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
             {/* Banners Section */}
             <HomeBanners onNavigate={onNavigate} />
 
-            {/* Shop Offers and News Section */}
-            <ShopOffersBanner onNavigate={onNavigate} />
+            {/* News Section */}
             <NewsSection />
         </main>
     );
