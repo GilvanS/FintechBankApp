@@ -1,24 +1,16 @@
-import React from 'react';
-import { Redirect, Route } from 'react-router-dom';
-import {
-  IonApp,
-  IonRouterOutlet,
-  setupIonicReact
-} from '@ionic/react';
-import { IonReactRouter } from '@ionic/react-router';
+import React, { useState, useEffect } from 'react';
+import { IonApp, setupIonicReact } from '@ionic/react';
 import Home from './pages/Home';
 import Login from './pages/Login';
-import PreLoginDashboard from './pages/PreLoginDashboard'; // Importa a nova tela
+import PreLoginDashboard from './pages/PreLoginDashboard';
+import { User } from './types';
+import api from './services/api'; // FIX: Corrigido o caminho de importação da API
 
-/* Core CSS required for Ionic components to work properly */
+/* Core CSS */
 import '@ionic/react/css/core.css';
-
-/* Basic CSS for apps built with Ionic */
 import '@ionic/react/css/normalize.css';
 import '@ionic/react/css/structure.css';
 import '@ionic/react/css/typography.css';
-
-/* Optional CSS utils that can be commented out */
 import '@ionic/react/css/padding.css';
 import '@ionic/react/css/float-elements.css';
 import '@ionic/react/css/text-alignment.css';
@@ -31,26 +23,69 @@ import './theme/variables.css';
 
 setupIonicReact();
 
-import { AuthProvider } from './context/AuthContext';
+enum AppView {
+  PRE_LOGIN,
+  LOGIN,
+  HOME,
+}
 
-const App: React.FC = () => (
-  <IonApp>
-    <AuthProvider>
-      <IonReactRouter>
-        <IonRouterOutlet>
-          <Route exact path="/">
-            <PreLoginDashboard />
-          </Route>
-          <Route exact path="/login">
-            <Login />
-          </Route>
-          <Route exact path="/home">
-            <Home />
-          </Route>
-        </IonRouterOutlet>
-      </IonReactRouter>
-    </AuthProvider>
-  </IonApp>
-);
+const App: React.FC = () => {
+  const [view, setView] = useState<AppView>(AppView.PRE_LOGIN);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const data = await api.getProfile();
+        setUser(data);
+        setView(AppView.HOME);
+      } catch (error) {
+        setView(AppView.PRE_LOGIN);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  const handleLoginSuccess = (userData: User) => {
+    setUser(userData);
+    setView(AppView.HOME);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setUser(null);
+    setView(AppView.PRE_LOGIN);
+  };
+
+  const refreshUserData = async () => {
+    if (user) {
+      try {
+        const updatedUser = await api.getProfile();
+        setUser(updatedUser);
+      } catch (error) {
+        console.error("Falha ao atualizar os dados do usuário:", error);
+        handleLogout();
+      }
+    }
+  };
+
+  const renderView = () => {
+    switch (view) {
+      case AppView.LOGIN:
+        return <Login onLoginSuccess={handleLoginSuccess} onNavigateToPreLogin={() => setView(AppView.PRE_LOGIN)} />;
+      case AppView.HOME:
+        return user ? <Home user={user} onLogout={handleLogout} refreshUserData={refreshUserData} /> : <Login onLoginSuccess={handleLoginSuccess} onNavigateToPreLogin={() => setView(AppView.PRE_LOGIN)} />;
+      case AppView.PRE_LOGIN:
+      default:
+        return <PreLoginDashboard onNavigateToLogin={() => setView(AppView.LOGIN)} />;
+    }
+  };
+
+  return (
+    <IonApp>
+      {renderView()}
+    </IonApp>
+  );
+};
 
 export default App;
