@@ -3,25 +3,27 @@ import { Transaction, User } from '../types';
 
 interface StatementProps {
     user: User;
-    onNavigate: (view: string) => void;
     onBack: () => void;
 }
 
-function Statement({ user, onNavigate, onBack }: StatementProps) {
+// FIX: This component now correctly receives the `user` object as a prop 
+// and does not depend on its own context fetching, resolving the error.
+function Statement({ user, onBack }: StatementProps) {
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterPeriod, setFilterPeriod] = useState('all');
+    const [filterPeriod, setFilterPeriod] = useState('all';
+    const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
-    const filteredTransactions = user.transactions
+    // Ensure transactions exist before trying to filter and reduce them
+    const filteredTransactions = (user?.transactions || [])
         .filter(tx => {
             const txDate = new Date(tx.date);
+            const now = new Date();
             if (filterPeriod === '7d') {
-                const sevenDaysAgo = new Date();
-                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
                 return txDate >= sevenDaysAgo;
             }
             if (filterPeriod === '30d') {
-                const thirtyDaysAgo = new Date();
-                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                const thirtyDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
                 return txDate >= thirtyDaysAgo;
             }
             return true;
@@ -33,14 +35,7 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
             (tx.senderName && tx.senderName.toLowerCase().includes(searchTerm.toLowerCase()))
         );
 
-    const getIconForType = (type: Transaction['type'], category?: string) => {
-        if (category) {
-            switch (category) {
-                case 'food': return 'restaurant';
-                case 'transport': return 'directions_car';
-                case 'shopping': return 'shopping_cart';
-            }
-        }
+    const getIconForType = (type: Transaction['type']) => {
         switch (type) {
             case 'PIX_SENT':
             case 'PIX_RECEIVED':
@@ -53,70 +48,75 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
             default: return 'receipt_long';
         }
     };
+    
+    if (!user) {
+        return <p>Usuário não encontrado.</p>;
+    }
 
     return (
-        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-8">
-            <header className="flex items-center">
-                <button onClick={onBack} className="mr-4 text-white"><span className="material-symbols-outlined">arrow_back</span></button>
-                <h1 className="text-white text-4xl font-black leading-tight tracking-[-0.033em]">Extrato da Conta</h1>
+        <div className="text-white">
+            <header className="flex items-center mb-6">
+                <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-white/10">
+                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <h1 className="text-2xl font-bold">Extrato da Conta</h1>
             </header>
-            <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl p-6">
-                <div className="flex items-center justify-between">
-                    <p className="text-white/70 text-base font-normal leading-normal">Saldo atual</p>
-                    <button className="text-white/70 hover:text-white">
-                        <span className="material-symbols-outlined">visibility</span>
+
+            <div className="bg-surface-dark rounded-xl p-4 mb-6">
+                <div className="flex items-center justify-between text-sm text-gray-400">
+                    <p>Saldo atual</p>
+                    <button onClick={() => setIsBalanceVisible(!isBalanceVisible)} className="p-1">
+                        <span className="material-symbols-outlined text-lg">{isBalanceVisible ? 'visibility' : 'visibility_off'}</span>
                     </button>
                 </div>
-                <p className="text-white text-4xl font-bold mt-2">{user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                <p className={`text-3xl font-bold text-primary mt-1 transition-all duration-300 ${!isBalanceVisible && 'blur-md'}`}>
+                    {isBalanceVisible ? user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ ********'}
+                </p>
             </div>
-            <div className="space-y-4">
-                <h2 className="text-white/90 text-lg font-semibold px-4">Transações</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="px-3">
-                        <label className="flex flex-col min-w-40 h-12 w-full">
-                            <div className="flex w-full flex-1 items-stretch rounded-lg h-full">
-                                <div className="text-primary/70 flex border-none bg-primary/10 items-center justify-center pl-4 rounded-l-lg border-r-0">
-                                    <span className="material-symbols-outlined">search</span>
-                                </div>
-                                <input
-                                    className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-lg text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border-none bg-primary/10 h-full placeholder:text-primary/70 px-4 pl-2 text-base font-normal leading-normal"
-                                    placeholder="Buscar por nome ou valor..."
-                                    value={searchTerm}
-                                    onChange={e => setSearchTerm(e.target.value)}
-                                />
-                            </div>
-                        </label>
-                    </div>
-                    <div className="flex gap-2 p-3 overflow-x-auto md:justify-end">
-                        <button onClick={() => setFilterPeriod('all')} className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 ${filterPeriod === 'all' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}>
-                            <p className="text-white text-sm font-medium leading-normal">Tudo</p>
-                        </button>
-                        <button onClick={() => setFilterPeriod('7d')} className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 ${filterPeriod === '7d' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}>
-                            <p className="text-white text-sm font-medium leading-normal">Últimos 7 dias</p>
-                        </button>
-                        <button onClick={() => setFilterPeriod('30d')} className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 ${filterPeriod === '30d' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}>
-                            <p className="text-white text-sm font-medium leading-normal">Este mês</p>
-                        </button>
-                    </div>
+
+            <div className="space-y-4 mb-4">
+                <input
+                    className="w-full px-4 py-3 bg-surface-dark border border-subtle-dark/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-gray-500"
+                    placeholder="Buscar por nome, valor..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                />
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                    <button onClick={() => setFilterPeriod('all')} className={`px-4 py-2 text-sm rounded-lg ${filterPeriod === 'all' ? 'bg-primary text-background-dark font-semibold' : 'bg-surface-dark hover:bg-white/10'}`}>
+                        Tudo
+                    </button>
+                    <button onClick={() => setFilterPeriod('7d')} className={`px-4 py-2 text-sm rounded-lg ${filterPeriod === '7d' ? 'bg-primary text-background-dark font-semibold' : 'bg-surface-dark hover:bg-white/10'}`}>
+                        Últimos 7 dias
+                    </button>
+                    <button onClick={() => setFilterPeriod('30d')} className={`px-4 py-2 text-sm rounded-lg ${filterPeriod === '30d' ? 'bg-primary text-background-dark font-semibold' : 'bg-surface-dark hover:bg-white/10'}`}>
+                        Últimos 30 dias
+                    </button>
                 </div>
             </div>
+
             <div className="flex flex-col gap-2">
-                {filteredTransactions.map((tx) => (
-                    <div key={tx.id} className="flex items-center gap-4 hover:bg-white/5 rounded-lg p-4 transition-colors duration-200">
-                        <div className="text-white flex items-center justify-center rounded-full bg-primary/10 shrink-0 size-10">
-                            <span className="material-symbols-outlined text-primary">{getIconForType(tx.type, (tx as any).category)}</span>
+                {filteredTransactions.length > 0 ? filteredTransactions.map((tx) => (
+                    <div key={tx.id} className="flex items-center gap-4 hover:bg-surface-dark rounded-lg p-3 transition-colors duration-200">
+                        <div className="text-white flex items-center justify-center rounded-full bg-background-dark shrink-0 size-10">
+                            <span className="material-symbols-outlined text-primary">{getIconForType(tx.type)}</span>
                         </div>
                         <div className="flex-1">
-                            <p className="text-white text-base font-medium leading-normal">{tx.description}</p>
-                            <p className="text-white/60 text-sm">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
+                            <p className="text-white font-medium">{tx.description}</p>
+                            <p className="text-gray-400 text-sm">{new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</p>
                         </div>
                         <div className="text-right">
-                            <p className={`text-base font-semibold ${tx.amount < 0 ? 'text-orange-400' : 'text-primary'}`}>{tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                            <p className={`font-semibold ${tx.amount < 0 ? 'text-orange-400' : 'text-green-400'}`}>
+                                {tx.amount < 0 ? '- ' : '+ '}{Math.abs(tx.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </p>
                         </div>
                     </div>
-                ))}
+                )) : (
+                    <div className="text-center py-10">
+                        <p className="text-gray-500">Nenhuma transação encontrada.</p>
+                    </div>
+                )}
             </div>
-        </main>
+        </div>
     );
 };
 

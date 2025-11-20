@@ -12,8 +12,6 @@ interface HomeViewProps {
 const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, news }) => {
     const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
-    // FIX: Removed min-h-full. The parent container in Home/index.tsx controls the scrolling, 
-    // so this component should simply grow with its content.
     return (
         <main className="flex flex-col gap-8 py-8 px-4 sm:px-6 md:px-8">
             {/* Balance Section */}
@@ -69,33 +67,6 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, news }) => {
                             </div>
                         </div>
                     </div>
-                </div>
-            </section>
-            
-            {/* Combined Card Info Section */}
-            <section>
-                 <div className="flex flex-col justify-between rounded-xl bg-surface-dark p-6">
-                    <div>
-                        <p className="text-base font-bold leading-tight text-white">Cartão de Crédito</p>
-                        <p className="text-sm font-normal leading-normal text-[#FF7A00]">Vencimento: {new Date(user.creditCard.invoiceDueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</p>
-                    </div>
-                    <div className="mt-4 grid grid-cols-2 gap-4">
-                        <div>
-                            <p className="text-xs text-white/70">Fatura Atual</p>
-                            <p className={`text-xl font-bold text-white transition-all duration-300 ${!isBalanceVisible && 'blur-md'}`}>
-                                {isBalanceVisible ? user.creditCard.currentInvoice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ ********'}
-                            </p>
-                        </div>
-                        <div className="text-right">
-                           <p className="text-xs text-white/70">Limite Disponível</p>
-                            <p className={`text-xl font-bold text-primary transition-all duration-300 ${!isBalanceVisible && 'blur-md'}`}>
-                                {isBalanceVisible ? user.creditCard.availableLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ ********'}
-                            </p>
-                        </div>
-                    </div>
-                    <button onClick={() => onNavigate('cards')} className="mt-4 flex h-10 w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-white/10 px-4 text-sm font-medium leading-normal text-white transition-colors hover:bg-white/20">
-                        <span className="truncate">Ver fatura e limite</span>
-                    </button>
                 </div>
             </section>
 
