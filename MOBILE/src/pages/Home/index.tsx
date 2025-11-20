@@ -10,12 +10,10 @@ import Profile from '../../components/Profile';
 import ShoppingCart from '../../components/ShoppingCart';
 import Statement from '../../components/Statement';
 import Shop from '../../components/Shop';
-import StoriesPopup from '../../components/StoriesPopup';
 import CurrentInvoiceView from '../../components/CurrentInvoiceView'; // Import Fatura Aberta
 import ClosedInvoiceView from '../../components/ClosedInvoiceView';   // Import Fatura Fechada
 import { Article } from '../../components/NewsSection';
 import { PurchasedItem } from '../../types';
-import { storiesData } from '../../data/storiesData';
 
 // Add new views for the invoices to the type definition
 type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart' | 'currentInvoice' | 'closedInvoice';
@@ -26,12 +24,10 @@ const Home: React.FC = () => {
   const [news, setNews] = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [cart, setCart] = useState<PurchasedItem[]>([]);
-  const [isStoriesOpen, setIsStoriesOpen] = useState(false);
 
   useEffect(() => {
     if (authUser) {
       fetchNews();
-      setIsStoriesOpen(authUser.showStoriesPopup || false);
     }
   }, [authUser]);
 
@@ -60,8 +56,6 @@ const Home: React.FC = () => {
   };
 
   const handleNavigate = (view: View) => setCurrentView(view);
-
-  const handleCloseStories = () => setIsStoriesOpen(false);
 
   const handleAddToCart = (item: PurchasedItem) => {
     setCart(prev => {
@@ -110,10 +104,6 @@ const Home: React.FC = () => {
 
   return (
     <div className="h-screen bg-background-dark text-white flex flex-col">
-      {isStoriesOpen && currentView === 'home' && (
-        <StoriesPopup stories={storiesData} onClose={handleCloseStories} />
-      )}
-
       <main className="flex-1 overflow-y-auto no-scrollbar">
         {renderContent()}
       </main>
