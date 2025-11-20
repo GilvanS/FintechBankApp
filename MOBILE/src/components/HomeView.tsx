@@ -2,10 +2,15 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import NewsSection, { Article } from './NewsSection';
 import HomeBanners from './HomeBanners';
+import CreditCardInfo from './CreditCardInfo';
+
+// A definição de View foi expandida para incluir todas as telas possíveis, incluindo as de fatura.
+// Isso garante que o HomeView possa passar a função de navegação para todos os seus filhos sem erros de tipo.
+type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart' | 'currentInvoice' | 'closedInvoice';
 
 interface HomeViewProps {
     user: User;
-    onNavigate: (view: 'pix' | 'cards' | 'statement' | 'shop') => void;
+    onNavigate: (view: View) => void;
     news: Article[];
 }
 
@@ -69,9 +74,12 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, news }) => {
                     </div>
                 </div>
             </section>
+            
+            {/* Credit Card Section */}
+            <CreditCardInfo user={user} onNavigate={onNavigate} />
 
             {/* Banners Section */}
-            <HomeBanners onNavigate={onNavigate as any} />
+            <HomeBanners onNavigate={onNavigate} />
 
             {/* News Section */}
             <NewsSection articles={news} />
