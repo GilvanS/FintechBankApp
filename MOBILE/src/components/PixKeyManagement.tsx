@@ -155,7 +155,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                             {error && <p className="text-sm text-red-400 mt-4">{error}</p>}
                             <div className="flex justify-end space-x-4 mt-6">
                                 <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-gray-200 bg-white/10 rounded-md hover:bg-white/20">Cancelar</button>
-                                <button type="submit" className="px-4 py-2 text-background-dark bg-primary font-semibold rounded-md hover:opacity-90">Cadastrar</ve>
+                                <button type="submit" className="px-4 py-2 text-background-dark bg-primary font-semibold rounded-md hover:opacity-90">Cadastrar</button>
                             </div>
                         </form>
                     </div>

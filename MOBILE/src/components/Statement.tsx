@@ -10,7 +10,7 @@ interface StatementProps {
 // and does not depend on its own context fetching, resolving the error.
 function Statement({ user, onBack }: StatementProps) {
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterPeriod, setFilterPeriod] = useState('all';
+    const [filterPeriod, setFilterPeriod] = useState('all');
     const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
     // Ensure transactions exist before trying to filter and reduce them

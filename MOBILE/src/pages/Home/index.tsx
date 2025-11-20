@@ -10,10 +10,10 @@ import Profile from '../../components/Profile';
 import ShoppingCart from '../../components/ShoppingCart';
 import Statement from '../../components/Statement';
 import Shop from '../../components/Shop';
-import StoriesPopup from '../../components/StoriesPopup'; // Import the Stories popup
+// import StoriesPopup from '../../components/StoriesPopup'; // Component does not exist
 import { Article } from '../../components/NewsSection';
 import { PurchasedItem } from '../../types';
-import { storiesData } from '../../data/storiesData'; // Import stories data
+// import { storiesData } from '../../data/storiesData'; // Data file does not exist
 
 
 // Define the possible views in the app
@@ -32,7 +32,7 @@ const Home: React.FC = () => {
       fetchNews();
       // FIX: Show stories popup if the flag is set for the user.
       // The flag is true on the mock user by default.
-      setIsStoriesOpen(authUser.showStoriesPopup || false);
+      // setIsStoriesOpen(authUser.showStoriesPopup || false); // Commented: StoriesPopup component does not exist
     }
   }, [authUser]);
 
@@ -111,9 +111,9 @@ const Home: React.FC = () => {
   return (
     <div className="h-screen bg-background-dark text-white flex flex-col">
       {/* --- REINTEGRATED STORIES POPUP --- */}
-      {isStoriesOpen && currentView === 'home' && (
+      {/* {isStoriesOpen && currentView === 'home' && (
         <StoriesPopup stories={storiesData} onClose={handleCloseStories} />
-      )}
+      )} */}
 
       <main className="flex-1 overflow-y-auto no-scrollbar">
         {renderContent()}
