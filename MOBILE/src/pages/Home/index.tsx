@@ -7,9 +7,11 @@ import Pix from '../../components/Pix';
 import CardDashboard from '../../components/CardDashboard';
 import Products from '../../components/Products';
 import Profile from '../../components/Profile';
+import ShoppingCart from '../../components/ShoppingCart';
+import Statement from '../../components/Statement';
 
 const Home: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'home' | 'cards' | 'products' | 'profile' | 'pix'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement'>('home');
   const { user: authUser, login } = useAuth();
   
   // Hardcoded user data to remove dependency on the deleted mockData.ts file
@@ -63,8 +65,11 @@ const Home: React.FC = () => {
       case 'pix':
         return <Pix onBack={() => handleNavigate('home')} />;
       case 'cards':
-        return <CardDashboard />;
-      // The 'shop' view was removed as part of the revert
+        return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={(view: any) => handleNavigate(view)} />;
+      case 'shop':
+        return <ShoppingCart onBack={() => handleNavigate('home')} />;
+      case 'statement':
+        return <Statement onBack={() => handleNavigate('home')} />;
       case 'products':
         return <Products />;
       case 'profile':

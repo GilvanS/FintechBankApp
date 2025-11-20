@@ -1,3 +1,12 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { getPixKeys, registerPixKey, deletePixKey } from '../services/api';
+import { PixKey } from '../types';
+import { useToast, ToastContainer } from './Toast';
+
+interface PixKeyManagementProps {
+    onBack: () => void;
+}
 
 const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     const { user } = useAuth();

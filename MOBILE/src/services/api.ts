@@ -206,4 +206,20 @@ export async function getUserByCpf(cpf: string): Promise<{ success: boolean; use
   }
 }
 
+// Método: registerPixKey
+export async function registerPixKey(type: 'CPF' | 'EMAIL', key: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await api.post('/pix/keys', { type, key }, {
+      headers: getAuthHeaders('json'),
+    });
+    const data = res.data;
+    if (!data?.success) {
+      return { success: false, message: data?.message || 'Falha ao cadastrar chave PIX.' };
+    }
+    return { success: true, message: data?.message || 'Chave PIX cadastrada com sucesso.' };
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao cadastrar chave PIX.' };
+  }
+}
+
 export default api;

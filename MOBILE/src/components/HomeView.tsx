@@ -12,7 +12,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
     const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
     return (
-        <main className="flex flex-col gap-8 py-8 px-4 sm:px-6 md:px-8">
+        <main className="flex flex-col gap-8 py-8 px-4 sm:px-6 md:px-8 overflow-y-auto h-full">
             {/* Balance Section */}
             <section>
                 <div className="flex flex-col justify-between rounded-xl bg-surface-dark p-6">
