@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import NewsSection from './NewsSection';
+import NewsSection, { Article } from './NewsSection';
 import HomeBanners from './HomeBanners';
 
 interface HomeViewProps {
     user: User;
-    onNavigate: (view: any) => void;
+    onNavigate: (view: 'pix' | 'cards' | 'statement' | 'shop') => void;
+    news: Article[];
 }
 
-const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
+const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, news }) => {
     const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
+    // FIX: Removed min-h-full. The parent container in Home/index.tsx controls the scrolling, 
+    // so this component should simply grow with its content.
     return (
-        <main className="flex flex-col gap-8 py-8 px-4 sm:px-6 md:px-8 overflow-y-auto h-full">
+        <main className="flex flex-col gap-8 py-8 px-4 sm:px-6 md:px-8">
             {/* Balance Section */}
             <section>
                 <div className="flex flex-col justify-between rounded-xl bg-surface-dark p-6">
@@ -37,13 +40,13 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
                     <div className="flex overflow-x-auto pb-4 [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         <div className="flex items-stretch gap-4 px-4">
                             {/* PIX */}
-                            <button onClick={() => onNavigate('pix')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center border-none bg-transparent p-0">
+                            <div onClick={() => onNavigate('pix')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center">
                                 <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square transition-transform hover:scale-105">
                                     <span className="material-symbols-outlined text-4xl text-primary">qr_code_2</span>
                                 </div>
                                 <p className="text-sm font-medium leading-normal text-white">PIX</p>
-                            </button>
-                            {/* Marketplace */}
+                            </div>
+                             {/* Shop */}
                              <div onClick={() => onNavigate('shop')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center">
                                 <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square transition-transform hover:scale-105">
                                     <span className="material-symbols-outlined text-4xl text-white">storefront</span>
@@ -56,14 +59,6 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
                                     <span className="material-symbols-outlined text-4xl text-white">credit_card</span>
                                 </div>
                                 <p className="text-sm font-medium leading-normal text-white">Cartões</p>
-                            </div>
-                            {/* Pagar Contas - Placeholder */}
-                            <div className="flex h-full w-28 flex-shrink-0 flex-col items-center gap-3 rounded-lg text-center opacity-50 cursor-not-allowed">
-                                <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square relative">
-                                    <span className="material-symbols-outlined text-4xl text-white">receipt_long</span>
-                                    <span className="absolute top-1 right-1 text-[10px] bg-primary text-background-dark px-1.5 py-0.5 rounded-full font-bold">EM BREVE</span>
-                                </div>
-                                <p className="text-sm font-medium leading-normal text-white">Pagar Contas</p>
                             </div>
                             {/* Extrato */}
                              <div onClick={() => onNavigate('statement')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center">
@@ -105,10 +100,10 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
             </section>
 
             {/* Banners Section */}
-            <HomeBanners onNavigate={onNavigate} />
+            <HomeBanners onNavigate={onNavigate as any} />
 
             {/* News Section */}
-            <NewsSection />
+            <NewsSection articles={news} />
         </main>
     );
 };

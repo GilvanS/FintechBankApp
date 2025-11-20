@@ -2,7 +2,7 @@ import React from 'react';
 
 interface BottomNavBarProps {
     currentView: string;
-    onNavigate: (view: 'home' | 'cards' | 'shop' | 'products' | 'profile' | 'pix') => void;
+    onNavigate: (view: 'home' | 'cards' | 'shop' | 'products' | 'profile') => void;
 }
 
 const NavButton: React.FC<{
@@ -27,10 +27,10 @@ const NavButton: React.FC<{
 
 const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) => {
     
+    // FIX: Removed PIX from the nav items to match the reference image.
     const navItems = [
         { label: 'Início', view: 'home', icon: 'home' },
         { label: 'Cartões', view: 'cards', icon: 'credit_card' },
-        { label: 'PIX', view: 'pix', icon: 'qr_code_2' },
         { label: 'Shop', view: 'shop', icon: 'storefront' },
         { label: 'Produtos', view: 'products', icon: 'grid_view' },
         { label: 'Perfil', view: 'profile', icon: 'person' },
@@ -44,7 +44,7 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) 
                     label={item.label}
                     icon={item.icon}
                     isActive={currentView === item.view}
-                   onClick={() => onNavigate(item.view as 'home' | 'cards' | 'shop' | 'products' | 'profile' | 'pix')}
+                   onClick={() => onNavigate(item.view as 'home' | 'cards' | 'shop' | 'products' | 'profile')}
                 />
            ))}
         </nav>
