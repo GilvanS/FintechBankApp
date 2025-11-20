@@ -10,13 +10,10 @@ import Profile from '../../components/Profile';
 import ShoppingCart from '../../components/ShoppingCart';
 import Statement from '../../components/Statement';
 import Shop from '../../components/Shop';
-import CurrentInvoiceView from '../../components/CurrentInvoiceView'; // Import Fatura Aberta
-import ClosedInvoiceView from '../../components/ClosedInvoiceView';   // Import Fatura Fechada
+import CurrentInvoiceView from '../../components/CurrentInvoiceView';
+import ClosedInvoiceView from '../../components/ClosedInvoiceView';
 import { Article } from '../../components/NewsSection';
-import { PurchasedItem } from '../../types';
-
-// Add new views for the invoices to the type definition
-type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart' | 'currentInvoice' | 'closedInvoice';
+import { PurchasedItem, View } from '../../types'; // Importa o tipo View
 
 const Home: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('home');
@@ -71,7 +68,6 @@ const Home: React.FC = () => {
     setCurrentView('shoppingCart');
   };
 
-  // This function renders the correct component based on the current view state
   const renderContent = () => {
     if (!authUser) {
         return <div className="flex items-center justify-center h-full"><p className="text-white">Erro de autenticação. Redirecionando...</p></div>;
@@ -90,7 +86,6 @@ const Home: React.FC = () => {
                     case 'shop': return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((s, i) => s + (i.quantity || 0), 0)} onNavigate={handleNavigate} />;
                     case 'shoppingCart': return <ShoppingCart onBack={() => handleNavigate('shop')} cartItems={cart} onUpdateCart={setCart} user={authUser} />;
                     case 'statement': return <Statement user={authUser} onBack={() => handleNavigate('home')} />;
-                    // ADDED: Render invoice views when the state matches
                     case 'currentInvoice': return <CurrentInvoiceView user={authUser} onBack={() => handleNavigate('cards')} />;
                     case 'closedInvoice': return <ClosedInvoiceView user={authUser} onBack={() => handleNavigate('cards')} />;
                     case 'products': return <Products />;

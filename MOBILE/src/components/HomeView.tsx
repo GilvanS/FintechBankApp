@@ -1,16 +1,12 @@
 import React, { useState } from 'react';
-import { User } from '../types';
+import { User, View } from '../types'; // Importa o tipo View
 import NewsSection, { Article } from './NewsSection';
 import HomeBanners from './HomeBanners';
 import CreditCardInfo from './CreditCardInfo';
 
-// A definição de View foi expandida para incluir todas as telas possíveis, incluindo as de fatura.
-// Isso garante que o HomeView possa passar a função de navegação para todos os seus filhos sem erros de tipo.
-type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart' | 'currentInvoice' | 'closedInvoice';
-
 interface HomeViewProps {
     user: User;
-    onNavigate: (view: View) => void;
+    onNavigate: (view: View) => void; // Usa o tipo View importado
     news: Article[];
 }
 
