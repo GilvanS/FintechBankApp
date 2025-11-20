@@ -2,8 +2,9 @@ import React, { useState, useCallback } from 'react';
 import './Login.css';
 import { useHistory } from 'react-router-dom';
 import { Preferences } from '@capacitor/preferences';
-import api, { setApiBaseUrl } from '../../services/api';
+import api, { setApiBaseUrl, getUserByCpf } from '../../services/api';
 import { useIonViewWillEnter } from '@ionic/react';
+import { useAuth } from '../../context/AuthContext';
 
 const Login: React.FC = () => {
   const [cpf, setCpf] = useState('');
@@ -16,6 +17,7 @@ const Login: React.FC = () => {
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
   const history = useHistory();
+  const { login } = useAuth();
 
   const formatCpf = (v: string) => {
     const d = v.replace(/\D/g, '').slice(0, 11);
@@ -66,9 +68,27 @@ const Login: React.FC = () => {
         return;
       }
       const response = await api.post('/auth/login', { cpf, password });
-      const { token } = response.data;
+      console.log('Login response:', response.data);
+      const { token, user } = response.data;
       await Preferences.set({ key: 'token', value: token });
-      history.push('/home');
+      localStorage.setItem('authToken', token);
+
+      if (user) {
+        login(user);
+        history.push('/home');
+        return;
+      }
+
+      // Fetch user data if not provided in login
+      const userResponse = await getUserByCpf(cpf);
+      if (userResponse.success && userResponse.user) {
+        login(userResponse.user);
+        history.push('/home');
+      } else {
+        console.error('User fetch error:', userResponse);
+        const debugMsg = JSON.stringify(userResponse);
+        setError(`Falha: ${userResponse.message || 'Sem msg'} | Debug: ${debugMsg}`);
+      }
     } catch (err) {
         if ((err as any).isAxiosError && !(err as any).response) {
             setError('Network Error');
@@ -179,7 +199,7 @@ const Login: React.FC = () => {
           <div className="w-full max-w-sm bg-surface-dark rounded-xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-center text-text-dark mb-1">Endereço da API do Servidor</h3>
             {/* FIX: Added version tag */}
-            <p className="text-center text-xs text-subtle-dark mb-4">v2.0 (Corrigida)</p>
+            <p className="text-center text-xs text-subtle-dark mb-4">v2.2 (Auth Fix Re-applied)</p>
             <input
               type="text"
               value={tempApiUrl}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useHistory } from 'react-router-dom';
 import HomeView from '../../components/HomeView';
 import BottomNavBar from '../../components/BottomNavBar';
 import { useAuth } from '../../context/AuthContext';
@@ -18,6 +19,7 @@ import { PurchasedItem, View } from '../../types'; // Importa o tipo View
 const Home: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('home');
   const { user: authUser, logout } = useAuth();
+  const history = useHistory();
   const [news, setNews] = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [cart, setCart] = useState<PurchasedItem[]>([]);
@@ -25,8 +27,11 @@ const Home: React.FC = () => {
   useEffect(() => {
     if (authUser) {
       fetchNews();
+    } else {
+      // Redirect to login if not authenticated
+      history.push('/login');
     }
-  }, [authUser]);
+  }, [authUser, history]);
 
   const fetchNews = async () => {
     const fallbackNews = [
