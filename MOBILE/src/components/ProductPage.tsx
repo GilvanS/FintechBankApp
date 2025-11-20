@@ -17,7 +17,7 @@ const ProductPage: React.FC<ProductPageProps> = ({ product, onBack, onAddToCart,
                 </button>
             </header>
             <main className="flex-grow overflow-y-auto no-scrollbar">
-                <img src={product.imageUrl} alt={product.name} className="w-full h-64 object-cover" />
+                <img src={product.image} alt={product.name} className="w-full h-64 object-cover" />
                 <div className="p-6">
                     <h1 className="text-3xl font-bold text-white mb-2">{product.name}</h1>
                     <p className="text-2xl font-bold text-primary mb-4">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.price)}</p>

@@ -10,8 +10,6 @@ interface CardDashboardProps {
 const CardDashboard: React.FC<CardDashboardProps> = ({ user, onBack, onNavigate }) => {
     const [activeTab, setActiveTab] = useState<'current' | 'future'>('current');
 
-    // FIX: Adiciona verificação de segurança para o objeto creditCard e suas propriedades.
-    // Se user.creditCard não existir, exibe uma mensagem de carregamento/erro em vez de quebrar.
     if (!user || !user.creditCard) {
         return (
             <div className="bg-background-dark text-white min-h-full flex flex-col">
@@ -28,19 +26,20 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ user, onBack, onNavigate 
         );
     }
 
+    // FIX: Safely access nested properties using optional chaining (?.) and provide default values.
     const { creditCard } = user;
     const invoices = user.invoices || [];
     const openInvoice = invoices.find(inv => inv.status === 'open');
     const closedInvoice = invoices.find(inv => inv.status === 'closed');
 
-    const isOverdue = closedInvoice && new Date() > new Date(closedInvoice.dueDate);
+    const isOverdue = closedInvoice?.dueDate && new Date() > new Date(closedInvoice.dueDate);
 
     const transactionsToDisplay = activeTab === 'current' 
         ? (openInvoice?.items || []) 
-        : []; // Lógica de transações futuras pode ser adicionada aqui
+        : [];
 
     const getIconForTx = (category: string) => {
-        const lowerCategory = category.toLowerCase();
+        const lowerCategory = category?.toLowerCase() || '';
         if (lowerCategory.includes('comida')) return 'restaurant';
         if (lowerCategory.includes('transporte')) return 'directions_bus';
         if (lowerCategory.includes('compras')) return 'shopping_bag';
@@ -56,7 +55,6 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ user, onBack, onNavigate 
                 <h2 className="text-2xl font-bold text-white">Meu Cartão</h2>
             </header>
             <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-6">
-                 {/* Mensagens de Status (Bloqueado/Atrasado) */}
 
                 <button 
                     onClick={() => onNavigate('currentInvoice')} 
@@ -65,14 +63,15 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ user, onBack, onNavigate 
                     <div className="flex justify-between items-start">
                         <span className="font-bold text-lg">Fatura Atual</span>
                         <span className="font-mono text-sm bg-white/20 px-2 py-1 rounded">
-                            Venc. {openInvoice ? new Date(openInvoice.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '--'}
+                            Venc. {openInvoice?.dueDate ? new Date(openInvoice.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '--'}
                         </span>
                     </div>
                     <p className="text-3xl font-bold text-blue-400">
                         {(openInvoice?.amount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </p>
                     <div className="text-sm">
-                        <p>Limite Disponível: <span className="font-semibold text-primary">{creditCard.limit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></p>
+                        {/* FIX: Ensured safe access to creditCard.limit with a fallback value. */}
+                        <p>Limite Disponível: <span className="font-semibold text-primary">{(creditCard?.limit || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></p>
                     </div>
                 </button>
 
@@ -80,6 +79,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ user, onBack, onNavigate 
                     <button onClick={() => onNavigate('closedInvoice')} className={`p-4 bg-surface-dark rounded-lg text-center hover:bg-white/10 transition-all ${isOverdue ? 'border-2 border-red-500' : ''}`}>
                         <p className="font-semibold text-white">Fatura Fechada</p>
                         <p className={`font-bold ${isOverdue ? 'text-red-400' : 'text-orange-400'}`}>
+                            {/* FIX: Ensured safe access to closedInvoice.amount with a fallback value. */}
                             {(closedInvoice?.amount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </p>
                     </button>
