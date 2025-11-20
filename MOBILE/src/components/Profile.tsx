@@ -2,10 +2,12 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 
-// Placeholder components for the sub-views
-const MyData = ({ onBack }) => <div className="p-4"><button onClick={onBack} className="text-primary">&lt; Voltar</button><h1 className="text-white text-xl mt-4">Meus Dados</h1></div>;
-const Security = ({ onBack }) => <div className="p-4"><button onClick={onBack} className="text-primary">&lt; Voltar</button><h1 className="text-white text-xl mt-4">Segurança</h1></div>;
-const Notifications = ({ onBack }) => <div className="p-4"><button onClick={onBack} className="text-primary">&lt; Voltar</button><h1 className="text-white text-xl mt-4">Notificações</h1></div>;
+import MyData from './MyData';
+import EditProfile from './EditProfile';
+import Security from './Security';
+import Limits from './Limits';
+import Notifications from './Notifications';
+import PointsDashboard from './PointsDashboard';
 
 interface ProfileProps {
     user: User;
@@ -67,14 +69,25 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onNavigate }) => {
         );
     };
     
+    const handleSaveProfile = (updatedUser: any) => {
+        console.log('Profile updated:', updatedUser);
+        setView('myData');
+    };
+
     const renderView = () => {
         switch (view) {
             case 'myData':
-                return <MyData onBack={() => setView('main')} />;
+                return <MyData user={user} onBack={() => setView('main')} onNavigateToEdit={() => setView('editProfile')} />;
+            case 'editProfile':
+                return <EditProfile user={user} onBack={() => setView('myData')} onSave={handleSaveProfile} />;
             case 'security':
-                return <Security onBack={() => setView('main')} />;
+                return <Security onBack={() => setView('main')} onNavigateToLimits={() => setView('limits')} />;
+            case 'limits':
+                return <Limits onBack={() => setView('security')} />;
             case 'notifications':
                 return <Notifications onBack={() => setView('main')} />;
+            case 'points':
+                return <PointsDashboard user={user} onBack={() => setView('main')} />;
             case 'main':
             default:
                 return <MainView />;
