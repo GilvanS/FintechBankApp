@@ -10,8 +10,11 @@ import Profile from '../../components/Profile';
 import ShoppingCart from '../../components/ShoppingCart';
 import Statement from '../../components/Statement';
 import Shop from '../../components/Shop';
+import StoriesPopup from '../../components/StoriesPopup'; // Import the Stories popup
 import { Article } from '../../components/NewsSection';
 import { PurchasedItem } from '../../types';
+import { storiesData } from '../../data/storiesData'; // Import stories data
+
 
 // Define the possible views in the app
 type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart';
@@ -22,17 +25,18 @@ const Home: React.FC = () => {
   const [news, setNews] = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [cart, setCart] = useState<PurchasedItem[]>([]);
+  const [isStoriesOpen, setIsStoriesOpen] = useState(false);
 
   useEffect(() => {
-    // If no user is authenticated, this component shouldn't be rendered anyway,
-    // but as a fallback, we can redirect or show a message.
     if (authUser) {
       fetchNews();
+      // FIX: Show stories popup if the flag is set for the user.
+      // The flag is true on the mock user by default.
+      setIsStoriesOpen(authUser.showStoriesPopup || false);
     }
   }, [authUser]);
 
   const fetchNews = async () => {
-    // Using a simple fallback for news as before
     const fallbackNews = [
         { title: 'Análise Semanal do Mercado Financeiro', description: 'Setores em alta e previsões.', url: '#', urlToImage: 'https://images.unsplash.com/photo-1543286386-713bdd548da4' },
     ];
@@ -58,6 +62,11 @@ const Home: React.FC = () => {
 
   const handleNavigate = (view: View) => setCurrentView(view);
 
+  // Handler to close the stories popup
+  const handleCloseStories = () => {
+    setIsStoriesOpen(false);
+  };
+
   const handleAddToCart = (item: PurchasedItem) => {
     setCart(prev => {
         const existing = prev.find(i => i.id === item.id);
@@ -72,17 +81,14 @@ const Home: React.FC = () => {
     setCurrentView('shoppingCart');
   };
 
-  // FIX: Centralized layout with consistent padding and uses authUser
   const renderContent = () => {
     if (!authUser) {
-        // This should technically not be reached if routing is correct, but it's a safe fallback.
         return <div className="flex items-center justify-center h-full"><p className="text-white">Erro de autenticação. Redirecionando...</p></div>;
     }
     if (isLoading && currentView === 'home') {
         return <div className="flex items-center justify-center h-full"><p className="text-white">Carregando...</p></div>;
     }
     
-    // The main container for views now has consistent padding
     return (
         <div className="p-4">
             {(() => {
@@ -104,11 +110,15 @@ const Home: React.FC = () => {
 
   return (
     <div className="h-screen bg-background-dark text-white flex flex-col">
+      {/* --- REINTEGRATED STORIES POPUP --- */}
+      {isStoriesOpen && currentView === 'home' && (
+        <StoriesPopup stories={storiesData} onClose={handleCloseStories} />
+      )}
+
       <main className="flex-1 overflow-y-auto no-scrollbar">
         {renderContent()}
       </main>
       
-      {/* Conditional rendering for the BottomNavBar */}
       {(currentView === 'home' || currentView === 'cards' || currentView === 'shop' || currentView === 'products' || currentView === 'profile') && (
         <BottomNavBar currentView={currentView} onNavigate={handleNavigate} />
       )}

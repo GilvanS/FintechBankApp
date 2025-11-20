@@ -1,5 +1,15 @@
-const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => {
-    const { user } = useAuth();
+import React, { useState } from 'react';
+import { User } from '../types'; // Assuming User type is defined here
+
+// FIX: The component now receives the `user` object as a prop instead of calling `useAuth`,
+// making it consistent with the new architecture and preventing crashes.
+interface CardDashboardProps {
+    user: User;
+    onBack: () => void;
+    onNavigate: (view: string) => void;
+}
+
+const CardDashboard: React.FC<CardDashboardProps> = ({ user, onBack, onNavigate }) => {
     const [activeTab, setActiveTab] = useState<'current' | 'future'>('current');
 
     if (!user) return null;
@@ -7,7 +17,6 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
 
     const isOverdue = creditCard.closedInvoice > 0 && creditCard.closedInvoiceDueDate && new Date() > new Date(creditCard.closedInvoiceDueDate);
 
-    // Filter transactions based on the invoice due date
     const hasInvoiceDueDate = !!creditCard.invoiceDueDate && !isNaN(new Date(creditCard.invoiceDueDate).getTime());
     const invoiceDueDate = hasInvoiceDueDate ? new Date(creditCard.invoiceDueDate) : null;
     const endOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
