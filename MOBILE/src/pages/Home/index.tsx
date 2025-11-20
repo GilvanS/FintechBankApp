@@ -11,19 +11,17 @@ import ShoppingCart from '../../components/ShoppingCart';
 import Statement from '../../components/Statement';
 import Shop from '../../components/Shop';
 import { Article } from '../../components/NewsSection';
-import { PurchasedItem } from '../../types';
+import { PurchasedItem, User } from '../../types';
 
 const Home: React.FC = () => {
-  // FIX: Added 'shop' and 'shoppingCart' to the view state
   const [currentView, setCurrentView] = useState<'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart'>('home');
   const { user: authUser, login } = useAuth();
   const [news, setNews] = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // FIX: Added cart state management
   const [cart, setCart] = useState<PurchasedItem[]>([]);
 
-  // Hardcoded user data to remove dependency on the deleted mockData.ts file
-  const user = {
+  // Mock user data for demonstration purposes
+    const user: User = {
       cpf: '22222222222',
       fullName: 'Beatriz Oliveira',
       username: 'biaoliveira',
@@ -33,9 +31,9 @@ const Home: React.FC = () => {
       balance: 2580.50,
       transactions: [],
       isBlocked: false,
-    role: 'user' as 'user' | 'admin',
+      role: 'user',
       pixDailyLimit: 2000,
-    pixKeys: [{ type: 'EMAIL' as const, key: 'beatriz@example.com' }],
+      pixKeys: [{ type: 'EMAIL', key: 'beatriz@example.com' }],
       pixContacts: [{name: 'Carlos Souza', key: 'carlos@example.com'}],
       limitIncreaseRequest: null,
       showStoriesPopup: true,
@@ -56,107 +54,81 @@ const Home: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!authUser) {
-      login(user);
-    }
+    // Automatically "log in" the mock user if no one is authenticated
+    if (!authUser) login(user);
     fetchNews();
-  }, []);
+  }, [authUser]);
 
   const fetchNews = async () => {
     const fallbackNews = [
-        {
-            title: 'Observatório do Mercado: Ações de Tecnologia em Alta',
-            description: 'Descubra os principais destaques no setor de tecnologia esta semana e o que isso significa para sua carteira.',
-            url: '#',
-            urlToImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAqjSdjyHdpjtMbz9Tb_i5fRsSva7728cCbAhZCZcHlZSIWt2H4gIUUJUlDCH2PjuN0w8ZfWXnFFlEz3SiJwfVUxs48d-8pQVHnWnlTrq1vsthzrLAb8vN5vUWaHp8WoLiiFsvdNBfEoeF_Xe11VIUtRTU5jHoPu8PNJ8hwMU5-C632bekGnftXt7noWVYSnpJVX3eE8onTb5Jm8YzHmQ-NXqFa1VRuh8456AP96SwVkDZejbd15QBWfTwNdzKw-EBAWp7IjY6l8gBK'
-        },
+        { title: 'Análise Semanal do Mercado Financeiro', description: 'Setores em alta e previsões.', url: '#', urlToImage: 'https://images.unsplash.com/photo-1543286386-713bdd548da4' },
     ];
-
     setIsLoading(true);
-    const url = 'https://servicodados.ibge.gov.br/api/v3/noticias/?qtd=3&busca=economia';
     try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('API request to IBGE failed');
+      const response = await fetch('https://servicodados.ibge.gov.br/api/v3/noticias/?qtd=3&busca=economia');
+      if (!response.ok) throw new Error('IBGE API request failed');
       const data = await response.json();
       const formattedArticles = data.items.map((item: any) => {
-        let imageUrl = '';
+        let imageUrl = 'https://images.unsplash.com/photo-1543286386-713bdd548da4'; // Default image
         if (item.imagens) {
           try {
-            const images = JSON.parse(item.imagens);
-            imageUrl = `https://agenciadenoticias.ibge.gov.br/${images.image_fulltext}`;
-          } catch (e) { console.error("Failed to parse image JSON from IBGE API", e); }
+            imageUrl = `https://agenciadenoticias.ibge.gov.br/${JSON.parse(item.imagens).image_fulltext}`;
+          } catch (e) { /* Ignore parsing error */ }
         }
         return { title: item.titulo, description: item.introducao, url: item.link, urlToImage: imageUrl };
-      }).filter((article: Article) => article.urlToImage);
-
-      setNews(formattedArticles.length > 0 ? formattedArticles : fallbackNews);
-    } catch (error) {
-      console.error("Failed to fetch news, using fallback data.", error);
-      setNews(fallbackNews);
-    } finally {
-      setIsLoading(false);
-    }
+      }).filter((a: Article) => a.urlToImage);
+      setNews(formattedArticles.length ? formattedArticles : fallbackNews);
+    } catch (error) { setNews(fallbackNews); } 
+    finally { setIsLoading(false); }
   };
 
-  const handleNavigate = (view: 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart') => {
-    setCurrentView(view);
-  };
+  const handleNavigate = (view: any) => setCurrentView(view);
 
-  // FIX: Added cart handling logic
   const handleAddToCart = (item: PurchasedItem) => {
-    setCart(prevCart => {
-        const existingItem = prevCart.find(cartItem => cartItem.id === item.id);
-        if (existingItem) {
-            return prevCart.map(cartItem => 
-                cartItem.id === item.id ? { ...cartItem, quantity: (cartItem.quantity || 1) + 1 } : cartItem
-            );
-        }
-        return [...prevCart, { ...item, quantity: 1 }];
+    setCart(prev => {
+        const existing = prev.find(i => i.id === item.id);
+        return existing ? prev.map(i => i.id === item.id ? { ...i, quantity: (i.quantity || 1) + 1 } : i) : [...prev, { ...item, quantity: 1 }];
     });
   };
 
   const handleInitiatePurchase = (item: PurchasedItem) => {
-    const isAlreadyInCart = cart.some(cartItem => cartItem.id === item.id);
-    if (!isAlreadyInCart) {
-        setCart(prevCart => [...prevCart, { ...item, quantity: 1}]);
+    if (!cart.some(i => i.id === item.id)) {
+        setCart(prev => [...prev, { ...item, quantity: 1}]);
     }
     setCurrentView('shoppingCart');
   };
 
   const renderContent = () => {
-    if (isLoading) {
-        return <div className="flex flex-col items-center justify-center min-h-screen"><p className="text-white text-lg">Carregando...</p></div>;
+    // Show a global loading indicator only on the very first load.
+    if (isLoading && !news.length) {
+        return <div className="flex items-center justify-center h-full"><p className="text-white">Carregando...</p></div>;
     }
     
     switch (currentView) {
-      case 'home':
-        return <HomeView user={user as any} onNavigate={handleNavigate} news={news} />;
-      case 'pix':
-        return <Pix onBack={() => handleNavigate('home')} />;
-      case 'cards':
-        return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
-      // FIX: Correctly render the Shop component and add a case for the shopping cart
-      case 'shop':
-        return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((count, item) => count + (item.quantity || 0), 0)} onNavigate={handleNavigate} />;
-      case 'shoppingCart':
-        return <ShoppingCart onBack={() => handleNavigate('shop')} cartItems={cart} onUpdateCart={setCart} />;
-      case 'statement':
-        return <Statement onBack={() => handleNavigate('home')} />;
-      case 'products':
-        return <Products />;
-      case 'profile':
-        return <Profile />;
-      default:
-        return <HomeView user={user as any} onNavigate={handleNavigate} news={news} />;
+      case 'home': return <HomeView user={user} onNavigate={handleNavigate} news={news} />;
+      case 'pix': return <Pix onBack={() => handleNavigate('home')} />;
+      case 'cards': return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
+      case 'shop': return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((s, i) => s + (i.quantity || 0), 0)} onNavigate={handleNavigate} />;
+      case 'shoppingCart': return <ShoppingCart onBack={() => handleNavigate('shop')} cartItems={cart} onUpdateCart={setCart} />;
+      case 'statement': return <Statement onBack={() => handleNavigate('home')} />;
+      case 'products': return <Products />;
+      case 'profile': return <Profile />;
+      default: return <HomeView user={user} onNavigate={handleNavigate} news={news} />;
     }
   };
 
+  // FIX: This layout structure ensures the nav bar is always visible and the content area scrolls correctly.
+  // - The main div is a flex container that fills the screen height.
+  // - The main content area (`flex-1`) grows to fill available space and makes its own content scrollable (`overflow-y-auto`).
+  // - The nav bar has a fixed height and is always visible at the bottom.
   return (
-    <div className="min-h-screen bg-background-dark text-text-dark flex flex-col">
-      <div className="flex-1 overflow-y-auto">
+    <div className="h-screen bg-background-dark text-white flex flex-col">
+      <main className="flex-1 overflow-y-auto no-scrollbar">
         {renderContent()}
-      </div>
-      {currentView !== 'pix' && !isLoading && (
+      </main>
+      
+      {/* Conditional rendering for the BottomNavBar */}
+      {(currentView === 'home' || currentView === 'cards' || currentView === 'shop' || currentView === 'products' || currentView === 'profile') && (
         <BottomNavBar currentView={currentView} onNavigate={handleNavigate} />
       )}
     </div>

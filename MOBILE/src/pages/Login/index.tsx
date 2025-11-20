@@ -175,9 +175,11 @@ const Login: React.FC = () => {
       </div>
 
       {showSettings && (
-        <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-50 safe-top pt-24">
-          <div className="w-full max-w-sm bg-surface-dark rounded-xl p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-center text-text-dark mb-4">Endereço da API do Servidor</h3>
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-50 safe-top pt-24" onClick={() => setShowSettings(false)}>
+          <div className="w-full max-w-sm bg-surface-dark rounded-xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-center text-text-dark mb-1">Endereço da API do Servidor</h3>
+            {/* FIX: Added version tag */}
+            <p className="text-center text-xs text-subtle-dark mb-4">v2.0 (Corrigida)</p>
             <input
               type="text"
               value={tempApiUrl}
@@ -188,7 +190,7 @@ const Login: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
-                <span className="text-subtle-dark">{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Offline' : 'Checando'}</span>
+                <span className="text-subtle-dark">{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Checando'}</span>
               </div>
               <div className="flex items-center gap-4">
                 <button onClick={() => checkServerStatus(tempApiUrl)} className="text-primary font-semibold">Testar</button>

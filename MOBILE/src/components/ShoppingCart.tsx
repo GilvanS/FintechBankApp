@@ -1,64 +1,75 @@
 import React from 'react';
 import { PurchasedItem } from '../types';
 
-// FIX: Renamed `cartItems` to `cart` and added `onUpdateQuantity` to match props from parent.
+// FIX: Added a more detailed interface for props, ensuring all necessary handlers are present.
 interface ShoppingCartProps {
-    cart: PurchasedItem[];
+    cartItems: PurchasedItem[];
+    onUpdateCart: (items: PurchasedItem[]) => void;
     onBack: () => void;
-    onCheckout: () => void;
-    // FIX: Corrected the onUpdateQuantity prop signature to accept item ID and quantity.
-    onUpdateQuantity: (itemId: string, quantity: number) => void;
 }
 
-const ShoppingCart: React.FC<ShoppingCartProps> = ({ cart, onBack, onCheckout, onUpdateQuantity }) => {
-    // FIX: Updated total calculation to account for item quantity.
-    const total = cart.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
+const ShoppingCart: React.FC<ShoppingCartProps> = ({ cartItems = [], onUpdateCart, onBack }) => {
+
+    // FIX: Safely calculate the total by ensuring `cartItems` is an array.
+    const total = cartItems.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
+
+    const handleRemove = (itemId: string) => {
+        onUpdateCart(cartItems.filter(item => item.id !== itemId));
+    };
+
+    const handleQuantityChange = (itemId: string, quantity: number) => {
+        if (quantity < 1) {
+            handleRemove(itemId);
+            return;
+        }
+        onUpdateCart(cartItems.map(item => item.id === itemId ? { ...item, quantity } : item));
+    };
 
     return (
         <div className="bg-background-dark text-white min-h-full flex flex-col">
-            <header className="flex items-center p-4 border-b border-subtle-dark/50">
-                <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10">
+            <header className="flex items-center justify-between p-4 border-b border-subtle-dark/50">
+                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
-                <h2 className="text-xl font-bold text-white">Meu Carrinho</h2>
+                <h2 className="text-2xl font-bold text-white">Carrinho</h2>
+                <div className="w-6"/>
             </header>
 
-            {cart.length === 0 ? (
-                <div className="flex-grow flex flex-col items-center justify-center text-center">
-                    <svg className="w-16 h-16 text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                    <h3 className="text-lg font-semibold text-white">Seu carrinho está vazio</h3>
-                    <p className="text-gray-400">Adicione produtos para vê-los aqui.</p>
+            {cartItems.length === 0 ? (
+                <div className="flex-grow flex items-center justify-center">
+                    <p className="text-white/70">Seu carrinho está vazio.</p>
                 </div>
             ) : (
-                <>
-                    <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-3">
-                        {cart.map((item, index) => (
-                             <div key={`${item.id}-${index}`} className="bg-surface-dark rounded-lg p-3 flex items-center space-x-4">
-                                <img src={item.imageUrl} alt={item.name} className="w-16 h-16 object-cover rounded-md" />
-                                <div className="flex-grow">
-                                    <p className="font-semibold text-white text-sm">{item.name}</p>
-                                    <p className="text-primary font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price)}</p>
+                <main className="flex-grow overflow-y-auto no-scrollbar p-4">
+                    {cartItems.map(item => (
+                        <div key={item.id} className="flex items-center gap-4 mb-4">
+                            <img src={item.imageUrl} alt={item.name} className="w-20 h-20 rounded-lg object-cover" />
+                            <div className="flex-grow">
+                                <h3 className="font-semibold text-white truncate">{item.name}</h3>
+                                <p className="text-primary font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price)}</p>
+                                <div className="flex items-center gap-2 mt-2">
+                                    <button onClick={() => handleQuantityChange(item.id, (item.quantity || 1) - 1)} className="w-6 h-6 rounded-full bg-surface-dark">-</button>
+                                    <span>{item.quantity || 1}</span>
+                                    <button onClick={() => handleQuantityChange(item.id, (item.quantity || 1) + 1)} className="w-6 h-6 rounded-full bg-surface-dark">+</button>
                                 </div>
-                                <button onClick={() => onUpdateQuantity(item.id, 0)} className="p-2 text-gray-500 hover:text-red-400">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                </button>
                             </div>
-                        ))}
-                    </main>
-                    <footer className="p-4 border-t border-subtle-dark/50 space-y-4">
-                        <div className="flex justify-between items-center text-lg">
-                            <span className="text-gray-300">Total</span>
-                            <span className="font-bold text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>
+                            <button onClick={() => handleRemove(item.id)} className="text-subtle-dark hover:text-white">
+                                <span className="material-symbols-outlined">delete</span>
+                            </button>
                         </div>
-                        <button
-                            onClick={onCheckout}
-                            className="w-full py-4 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90"
-                        >
-                            Finalizar Compra
-                        </button>
-                    </footer>
-                </>
+                    ))}
+                </main>
             )}
+
+            <footer className="p-4 bg-background-dark border-t border-subtle-dark/50">
+                <div className="flex justify-between items-center mb-4">
+                    <span className="text-white/70">Total</span>
+                    <span className="text-2xl font-bold text-primary">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>
+                </div>
+                <button disabled={cartItems.length === 0} className="w-full bg-primary text-background-dark font-bold py-3 px-4 rounded-lg hover:bg-primary/90 transition-colors disabled:bg-primary/50 disabled:cursor-not-allowed">
+                    Finalizar Compra
+                </button>
+            </footer>
         </div>
     );
 };
