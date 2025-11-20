@@ -10,18 +10,19 @@ import Profile from '../../components/Profile';
 import ShoppingCart from '../../components/ShoppingCart';
 import Statement from '../../components/Statement';
 import Shop from '../../components/Shop';
-// import StoriesPopup from '../../components/StoriesPopup'; // Component does not exist
+import StoriesPopup from '../../components/StoriesPopup';
+import CurrentInvoiceView from '../../components/CurrentInvoiceView'; // Import Fatura Aberta
+import ClosedInvoiceView from '../../components/ClosedInvoiceView';   // Import Fatura Fechada
 import { Article } from '../../components/NewsSection';
 import { PurchasedItem } from '../../types';
-// import { storiesData } from '../../data/storiesData'; // Data file does not exist
+import { storiesData } from '../../data/storiesData';
 
-
-// Define the possible views in the app
-type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart';
+// Add new views for the invoices to the type definition
+type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart' | 'currentInvoice' | 'closedInvoice';
 
 const Home: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('home');
-  const { user: authUser, logout } = useAuth(); // Use the authenticated user from context
+  const { user: authUser, logout } = useAuth();
   const [news, setNews] = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [cart, setCart] = useState<PurchasedItem[]>([]);
@@ -30,9 +31,7 @@ const Home: React.FC = () => {
   useEffect(() => {
     if (authUser) {
       fetchNews();
-      // FIX: Show stories popup if the flag is set for the user.
-      // The flag is true on the mock user by default.
-      // setIsStoriesOpen(authUser.showStoriesPopup || false); // Commented: StoriesPopup component does not exist
+      setIsStoriesOpen(authUser.showStoriesPopup || false);
     }
   }, [authUser]);
 
@@ -62,10 +61,7 @@ const Home: React.FC = () => {
 
   const handleNavigate = (view: View) => setCurrentView(view);
 
-  // Handler to close the stories popup
-  const handleCloseStories = () => {
-    setIsStoriesOpen(false);
-  };
+  const handleCloseStories = () => setIsStoriesOpen(false);
 
   const handleAddToCart = (item: PurchasedItem) => {
     setCart(prev => {
@@ -81,6 +77,7 @@ const Home: React.FC = () => {
     setCurrentView('shoppingCart');
   };
 
+  // This function renders the correct component based on the current view state
   const renderContent = () => {
     if (!authUser) {
         return <div className="flex items-center justify-center h-full"><p className="text-white">Erro de autenticação. Redirecionando...</p></div>;
@@ -99,6 +96,9 @@ const Home: React.FC = () => {
                     case 'shop': return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((s, i) => s + (i.quantity || 0), 0)} onNavigate={handleNavigate} />;
                     case 'shoppingCart': return <ShoppingCart onBack={() => handleNavigate('shop')} cartItems={cart} onUpdateCart={setCart} user={authUser} />;
                     case 'statement': return <Statement user={authUser} onBack={() => handleNavigate('home')} />;
+                    // ADDED: Render invoice views when the state matches
+                    case 'currentInvoice': return <CurrentInvoiceView user={authUser} onBack={() => handleNavigate('cards')} />;
+                    case 'closedInvoice': return <ClosedInvoiceView user={authUser} onBack={() => handleNavigate('cards')} />;
                     case 'products': return <Products />;
                     case 'profile': return <Profile user={authUser} onLogout={logout} />;
                     default: return <HomeView user={authUser} onNavigate={handleNavigate} news={news} />;
@@ -110,10 +110,9 @@ const Home: React.FC = () => {
 
   return (
     <div className="h-screen bg-background-dark text-white flex flex-col">
-      {/* --- REINTEGRATED STORIES POPUP --- */}
-      {/* {isStoriesOpen && currentView === 'home' && (
+      {isStoriesOpen && currentView === 'home' && (
         <StoriesPopup stories={storiesData} onClose={handleCloseStories} />
-      )} */}
+      )}
 
       <main className="flex-1 overflow-y-auto no-scrollbar">
         {renderContent()}
