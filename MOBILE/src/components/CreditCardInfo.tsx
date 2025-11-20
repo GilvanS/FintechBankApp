@@ -1,22 +1,18 @@
 import React from 'react';
-import { User } from '../types';
-
-// Define um tipo mais específico para a função onNavigate, se necessário.
-// Isso garante que o componente só possa navegar para as visualizações que ele conhece.
-type NavigateTo = 'cards' | 'currentInvoice' | 'closedInvoice';
+import { User, View } from '../types';
 
 interface CreditCardInfoProps {
   user: User;
-  onNavigate: (view: NavigateTo) => void;
+  onNavigate: (view: View) => void;
 }
 
 const CreditCardInfo: React.FC<CreditCardInfoProps> = ({ user, onNavigate }) => {
-  // Encontra a fatura atual (aberta)
-  const currentInvoice = user.invoices?.find(invoice => invoice.status === 'open');
+  // Adiciona uma verificação para garantir que user.invoices exista antes de usar .find()
+  // Isso torna o componente mais robusto e evita o crash caso a API não retorne as faturas.
+  const currentInvoice = user.invoices && user.invoices.find(invoice => invoice.status === 'open');
 
-  // Se não houver fatura atual, o componente não renderiza nada.
   if (!currentInvoice) {
-    return null;
+    return null; // Se não houver fatura, o componente não renderiza nada.
   }
 
   return (
