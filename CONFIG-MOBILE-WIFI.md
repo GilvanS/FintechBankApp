@@ -1,6 +1,6 @@
 # Configuração do Ambiente: API (Backend) e Mobile (Frontend) via Wi-Fi
 
-Este documento descreve os passos para configurar o ambiente de desenvolvimento completo (backend e frontend) para que o aplicativo mobile se comunique com a API na sua rede local. O princípio é que a **API deve se adequar para servir o Mobile**, e não o contrário. Para isso, a API precisa estar acessível na rede, и o Mobile precisa saber onde encontrá-la.
+Este documento descreve os passos para configurar o ambiente de desenvolvimento completo (backend e frontend) para que o aplicativo mobile se comunique com a API na sua rede local. O princípio é que a **API deve se adequar para servir o Mobile**, e não o contrário. Para isso, a API precisa estar acessível na rede, e o Mobile precisa saber onde encontrá-la.
 
 ## Passo 1: Configuração do Servidor (API)
 

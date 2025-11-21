@@ -53,28 +53,33 @@ Este documento detalha o planejamento e as etapas para transformar o projeto `WE
 ### **Fase 6: Configuração Final e Compilação para Android**
 
 -   [x] **Tarefa 6.1: Configurar a Comunicação com o Backend**
-    -   A comunicação com a API foi configurada utilizando `ngrok`.
-
 -   [x] **Tarefa 6.2: Sincronizar o Projeto com o Capacitor**
-    -   Executado `npx cap sync` para atualizar a plataforma Android com as últimas alterações.
-
 -   [x] **Tarefa 6.3: Compilar e Gerar o APK de Debug via Gradle**
-    -   O código foi preparado e enviado para o repositório para compilação local pelo desenvolvedor.
-
 -   [x] **Tarefa 6.4: Documentação Final e Encerramento**
-    -   A documentação foi finalizada, e a migração do projeto `WEB` para `MOBILE` foi concluída com sucesso.
 
 ---
 
 ### **Fase 7: Correção de Bug Pós-Login (MOBILE)**
 
--   [x] **Tarefa 7.1: Análise e Documentação do Bug**
-    -   **Bug:** Erro de tempo de execução `TypeError: Cannot read properties of undefined (reading 'fullName')` ocorre após o login no aplicativo `MOBILE`.
-    -   **Causa Raiz:** O componente principal da aplicação, renderizado após o login, não está recebendo os dados do objeto `user`. Isso faz com que qualquer tentativa de acessar `user.fullName` (ou qualquer outra propriedade) resulte em um erro, impedindo a renderização da tela Home.
+-   [x] **Tarefa 7.1:** Análise e Documentação do Bug
+-   [x] **Tarefa 7.2:** Implementação da Correção
+-   [x] **Tarefa 7.3:** Validação da Correção e Encerramento
 
--   [x] **Tarefa 7.2: Implementação da Correção**
-    -   **Análise:** O erro foi causado porque o componente `Home` esperava receber o objeto `user` como uma propriedade (prop), mas o componente `App.tsx` o renderizava sem passar essa prop. A versão web funcionava por usar o `AuthContext` de forma diferente.
-    -   **Correção:** Ajustar a renderização do componente `Home` no arquivo `MOBILE/src/App.tsx`. A linha `<Home />` foi alterada para `<Home user={user} onLogout={handleLogout} refreshUserData={handleUpdateUser} />`, passando explicitamente os dados do usuário e as funções de logout e update, conforme esperado pelo componente.
+---
 
--   [x] **Tarefa 7.3: Validação da Correção e Encerramento**
-    -   O fluxo de login no `MOBILE` foi corrigido. O código-fonte foi atualizado e está pronto para a validação final pelo desenvolvedor.
+### **Fase 8: Ajustes Finais e Melhorias de UX (MOBILE)**
+
+-   [x] **Tarefa 8.1: Análise e Correção de Divergências Visuais**
+    -   **Problema:** As cores da tela `Home` no `MOBILE` estão diferentes da versão `WEB`, notavelmente a cor de fundo que é branca em vez de azul-escura.
+    -   **Análise:** A investigação no código-fonte do `WEB` (`App.tsx`) identificou o uso da classe `bg-background-dark`. Essa variável de cor não está definida ou não está sendo aplicada corretamente no projeto `MOBILE`.
+    -   **Ação:** Adicionar a variável de cor correspondente ao `background-dark` no arquivo `MOBILE/src/theme/variables.css` e garantir que ela seja aplicada como a cor de fundo principal da aplicação para unificar a identidade visual.
+
+-   [x] **Tarefa 8.2: Correção do Bug de Navegação na Home**
+    -   **Problema:** Todos os botões de navegação na tela `Home` (ex: PIX, Cartões) redirecionam incorretamente de volta para a própria tela `Home`.
+    -   **Análise:** O problema provavelmente reside na função `handleNavigate` ou no gerenciamento do estado `currentView` dentro do componente `Home/index.tsx`. A lógica que deveria atualizar a `view` para a seção correta não está funcionando como esperado.
+    -   **Ação:** Revisar e depurar a função `handleNavigate` no arquivo `MOBILE/src/pages/Home/index.tsx` para garantir que o estado `currentView` seja atualizado corretamente com a `view` selecionada, roteando o usuário para a tela certa.
+
+-   [x] **Tarefa 8.3: Implementar Cache para o Endereço do Backend (Ngrok)**
+    -   **Problema:** O endereço IP do `ngrok` (ou qualquer URL de backend) precisa ser inserido toda vez que o aplicativo é iniciado, causando atrito no desenvolvimento.
+    -   **Análise:** O aplicativo não possui um mecanismo para persistir o endereço da API entre as sessões.
+    -   **Ação:** Modificar o serviço `api.ts` para que, ao configurar um novo endereço de API, ele seja salvo no `localStorage` junto com um timestamp. Ao iniciar, o aplicativo verificará se existe um endereço no cache com menos de 60 minutos. Se existir, ele será usado automaticamente; caso contrário, o aplicativo solicitará o novo endereço.

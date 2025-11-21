@@ -3,6 +3,8 @@ import { Preferences } from '@capacitor/preferences';
 import { PixContact, User } from '../types';
 
 const DEV_API_URL = '__NGROK_URL__'; // substitute pelo seu URL ngrok
+const API_CACHE_KEY = 'apiBaseUrlCache';
+const CACHE_DURATION_MS = 60 * 60 * 1000; // 60 minutos
 
 // Cria a instance do Axios SEM uma baseURL fixa
 const api = axios.create({
@@ -34,25 +36,44 @@ export const setApiBaseUrl = (url: string) => {
     base = t + '/api/v1';
   }
   api.defaults.baseURL = base;
-  console.log('API Base URL configurada para:', base);
+
+  // Salva a URL e o timestamp no localStorage
+  const cacheData = {
+    url: base,
+    timestamp: Date.now(),
+  };
+  localStorage.setItem(API_CACHE_KEY, JSON.stringify(cacheData));
+
+  console.log('API Base URL configurada e salva no cache:', base);
 };
 
 /**
- * Função para inicializar a API quando o app abre.
- * Ela tenta carregar a URL salva na memória do dispositivo ou usa a de desenvolvimento.
+ * Função para inicializar la API quando o app abre.
+ * Tenta carregar a URL do cache se ela não tiver expirado.
  */
 export const initializeApi = async () => {
-  const { value } = await Preferences.get({ key: 'apiBaseUrl' });
-  if (value) {
-    console.log('API URL carregada:', value);
-    setApiBaseUrl(value);
-  } else if (DEV_API_URL !== '__NGROK_URL__') {
+  const cachedData = localStorage.getItem(API_CACHE_KEY);
+
+  if (cachedData) {
+    const { url, timestamp } = JSON.parse(cachedData);
+    const isCacheValid = (Date.now() - timestamp) < CACHE_DURATION_MS;
+
+    if (isCacheValid) {
+      console.log('API URL carregada do cache:', url);
+      setApiBaseUrl(url); // A própria função se encarrega de normalizar e salvar
+      return;
+    }
+     console.log('Cache da API URL expirado.');
+  }
+
+  if (DEV_API_URL !== '__NGROK_URL__') {
     console.log(`Usando API URL de desenvolvimento: ${DEV_API_URL}`);
     setApiBaseUrl(DEV_API_URL);
   } else {
-    console.log('Nenhuma API URL salva encontrada. Por favor, configure na tela de login.');
+    console.log('Nenhuma API URL válida encontrada. Por favor, configure na tela de login.');
   }
 };
+
 
 // ... (código anterior)
 
