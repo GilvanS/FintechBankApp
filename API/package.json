@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Backend API for FintechBankApp",
   "main": "index.cjs",
-  "type": "", 
+  "type": "",
   "scripts": {
     "start": "node index.cjs",
     "dev": "node --watch index.cjs",
@@ -22,6 +22,7 @@
     "express-validator": "^7.3.0",
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.9.7",
+    "newman-reporter-html": "^1.0.5",
     "swagger-autogen": "^2.23.7",
     "swagger-ui-express": "^5.0.1",
     "yamljs": "^0.3.0"

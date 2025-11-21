@@ -4,7 +4,7 @@ const fs = require('fs');
 
 // Configurações
 const config = {
-    collection: path.join(__dirname, '..', 'postman-collection.json'),
+    collection: path.join(__dirname, 'postman-collection.json'),
     environment: null, // Usaremos as variáveis da collection
     reporters: ['cli', 'json', 'html'],
     reporter: {
@@ -23,19 +23,26 @@ const config = {
 
 console.log('🚀 Iniciando testes Newman para FintechBankApp...\n');
 
-// Função para verificar se o servidor está rodando
-async function checkServerHealth() {
-    try {
-        const response = await fetch('http://localhost:3001/health');
-        if (response.ok) {
-            console.log('✅ Servidor está rodando e saudável\n');
-            return true;
+// Função para verificar se o servidor está rodando, com retentativas
+async function checkServerHealth(retries = 5, interval = 2000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            // CORREÇÃO: A URL correta é /api/health
+            const response = await fetch('http://localhost:3001/api/health');
+            if (response.ok) {
+                console.log('✅ Servidor está rodando e saudável\n');
+                return true;
+            }
+        } catch (error) {
+            // Ignora o erro e tenta novamente
         }
-    } catch (error) {
-        console.log('❌ Servidor não está rodando ou não está saudável');
-        console.log('   Por favor, inicie o servidor com: npm start\n');
-        return false;
+        console.log(`(${i + 1}/${retries}) Servidor não respondeu. Tentando novamente em ${interval / 1000}s...`);
+        await new Promise(res => setTimeout(res, interval));
     }
+
+    console.log('❌ Servidor não está rodando ou não está saudável após várias tentativas.');
+    console.log('   Por favor, inicie o servidor com: npm start\n');
+    return false;
 }
 
 // Função principal para executar os testes

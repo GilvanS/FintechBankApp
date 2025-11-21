@@ -1,0 +1,22 @@
+
+> fintech-bank-app-api@1.0.0 start
+> node index.cjs
+
+⚠️ Configuracao Databricks ausente ou token placeholder. Ativando mockMode.
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:300🔍 Health check solicitado
+🔍 Tentativa de login - CPF: 12345678901
+Error: MockMode ativo: operacao de banco nao disponivel no desenvolvimento local.
+    at DatabricksService.executeQuery (/home/user/FintechBankApp/API/index.cjs:152:19)
+    at /home/user/FintechBankApp/API/index.cjs:396:43
+    at /home/user/FintechBankApp/API/index.cjs:220:21
+    at Layer.handle [as handle_request] (/home/user/FintechBankApp/API/node_modules/express/lib/router/layer.js:95:5)
+    at next (/home/user/FintechBankApp/API/node_modules/express/lib/router/route.js:149:13)
+    at handleValidationErrors (/home/user/FintechBankApp/API/index.cjs:254:5)
+    at Layer.handle [as handle_request] (/home/user/FintechBankApp/API/node_modules/express/lib/router/layer.js:95:5)
+    at next (/home/user/FintechBankApp/API/node_modules/express/lib/router/route.js:149:13)
+    at middleware (/home/user/FintechBankApp/API/node_modules/express-validator/lib/middlewares/check.js:16:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
