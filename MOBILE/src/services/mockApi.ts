@@ -874,6 +874,30 @@ export const deletePixKey = async (cpf: string, key: string): Promise<{ success:
     return { success: true, message: 'Chave PIX removida.' };
 };
 
+export const getUserMe = async (): Promise<{ success: boolean; message?: string; user?: Omit<User, 'password'> }> => {
+    await delay(500);
+    const token = localStorage.getItem('token');
+    if (!token) {
+        return { success: false, message: 'Não autenticado.' };
+    }
+    // No mock, o token é o próprio CPF
+    const user = _findUser(token);
+    if (user) {
+        const { password, ...userWithoutPassword } = user;
+        return { success: true, user: userWithoutPassword };
+    }
+    return { success: false, message: 'Usuário não encontrado.' };
+};
+
+export const getUserStatement = async (cpf: string): Promise<{ success: boolean; message?: string; transactions?: Transaction[] }> => {
+    await delay(500);
+    const user = _findUser(cpf);
+    if (user) {
+        return { success: true, transactions: user.transactions };
+    }
+    return { success: false, message: 'Usuário não encontrado.' };
+};
+
 export const getUserByCpf = async (cpf: string): Promise<{ success: boolean; message?: string; user?: Omit<User, 'password'> }> => {
     await delay(500);
     const user = _findUser(cpf);

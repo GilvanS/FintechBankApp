@@ -64,6 +64,17 @@ npm run dev
 - A interface web abrirá em `http://localhost:5173` (padrão do Vite).
 - O frontend consome a API em `http://localhost:3001` (ajustável via `.env`/config).
 
+## Expondo API para Mobile (ngrok)
+Para permitir que o aplicativo mobile acesse a API localmente:
+
+1. Certifique-se de que a API está rodando (`npm run dev:api`).
+2. Em um novo terminal, execute:
+```bash
+ngrok http 3001
+```
+3. Copie a URL HTTPS gerada (ex: `https://xxxx.ngrok-free.app`).
+4. Atualize a URL da API no projeto Mobile (em `MOBILE/src/services/api.ts` ou `.env`).
+
 ## Postgres via Docker (opção de branch Postgres)
 Suba o container antes de executar migração/seed:
 ```bash

@@ -222,7 +222,11 @@ const Home: React.FC = () => {
 
     return (
         <IonPage>
-            <Header onNavigate={navigateTo} />
+            <Header
+                user={user}
+                onNavigateToMenu={() => navigateTo('menu')}
+                onNavigateToNotifications={() => navigateTo('notifications')}
+            />
             <IonContent className="no-scrollbar">
                 {renderContent()}
             </IonContent>

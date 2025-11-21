@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getPixContacts, getPixRecipientInfo, performPix, performPixCreditInstallment, getUserByCpf } from '../services/api';
+import { getPixContacts, getPixRecipientInfo, performPixTransfer, performPixCreditTransfer, getUserByCpf } from '../services/api';
 import { PixContact, Transaction, User } from '../types';
 import Contacts from './Contacts';
 import PixKeyManagement from './PixKeyManagement';
@@ -75,9 +75,9 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
             let result;
             if (transferDetails.useCredit) {
-                result = await performPixCreditInstallment(user.cpf, transferDetails.amount, 1);
+                result = await performPixCreditTransfer(user.cpf, transferDetails.key, transferDetails.amount, transferDetails.description, 1, pin);
             } else {
-                result = await performPix(user.cpf, transferDetails.key, transferDetails.amount, transferDetails.description);
+                result = await performPixTransfer(transferDetails.key, transferDetails.amount, transferDetails.description, pin, user.cpf);
             }
             
             if (result.success) {

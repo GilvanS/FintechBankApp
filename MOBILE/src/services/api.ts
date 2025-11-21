@@ -222,6 +222,13 @@ export async function registerPixKey(type: 'CPF' | 'EMAIL', key: string): Promis
   }
 }
 
-export { updateUserProfile } from './mockApi';
+export { 
+    updateUserProfile,
+    purchaseWithDebit,
+    purchaseWithCard,
+    getUserMe,
+    getUserStatement,
+    getUserMe as getProfile
+} from './mockApi';
 
 export default api;
