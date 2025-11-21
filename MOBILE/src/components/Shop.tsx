@@ -6,7 +6,7 @@ import ProductPage from './ProductPage';
 // FIX: Updated ShopProps interface to include all necessary handlers from the parent component.
 interface ShopProps {
     onBack: () => void;
-    onAddToCart: (item: PurchasedItem) => void;
+    onAddToCart: (item: PurchasedasedItem) => void;
     onInitiatePurchase: (item: PurchasedItem) => void;
     cartItemCount: number;
     onNavigate: (view: string) => void;
@@ -52,7 +52,7 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
                 <div className="grid grid-cols-2 gap-4">
                     {products.map(product => (
                         <div key={product.id} onClick={() => handleProductClick(product)} className="bg-surface-dark rounded-lg overflow-hidden cursor-pointer group">
-                            <img src={product.image} alt={product.name} className="w-full h-32 object-cover group-hover:opacity-80 transition-opacity" />
+                            <img src={product.imageUrl} alt={product.name} className="w-full h-32 object-cover group-hover:opacity-80 transition-opacity" />
                             <div className="p-3">
                                 <h3 className="font-semibold text-white truncate">{product.name}</h3>
                                 <p className="text-sm text-primary font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.price)}</p>

@@ -1,5 +1,4 @@
 import React from 'react';
-// FIX: Corrected import path for types from parent directory.
 import { User, PurchasedItem } from '../types';
 
 interface PaymentMethodsProps {
@@ -11,7 +10,6 @@ interface PaymentMethodsProps {
 
 const PaymentMethods: React.FC<PaymentMethodsProps> = ({ user, item, onBack, onSelectMethod }) => {
     if (!item) {
-        // Handle case where no item is selected, maybe navigate back or show an error.
         return (
             <div className="bg-background-dark text-white p-4 min-h-full flex flex-col items-center justify-center">
                 <p>Nenhum item selecionado para compra.</p>

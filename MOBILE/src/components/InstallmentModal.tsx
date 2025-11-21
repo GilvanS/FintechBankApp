@@ -1,7 +1,4 @@
-
-
 import React, { useState, useMemo } from 'react';
-// FIX: Corrected import path for types from parent directory.
 import { User, PurchasedItem } from '../types';
 
 interface InstallmentModalProps {
@@ -13,7 +10,7 @@ interface InstallmentModalProps {
 }
 
 const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onClose, item, user, onConfirm }) => {
-    const [step, setStep] = useState(1); // 1 for cashback, 2 for installments
+    const [step, setStep] = useState(1);
     const [cashbackToUse, setCashbackToUse] = useState(0);
     const [selectedInstallments, setSelectedInstallments] = useState(1);
 
@@ -23,7 +20,6 @@ const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onClose, it
     const installmentOptions = useMemo(() => {
         const options = [];
         for (let i = 1; i <= 12; i++) {
-            // Simple interest simulation: 1% per month after the first
             const interest = i > 1 ? (priceAfterCashback * 0.01 * (i - 1)) : 0;
             const total = priceAfterCashback + interest;
             const value = total / i;

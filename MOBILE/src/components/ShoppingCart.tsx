@@ -1,72 +1,63 @@
 import React from 'react';
-import { Product } from '../types';
+import { PurchasedItem } from '../types';
 
 interface ShoppingCartProps {
-    cart: Product[];
-    onClose: () => void;
-    onCheckout: () => void; // FIX: Renomeado para refletir a ação de finalização
-    onRemoveFromCart: (productId: number) => void;
+    cart: PurchasedItem[];
+    onBack: () => void;
+    onCheckout: () => void;
+    onUpdateQuantity: (itemId: string, quantity: number) => void;
 }
 
-// FIX: A lógica de finalização de compra foi implementada.
-// Agora, o botão "Finalizar Compra" limpa o carrinho, exibe um alerta de sucesso
-// e navega para a próxima tela, como esperado pelo usuário.
-const ShoppingCart: React.FC<ShoppingCartProps> = ({ cart, onClose, onCheckout, onRemoveFromCart }) => {
-    const total = cart.reduce((sum, item) => sum + item.price, 0);
+const ShoppingCart: React.FC<ShoppingCartProps> = ({ cart, onBack, onCheckout, onUpdateQuantity }) => {
+    const total = cart.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 animate-fade-in-fast">
-            <div className="bg-surface-dark rounded-2xl shadow-lg w-full max-w-md m-4 flex flex-col max-h-[80vh]">
-                <header className="flex justify-between items-center p-4 border-b border-subtle-dark">
-                    <h2 className="text-xl font-bold text-white">Meu Carrinho</h2>
-                    <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10">
-                        <span className="material-symbols-outlined text-white">close</span>
-                    </button>
-                </header>
-
-                <main className="overflow-y-auto p-4 flex-grow">
-                    {cart.length === 0 ? (
-                        <div className="text-center py-10">
-                            <span className="material-symbols-outlined text-6xl text-gray-600">shopping_cart</span>
-                            <p className="mt-4 text-gray-400">Seu carrinho está vazio.</p>
-                        </div>
-                    ) : (
-                        <ul className="space-y-3">
-                            {cart.map(item => (
-                                <li key={item.id} className="flex items-center bg-background-dark p-3 rounded-lg">
-                                    <img src={item.image} alt={item.name} className="w-16 h-16 rounded-md object-cover mr-4"/>
-                                    <div className="flex-grow">
-                                        <p className="font-semibold text-white">{item.name}</p>
-                                        <p className="text-primary font-bold">{item.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+        <div className="bg-background-dark text-white min-h-full flex flex-col">
+            <header className="flex items-center justify-between p-4 border-b border-subtle-dark/50">
+                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <h2 className="text-2xl font-bold text-white">Carrinho</h2>
+                <div className="w-6"></div>
+            </header>
+            <main className="flex-grow overflow-y-auto no-scrollbar p-4">
+                {cart.length === 0 ? (
+                    <div className="text-center text-subtle-dark">
+                        <p>Seu carrinho está vazio.</p>
+                    </div>
+                ) : (
+                    <div>
+                        {cart.map(item => (
+                            <div key={item.id} className="flex items-center justify-between mb-4">
+                                <div className="flex items-center">
+                                    <img src={item.imageUrl} alt={item.name} className="w-16 h-16 object-cover rounded-lg mr-4" />
+                                    <div>
+                                        <h3 className="font-semibold text-white">{item.name}</h3>
+                                        <p className="text-sm text-primary font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price)}</p>
                                     </div>
-                                    <button onClick={() => onRemoveFromCart(item.id)} className="p-2 rounded-full hover:bg-red-500/20 text-red-400">
-                                        <span className="material-symbols-outlined">delete</span>
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </main>
-
-                {cart.length > 0 && (
-                    <footer className="p-4 border-t border-subtle-dark space-y-4">
-                        <div className="flex justify-between items-center text-lg">
-                            <span className="text-gray-300">Total:</span>
-                            <span className="font-bold text-primary text-xl">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                        </div>
-                        <button 
-                            onClick={onCheckout} 
-                            className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-lg"
-                        >
-                            Finalizar Compra
-                        </button>
-                    </footer>
+                                </div>
+                                <div className="flex items-center">
+                                    <input 
+                                        type="number" 
+                                        value={item.quantity || 1} 
+                                        onChange={(e) => onUpdateQuantity(item.id, parseInt(e.target.value, 10))} 
+                                        className="w-16 text-center bg-surface-dark rounded-md" 
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 )}
-            </div>
-             <style>{`
-                @keyframes fade-in-fast { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-                .animate-fade-in-fast { animation: fade-in-fast 0.2s ease-out forwards; }
-            `}</style>
+            </main>
+            <footer className="p-4 border-t border-subtle-dark/50">
+                <div className="flex justify-between items-center mb-4">
+                    <span className="text-lg font-semibold">Total:</span>
+                    <span className="text-lg font-bold text-primary">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>
+                </div>
+                <button onClick={onCheckout} className="w-full py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90" disabled={cart.length === 0}>
+                    Finalizar Compra
+                </button>
+            </footer>
         </div>
     );
 };

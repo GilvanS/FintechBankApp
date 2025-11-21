@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { IonApp, setupIonicReact } from '@ionic/react';
-import Home from './pages/Home';
+import { User } from './types';
+import { AuthContext } from './context/AuthContext';
 import Login from './pages/Login';
 import PreLoginDashboard from './pages/PreLoginDashboard';
-import { User } from './types';
-import api from './services/api'; // FIX: Corrigido o caminho de importação da API
+import Home from './pages/Home';
+import api from './services/api';
 
-/* Core CSS */
+/* Core CSS & Theme */
 import '@ionic/react/css/core.css';
 import '@ionic/react/css/normalize.css';
 import '@ionic/react/css/structure.css';
@@ -17,74 +19,151 @@ import '@ionic/react/css/text-alignment.css';
 import '@ionic/react/css/text-transformation.css';
 import '@ionic/react/css/flex-utils.css';
 import '@ionic/react/css/display.css';
-
-/* Theme variables */
 import './theme/variables.css';
 
 setupIonicReact();
 
-enum AppView {
-  PRE_LOGIN,
-  LOGIN,
-  HOME,
+// Função de normalizacao do usuario vindo do backend (from WEB)
+function normalizeUserShape(input: Partial<User>): User {
+    const nowIso = new Date().toISOString();
+    const defaultCard = {
+        number: '0000000000000000',
+        dueDate: nowIso,
+        invoiceDueDate: nowIso,
+        closedInvoiceDueDate: nowIso,
+        currentInvoice: 0,
+        closedInvoice: 0,
+        availableLimit: 0,
+        totalLimit: 0,
+        pointsBalance: 0,
+        isBlocked: false,
+        transactions: [],
+        closedTransactions: [],
+    };
+
+    const ccRaw: any = (input as any).credit_card || input.creditCard || {};
+    const toNum = (v: any) => (typeof v === 'number' ? v : Number(v || 0));
+    const toBool = (v: any) => Boolean(v);
+    const toStr = (v: any) => (v == null ? '' : String(v));
+
+    const creditCard = {
+        ...defaultCard,
+        ...(ccRaw || {}),
+        dueDate: ccRaw.dueDate || ccRaw.due_date || defaultCard.dueDate,
+        invoiceDueDate: ccRaw.invoiceDueDate || ccRaw.invoice_due_date || defaultCard.invoiceDueDate,
+        closedInvoiceDueDate: ccRaw.closedInvoiceDueDate || ccRaw.closed_invoice_due_date || defaultCard.closedInvoiceDueDate,
+        currentInvoice: toNum(ccRaw.currentInvoice),
+        closedInvoice: toNum(ccRaw.closedInvoice),
+        availableLimit: toNum(ccRaw.availableLimit),
+        totalLimit: toNum(ccRaw.totalLimit),
+        pointsBalance: toNum(ccRaw.pointsBalance),
+        isBlocked: toBool(ccRaw.isBlocked),
+        transactions: Array.isArray(ccRaw.transactions) ? ccRaw.transactions : [],
+        closedTransactions: Array.isArray(ccRaw.closedTransactions) ? ccRaw.closedTransactions : [],
+    };
+
+    const user: User = {
+        cpf: toStr(input.cpf),
+        fullName: toStr(input.fullName),
+        username: input.username || '',
+        profileDescription: input.profileDescription || '',
+        email: toStr(input.email),
+        password: toStr((input as any).password),
+        balance: toNum(input.balance),
+        transactions: Array.isArray(input.transactions) ? input.transactions : [],
+        isBlocked: toBool(input.isBlocked),
+        role: input.role === 'admin' ? 'admin' : 'user',
+        pixDailyLimit: toNum(input.pixDailyLimit),
+        pixKeys: Array.isArray(input.pixKeys) ? input.pixKeys : [],
+        pixContacts: Array.isArray(input.pixContacts) ? input.pixContacts : [],
+        limitIncreaseRequest: input.limitIncreaseRequest ?? null,
+        showStoriesPopup: toBool(input.showStoriesPopup),
+        purchasedItems: Array.isArray(input.purchasedItems) ? input.purchasedItems : [],
+        creditCard,
+    };
+
+    user.creditCard.dueDate = toStr(user.creditCard.dueDate) || nowIso;
+    user.creditCard.invoiceDueDate = toStr(user.creditCard.invoiceDueDate) || nowIso;
+    user.creditCard.closedInvoiceDueDate = toStr(user.creditCard.closedInvoiceDueDate) || nowIso;
+
+    return user;
 }
 
+
 const App: React.FC = () => {
-  const [view, setView] = useState<AppView>(AppView.PRE_LOGIN);
   const [user, setUser] = useState<User | null>(null);
+  const [view, setView] = useState('prelogin'); // prelogin, login, home
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const data = await api.getProfile();
-        setUser(data);
-        setView(AppView.HOME);
+        const userData = await api.getProfile();
+        const normalizedUser = normalizeUserShape(userData);
+        setUser(normalizedUser);
+        setView('home');
       } catch (error) {
-        setView(AppView.PRE_LOGIN);
+        setView('prelogin');
       }
     };
     checkAuth();
   }, []);
 
-  const handleLoginSuccess = (userData: User) => {
-    setUser(userData);
-    setView(AppView.HOME);
+  const handleLogin = (loggedInUser: Omit<User, 'password'>) => {
+    const normalized = normalizeUserShape(loggedInUser as Partial<User>);
+    setUser(normalized);
+    setView('home');
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     setUser(null);
-    setView(AppView.PRE_LOGIN);
+    setView('prelogin');
   };
 
-  const refreshUserData = async () => {
+  const handleUpdateUser = useCallback(async () => {
     if (user) {
       try {
-        const updatedUser = await api.getProfile();
-        setUser(updatedUser);
+        const updatedUserData = await api.getProfile();
+        const normalized = normalizeUserShape(updatedUserData);
+        setUser(normalized);
       } catch (error) {
         console.error("Falha ao atualizar os dados do usuário:", error);
         handleLogout();
       }
     }
+  }, [user]);
+
+  const navigateTo = (newView: string) => {
+    setView(newView);
+  };
+
+  const authContextValue = {
+    user,
+    login: handleLogin,
+    logout: handleLogout,
+    updateUser: handleUpdateUser,
+    view,
+    navigateTo,
   };
 
   const renderView = () => {
     switch (view) {
-      case AppView.LOGIN:
-        return <Login onLoginSuccess={handleLoginSuccess} onNavigateToPreLogin={() => setView(AppView.PRE_LOGIN)} />;
-      case AppView.HOME:
-        return user ? <Home user={user} onLogout={handleLogout} refreshUserData={refreshUserData} /> : <Login onLoginSuccess={handleLoginSuccess} onNavigateToPreLogin={() => setView(AppView.PRE_LOGIN)} />;
-      case AppView.PRE_LOGIN:
+      case 'login':
+        return <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} />;
+      case 'home':
+        return user ? <Home /> : <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} />;
+      case 'prelogin':
       default:
-        return <PreLoginDashboard onNavigateToLogin={() => setView(AppView.LOGIN)} />;
+        return <PreLoginDashboard onNavigateToLogin={() => setView('login')} />;
     }
   };
 
   return (
-    <IonApp>
-      {renderView()}
-    </IonApp>
+    <AuthContext.Provider value={authContextValue}>
+      <IonApp>
+        {renderView()}
+      </IonApp>
+    </AuthContext.Provider>
   );
 };
 
