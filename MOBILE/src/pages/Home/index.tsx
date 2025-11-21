@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useHistory } from 'react-router-dom';
 import HomeView from '../../components/HomeView';
 import BottomNavBar from '../../components/BottomNavBar';
 import { useAuth } from '../../context/AuthContext';
@@ -14,24 +13,27 @@ import Shop from '../../components/Shop';
 import CurrentInvoiceView from '../../components/CurrentInvoiceView';
 import ClosedInvoiceView from '../../components/ClosedInvoiceView';
 import { Article } from '../../components/NewsSection';
-import { PurchasedItem, View } from '../../types'; // Importa o tipo View
+import { PurchasedItem, View, User } from '../../types';
 
-const Home: React.FC = () => {
+interface HomeProps {
+  user: User;
+  onLogout: () => void;
+  refreshUserData: () => Promise<void>;
+}
+
+const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
   const [currentView, setCurrentView] = useState<View>('home');
-  const { user: authUser, logout } = useAuth();
-  const history = useHistory();
+  // We can still use useAuth if needed, but we rely on props for main user data and logout
+  const { logout } = useAuth(); 
   const [news, setNews] = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [cart, setCart] = useState<PurchasedItem[]>([]);
 
+  // Removed useHistory and useEffect for redirect, as App.tsx handles this.
+
   useEffect(() => {
-    if (authUser) {
       fetchNews();
-    } else {
-      // Redirect to login if not authenticated
-      history.push('/login');
-    }
-  }, [authUser, history]);
+  }, []);
 
   const fetchNews = async () => {
     const fallbackNews = [
@@ -73,9 +75,14 @@ const Home: React.FC = () => {
     setCurrentView('shoppingCart');
   };
 
+  const handleLogout = () => {
+    logout(); // clear auth context
+    onLogout(); // notify parent app
+  };
+
   const renderContent = () => {
-    if (!authUser) {
-        return <div className="flex items-center justify-center h-full"><p className="text-white">Erro de autenticação. Redirecionando...</p></div>;
+    if (!user) {
+      return <div className="flex items-center justify-center h-full"><p className="text-white">Erro de autenticação.</p></div>;
     }
     if (isLoading && currentView === 'home') {
         return <div className="flex items-center justify-center h-full"><p className="text-white">Carregando...</p></div>;
@@ -85,17 +92,17 @@ const Home: React.FC = () => {
         <div className="p-4">
             {(() => {
                 switch (currentView) {
-                    case 'home': return <HomeView user={authUser} onNavigate={handleNavigate} news={news} />;
+                  case 'home': return <HomeView user={user} onNavigate={handleNavigate} news={news} />;
                     case 'pix': return <Pix onBack={() => handleNavigate('home')} />;
-                    case 'cards': return <CardDashboard user={authUser} onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
+                  case 'cards': return <CardDashboard user={user} onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
                     case 'shop': return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((s, i) => s + (i.quantity || 0), 0)} onNavigate={handleNavigate} />;
-                    case 'shoppingCart': return <ShoppingCart onBack={() => handleNavigate('shop')} cartItems={cart} onUpdateCart={setCart} user={authUser} />;
-                    case 'statement': return <Statement user={authUser} onBack={() => handleNavigate('home')} />;
-                    case 'currentInvoice': return <CurrentInvoiceView user={authUser} onBack={() => handleNavigate('cards')} />;
-                    case 'closedInvoice': return <ClosedInvoiceView user={authUser} onBack={() => handleNavigate('cards')} />;
+                  case 'shoppingCart': return <ShoppingCart onBack={() => handleNavigate('shop')} cartItems={cart} onUpdateCart={setCart} user={user} />;
+                  case 'statement': return <Statement user={user} onBack={() => handleNavigate('home')} />;
+                  case 'currentInvoice': return <CurrentInvoiceView user={user} onBack={() => handleNavigate('cards')} />;
+                  case 'closedInvoice': return <ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} />;
                     case 'products': return <Products />;
-                    case 'profile': return <Profile user={authUser} onLogout={logout} />;
-                    default: return <HomeView user={authUser} onNavigate={handleNavigate} news={news} />;
+                  case 'profile': return <Profile user={user} onLogout={handleLogout} />;
+                  default: return <HomeView user={user} onNavigate={handleNavigate} news={news} />;
                 }
             })()}
         </div>

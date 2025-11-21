@@ -1,12 +1,17 @@
 import React, { useState, useCallback } from 'react';
 import './Login.css';
-import { useHistory } from 'react-router-dom';
 import { Preferences } from '@capacitor/preferences';
 import api, { setApiBaseUrl, getUserByCpf } from '../../services/api';
 import { useIonViewWillEnter } from '@ionic/react';
 import { useAuth } from '../../context/AuthContext';
+import { User } from '../../types';
 
-const Login: React.FC = () => {
+interface LoginProps {
+  onLoginSuccess: (user: User) => void;
+  onNavigateToPreLogin: () => void;
+}
+
+const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin }) => {
   const [cpf, setCpf] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -16,7 +21,6 @@ const Login: React.FC = () => {
   const [tempApiUrl, setTempApiUrl] = useState('');
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
-  const history = useHistory();
   const { login } = useAuth();
 
   const formatCpf = (v: string) => {
@@ -75,15 +79,15 @@ const Login: React.FC = () => {
 
       if (user) {
         login(user);
-        history.push('/home');
+        onLoginSuccess(user);
         return;
       }
 
       // Fetch user data if not provided in login
       const userResponse = await getUserByCpf(cpf);
       if (userResponse.success && userResponse.user) {
-        login(userResponse.user);
-        history.push('/home');
+        login(userResponse.user as User); // Ensure type compatibility
+        onLoginSuccess(userResponse.user as User);
       } else {
         console.error('User fetch error:', userResponse);
         const debugMsg = JSON.stringify(userResponse);
@@ -126,7 +130,10 @@ const Login: React.FC = () => {
     <div className="font-display bg-background-dark text-text-dark antialiased">
       <div className="flex flex-col min-h-screen">
         <header className="w-full p-4 safe-top">
-          <div className="w-full max-w-sm mx-auto flex justify-end mt-2">
+          <div className="w-full max-w-sm mx-auto flex justify-between mt-2">
+            <button onClick={onNavigateToPreLogin} className="text-subtle-dark hover:text-primary">
+              <span className="material-symbols-outlined text-2xl">arrow_back</span>
+            </button>
             <button onClick={() => setShowSettings(true)} className="text-subtle-dark hover:text-primary">
               <span className="material-symbols-outlined text-2xl">settings</span>
             </button>
