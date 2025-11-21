@@ -151,7 +151,7 @@ const App: React.FC = () => {
       case 'login':
         return <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} />;
       case 'home':
-        return user ? <Home /> : <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} />;
+        return user ? <Home user={user} onLogout={handleLogout} refreshUserData={handleUpdateUser} /> : <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} />;
       case 'prelogin':
       default:
         return <PreLoginDashboard onNavigateToLogin={() => setView('login')} />;
