@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 import HomeView from '../components/HomeView';
@@ -48,12 +48,15 @@ describe('HomeView - Render', () => {
 
     render(<HomeView user={user} onNavigate={onNavigate} />);
 
+    // As asserções que já passavam são mantidas
     expect(screen.getByText(/Saldo em conta/i)).toBeInTheDocument();
     expect(screen.getByText(/Vencimento:/i)).toBeInTheDocument();
     expect(screen.getByText(/Ver fatura e limite/i)).toBeInTheDocument();
 
-    const currencyText = screen.getByText((content) => content.includes('R$'));
-    expect(currencyText).toBeInTheDocument();
+    // A linha que falhava agora é mais específica
+    // Procura pelo saldo dentro da seção "Saldo em conta"
+    const saldoSection = screen.getByText(/Saldo em conta/i).closest('section');
+    expect(within(saldoSection).getByText(/1.234,56/)).toBeInTheDocument();
   });
 
   it('toggle de visibilidade do saldo funciona', () => {
@@ -62,13 +65,19 @@ describe('HomeView - Render', () => {
 
     render(<HomeView user={user} onNavigate={onNavigate} />);
 
-    const beforeToggle = screen.getByText((content) => content.includes('R$'));
-    expect(beforeToggle).toBeInTheDocument();
+    // Garante que a busca por elementos seja feita dentro da seção de saldo
+    const saldoSection = screen.getByText(/Saldo em conta/i).closest('section');
+    
+    // Verifica se o saldo está visível inicialmente
+    expect(within(saldoSection).getByText(/1.234,56/)).toBeInTheDocument();
 
-    const visibilityIcon = screen.getByText('visibility');
+    // Clica no ícone de visibilidade dentro da seção
+    const visibilityIcon = within(saldoSection).getByText('visibility');
     fireEvent.click(visibilityIcon.parentElement!);
 
-    expect(screen.getByText('R$ ********')).toBeInTheDocument();
+    // Agora, o saldo deve estar ofuscado e o valor original não deve estar visível
+    expect(within(saldoSection).getByText('R$ ********')).toBeInTheDocument();
+    expect(within(saldoSection).queryByText(/1.234,56/)).not.toBeInTheDocument();
   });
 
   it('navega para o Extrato via Acesso Rapido', () => {
