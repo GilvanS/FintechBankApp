@@ -69,17 +69,21 @@ Este documento detalha o planejamento e as etapas para transformar o projeto `WE
 
 ### **Fase 8: Ajustes Finais e Melhorias de UX (MOBILE)**
 
--   [x] **Tarefa 8.1: Análise e Correção de Divergências Visuais**
-    -   **Problema:** As cores da tela `Home` no `MOBILE` estão diferentes da versão `WEB`, notavelmente a cor de fundo que é branca em vez de azul-escura.
-    -   **Análise:** A investigação no código-fonte do `WEB` (`App.tsx`) identificou o uso da classe `bg-background-dark`. Essa variável de cor não está definida ou não está sendo aplicada corretamente no projeto `MOBILE`.
-    -   **Ação:** Adicionar a variável de cor correspondente ao `background-dark` no arquivo `MOBILE/src/theme/variables.css` e garantir que ela seja aplicada como a cor de fundo principal da aplicação para unificar a identidade visual.
+-   [x] **Tarefa 8.1:** Análise e Correção de Divergências Visuais
+-   [x] **Tarefa 8.2:** Correção do Bug de Navegação na Home
+-   [x] **Tarefa 8.3:** Implementar Cache para o Endereço do Backend (Ngrok)
 
--   [x] **Tarefa 8.2: Correção do Bug de Navegação na Home**
-    -   **Problema:** Todos os botões de navegação na tela `Home` (ex: PIX, Cartões) redirecionam incorretamente de volta para a própria tela `Home`.
-    -   **Análise:** O problema provavelmente reside na função `handleNavigate` ou no gerenciamento do estado `currentView` dentro do componente `Home/index.tsx`. A lógica que deveria atualizar a `view` para a seção correta não está funcionando como esperado.
-    -   **Ação:** Revisar e depurar a função `handleNavigate` no arquivo `MOBILE/src/pages/Home/index.tsx` para garantir que o estado `currentView` seja atualizado corretamente com a `view` selecionada, roteando o usuário para a tela certa.
+---
 
--   [x] **Tarefa 8.3: Implementar Cache para o Endereço do Backend (Ngrok)**
-    -   **Problema:** O endereço IP do `ngrok` (ou qualquer URL de backend) precisa ser inserido toda vez que o aplicativo é iniciado, causando atrito no desenvolvimento.
-    -   **Análise:** O aplicativo não possui um mecanismo para persistir o endereço da API entre as sessões.
-    -   **Ação:** Modificar o serviço `api.ts` para que, ao configurar um novo endereço de API, ele seja salvo no `localStorage` junto com um timestamp. Ao iniciar, o aplicativo verificará se existe um endereço no cache com menos de 60 minutos. Se existir, ele será usado automaticamente; caso contrário, o aplicativo solicitará o novo endereço.
+### **Fase 9: Correção de Bugs Críticos Pós-Lançamento (MOBILE)**
+
+-   [x] **Tarefa 9.1: Análise e Documentação dos Bugs em Cascata**
+    -   **Bug 1 (Causa Raiz):** Erro de propriedade no componente `HomeView`.
+    -   **Bug 2 (Sintoma):** Quebra da UI na tela Home (barra de navegação e ícones ausentes).
+    -   **Bug 3 (Sintoma):** Crash na navegação, resultando em logout e perda do cache da API.
+
+-   [x] **Tarefa 9.2: Implementação da Correção**
+    -   **Ação:** Modificar a interface `HomeViewProps` no arquivo `MOBILE/src/components/HomeView.tsx` para aceitar a propriedade `news` e passá-la corretamente para o componente `NewsSection`.
+
+-   [ ] **Tarefa 9.3: Validação da Correção e Encerramento**
+    -   **Ação:** Validar que a UI da Home foi restaurada, a navegação funciona e o cache da API persiste conforme o esperado.

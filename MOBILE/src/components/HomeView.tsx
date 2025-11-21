@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User } from '../types';
+import { User, News } from '../types';
 import NewsSection from './NewsSection';
 import HomeBanners from './HomeBanners';
 import ShopOffersBanner from './ShopOffersBanner';
@@ -7,9 +7,10 @@ import ShopOffersBanner from './ShopOffersBanner';
 interface HomeViewProps {
     user: User;
     onNavigate: (view: any) => void;
+    news: News[];
 }
 
-const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
+const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, news }) => {
     const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
     return (
@@ -109,7 +110,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
 
             {/* Shop Offers and News Section */}
             <ShopOffersBanner onNavigate={onNavigate} />
-            <NewsSection />
+            <NewsSection news={news} />
         </main>
     );
 };
