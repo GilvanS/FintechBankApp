@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+simimport React, { useState, useEffect } from 'react';
 import { useHistory } from 'react-router-dom';
 import HomeView from '../../components/HomeView';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -13,49 +13,20 @@ import Statement from '../../components/Statement';
 import Shop from '../../components/Shop';
 import CurrentInvoiceView from '../../components/CurrentInvoiceView';
 import ClosedInvoiceView from '../../components/ClosedInvoiceView';
-import { Article } from '../../components/NewsSection';
 import { PurchasedItem, View } from '../../types'; // Importa o tipo View
 
 const Home: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('home');
   const { user: authUser, logout } = useAuth();
   const history = useHistory();
-  const [news, setNews] = useState<Article[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [cart, setCart] = useState<PurchasedItem[]>([]);
 
   useEffect(() => {
-    if (authUser) {
-      fetchNews();
-    } else {
+    if (!authUser) {
       // Redirect to login if not authenticated
       history.push('/login');
     }
   }, [authUser, history]);
-
-  const fetchNews = async () => {
-    const fallbackNews = [
-        { title: 'Análise Semanal do Mercado Financeiro', description: 'Setores em alta e previsões.', url: '#', urlToImage: 'https://images.unsplash.com/photo-1543286386-713bdd548da4' },
-    ];
-    setIsLoading(true);
-    try {
-      const response = await fetch('https://servicodados.ibge.gov.br/api/v3/noticias/?qtd=3&busca=economia');
-      if (!response.ok) throw new Error('IBGE API request failed');
-      const data = await response.json();
-      const formattedArticles = data.items.map((item: any) => {
-        let imageUrl = 'https://images.unsplash.com/photo-1543286386-713bdd548da4';
-        try {
-          imageUrl = `https://agenciadenoticias.ibge.gov.br/${JSON.parse(item.imagens).image_fulltext}`;
-        } catch (e) { /* Ignore */ }
-        return { title: item.titulo, description: item.introducao, url: item.link, urlToImage: imageUrl };
-      }).filter((a: Article) => a.urlToImage);
-      setNews(formattedArticles.length ? formattedArticles : fallbackNews);
-    } catch (error) { 
-      setNews(fallbackNews); 
-    } finally { 
-      setIsLoading(false); 
-    }
-  };
 
   const handleNavigate = (view: View) => setCurrentView(view);
 
@@ -77,15 +48,12 @@ const Home: React.FC = () => {
     if (!authUser) {
         return <div className="flex items-center justify-center h-full"><p className="text-white">Erro de autenticação. Redirecionando...</p></div>;
     }
-    if (isLoading && currentView === 'home') {
-        return <div className="flex items-center justify-center h-full"><p className="text-white">Carregando...</p></div>;
-    }
     
     return (
         <div className="p-4">
             {(() => {
                 switch (currentView) {
-                    case 'home': return <HomeView user={authUser} onNavigate={handleNavigate} news={news} />;
+                    case 'home': return <HomeView user={authUser} onNavigate={handleNavigate} />;
                     case 'pix': return <Pix onBack={() => handleNavigate('home')} />;
                     case 'cards': return <CardDashboard user={authUser} onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
                     case 'shop': return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((s, i) => s + (i.quantity || 0), 0)} onNavigate={handleNavigate} />;
@@ -95,7 +63,7 @@ const Home: React.FC = () => {
                     case 'closedInvoice': return <ClosedInvoiceView user={authUser} onBack={() => handleNavigate('cards')} />;
                     case 'products': return <Products />;
                     case 'profile': return <Profile user={authUser} onLogout={logout} />;
-                    default: return <HomeView user={authUser} onNavigate={handleNavigate} news={news} />;
+                    default: return <HomeView user={authUser} onNavigate={handleNavigate} />;
                 }
             })()}
         </div>
@@ -108,7 +76,7 @@ const Home: React.FC = () => {
         {renderContent()}
       </main>
       
-      {(currentView === 'home' || currentView === 'cards' || currentView === 'shop' || currentView === 'products' || currentView === 'profile') && (
+      {(currentView === 'home' || currentView === 'cards' || currentView === 'shop' || currentVient === 'products' || currentView === 'profile') && (
         <BottomNavBar currentView={currentView} onNavigate={handleNavigate} />
       )}
     </div>

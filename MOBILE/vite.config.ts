@@ -29,7 +29,9 @@ export default defineConfig(({ mode }) => {
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
       },
       test: {
-        environment: 'jsdom'
+        globals: true,
+        environment: 'jsdom',
+        setupFiles: 'tests/setup.ts'
       }
     };
 });

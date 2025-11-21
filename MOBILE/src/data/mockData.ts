@@ -158,26 +158,26 @@ export const MOCK_STORIES: Story[] = [
         title: "Segurança em Dobro",
         description: "Ative a verificação em duas etapas e proteja sua conta ainda mais.",
         icon: "🛡️",
-        image: "https://images.pexels.com/photos/60504/security-protection-anti-virus-software-60504.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
+        imageUrl: "https://images.pexels.com/photos/60504/security-protection-anti-virus-software-60504.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
     },
     {
         title: "Conheça o PIX no Crédito",
         description: "Envie PIX mesmo sem saldo na conta, usando seu limite do cartão de crédito.",
         icon: "💳",
-        image: "https://images.pexels.com/photos/50987/money-card-business-credit-card-50987.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
+        imageUrl: "https://images.pexels.com/photos/50987/money-card-business-credit-card-50987.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
     },
     {
         title: "Novidades no Shop",
         description: "Confira as últimas ofertas e ganhe cashback em suas lojas favoritas.",
         icon: "🛍️",
-        image: "https://images.pexels.com/photos/3769747/pexels-photo-3769747.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
+        imageUrl: "https://images.pexels.com/photos/3769747/pexels-photo-3769747.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
     },
     {
         title: "Seu Jornal Financeiro",
         description: "Acesse notícias do mercado financeiro e tome decisões mais inteligentes.",
         icon: "📰",
         url: "#",
-        image: "https://images.pexels.com/photos/261621/pexels-photo-261621.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
+        imageUrl: "https://images.pexels.com/photos/261621/pexels-photo-261621.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
     }
 ];
 
@@ -187,83 +187,83 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         name: 'Smartphone Fintech X',
         description: 'O mais novo smartphone com integração total ao nosso ecossistema. Câmera de 108MP, 256GB de armazenamento e tela Super AMOLED.',
         price: 3999.90,
-        image: 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-2',
         name: 'Fone de Ouvido Bass+',
         description: 'Cancelamento de ruído ativo, 30 horas de bateria e som de alta fidelidade para você curtir suas músicas e podcasts.',
         price: 799.00,
-        image: 'https://images.pexels.com/photos/3587478/pexels-photo-3587478.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/3587478/pexels-photo-3587478.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-3',
         name: 'Smartwatch Connect',
         description: 'Monitore sua saúde, receba notificações e pague por aproximação com seu novo smartwatch. Bateria para 7 dias.',
         price: 1499.90,
-        image: 'https://images.pexels.com/photos/110471/pexels-photo-110471.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/110471/pexels-photo-110471.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-4',
         name: 'Carregador Portátil 20000mAh',
         description: 'Nunca mais fique sem bateria. Carregue até 3 dispositivos ao mesmo tempo com alta velocidade.',
         price: 250.00,
-        image: 'https://images.pexels.com/photos/133505/pexels-photo-133505.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/133505/pexels-photo-133505.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-5',
         name: 'Audeze Pro Headphones',
         description: 'Fones de ouvido com qualidade de estúdio para audiófilos. Clareza e graves incomparáveis.',
         price: 499.00,
-        image: 'https://images.pexels.com/photos/1649771/pexels-photo-1649771.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/1649771/pexels-photo-1649771.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-6',
         name: 'Apex Smartwatch Gen 2',
         description: 'Monitore sua saúde e conecte-se com estilo. GPS integrado e bateria de longa duração.',
         price: 279.00,
-        image: 'https://images.pexels.com/photos/277406/pexels-photo-277406.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/277406/pexels-photo-277406.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-7',
         name: 'Momentum Pro Camera',
         description: 'Capture momentos com qualidade profissional. Sensor full-frame de 42MP e vídeo em 4K.',
         price: 1299.00,
-        image: 'https://images.pexels.com/photos/90946/pexels-photo-90946.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/90946/pexels-photo-90946.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-8',
         name: 'Barista Express Coffee Maker',
         description: 'Seu café expresso perfeito em casa. Moedor integrado e controle de temperatura preciso.',
         price: 189.00,
-        image: 'https://images.pexels.com/photos/324028/pexels-photo-324028.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/324028/pexels-photo-324028.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-9',
         name: 'Minimalist Desk Lamp',
         description: 'Design elegante e iluminação ajustável para seu espaço de trabalho. Baixo consumo de energia.',
         price: 75.00,
-        image: 'https://images.pexels.com/photos/1112598/pexels-photo-1112598.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/1112598/pexels-photo-1112598.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-10',
         name: 'Jetset Carry-On Luggage',
         description: 'Viaje com estilo e praticidade. Leve, resistente e com compartimentos inteligentes.',
         price: 150.00,
-        image: 'https://images.pexels.com/photos/2082414/pexels-photo-2082414.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/2082414/pexels-photo-2082414.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-11',
         name: 'AeroView 4K Drone',
         description: 'Explore o mundo de cima com imagens incríveis. Compacto, seguro e fácil de pilotar.',
         price: 799.00,
-        image: 'https://images.pexels.com/photos/1034608/pexels-photo-1034608.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/1034608/pexels-photo-1034608.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-12',
         name: 'ErgoFlex Office Chair',
         description: 'Conforto e ergonomia para longas horas de trabalho. Múltiplos ajustes para sua postura.',
         price: 350.00,
-        image: 'https://images.pexels.com/photos/2762247/pexels-photo-2762247.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/2762247/pexels-photo-2762247.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
 ];
