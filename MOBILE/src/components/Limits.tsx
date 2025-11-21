@@ -1,8 +1,19 @@
-import { useToast } from "./Toast";
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { getUserByCpf } from '../services/api';
+import { requestLimitIncrease, updateUserPixDailyLimit } from '../services/mockApi';
+import { useToast, ToastContainer } from './Toast';
 
+interface LimitsProps {
+    onBack: () => void;
+}
+
+const Limits: React.FC<LimitsProps> = ({ onBack }) => {
+    const { user, updateUser } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [newLimit, setNewLimit] = useState('');
     const { toast, showSuccess, showError, hide } = useToast();
     
     if(!user) return null;

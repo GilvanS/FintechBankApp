@@ -2,16 +2,16 @@ import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
 import { PixContact, User } from '../types';
 
-const DEV_API_URL = '__NGROK_URL__'; // Substitua pelo seu URL ngrok
+const DEV_API_URL = '__NGROK_URL__'; // substitute pelo seu URL ngrok
 
-// Cria a instância do Axios SEM uma baseURL fixa
+// Cria a instance do Axios SEM uma baseURL fixa
 const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Função para obter headers de autenticação
+// functor para obter headers de autenticação
 export function getAuthHeaders(contentType: 'json' | 'none' = 'json') {
   const token = localStorage.getItem('authToken') || '';
   const base: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
@@ -21,7 +21,7 @@ export function getAuthHeaders(contentType: 'json' | 'none' = 'json') {
 
 /**
  * Função para definir a URL base da API dinamicamente.
- * Isso será chamado a partir da tela de login.
+ * Isso será chamado a parity da tela de login.
  */
 export const setApiBaseUrl = (url: string) => {
   const t = url.trim().replace(/\/+$/, '');
@@ -221,5 +221,7 @@ export async function registerPixKey(type: 'CPF' | 'EMAIL', key: string): Promis
     return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao cadastrar chave PIX.' };
   }
 }
+
+export { updateUserProfile } from './mockApi';
 
 export default api;

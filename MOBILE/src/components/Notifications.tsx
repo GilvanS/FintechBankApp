@@ -1,4 +1,15 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { getNotifications, markNotificationAsRead } from '../services/mockApi';
+import { useToast, ToastContainer } from './Toast';
+import { AppNotification } from '../types';
 
+interface NotificationsProps {
+    onBack: () => void;
+}
+
+const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
+    const { user } = useAuth();
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const { toast, showSuccess, showError, hide } = useToast();
@@ -7,10 +18,24 @@
         if (user) {
             setIsLoading(true);
             const result = await getNotifications(user.cpf);
-            if (result.success) {
-                const userNotifications = result.notifications!;
-                setNotifications(userNotifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
-            }
+            // getNotifications returns AppNotification[] directly in mockApi.ts based on previous view, 
+            // BUT looking at the code I saw in view_file for mockApi.ts lines 811-815:
+            // export const getNotifications = async (cpf: string): Promise<AppNotification[]> => { ... }
+            // However, the usage in the broken file was:
+            // const result = await getNotifications(user.cpf);
+            // if (result.success) { ... }
+            // This implies the broken file expected a different signature. 
+            // I must check mockApi.ts signature again to be sure.
+            // Wait, I saw line 811 in mockApi.ts: export const getNotifications = async (cpf: string): Promise<AppNotification[]>
+            // So it returns an array, not an object with success property.
+            // I should adapt the component to match the actual API signature found in mockApi.ts.
+
+            // Actually, let me re-read the mockApi.ts output from step 61 carefully.
+            // Line 811: export const getNotifications = async (cpf: string): Promise<AppNotification[]>
+            // It returns the array directly.
+
+            // So I will fix the usage in Notifications.tsx as well.
+            setNotifications(result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
             setIsLoading(false);
         }
     };
@@ -35,7 +60,7 @@
         <div className="bg-white min-h-full">
             <header className="bg-orange-500 text-white p-4 flex items-center">
                 <button onClick={onBack} className="mr-4 p-2 -ml-2 rounded-full hover:bg-white/20">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
+                    <span className="material-symbols-outlined">arrow_back</span>
                 </button>
                 <h2 className="text-xl font-bold">Notificações</h2>
             </header>
