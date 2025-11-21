@@ -1,4 +1,4 @@
-# Especificação da API Backend - Fintech Bank (BACKEND_I.md)
+# Especificação da API Backend - Fintech Bank (BACKEND_I.md).
 
 Este documento descreve os endpoints e as regras de negócio que a API do backend precisa implementar para suportar todas as funcionalidades do frontend da Fintech Bank.
 
