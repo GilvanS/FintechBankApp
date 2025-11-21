@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getPixContacts, getPixRecipientInfo, performPixTransfer, performPixCreditTransfer, getUserByCpf } from '../services/api';
+import { getPixContacts, getPixRecipientInfo, performPix, performPixCreditInstallment, getUserByCpf } from '../services/api';
 import { PixContact, Transaction, User } from '../types';
 import Contacts from './Contacts';
 import PixKeyManagement from './PixKeyManagement';
@@ -10,8 +10,6 @@ import PixConfirmation from './PixConfirmation';
 import { useToast, ToastContainer } from './Toast';
 
 type PixSubView = 'transfer' | 'keyManagement' | 'contacts' | 'confirmation';
-
-// A view de transferencia foi movida para dentro do componente principal para melhor controle do layout.
 
 const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { user, updateUser, logout } = useAuth();
@@ -27,7 +25,6 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [selectedContact, setSelectedContact] = useState<PixContact | null>(null);
     const { toast, showSuccess, showError, showInfo, hide } = useToast();
 
-    // Props para a TransferView interna
     const [pixKey, setPixKey] = useState('');
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
@@ -37,7 +34,7 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     useEffect(() => {
         if (selectedContact) {
             setPixKey(selectedContact.key);
-            setSelectedContact(null); // Limpa o contato selecionado
+            setSelectedContact(null); 
         }
     }, [selectedContact]);
 
@@ -75,9 +72,13 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         setPendingPinAction(() => async (pin: string) => {
             if (!user || !transferDetails) return;
             setIsProcessing(true);
-            const result = transferDetails.useCredit 
-                ? await performPixCreditTransfer(user.cpf, transferDetails.key, transferDetails.amount, transferDetails.description, 1, pin)
-                : await performPixTransfer(transferDetails.key, transferDetails.amount, transferDetails.description, pin);
+
+            let result;
+            if (transferDetails.useCredit) {
+                result = await performPixCreditInstallment(user.cpf, transferDetails.amount, 1);
+            } else {
+                result = await performPix(user.cpf, transferDetails.key, transferDetails.amount, transferDetails.description);
+            }
             
             if (result.success) {
                 const refreshed = await getUserByCpf(user.cpf);
