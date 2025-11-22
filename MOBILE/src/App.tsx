@@ -168,7 +168,7 @@ const App: React.FC = () => {
 
   return (
     <AuthContext.Provider value={authContextValue}>
-      <IonApp className="bg-background-dark" style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden' }}>
+      <IonApp className="bg-background-dark" style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'visible' }}>
         {renderView()}
       </IonApp>
     </AuthContext.Provider>

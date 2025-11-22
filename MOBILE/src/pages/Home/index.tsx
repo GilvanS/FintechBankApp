@@ -360,8 +360,8 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
   const showBottomNav = ['home', 'cards', 'shop', 'products', 'profile'].includes(currentView);
 
   return (
-    <div className="h-full w-full flex flex-col bg-background-dark overflow-hidden">
-        <div className="flex-grow overflow-y-auto no-scrollbar">
+    <div className="h-full w-full flex flex-col bg-background-dark" style={{ position: 'relative', overflow: 'visible' }}>
+        <div className={`flex-grow overflow-y-auto no-scrollbar ${showBottomNav ? 'pb-16' : ''}`} style={{ position: 'relative', zIndex: 1 }}>
             {renderContent()}
         </div>
         {showBottomNav && (
