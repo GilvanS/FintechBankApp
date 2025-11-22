@@ -160,7 +160,7 @@ const App: React.FC = () => {
 
   return (
     <AuthContext.Provider value={authContextValue}>
-      <IonApp>
+      <IonApp className="bg-background-dark">
         {renderView()}
       </IonApp>
     </AuthContext.Provider>

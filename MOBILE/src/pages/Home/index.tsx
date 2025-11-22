@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import HomeView from '../../components/HomeView';
 import BottomNavBar from '../../components/BottomNavBar';
 import { useAuth } from '../../context/AuthContext';
-
 import Pix from '../../components/Pix';
 import CardDashboard from '../../components/CardDashboard';
 import Products from '../../components/Products';
@@ -31,22 +30,19 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
   useEffect(() => {
     const fetchNews = async () => {
         try {
-            // This will call the proxy endpoint on the server
             const response = await fetch('/api/news');
             if (!response.ok) {
-                // If the proxy fails, we could have a fallback or just show an error
                 throw new Error('Failed to fetch news from proxy');
             }
             const data = await response.json();
             setNews(data);
         } catch (error) {
             console.error("Error fetching news:", error);
-            setNews([]); // On error, show no news
+            setNews([]);
         } finally {
             setIsLoading(false);
         }
     };
-
     fetchNews();
   }, []);
 
@@ -76,36 +72,31 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
       return <div className="flex items-center justify-center h-full"><p className="text-white">Authentication error.</p></div>;
     }
     
-    return (
-        <div className="p-4">
-            {(() => {
-                switch (currentView) {
-                    case 'home': return <HomeView user={user} onNavigate={handleNavigate} news={news} />;
-                    case 'pix': return <Pix onBack={() => handleNavigate('home')} />;
-                    case 'cards': return <CardDashboard user={user} onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
-                    case 'shop': return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((s, i) => s + (i.quantity || 0), 0)} onNavigate={handleNavigate} />;
-                    case 'shoppingCart': return <ShoppingCart onBack={() => handleNavigate('shop')} cartItems={cart} onUpdateCart={setCart} user={user} />;
-                    case 'statement': return <Statement user={user} onBack={() => handleNavigate('home')} />;
-                    case 'currentInvoice': return <CurrentInvoiceView user={user} onBack={() => handleNavigate('cards')} />;
-                    case 'closedInvoice': return <ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} />;
-                    case 'products': return <Products />;
-                    case 'profile': return <Profile user={user} onLogout={handleLogout} />;
-                    default: return <HomeView user={user} onNavigate={handleNavigate} news={news} />;
-                }
-            })()}
-        </div>
-    );
+    switch (currentView) {
+        case 'home': return <HomeView user={user} onNavigate={handleNavigate} news={news} />;
+        case 'pix': return <Pix onBack={() => handleNavigate('home')} />;
+        case 'cards': return <CardDashboard user={user} onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
+        case 'shop': return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((s, i) => s + (i.quantity || 0), 0)} onNavigate={handleNavigate} />;
+        case 'shoppingCart': return <ShoppingCart onBack={() => handleNavigate('shop')} cartItems={cart} onUpdateCart={setCart} user={user} />;
+        case 'statement': return <Statement user={user} onBack={() => handleNavigate('home')} />;
+        case 'currentInvoice': return <CurrentInvoiceView user={user} onBack={() => handleNavigate('cards')} />;
+        case 'closedInvoice': return <ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} />;
+        case 'products': return <Products />;
+        case 'profile': return <Profile user={user} onLogout={handleLogout} />;
+        default: return <HomeView user={user} onNavigate={handleNavigate} news={news} />;
+    }
   };
 
+  const showBottomNav = ['home', 'cards', 'shop', 'products', 'profile'].includes(currentView);
+
   return (
-    <div className="h-screen bg-background-dark text-white flex flex-col">
-      <main className="flex-1 overflow-y-auto no-scrollbar">
-        {renderContent()}
-      </main>
-      
-      {(currentView === 'home' || currentView === 'cards' || currentView === 'shop' || currentView === 'products' || currentView === 'profile') && (
-        <BottomNavBar currentView={currentView} onNavigate={handleNavigate} />
-      )}
+    <div className="h-screen w-full flex flex-col bg-background-dark text-white">
+        <main className={`flex-1 overflow-y-auto no-scrollbar ${!showBottomNav ? 'pb-0' : ''}`}>
+            {renderContent()}
+        </main>
+        {showBottomNav && (
+            <BottomNavBar currentView={currentView} onNavigate={handleNavigate} />
+        )}
     </div>
   );
 };

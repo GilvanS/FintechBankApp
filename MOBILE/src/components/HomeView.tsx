@@ -14,7 +14,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, news }) => {
     const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
     return (
-        <main className="flex flex-col gap-8 py-8 px-4 sm:px-6 md:px-8">
+        <div className="flex flex-col gap-8 py-8 px-4 sm:px-6 md:px-8">
             {/* Balance Section */}
             <section>
                 <div className="flex flex-col justify-between rounded-xl bg-surface-dark p-6">
@@ -41,7 +41,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, news }) => {
                             {/* PIX */}
                             <button onClick={() => onNavigate('pix')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center border-none bg-transparent p-0">
                                 <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square transition-transform hover:scale-105">
-                                    <span className="material-symbols-outlined text-4xl text-primary">qr_code_2</span>
+                                    <span className="material-symbols-outlined text-4xl">qr_code_2</span>
                                 </div>
                                 <p className="text-sm font-medium leading-normal text-white">PIX</p>
                             </button>
@@ -111,7 +111,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, news }) => {
             {/* Shop Offers and News Section */}
             <ShopOffersBanner onNavigate={onNavigate} />
             <NewsSection news={news} />
-        </main>
+        </div>
     );
 };
 

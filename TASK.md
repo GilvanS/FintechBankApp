@@ -77,13 +77,26 @@ Este documento detalha o planejamento e as etapas para transformar o projeto `WE
 
 ### **Fase 9: Correção de Bugs Críticos Pós-Lançamento (MOBILE)**
 
--   [x] **Tarefa 9.1: Análise e Documentação dos Bugs em Cascata**
-    -   **Bug 1 (Causa Raiz):** Erro de propriedade no componente `HomeView`.
-    -   **Bug 2 (Sintoma):** Quebra da UI na tela Home (barra de navegação e ícones ausentes).
-    -   **Bug 3 (Sintoma):** Crash na navegação, resultando em logout e perda do cache da API.
+-   [x] **Tarefa 9.1:** Análise e Documentação dos Bugs em Cascata
+-   [x] **Tarefa 9.2:** Implementação da Correção
+-   [x] **Tarefa 9.3:** Validação da Correção e Encerramento (FALHOU)
 
--   [x] **Tarefa 9.2: Implementação da Correção**
-    -   **Ação:** Modificar a interface `HomeViewProps` no arquivo `MOBILE/src/components/HomeView.tsx` para aceitar a propriedade `news` e passá-la corretamente para o componente `NewsSection`.
+---
 
--   [ ] **Tarefa 9.3: Validação da Correção e Encerramento**
-    -   **Ação:** Validar que a UI da Home foi restaurada, a navegação funciona e o cache da API persiste conforme o esperado.
+### **Fase 10: Correção de Regressão Crítica de UI (Home)**
+
+-   [x] **Tarefa 10.1:** Análise e Correção de Divergência de Cores
+-   [x] **Tarefa 10.2:** Restauração da Barra de Navegação e Layout
+-   [x] **Tarefa 10.3:** Correção do Bug de Interação dos Botões
+-   [x] **Tarefa 10.4:** Validação Final da UI e Interação
+
+---
+
+### **Fase 11: Correção do Mecanismo de Cache da API**
+
+-   [x] **Tarefa 11.1:** Análise e Documentação do Bug de Persistência
+-   [x] **Tarefa 11.2:** Implementação da Correção
+
+-   [ ] **Tarefa 11.3: Validação pelo Usuário e Encerramento**
+    -   **Responsável:** Usuário.
+    -   **Ação:** Gerar um novo APK, instalar no dispositivo Android e validar se o endereço da API (ngrok) persiste após fechar e reabrir o aplicativo.
