@@ -9,9 +9,11 @@ import { User } from '../../types';
 interface LoginProps {
   onLoginSuccess: (user: User) => void;
   onNavigateToPreLogin: () => void;
+  onNavigateToSignUp: () => void;
+  onNavigateToResetPassword: () => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin }) => {
+const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onNavigateToSignUp, onNavigateToResetPassword }) => {
   const [cpf, setCpf] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -166,7 +168,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin }) =
                 <div>
                   <div className="flex justify-between items-baseline">
                     <label htmlFor="password" className="text-sm font-medium text-subtle-dark mb-1 block">Senha</label>
-                    <a href="#" className="text-xs text-primary hover:underline">Esqueci minha senha</a>
+                    <button type="button" onClick={onNavigateToResetPassword} className="text-xs text-primary hover:underline">Esqueci minha senha</button>
                   </div>
                   <input
                     id="password"
@@ -188,7 +190,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin }) =
               </div>
 
               <p className="text-center text-sm text-subtle-dark mt-6">
-                Não tem uma conta? <a href="#" className="font-semibold text-primary hover:underline">Cadastre-se</a>
+                Não tem uma conta? <button type="button" onClick={onNavigateToSignUp} className="font-semibold text-primary hover:underline">Cadastre-se</button>
               </p>
             </form>
           </div>
@@ -217,7 +219,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin }) =
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
-                <span className="text-subtle-dark">{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Offline' : 'Checando'}</span>
+                <span className="text-subtle-dark">{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Checando'}</span>
               </div>
               <div className="flex items-center gap-4">
                 <button onClick={() => checkServerStatus(tempApiUrl)} className="text-primary font-semibold">Testar</button>

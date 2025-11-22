@@ -6,6 +6,8 @@ import { AuthContext } from './context/AuthContext';
 import Login from './pages/Login';
 import PreLoginDashboard from './pages/PreLoginDashboard';
 import Home from './pages/Home';
+import SignUp from './SignUp';
+import ResetPassword from './components/ResetPassword';
 import { initializeApi, getUserMe as getProfile } from './services/api';
 
 /* Core CSS & Theme */
@@ -92,16 +94,11 @@ function normalizeUserShape(input: Partial<User>): User {
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState('prelogin'); // prelogin, login, home
+  const [view, setView] = useState('prelogin'); // prelogin, login, home, signup, resetPassword
 
   useEffect(() => {
     const initApp = async () => {
-      // Initialize API with cached URL if available
       await initializeApi();
-      
-      // SEMPRE começa no PreLoginDashboard
-      // Não faz verificação automática de token na inicialização
-      // O usuário deve clicar em "Entrar" para ir para a tela de login
       setView('prelogin');
     };
     initApp();
@@ -114,7 +111,6 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    // Limpa todos os tokens (tanto 'token' quanto 'authToken' para garantir)
     localStorage.removeItem('token');
     localStorage.removeItem('authToken');
     await Preferences.remove({ key: 'token' });
@@ -140,7 +136,7 @@ const App: React.FC = () => {
     }
   }, [user]);
 
-  const navigateTo = (newView: 'home' | 'cards' | 'shop' | 'profile' | 'login' | 'prelogin') => {
+  const navigateTo = (newView: 'home' | 'cards' | 'shop' | 'profile' | 'login' | 'prelogin' | 'signup' | 'resetPassword') => {
     setView(newView);
   };
 
@@ -156,20 +152,29 @@ const App: React.FC = () => {
   const renderView = () => {
     switch (view) {
       case 'login':
-        return <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} />;
+        return <Login 
+                  onLoginSuccess={handleLogin} 
+                  onNavigateToPreLogin={() => setView('prelogin')} 
+                  onNavigateToSignUp={() => setView('signup')}
+                  onNavigateToResetPassword={() => setView('resetPassword')}
+                />;
+      case 'signup':
+        return <SignUp onNavigateToLogin={() => setView('login')} />;
+      case 'resetPassword':
+        return <ResetPassword onNavigateToLogin={() => setView('login')} />;
       case 'home':
       case 'cards':
       case 'shop':
       case 'profile':
-        return user ? <Home user={user} onLogout={handleLogout} refreshUserData={handleUpdateUser} /> : <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} />;
+        return user ? <Home user={user} onLogout={handleLogout} refreshUserData={handleUpdateUser} /> : <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} onNavigateToSignUp={() => setView('signup')} onNavigateToResetPassword={() => setView('resetPassword')} />;
       case 'prelogin':
       default:
-        return <PreLoginDashboard onNavigateToLogin={() => setView('login')} />;
+        return <PreLoginDashboard onNavigateToLogin={() => setView('login')} onNavigateToSignUp={() => setView('signup')} />;
     }
   };
 
   return (
-    <AuthContext.Provider value={authContextValue}>
+    <AuthContext.Provider value={authContextValue as any}>
       <IonApp className="bg-background-dark" style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'visible' }}>
         {renderView()}
       </IonApp>

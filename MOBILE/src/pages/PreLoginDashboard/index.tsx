@@ -4,9 +4,10 @@ import './PreLoginDashboard.css';
 // Define a interface de props para aceitar a função de navegação
 interface PreLoginDashboardProps {
   onNavigateToLogin: () => void;
+  onNavigateToSignUp: () => void;
 }
 
-const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin }) => {
+const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin, onNavigateToSignUp }) => {
   // Remove o uso do useHistory, que não se aplica aqui
 
   return (
@@ -61,7 +62,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
               Entre na conta
             </button>
             {/* O botão de abrir conta pode ter sua própria função de navegação no futuro */}
-            <button className="w-full max-w-xs px-8 py-3 font-semibold transition-colors duration-300 border border-subtle-dark/50 rounded-lg text-subtle-dark hover:text-primary hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50">
+            <button onClick={onNavigateToSignUp} className="w-full max-w-xs px-8 py-3 font-semibold transition-colors duration-300 border border-subtle-dark/50 rounded-lg text-subtle-dark hover:text-primary hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50">
               Não é cliente? Abra uma conta
             </button>
           </div>
