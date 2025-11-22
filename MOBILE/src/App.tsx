@@ -6,7 +6,7 @@ import { AuthContext } from './context/AuthContext';
 import Login from './pages/Login';
 import PreLoginDashboard from './pages/PreLoginDashboard';
 import Home from './pages/Home';
-import api from './services/api';
+import { initializeApi, getUserMe as getProfile } from './services/api';
 
 /* Core CSS & Theme */
 import '@ionic/react/css/core.css';
@@ -95,17 +95,23 @@ const App: React.FC = () => {
   const [view, setView] = useState('prelogin'); // prelogin, login, home
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const userData = await api.getProfile();
-        const normalizedUser = normalizeUserShape(userData);
-        setUser(normalizedUser);
-        setView('home');
-      } catch (error) {
-        setView('prelogin');
-      }
+    const initApp = async () => {
+      // Initialize API with cached URL if available
+      await initializeApi();
+
+      const checkAuth = async () => {
+        try {
+          const userData = await getProfile();
+          const normalizedUser = normalizeUserShape(userData);
+          setUser(normalizedUser);
+          setView('home');
+        } catch (error) {
+          setView('prelogin');
+        }
+      };
+      checkAuth();
     };
-    checkAuth();
+    initApp();
   }, []);
 
   const handleLogin = (loggedInUser: Omit<User, 'password'>) => {

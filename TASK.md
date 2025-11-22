@@ -96,5 +96,43 @@ Este documento detalha o planejamento e as etapas para transformar o projeto `WE
 
 -   [x] **Tarefa 11.1:** Análise e Documentação do Bug de Persistência
 -   [x] **Tarefa 11.2:** Implementação da Correção no Código
--   [ ] **Tarefa 11.3:** Validação da Correção pelo Usuário
+-   [x] **Tarefa 11.3:** Validação da Correção pelo Usuário
     -   **Ação Pendente:** Usuário deve realizar `git pull`, compilar o APK, instalar e testar a persistência do endereço da API entre as sessões do aplicativo.
+    -   **Status:** Correção implementada, aguardando validação do usuário
+
+---
+
+### **Fase 12: Bugs Críticos Identificados (Pendentes de Resolução)**
+
+-   [ ] **Tarefa 12.1:** Correção de Erro no swagger.yaml (Padrão regex malformado)
+    -   **Descrição:** Erro "Malformed inline YAML string ('^[0-9]{11})" na linha 773 do swagger.yaml impede inicialização do servidor backend
+    -   **Localização:** API/swagger.yaml
+    -   **Impacto:** API completamente indisponível
+    -   **Status:** Aguardando correção imediata
+-   [ ] **Tarefa 12.2:** Validar Resolução de Falha na Fase 9
+    -   **Descrição:** A validação da correção dos bugs críticos pós-lançamento (Fase 9.3) foi marcada como "FALHOU"
+    -   **Status:** Necessário reanálise e nova implementação
+-   [x] **Tarefa 12.3:** Validar Persistência do Cache da API
+    -   **Descrição:** Verificar se a correção do mecanismo de cache da API (Fase 11) está funcionando corretamente após implementação
+    -   **Status:** Correção implementada e testes pendentes de validação
+
+---
+
+### **Fase 13: Correções Críticas Realizadas (Aguardando Validação do Usuário)**
+
+-   [x] **Tarefa 13.1:** Correção de Imports Ausentes no Dashboard.tsx
+    -   **Descrição:** Arquivo MOBILE\src\components\Dashboard.tsx estava faltando importações essenciais (React hooks, contexto de autenticação, tipos, serviços de API)
+    -   **Impacto:** Componentes não funcionando corretamente, erros de execução
+    -   **Solução:** Adicionados imports: React hooks, useAuth, tipos (PurchasedItem, Transaction, User), e serviços de API
+-   [x] **Tarefa 13.2:** Correção de Elementos de Navegação na HomeView.tsx
+    -   **Descrição:** Botões de navegação na tela Home do MOBILE estavam usando divs em vez de elementos button, causando problemas de interação
+    -   **Impacto:** Botões não funcionavam corretamente, experiência do usuário degradada
+    -   **Solução:** Substituídos elementos div por button em todos os itens de navegação rápida (Shop, Cards, Pagar Contas, Extrato)
+-   [x] **Tarefa 13.3:** Correção de Propriedades Opcionais na HomeView.tsx
+    -   **Descrição:** Componente NewsSection na HomeView do MOBILE esperava propriedade news que não estava sendo fornecida
+    -   **Impacto:** Erros de execução e falha na renderização da seção de notícias
+    - **Solução:** Atualizada interface HomeViewProps e chamada do NewsSection para remover a propriedade news
+-   [x] **Tarefa 13.4:** Inicialização Adequada do Cache da API no App.tsx
+    -   **Descrição:** A função initializeApi não estava sendo chamada no startup do aplicativo MOBILE
+    -   **Impacto:** Cache da URL da API não funcionava, endereço da API não persistia entre sessões
+    -   **Solução:** Adicionada chamada para initializeApi() na inicialização do App.tsx

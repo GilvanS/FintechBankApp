@@ -7,10 +7,9 @@ import ShopOffersBanner from './ShopOffersBanner';
 interface HomeViewProps {
     user: User;
     onNavigate: (view: any) => void;
-    news: News[];
 }
 
-const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, news }) => {
+const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
     const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
     return (
@@ -41,38 +40,38 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, news }) => {
                             {/* PIX */}
                             <button onClick={() => onNavigate('pix')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center border-none bg-transparent p-0">
                                 <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square transition-transform hover:scale-105">
-                                    <span className="material-symbols-outlined text-4xl">qr_code_2</span>
+                                    <span className="material-symbols-outlined text-4xl text-primary">qr_code_2</span>
                                 </div>
                                 <p className="text-sm font-medium leading-normal text-white">PIX</p>
                             </button>
                             {/* Marketplace */}
-                             <div onClick={() => onNavigate('shop')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center">
+                             <button onClick={() => onNavigate('shop')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center border-none bg-transparent p-0">
                                 <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square transition-transform hover:scale-105">
                                     <span className="material-symbols-outlined text-4xl text-white">storefront</span>
                                 </div>
                                 <p className="text-sm font-medium leading-normal text-white">Shop</p>
-                            </div>
+                            </button>
                             {/* Cards */}
-                             <div onClick={() => onNavigate('cards')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center">
+                             <button onClick={() => onNavigate('cards')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center border-none bg-transparent p-0">
                                 <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square transition-transform hover:scale-105">
                                     <span className="material-symbols-outlined text-4xl text-white">credit_card</span>
                                 </div>
                                 <p className="text-sm font-medium leading-normal text-white">Cartões</p>
-                            </div>
+                            </button>
                             {/* Pagar Contas - Placeholder */}
-                            <div className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center">
+                            <button onClick={() => {}} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center border-none bg-transparent p-0">
                                 <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square transition-transform hover:scale-105">
                                     <span className="material-symbols-outlined text-4xl text-white">receipt_long</span>
                                 </div>
                                 <p className="text-sm font-medium leading-normal text-white">Pagar Contas</p>
-                            </div>
+                            </button>
                             {/* Extrato */}
-                             <div onClick={() => onNavigate('statement')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center">
+                             <button onClick={() => onNavigate('statement')} className="flex h-full w-28 flex-shrink-0 cursor-pointer flex-col items-center gap-3 rounded-lg text-center border-none bg-transparent p-0">
                                 <div className="flex w-full items-center justify-center rounded-xl bg-surface-dark p-4 aspect-square transition-transform hover:scale-105">
                                     <span className="material-symbols-outlined text-4xl text-white">description</span>
                                 </div>
                                 <p className="text-sm font-medium leading-normal text-white">Extrato</p>
-                            </div>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -110,7 +109,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, news }) => {
 
             {/* Shop Offers and News Section */}
             <ShopOffersBanner onNavigate={onNavigate} />
-            <NewsSection news={news} />
+            <NewsSection />
         </div>
     );
 };
