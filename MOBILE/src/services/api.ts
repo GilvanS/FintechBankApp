@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
 import { PixContact, User, PasswordResetRequest, LimitIncreaseRequest, SignUpData } from '../types';
 
-const DEV_API_URL = '__NGROK_URL__'; // substitute pelo seu URL ngrok
+const DEV_API_URL = 'http://192.168.0.105:3001'; // IP da rede (funciona no PC e Mobile)
 const API_CACHE_KEY = 'apiBaseUrlCache';
 const CACHE_DURATION_MS = 60 * 60 * 1000; // 60 minutos
 

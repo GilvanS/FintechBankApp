@@ -18,9 +18,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [apiUrl, setApiUrl] = useState('');
-  const [tempApiUrl, setTempApiUrl] = useState('');
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
   const { login } = useAuth();
@@ -33,36 +30,34 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
       .replace(/^(\d{3}\.\d{3}\.\d{3})(\d{1,2})$/, '$1-$2');
   };
 
-  const checkServerStatus = useCallback(async (url: string | null) => {
-    if (!url) {
-      setServerStatus('offline');
-      return;
-    }
+  const checkServerStatus = useCallback(async () => {
     setServerStatus('checking');
+    const url = 'http://192.168.0.105:3001';
+    console.log('Verificando status em:', url);
+
     try {
       setApiBaseUrl(url);
-      await api.get('/health', { timeout: 5000, headers: { Accept: 'application/json' } });
+      await api.get('/health', { timeout: 5000 });
       setServerStatus('online');
-    } catch (err) {
+      setError('');
+      return true;
+    } catch (e: any) {
+      console.error('Erro de conexão:', e);
       setServerStatus('offline');
+      setError(`Erro ao conectar em ${url}. Verifique se a API está rodando.`);
+      return false;
     }
   }, []);
 
   useIonViewWillEnter(() => {
-    const init = async () => {
-      const { value } = await Preferences.get({ key: 'apiBaseUrl' });
-      const url = value || '';
-      setApiUrl(url);
-      setTempApiUrl(url);
-      await checkServerStatus(url);
-    };
-    init();
+    // Forçar uso do IP correto ao entrar
+    checkServerStatus();
   });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (serverStatus !== 'online') {
-      setError('Servidor offline. Verifique a configuração da API.');
+      setError('Servidor offline. Verifique a conexão com a rede.');
       return;
     }
     setLoading(true);
@@ -106,28 +101,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
     }
   };
 
-  const handleSaveSettings = async () => {
-    await Preferences.set({ key: 'apiBaseUrl', value: tempApiUrl });
-    setApiUrl(tempApiUrl);
-    setShowSettings(false);
-    await checkServerStatus(tempApiUrl);
-  };
-
-  const openNgrokConsole = () => {
-    const url = 'http://127.0.0.1:4040';
-    try {
-      window.open(url, '_blank');
-    } catch (e) {}
-  };
-
-  const handleResetSettings = async () => {
-    await Preferences.remove({ key: 'apiBaseUrl' });
-    setApiUrl('');
-    setTempApiUrl('');
-    setApiBaseUrl('');
-    setServerStatus('offline');
-  };
-
   return (
     <div className="font-display bg-background-dark text-text-dark antialiased">
       <div className="flex flex-col min-h-screen">
@@ -136,9 +109,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             <button onClick={onNavigateToPreLogin} className="text-subtle-dark hover:text-primary">
               <span className="material-symbols-outlined text-2xl">arrow_back</span>
             </button>
-            <button onClick={() => setShowSettings(true)} className="text-subtle-dark hover:text-primary">
-              <span className="material-symbols-outlined text-2xl">settings</span>
-            </button>
+            {/* Settings button removed */}
           </div>
         </header>
         <main className="flex-grow flex flex-col items-center justify-center p-4">
@@ -202,37 +173,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
           </div>
         </footer>
       </div>
-
-      {showSettings && (
-        <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-50 safe-top pt-24" onClick={() => setShowSettings(false)}>
-          <div className="w-full max-w-sm bg-surface-dark rounded-xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-center text-text-dark mb-1">Endereço da API do Servidor</h3>
-            {/* FIX: Added version tag */}
-            <p className="text-center text-xs text-subtle-dark mb-4">v2.2 (Auth Fix Re-applied)</p>
-            <input
-              type="text"
-              value={tempApiUrl}
-              onChange={(e) => setTempApiUrl(e.target.value)}
-              placeholder="http://192.168.0.10:3001/api/v1"
-              className="w-full px-4 py-3 bg-background-dark border border-subtle-dark/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-6"
-            />
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2">
-                <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
-                <span className="text-subtle-dark">{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Offline' : 'Checando'}</span>
-              </div>
-              <div className="flex items-center gap-4">
-                <button onClick={() => checkServerStatus(tempApiUrl)} className="text-primary font-semibold">Testar</button>
-                <button onClick={openNgrokConsole} className="text-subtle-dark hover:text-primary">Abrir console</button>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <button onClick={handleResetSettings} className="w-full py-3 bg-subtle-dark/50 text-text-dark rounded-lg hover:bg-subtle-dark/70 font-semibold">Resetar</button>
-              <button onClick={handleSaveSettings} className="w-full py-3 bg-primary text-white rounded-lg hover:bg-primary/90 font-semibold">Salvar</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

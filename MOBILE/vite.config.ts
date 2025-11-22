@@ -7,10 +7,20 @@ export default defineConfig(({ mode }) => {
     return {
       server: {
         port: 3000,
-        host: '0.0.0.0',
+        host: '0.0.0.0', // Permite acesso via IP da rede
         proxy: {
           '/api': {
-            target: 'http://localhost:3001',
+            target: 'http://192.168.0.105:3001', // IP fixo da rede WiFi
+            changeOrigin: true
+          }
+        }
+      },
+      preview: {
+        port: 3000,
+        host: '0.0.0.0', // Permite acesso via IP da rede no preview também
+        proxy: {
+          '/api': {
+            target: 'http://192.168.0.105:3001', // IP fixo da rede WiFi
             changeOrigin: true
           }
         }

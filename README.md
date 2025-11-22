@@ -4,7 +4,15 @@ npm run build
 npx cap sync android
 ngrok http 3001
 
+Aqui está o comando para configurar o IP fixo. Execute-o no PowerShell como Administrador. Cuidado: Isso pode desconectar sua internet momentaneamente.
 
+powershell
+New-NetIPAddress -InterfaceAlias "Wi-Fi" -IPAddress "192.168.0.105" -PrefixLength 24 -DefaultGateway "192.168.0.1"; Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses "8.8.8.8","8.8.4.4"
+Se der erro dizendo que o IP já existe, use este para garantir que está tudo certo (ele apenas define, sem criar novo se já existir):
+
+powershell
+Set-NetIPAddress -InterfaceAlias "Wi-Fi" -IPAddress "192.168.0.105" -PrefixLength 24; Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses "8.8.8.8","8.8.4.4"
+A
 MOBILE/src/types.t# FintechBankApp
 
 FintechBankApp é um projeto didático desenvolvido para treinamento de desenvolvimento Web e APIs com foco em boas práticas aplicáveis ao ecossistema Java + frameworks (conceitos, padrões e arquitetura). A implementação de referência desta branch usa Node.js (Express) no backend e Vite + React + TypeScript no frontend para acelerar a prática e a validação dos fluxos.

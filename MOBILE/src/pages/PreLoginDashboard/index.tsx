@@ -19,10 +19,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
           <h1 className="text-2xl font-semibold text-text-dark">
             Olá!
           </h1>
-          {/* O botão de configurações agora também chama a função de navegação para o login */}
-          <button onClick={onNavigateToLogin} className="text-subtle-dark hover:text-primary transition-colors">
-            <span className="material-symbols-outlined text-3xl">settings</span>
-          </button>
+          {/* Settings button removed */}
         </div>
 
         {/* Conteúdo Principal Centralizado */}

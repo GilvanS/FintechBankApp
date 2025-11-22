@@ -86,9 +86,18 @@ class DatabricksService {
                 initialSchema: databricksConfig.schema,
             });
             console.log("✅ Conectado ao Databricks com sucesso.");
+            console.log(`📋 Catalog configurado: ${this.catalog}`);
+            console.log(`📋 Schema configurado: ${this.schema}`);
 
             // Detectar catálogo disponível automaticamente
             await this.detectAvailableCatalog();
+            
+            // Verificar se catalog e schema são iguais (pode causar problemas)
+            if (this.catalog === this.schema) {
+                console.warn(`⚠️  ATENÇÃO: Catalog e Schema são iguais (${this.catalog}). Isso pode causar duplicação no nome das tabelas.`);
+                console.warn(`💡 Considere usar schema 'default' ou outro nome diferente do catalog.`);
+            }
+            
             this.mockMode = false;
         } catch (error) {
             console.error('❌ Falha ao conectar com Databricks:', error.message);
@@ -159,6 +168,10 @@ class DatabricksService {
     }
 
     fq(tableName) {
+        // Evitar duplicação se catalog e schema forem iguais
+        if (this.catalog === this.schema) {
+            return `\`${this.catalog}\`.\`${tableName}\``;
+        }
         return `\`${this.catalog}\`.\`${this.schema}\`.\`${tableName}\``;
     }
 }
@@ -371,6 +384,7 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     if (existingUser.length > 0) {
         return res.status(400).json({ success: false, message: 'CPF ou email ja cadastrado.' });
     }
+    console.log(`✅ Usuário não existe. Criando conta para ${cpf}...`);
     const hashedPassword = await bcrypt.hash(password, 10);
     
     // Valores padrão definidos no código (já que o Databricks não permite DEFAULT)
@@ -1674,9 +1688,10 @@ async function initializeDatabase() {
         try {
             const tableInfo = await databricksService.executeQuery(`DESCRIBE TABLE ${databricksService.fq('users')}`);
             const hasFullName = tableInfo.some(col => col.col_name === 'full_name');
+            const hasUsername = tableInfo.some(col => col.col_name === 'username');
             
-            if (!hasFullName) {
-                console.log('⚠️  Tabela users existe mas não tem a estrutura correta. Recriando...');
+            if (!hasFullName || !hasUsername) {
+                console.log('⚠️  Tabela users existe mas não tem a estrutura correta (faltam colunas). Recriando...');
                 await databricksService.executeQuery(`DROP TABLE IF EXISTS ${databricksService.fq('users')}`);
                 await databricksService.executeQuery(`DROP TABLE IF EXISTS ${databricksService.fq('transactions')}`);
                 // Forçar recriação da tabela pix_contacts com estrutura correta
@@ -1737,6 +1752,15 @@ async function initializeDatabase() {
                 login_attempts INT,
                 pix_daily_limit DECIMAL(15,2),
                 password_reset_requested BOOLEAN,
+                username STRING,
+                profile_description STRING,
+                show_stories_popup BOOLEAN,
+                credit_card_due_date STRING,
+                credit_card_invoice_due_date TIMESTAMP,
+                credit_card_available_limit DECIMAL(15,2),
+                credit_card_total_limit DECIMAL(15,2),
+                credit_card_points_balance INT,
+                credit_card_is_blocked BOOLEAN,
                 created_at TIMESTAMP,
                 updated_at TIMESTAMP
             ) USING DELTA
@@ -2034,4 +2058,6 @@ app.get('/api/health', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API ouvindo em http://0.0.0.0:${PORT}`);
+  console.log(`🌐 Acesse via rede local: http://192.168.0.105:${PORT}`);
+  console.log(`📋 Swagger: http://192.168.0.105:${PORT}/api-docs`);
 });
