@@ -35,7 +35,7 @@ const databricksConfig = {
     httpPath: process.env.DATABRICKS_HTTP_PATH,
     token: process.env.DATABRICKS_TOKEN,
     catalog: process.env.DATABRICKS_CATALOG || 'workspace', // Usar 'workspace' como padrão
-    schema: process.env.DATABRICKS_SCHEMA || 'fintechbank'
+    schema: process.env.DATABRICKS_SCHEMA || 'default'
 };
 
 // --- Classe de Serviço Databricks ---
