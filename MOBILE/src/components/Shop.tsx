@@ -6,7 +6,7 @@ import ProductPage from './ProductPage';
 // FIX: Updated ShopProps interface to include all necessary handlers from the parent component.
 interface ShopProps {
     onBack: () => void;
-    onAddToCart: (item: PurchasedasedItem) => void;
+    onAddToCart: (item: PurchasedItem) => void;
     onInitiatePurchase: (item: PurchasedItem) => void;
     cartItemCount: number;
     onNavigate: (view: string) => void;

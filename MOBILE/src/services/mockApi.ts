@@ -130,7 +130,7 @@ export const signUp = async (data: SignUpData): Promise<{ success: boolean; mess
 
 // ... other existing API functions ...
 
-export const payCreditCardInvoice = async (cpf: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
+export const payCreditCardInvoice = async (cpf: string, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
     await delay(1500);
     const store = _getStore();
     const userIndex = store.users.findIndex(u => u.cpf === cpf);
@@ -247,7 +247,7 @@ export const anticipateCreditCardInstallments = async (cpf: string, transactionI
 // FIX: Added implementations and exports for all missing functions to resolve errors.
 // --- Stubs for other functions that might be needed ---
 
-export const parcelCreditCardInvoice = async (cpf: string, details: { amount: number, installments: number }): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const parcelCreditCardInvoice = async (cpf: string, details: { amount: number, installments: number }, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
     await delay(1500);
     const store = _getStore();
     const userIndex = store.users.findIndex(u => u.cpf === cpf);
@@ -275,18 +275,35 @@ export const parcelCreditCardInvoice = async (cpf: string, details: { amount: nu
     const totalWithInterest = amount * (1 + (interestRate * installments));
     const installmentValue = totalWithInterest / installments;
 
-    // Update available limit: restore paid invoice amount, then subtract new total debt
+    // Primeira parcela é debitada do saldo da conta
+    const firstInstallment = installmentValue;
+    if (user.balance < firstInstallment) {
+        return { success: false, message: 'Saldo insuficiente para pagar a primeira parcela.' };
+    }
+    user.balance -= firstInstallment;
+
+    // Adiciona transação de débito para primeira parcela
+    user.transactions.unshift({
+        id: `tx-parc-1-${Date.now()}`,
+        type: 'PAYMENT',
+        amount: -firstInstallment,
+        date: new Date().toISOString(),
+        description: `1ª parcela de ${installments}x - Parcelamento Fatura`,
+    });
+
+    // Update available limit: restore paid invoice amount, then subtract remaining debt (total - first installment)
+    const remainingDebt = totalWithInterest - firstInstallment;
     user.creditCard.availableLimit += user.creditCard.closedInvoice;
-    user.creditCard.availableLimit -= totalWithInterest;
+    user.creditCard.availableLimit -= remainingDebt;
     
     // Clear closed invoice details
     user.creditCard.closedInvoice = 0;
     user.creditCard.closedTransactions = [];
     user.creditCard.closedInvoiceDueDate = undefined;
 
-    // Add new installment transactions to the open invoice with future dates
+    // Add remaining installments (2nd onwards) to the open invoice with future dates
     const parcelDate = new Date();
-    for (let i = 1; i <= installments; i++) {
+    for (let i = 2; i <= installments; i++) {
         const transactionDate = new Date(parcelDate);
         transactionDate.setMonth(transactionDate.getMonth() + (i-1));
         

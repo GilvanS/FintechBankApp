@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
-import { PixContact, User } from '../types';
+import { PixContact, User, PasswordResetRequest, LimitIncreaseRequest } from '../types';
 
 const DEV_API_URL = '__NGROK_URL__'; // substitute pelo seu URL ngrok
 const API_CACHE_KEY = 'apiBaseUrlCache';
@@ -280,11 +280,184 @@ export async function getUserMe(): Promise<{ success: boolean; message?: string;
 // Alias para compatibilidade
 export const getProfile = getUserMe;
 
+// ========== FUNÇÕES DE ADMIN ==========
+
+// Método: adminGetUserByCpf - Busca usuário por CPF (Admin)
+// Usa a mesma função getUserByCpf que já chama /admin/users/:cpf
+export const adminGetUserByCpf = getUserByCpf;
+
+// Método: blockUser - Bloqueia conta de usuário (Admin)
+export async function blockUser(cpf: string): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        const res = await api.post(`/admin/users/${cpf}/block`, {}, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success && data?.user) {
+            return { success: true, message: data.message || 'Usuário bloqueado com sucesso.', user: data.user };
+        }
+        return { success: false, message: data?.message || 'Falha ao bloquear usuário.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao bloquear usuário.' };
+    }
+}
+
+// Método: unblockUser - Desbloqueia conta de usuário (Admin)
+export async function unblockUser(cpf: string): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        const res = await api.post(`/admin/users/${cpf}/unblock`, {}, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success && data?.user) {
+            return { success: true, message: data.message || 'Usuário desbloqueado com sucesso.', user: data.user };
+        }
+        return { success: false, message: data?.message || 'Falha ao desbloquear usuário.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao desbloquear usuário.' };
+    }
+}
+
+// Método: adminDeposit - Realiza depósito em conta (Admin)
+export async function adminDeposit(cpf: string, amount: number): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        const res = await api.post(`/admin/users/${cpf}/deposit`, { amount }, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success && data?.user) {
+            return { success: true, message: data.message || 'Depósito realizado com sucesso.', user: data.user };
+        }
+        return { success: false, message: data?.message || 'Falha ao realizar depósito.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao realizar depósito.' };
+    }
+}
+
+// Método: adminUpdateCardDetails - Atualiza detalhes do cartão (Admin)
+export async function adminUpdateCardDetails(cpf: string, details: { dueDate?: string; invoiceDueDate?: string }): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        const res = await api.put(`/admin/users/${cpf}/card-details`, details, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success && data?.user) {
+            return { success: true, message: data.message || 'Detalhes do cartão atualizados com sucesso.', user: data.user };
+        }
+        return { success: false, message: data?.message || 'Falha ao atualizar detalhes do cartão.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao atualizar detalhes do cartão.' };
+    }
+}
+
+// Método: adminGetPasswordRequests - Lista solicitações de senha (Admin)
+export async function adminGetPasswordRequests(): Promise<PasswordResetRequest[]> {
+    try {
+        const res = await api.get('/admin/requests/password', {
+            headers: getAuthHeaders('none'),
+        });
+        const data = res.data;
+        if (Array.isArray(data)) {
+            return data.filter((r: any) => r.status === 'pending') as PasswordResetRequest[];
+        }
+        const requests = data?.requests || [];
+        return requests.filter((r: any) => r.status === 'pending') as PasswordResetRequest[];
+    } catch (error: any) {
+        console.error('Erro ao buscar solicitações de senha:', error);
+        return [];
+    }
+}
+
+// Método: adminApprovePasswordRequest - Aprova solicitação de senha (Admin)
+export async function adminApprovePasswordRequest(cpf: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post(`/admin/requests/password/${cpf}/approve`, {}, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success) {
+            return { success: true, message: data.message || 'Solicitação de senha aprovada.' };
+        }
+        return { success: false, message: data?.message || 'Falha ao aprovar solicitação de senha.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao aprovar solicitação de senha.' };
+    }
+}
+
+// Método: adminDenyPasswordRequest - Nega solicitação de senha (Admin)
+export async function adminDenyPasswordRequest(cpf: string, reason: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post(`/admin/requests/password/${cpf}/deny`, { reason }, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success) {
+            return { success: true, message: data.message || 'Solicitação de senha negada.' };
+        }
+        return { success: false, message: data?.message || 'Falha ao negar solicitação de senha.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao negar solicitação de senha.' };
+    }
+}
+
+// Método: adminGetLimitRequests - Lista solicitações de limite (Admin)
+export async function adminGetLimitRequests(): Promise<LimitIncreaseRequest[]> {
+    try {
+        const res = await api.get('/admin/requests/limit', {
+            headers: getAuthHeaders('none'),
+        });
+        const data = res.data;
+        if (Array.isArray(data)) {
+            return data.filter((r: any) => r.status === 'pending') as LimitIncreaseRequest[];
+        }
+        const requests = data?.requests || [];
+        return requests.filter((r: any) => r.status === 'pending') as LimitIncreaseRequest[];
+    } catch (error: any) {
+        console.error('Erro ao buscar solicitações de limite:', error);
+        return [];
+    }
+}
+
+// Método: adminApproveLimitRequest - Aprova solicitação de limite (Admin)
+export async function adminApproveLimitRequest(cpf: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post(`/admin/requests/limit/${cpf}/approve`, {}, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success) {
+            return { success: true, message: data.message || 'Solicitação de limite aprovada.' };
+        }
+        return { success: false, message: data?.message || 'Falha ao aprovar solicitação de limite.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao aprovar solicitação de limite.' };
+    }
+}
+
+// Método: adminDenyLimitRequest - Nega solicitação de limite (Admin)
+export async function adminDenyLimitRequest(cpf: string, reason: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post(`/admin/requests/limit/${cpf}/deny`, { reason }, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success) {
+            return { success: true, message: data.message || 'Solicitação de limite negada.' };
+        }
+        return { success: false, message: data?.message || 'Falha ao negar solicitação de limite.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao negar solicitação de limite.' };
+    }
+}
+
+// ========== FUNÇÕES AINDA USANDO MOCK (TEMPORÁRIO) ==========
 export {
     updateUserProfile,
     purchaseWithDebit,
     purchaseWithCard,
-    getUserStatement
+    getUserStatement,
+    payCreditCardInvoice,
+    parcelCreditCardInvoice
 } from './mockApi';
 
 export default api;

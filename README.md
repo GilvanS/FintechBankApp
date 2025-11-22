@@ -1,10 +1,13 @@
-MOBILE/src/types.t# FintechBankApp
-
-FintechBankApp é um projeto didático desenvolvido para treinamento de desenvolvimento Web e APIs com foco em boas práticas aplicáveis ao ecossistema Java + frameworks (conceitos, padrões e arquitetura). A implementação de referência desta branch usa Node.js (Express) no backend e Vite + React + TypeScript no frontend para acelerar a prática e a validação dos fluxos.
+## Comando Basicos
 
 npm run build
 npx cap sync android
+ngrok http 3001
 
+
+MOBILE/src/types.t# FintechBankApp
+
+FintechBankApp é um projeto didático desenvolvido para treinamento de desenvolvimento Web e APIs com foco em boas práticas aplicáveis ao ecossistema Java + frameworks (conceitos, padrões e arquitetura). A implementação de referência desta branch usa Node.js (Express) no backend e Vite + React + TypeScript no frontend para acelerar a prática e a validação dos fluxos.
 
 O objetivo é proporcionar um ambiente completo para:
 - Exercitar princípios SOLID, Clean Code e testes automatizados.

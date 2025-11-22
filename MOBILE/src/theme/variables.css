@@ -12,6 +12,8 @@
 ion-app {
   background-color: #0B1120 !important;
   color: #E5E7EB !important;
+  position: relative !important;
+  overflow: visible !important;
 }
 
 /* Ensure Material Symbols are visible */
@@ -29,4 +31,14 @@ ion-app {
   direction: ltr;
   -webkit-font-feature-settings: 'liga';
   -webkit-font-smoothing: antialiased;
+}
+
+/* Hide scrollbar but keep functionality */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
 }
