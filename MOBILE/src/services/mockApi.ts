@@ -876,7 +876,8 @@ export const deletePixKey = async (cpf: string, key: string): Promise<{ success:
 
 export const getUserMe = async (): Promise<{ success: boolean; message?: string; user?: Omit<User, 'password'> }> => {
     await delay(500);
-    const token = localStorage.getItem('token');
+    // CORRIGIDO: Usa 'authToken' em vez de 'token' para consistência
+    const token = localStorage.getItem('authToken') || localStorage.getItem('token');
     if (!token) {
         return { success: false, message: 'Não autenticado.' };
     }

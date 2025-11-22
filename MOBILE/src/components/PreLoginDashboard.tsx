@@ -38,7 +38,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
                         onClick={onNavigateToLogin}
                         className="w-full max-w-xs px-8 py-4 font-semibold text-background-dark transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50"
                     >
-                        Acessar minha conta
+                        Entre na conta
                     </button>
                     <button
                         onClick={onNavigateToSignUp}

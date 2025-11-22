@@ -20,7 +20,8 @@ import PasswordModal from '../components/PasswordModal';
 import BlockedCardModal from '../components/BlockedCardModal';
 
 const Home: React.FC = () => {
-    const { user, logout, updateUser, view, navigateTo } = useAuth();
+    const { user, logout, updateUser } = useAuth();
+    const [view, setView] = useState<View>('home');
     const [cart, setCart] = useState<PurchasedItem[]>([]);
     const [currentItem, setCurrentItem] = useState<PurchasedItem | null>(null);
     const [checkoutTotal, setCheckoutTotal] = useState(0);
@@ -35,6 +36,13 @@ const Home: React.FC = () => {
     const passwordActionPayload = useRef<any>(null);
     const [passwordModalInfo, setPasswordModalInfo] = useState({ title: '', description: '' });
 
+    const navigateTo = (newView: View) => {
+        setView(newView);
+    };
+
+    const handleGoToLogin = () => {
+        logout();  // Isso vai chamar o logout do contexto e levar para prelogin
+    };
 
     const handleAddToCart = (item: PurchasedItem) => {
         setCart(prevCart => {
@@ -211,8 +219,8 @@ const Home: React.FC = () => {
         <IonPage>
             <Header
                 user={user}
-                onNavigateToMenu={() => navigateTo('menu')}
-                onNavigateToNotifications={() => navigateTo('notifications')}
+                onNavigateToMenu={handleGoToLogin}
+                onNavigateToNotifications={handleGoToLogin}
             />
             <IonContent className="no-scrollbar">
                 {renderContent()}

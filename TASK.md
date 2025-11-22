@@ -153,3 +153,75 @@ Este documento detalha o planejamento e as etapas para transformar o projeto `WE
     -   **Descrição:** Verificação final de todas as correções implementadas nas fases anteriores
     -   **Impacto:** Garantia de que todos os bugs identificados foram devidamente corrigidos
     -   **Solução:** Revisão completa dos componentes principais (Dashboard, HomeView, App, Home) para assegurar consistência
+
+---
+
+### **Fase 15: Correção Crítica do Sistema de Navegação (Concluído)**
+
+-   [x] **Tarefa 15.1:** Análise do Problema de Navegação nos Botões
+    -   **Descrição:** Identificação de que os botões na tela Home não estavam funcionando devido ao uso incorreto do contexto de navegação
+    -   **Impacto:** Usuário não conseguia navegar entre as diferentes seções do app (PIX, Shop, Cartões, etc.)
+    -   **Causa Raiz:** O componente Home.tsx estava tentando usar o estado global de navegação em vez de um estado local para navegação interna
+-   [x] **Tarefa 15.2:** Implementação de Sistema de Navegação Local no Home.tsx
+    -   **Descrição:** Criação de estado local de navegação dentro do componente Home para gerenciar as telas internas
+    -   **Impacto:** Permite navegação adequada entre as diferentes funcionalidades (PIX, Shop, Cartões, Extrato) sem interferir no estado global
+    -   **Solução:** Adicionado useState<View> local e função navigateTo local para gerenciar navegação interna
+-   [x] **Tarefa 15.3:** Atualização do Tipo View para Incluir Todos os Estados Necessários
+    -   **Descrição:** Expansão do tipo View para incluir todos os valores usados no sistema de navegação
+    -   **Impacto:** Tipagem correta e prevenção de erros de compilação relacionados à navegação
+    -   **Solução:** Adicionados todos os valores possíveis ('paymentMethods', 'purchaseConfirmation', 'menu', 'notifications', etc.) ao tipo View em types.ts
+
+---
+
+### **Fase 16: Identificação e Correção de Componente Duplicado (Concluído)**
+
+-   [x] **Tarefa 16.1:** Análise do Componente PreLoginDashboard
+    -   **Descrição:** Identificação de que existiam duas versões do componente PreLoginDashboard no projeto MOBILE
+    -   **Impacto:** Dificuldade em identificar qual componente estava sendo usado e potenciais inconsistências
+    -   **Causa Raiz:** Cópia do projeto WEB para MOBILE resultou em componentes duplicados em diferentes diretórios
+-   [x] **Tarefa 16.2:** Atualização do Componente em src/components/PreLoginDashboard.tsx
+    -   **Descrição:** Correção do texto 'Acessar minha conta' para 'Entre na conta' no componente duplicado
+    -   **Impacto:** Garantia de consistência em todos os componentes do projeto
+    -   **Solução:** Atualização do texto em F:\GITHUB\FintechBankApp\MOBILE\src\components\PreLoginDashboard.tsx
+-   [x] **Tarefa 16.3:** Validação da Correta Utilização do Componente Atual
+    -   **Descrição:** Confirmação de que o App.tsx utiliza o componente correto em src/pages/PreLoginDashboard
+    -   **Impacto:** Garantia de que as alterações feitas anteriormente estavam no componente correto
+    -   **Solução:** Verificação do import e uso do componente correto no App.tsx
+
+---
+
+### **Fase 17: Correção Crítica de Vulnerabilidade de Autenticação (Concluído)**
+
+-   [x] **Tarefa 17.1:** Identificação do Bug Crítico de Autenticação
+    -   **Descrição:** O aplicativo estava permitindo acesso à tela home sem autenticação válida. Ao abrir o APK, o app ia direto para a tela home sem exigir login.
+    -   **Impacto:** VULNERABILIDADE CRÍTICA DE SEGURANÇA - Qualquer pessoa poderia acessar o aplicativo sem fazer login
+    -   **Causa Raiz:** 
+        1. Inconsistência de chaves de token: Login salvava token como 'authToken', mas mockApi procurava 'token'
+        2. App.tsx usava getProfile() do mockApi que não validava token real com backend
+        3. checkAuth() não verificava se token existia antes de tentar buscar perfil
+        4. Não havia validação real do token com a API backend
+-   [x] **Tarefa 17.2:** Implementação de getUserMe Real que Chama API Backend
+    -   **Descrição:** Criada implementação real de getUserMe() em api.ts que chama GET /users/me com validação de token
+    -   **Impacto:** Agora o app valida o token com o backend antes de permitir acesso
+    -   **Solução:** Implementada função getUserMe() que:
+        - Verifica se token existe antes de fazer requisição
+        - Verifica se API base URL está configurada
+        - Chama GET /users/me com headers de autenticação
+        - Retorna erro 401 se token inválido/expirado e limpa tokens automaticamente
+-   [x] **Tarefa 17.3:** Correção da Verificação de Autenticação no App.tsx
+    -   **Descrição:** Corrigido checkAuth() para validar token antes de buscar perfil e tratar erros adequadamente
+    -   **Impacto:** App agora verifica autenticação corretamente e redireciona para login se token inválido
+    -   **Solução:** 
+        - Adicionada verificação de token antes de chamar getProfile()
+        - Tratamento adequado de erros com limpeza de tokens
+        - Redirecionamento para prelogin se autenticação falhar
+-   [x] **Tarefa 17.4:** Correção de Inconsistência de Chaves de Token
+    -   **Descrição:** Corrigida inconsistência onde login salvava 'authToken' mas código procurava 'token'
+    -   **Impacto:** Garantia de que tokens são salvos e recuperados corretamente
+    -   **Solução:** 
+        - mockApi.ts atualizado para procurar 'authToken' primeiro, depois 'token' (compatibilidade)
+        - Logout atualizado para limpar ambas as chaves ('token' e 'authToken')
+-   [x] **Tarefa 17.5:** Correção do Logout para Limpar Todos os Tokens
+    -   **Descrição:** Logout agora limpa todos os tokens (localStorage e Preferences)
+    -   **Impacto:** Garantia de que logout remove completamente a autenticação
+    -   **Solução:** handleLogout() agora remove 'token' e 'authToken' do localStorage e Preferences

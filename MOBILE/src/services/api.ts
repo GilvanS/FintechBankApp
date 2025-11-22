@@ -243,13 +243,48 @@ export async function registerPixKey(type: 'CPF' | 'EMAIL', key: string): Promis
     }
 }
 
+// Método: getUserMe - Implementação REAL que chama a API backend
+export async function getUserMe(): Promise<{ success: boolean; message?: string; user?: User }> {
+    try {
+        // Verifica se há token antes de fazer a requisição
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            return { success: false, message: 'Não autenticado. Token não encontrado.' };
+        }
+
+        // Verifica se a API base URL está configurada
+        if (!api.defaults.baseURL) {
+            return { success: false, message: 'API não configurada. Configure a URL da API na tela de login.' };
+        }
+
+        const res = await api.get('/users/me', {
+            headers: getAuthHeaders('none'),
+        });
+        
+        const data = res.data;
+        if (data?.success && data?.user) {
+            return { success: true, user: data.user };
+        }
+        return { success: false, message: data?.message || 'Falha ao obter dados do usuário.' };
+    } catch (error: any) {
+        // Se o erro for 401 (não autorizado), limpa o token
+        if (error?.response?.status === 401) {
+            localStorage.removeItem('authToken');
+            await Preferences.remove({ key: 'token' });
+            return { success: false, message: 'Token inválido ou expirado. Faça login novamente.' };
+        }
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao obter dados do usuário.' };
+    }
+}
+
+// Alias para compatibilidade
+export const getProfile = getUserMe;
+
 export {
     updateUserProfile,
     purchaseWithDebit,
     purchaseWithCard,
-    getUserMe,
-    getUserStatement,
-    getUserMe as getProfile
+    getUserStatement
 } from './mockApi';
 
 export default api;

@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { IonApp, setupIonicReact } from '@ionic/react';
+import { Preferences } from '@capacitor/preferences';
 import { User } from './types';
 import { AuthContext } from './context/AuthContext';
 import Login from './pages/Login';
@@ -101,11 +102,33 @@ const App: React.FC = () => {
 
       const checkAuth = async () => {
         try {
-          const userData = await getProfile();
-          const normalizedUser = normalizeUserShape(userData);
-          setUser(normalizedUser);
-          setView('home');
+          // Verifica se há token antes de tentar buscar o perfil
+          const token = localStorage.getItem('authToken');
+          if (!token) {
+            console.log('Nenhum token encontrado. Redirecionando para login.');
+            setView('prelogin');
+            return;
+          }
+
+          // Tenta buscar o perfil do usuário usando a API real
+          const result = await getProfile();
+          
+          if (result.success && result.user) {
+            const normalizedUser = normalizeUserShape(result.user);
+            setUser(normalizedUser);
+            setView('home');
+          } else {
+            // Se não conseguiu obter o perfil, limpa o token e redireciona para login
+            console.log('Falha na autenticação:', result.message);
+            localStorage.removeItem('authToken');
+            await Preferences.remove({ key: 'token' });
+            setView('prelogin');
+          }
         } catch (error) {
+          console.error('Erro ao verificar autenticação:', error);
+          // Em caso de erro, limpa tokens e redireciona para login
+          localStorage.removeItem('authToken');
+          Preferences.remove({ key: 'token' });
           setView('prelogin');
         }
       };
@@ -120,8 +143,11 @@ const App: React.FC = () => {
     setView('home');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Limpa todos os tokens (tanto 'token' quanto 'authToken' para garantir)
     localStorage.removeItem('token');
+    localStorage.removeItem('authToken');
+    await Preferences.remove({ key: 'token' });
     setUser(null);
     setView('prelogin');
   };
@@ -129,9 +155,14 @@ const App: React.FC = () => {
   const handleUpdateUser = useCallback(async () => {
     if (user) {
       try {
-        const updatedUserData = await api.getProfile();
-        const normalized = normalizeUserShape(updatedUserData);
-        setUser(normalized);
+        const result = await getProfile();
+        if (result.success && result.user) {
+          const normalized = normalizeUserShape(result.user);
+          setUser(normalized);
+        } else {
+          console.error("Falha ao atualizar os dados do usuário:", result.message);
+          handleLogout();
+        }
       } catch (error) {
         console.error("Falha ao atualizar os dados do usuário:", error);
         handleLogout();

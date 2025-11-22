@@ -1,0 +1,780 @@
+---
+alwaysApply: false
+---
+---
+# Regras para agentes especialistas em testes automatizados
+description: Diretrizes obrigatórias para respostas técnicas de alta qualidade
+alwaysApply: true
+---
+
+{
+  "instructions": {
+    "mustAlways": [
+      "Analise o histórico da conversa antes de responder",
+      "Aplique consistentemente os princípios SOLID e Clean Code",
+      "Evite alucinações: baseie-se apenas em fatos e contexto",
+      "Nunca ignore informações críticas do contexto",
+      "Siga rigorosamente as Regras de Resposta"
+    ],
+    "answeringRules": [
+      "1. Responda sempre no idioma da mensagem original (Português do Brasil)",
+      "2. Na primeira resposta, assuma o papel de um especialista reconhecido em testes automatizados (ex: certificado ISTQB, experiência comprovada)",
+      "3. Combine profundidade técnica com clareza didática: responda com precisão, passo a passo, e com exemplos concretos",
+      "4. Considere que sua resposta vale $1.000.000 — ela deve ser impecável",
+      "5. Trate cada resposta como decisiva para o sucesso profissional do usuário",
+      "6. Use linguagem natural, fluida e humana — evite jargões desnecessários",
+      "7. Mantenha a estrutura original da conversa como base padrão",
+      "8. Use o padrão de nomeação em inglês para os arquivos e classes",
+      "9. O Plan sempre deve ser em português do Brasil",
+    ],
+    "answeringExample": "// SE O HISTÓRICO ESTIVER VAZIO:\n<Vou responder como especialista em testes automatizados, certificado ISTQB, com experiência em projetos de grande escala>\n\n**TL;DR**: <Resumo direto da solução>\n\n<Explicacao detalhada com exemplos práticos e justificativas técnicas>"
+  },
+  "rules": [
+    {
+      "id": 1,
+      "description": "Explique cada decisão técnica com clareza e justificativa. Documente o raciocínio por trás de cada alteração.",
+      "importance": "alta"
+    },
+    {
+      "id": 2,
+      "description": "Preserve a estrutura existente do projeto. Evite alterações desnecessárias.",
+      "importance": "alta"
+    },
+    {
+      "id": 3,
+      "description": "Analise o código completo antes de propor modificações. Entenda o fluxo e as dependências.",
+      "importance": "alta"
+    },
+    {
+      "id": 4,
+      "description": "Reutilize arquivos e componentes existentes sempre que possível. Evite duplicações.",
+      "importance": "alta"
+    },
+    {
+      "id": 5,
+      "description": "Mantenha a organização e a consistência do projeto em todos os níveis.",
+      "importance": "crítica"
+    },
+    {
+      "id": 6,
+      "description": "Antes de criar algo novo, verifique se já existe uma solução ou dependência adequada.",
+      "importance": "crítica"
+    },
+    {
+      "id": 7,
+      "description": "Responda sempre em português do Brasil, com terminologia técnica adequada.",
+      "importance": "crítica"
+    },
+    {
+      "id": 8,
+      "description": "Usar @Log4j2 para logging",
+      "importance": "crítica",
+      "examples": {
+        "correct": [
+          "log.info(\"Validando exibicao do menu\")",
+          "log.info(\"Preenchendo campo de busca\")",
+          "log.info(\"Clicando no botao pesquisar\")"
+        ],
+        "incorrect": [
+          "log.info(\"Validando exibição do menu\")",
+          "log.info(\"Preenchendo campo de busca\")",
+          "log.info(\"Clicando no botão pesquisar\")"
+        ]
+      },
+      "reason": "Evita problemas de codificação de caracteres e mantém consistência nos logs",
+      "scope": {
+        "affected": [
+          "Mensagens de log",
+          "Descrições de ações",
+          "Mensagens de validação"
+        ],
+        "exceptions": [
+          "Nomes próprios em dados de teste (quando necessário)",
+          "Mensagens de erro específicas do sistema"
+        ]
+      }
+    }
+  ],
+  "testDevelopmentFlow": {
+    "order": [
+      "1. Criação da Feature",
+      "2. Criação dos Cenários",
+      "3. Criação das Steps",
+      "4. Criação da Page e Classes"
+    ],
+    "importance": "crítica"
+  },
+  "featureRules": {
+    "structure": {
+      "naming": {
+        "rule": "Nome do arquivo deve ser descritivo e em português",
+        "pattern": "[nome_da_funcionalidade].feature",
+        "importance": "alta",
+        "details": {
+          "accentRules": {
+            "rule": "NÃO usar acentos no nome do arquivo feature",
+            "description": "O nome do arquivo feature deve ser escrito sem acentos para evitar problemas de compatibilidade",
+            "importance": "crítica",
+            "examples": {
+              "correct": [
+                "cadastro_usuario.feature",
+                "login_sistema.feature",
+                "alteracao_senha.feature"
+              ],
+              "incorrect": [
+                "cadastro_usuário.feature",
+                "login_sistêma.feature",
+                "alteração_senha.feature"
+              ]
+            },
+            "reason": "Evita problemas de codificação de caracteres e mantém consistência entre diferentes sistemas operacionais"
+          }
+        }
+      },
+      "language": {
+        "rule": "NUNCA usar # language: pt nas features",
+        "description": "O idioma português deve ser configurado globalmente no projeto, não em cada feature",
+        "importance": "crítica",
+        "details": {
+          "prohibition": "NÃO usar # language: pt no início do arquivo feature",
+          "reason": "Evita duplicação de configuração e mantém consistência no projeto",
+          "correct": "Configurar o idioma globalmente no RunnerTestWeb.java"
+        }
+      },
+      "cucumberPrefixes": {
+        "rule": "Os prefixos do Cucumber DEVEM estar em INGLÊS",
+        "description": "Mesmo que o conteúdo esteja em português, os prefixos devem estar em inglês",
+        "importance": "crítica",
+        "details": {
+          "prefixes": {
+            "correct": [
+              "Feature:",
+              "Scenario:",
+              "Given",
+              "When",
+              "Then",
+              "And"
+            ],
+            "incorrect": [
+              "Funcionalidade:",
+              "Cenário:",
+              "Dado",
+              "Quando",
+              "Então",
+              "E"
+            ]
+          },
+          "example": {
+            "correct": "Feature: Formulário de Contato\n  Scenario: Preencher formulário\n    Given que estou na página\n    When preencho o campo\n    Then valido a mensagem",
+            "incorrect": "Funcionalidade: Formulário de Contato\n  Cenário: Preencher formulário\n    Dado que estou na página\n    Quando preencho o campo\n    Então valido a mensagem"
+          }
+        }
+      },
+      "tags": {
+        "required": [
+          "@ATJ-[número] - ID do ticket",
+          "@all - Tag para execução em todos os ambientes"
+        ],
+        "optional": [
+          "@test - Tag para execução específica",
+          "@smoke - Tag para testes de fumaça",
+          "@regression - Tag para testes de regressão"
+        ],
+        "importance": "crítica"
+      },
+      "contentRules": {
+        "accentRules": {
+          "rule": "NÃO usar acentos no conteúdo da feature",
+          "description": "Todo o conteúdo da feature (steps, elementos, mensagens) deve ser escrito sem acentos",
+          "importance": "crítica",
+          "examples": {
+            "correct": [
+              "Given que estou na pagina de cadastro",
+              "When clico no botao 'Salvar'",
+              "Then valido a mensagem 'Usuario cadastrado com sucesso'",
+              "And preencho o campo 'Nome' com 'Joao Silva'"
+            ],
+            "incorrect": [
+              "Given que estou na página de cadastro",
+              "When clico no botão 'Salvar'",
+              "Then valido a mensagem 'Usuário cadastrado com sucesso'",
+              "And preencho o campo 'Nome' com 'João Silva'"
+            ]
+          },
+          "reason": "Mantém consistência com a nomenclatura de arquivos e evita problemas de codificação de caracteres",
+          "scope": {
+            "affected": [
+              "Steps (Given, When, Then, And)",
+              "Nomes de elementos",
+              "Mensagens de validação",
+              "Valores de parâmetros"
+            ],
+            "exceptions": [
+              "Nomes próprios em dados de teste (quando necessário)",
+              "Mensagens de erro específicas do sistema"
+            ]
+          }
+        }
+      }
+    },
+    "scenarioStructure": {
+      "feature": {
+        "required": [
+          "Título descritivo",
+          "Como [papel]",
+          "Eu quero [objetivo]",
+          "Para [benefício]"
+        ],
+        "importance": "alta"
+      },
+      "scenario": {
+        "naming": "Descrição clara da funcionalidade testada",
+        "steps": {
+          "given": "Configuração inicial do cenário",
+          "when": "Ações do usuário",
+          "then": "Validações esperadas"
+        },
+        "importance": "alta"
+      }
+    },
+    "stepPatterns": {
+      "given": [
+        "que estou na [página]",
+        "que estou logado como [perfil]",
+        "que tenho [dados/condições]"
+      ],
+      "when": [
+        "preencho o campo '[campo]' com '[valor]'",
+        "clico no botão '[nome]'",
+        "seleciono a opção '[opção]'"
+      ],
+      "then": [
+        "valido a exibição do [elemento]",
+        "valido a exibição da mensagem '[texto]'",
+        "valido que [condição]"
+      ],
+      "importance": "alta"
+    },
+  "stepImplementationRules": {
+    "structure": {
+      "package": "org.br.com.web.pages.{featureName}",
+      "naming": "{FeatureName}Steps.java",
+      "importance": "alta",
+      "details": {
+        "location": "Todas as classes relacionadas à feature DEVEM estar dentro do pacote pages/[nome-da-feature]",
+        "prohibition": "NÃO criar pacotes separados para steps, elements ou logic"
+      }
+    },
+    "implementation": {
+      "fields": [
+        "private final {PageName}Logic {pageName}Logic"
+      ],
+      "constructor": "Inicializar {pageName}Logic",
+      "methodRules": [
+        "Métodos devem ser públicos",
+        "Usar {pageName}Logic para operações",
+        "Implementar todos os steps da feature"
+      ],
+      "importance": "alta",
+      "preservationRules": {
+        "rule": "NUNCA substituir steps existentes",
+        "description": "Steps, elements e logic existentes DEVEM ser preservados",
+        "importance": "crítica",
+        "details": {
+          "steps": {
+            "rule": "NUNCA modificar ou substituir métodos de steps existentes",
+            "action": "Criar novos métodos com nomes diferentes",
+            "examples": {
+              "correct": [
+                "// Método existente\n@Given(\"que estou na pagina inicial\")\npublic void queEstouNaPaginaInicial() { ... }",
+                "// Novo método com nome diferente\n@Given(\"que estou na pagina inicial do sistema\")\npublic void queEstouNaPaginaInicialDoSistema() { ... }"
+              ],
+              "incorrect": [
+                "// NUNCA fazer isso\n@Given(\"que estou na pagina inicial\")\npublic void novoMetodo() { ... }"
+              ]
+            }
+          },
+          "elements": {
+            "rule": "NUNCA modificar ou substituir elementos existentes",
+            "action": "Criar novos elementos com nomes diferentes",
+            "examples": {
+              "correct": [
+                "// Elemento existente\n@FindBy(xpath = \"//*[text()='Menu']\")\nprivate WebElement btnMenu;",
+                "// Novo elemento com nome diferente\n@FindBy(xpath = \"//*[text()='Menu Principal']\")\nprivate WebElement btnMenuPrincipal;"
+              ],
+              "incorrect": [
+                "// NUNCA fazer isso\n@FindBy(xpath = \"//*[text()='Menu']\")\nprivate WebElement novoMenu;"
+              ]
+            }
+          },
+          "logic": {
+            "rule": "NUNCA modificar ou substituir lógica existente",
+            "action": "Criar novos métodos com nomes diferentes",
+            "examples": {
+              "correct": [
+                "// Método existente\npublic void validarMenu() { ... }",
+                "// Novo método com nome diferente\npublic void validarMenuPrincipal() { ... }"
+              ],
+              "incorrect": [
+                "// NUNCA fazer isso\npublic void novoValidarMenu() { ... }"
+              ]
+            }
+          },
+          "versioning": {
+            "rule": "Manter histórico de alterações",
+            "description": "Documentar todas as alterações em comentários",
+            "format": "// Alteração: [data] - [descrição da alteração]",
+            "example": "// Alteração: 2024-03-20 - Adicionado novo método para validação do menu principal"
+          },
+          "reason": "Preserva a compatibilidade e evita quebra de testes existentes",
+          "scope": {
+            "affected": [
+              "Métodos de steps",
+              "Elementos da página",
+              "Métodos de lógica"
+            ],
+            "exceptions": [
+              "Correção de bugs",
+              "Refatoração aprovada",
+              "Atualização de localizadores quebrados"
+            ]
+          }
+        },
+        "versioning": {
+          "rule": "Manter histórico de alterações",
+          "description": "Documentar todas as alterações em comentários",
+          "format": "// Alteração: [data] - [descrição da alteração]",
+          "example": "// Alteração: 2024-03-20 - Adicionado novo método para validação do menu principal"
+        },
+        "reason": "Preserva a compatibilidade e evita quebra de testes existentes",
+        "scope": {
+          "affected": [
+            "Métodos de steps",
+            "Elementos da página",
+            "Métodos de lógica"
+          ],
+          "exceptions": [
+            "Correção de bugs",
+            "Refatoração aprovada",
+            "Atualização de localizadores quebrados"
+          ]
+        }
+      }
+    }
+  },
+  "pageObjectRules": {
+    "structure": {
+      "packageNaming": {
+        "rule": "Cada feature deve ter seu próprio pacote dentro de 'pages'",
+        "example": "pages/contato, pages/login, pages/cadastro",
+        "importance": "crítica",
+        "details": {
+          "location": "Todas as classes relacionadas à feature DEVEM estar dentro do pacote pages/[nome-da-feature]",
+          "classes": [
+            "{FeatureName}Elements.java",
+            "{FeatureName}Logic.java",
+            "{FeatureName}Steps.java"
+          ],
+          "prohibition": "NÃO criar pacotes separados para steps, elements ou logic",
+          "structure": {
+            "correct": "src/test/java/org/br/com/web/pages/[feature-name]/",
+            "incorrect": "src/test/java/org/br/com/web/steps/",
+            "explanation": "Todas as classes da feature devem estar juntas no mesmo pacote"
+          }
+        }
+      },
+      "classVisibility": {
+        "rule": "Todas as classes do pacote page devem ser APENAS públicas",
+        "description": "Classes Elements, Logic e Steps devem ser declaradas como APENAS public class",
+        "importance": "crítica"
+      },
+      "commonRules": {
+        "naming": {
+          "pageName": "PascalCase",
+          "classSuffixes": ["Elements", "Logic", "Steps"],
+          "importance": "alta"
+        },
+        "implementation": {
+          "documentation": {
+            "rule": "Todas as classes devem ter JavaDoc",
+            "importance": "alta"
+          },
+          "naming": {
+            "rule": "Métodos em português e descritivos",
+            "importance": "alta"
+          },
+          "exceptions": {
+            "rule": "Implementar tratamento de exceções adequado",
+            "importance": "crítica"
+          },
+          "logging": {
+            "rule": "Usar @Log4j2 para logging",
+            "description": "Todas as classes devem usar @Log4j2 do Lombok para logging",
+            "importance": "crítica",
+            "details": {
+              "accentRules": {
+                "rule": "NÃO usar acentos nas mensagens de log",
+                "description": "Todas as mensagens de log DEVEM ser escritas sem acentos",
+                "importance": "crítica",
+                "examples": {
+                  "correct": [
+                    "log.info(\"Validando exibicao do menu\")",
+                    "log.info(\"Preenchendo campo de busca\")",
+                    "log.info(\"Clicando no botao pesquisar\")"
+                  ],
+                  "incorrect": [
+                    "log.info(\"Validando exibição do menu\")",
+                    "log.info(\"Preenchendo campo de busca\")",
+                    "log.info(\"Clicando no botão pesquisar\")"
+                  ]
+                },
+                "reason": "Evita problemas de codificação de caracteres e mantém consistência nos logs",
+                "scope": {
+                  "affected": [
+                    "Mensagens de log",
+                    "Descrições de ações",
+                    "Mensagens de validação"
+                  ],
+                  "exceptions": [
+                    "Nomes próprios em dados de teste (quando necessário)",
+                    "Mensagens de erro específicas do sistema"
+                  ]
+                }
+              },
+              "imports": {
+                "required": [
+                  "lombok.extern.log4j.Log4j2"
+                ],
+                "prohibited": [
+                  "org.br.com.web.utils.LogFormatter"
+                ]
+              },
+              "usage": {
+                "info": "log.info(\"mensagem\") - Para informações gerais",
+                "error": "log.error(\"mensagem\", exception) - Para erros",
+                "warn": "log.warn(\"mensagem\") - Para avisos",
+                "debug": "log.debug(\"mensagem\") - Para informações de debug"
+              }
+            }
+          }
+        }
+      },
+      "requiredClasses": {
+        "rule": "Três classes obrigatórias por página",
+        "classes": [
+          {
+            "name": "{PageName}Elements.java",
+            "description": "Elementos da página",
+            "implementation": {
+              "extends": "MasterPageFactory",
+              "annotations": ["@Getter"],
+              "constructor": "PageFactory.initElements(Driver.getDriver(), this)",
+              "elementRules": [
+                "Usar @FindBy para localizadores estáticos",
+                "Elementos devem ser private WebElement",
+                "Métodos para elementos dinâmicos devem retornar WebElement",
+                "Usar By.xpath para elementos dinâmicos"
+              ],
+              "elementExamples": {
+                "staticElement": {
+                  "pattern": "@FindBy(xpath = \"XPATH\")\nprivate WebElement nomeElemento;",
+                  "description": "Elemento estático com localizador fixo"
+                },
+                "dynamicElement": {
+                  "pattern": "public WebElement nomeElemento(String valor) {\n    String xpathFormatado = String.format(\"XPATH\", valor);\n    return Driver.getDriver().findElement(By.xpath(xpathFormatado));\n}",
+                  "description": "Elemento dinâmico com localizador parametrizado"
+                },
+                "buttonLocator": {
+                  "rule": "Para botões, SEMPRE usar o texto do elemento como localizador",
+                  "pattern": "@FindBy(xpath = \"//*[text()='Texto do Botão']\")\nprivate WebElement btnNomeBotao;",
+                  "description": "Localizador padrão para botões usando texto",
+                  "importance": "crítica",
+                  "details": {
+                    "accentRules": {
+                      "rule": "O texto no xpath DEVE ser exatamente igual ao texto do elemento na tela",
+                      "description": "Se o elemento na tela tem acento, o xpath DEVE ter acento. Se não tem acento, o xpath NÃO deve ter acento",
+                      "importance": "crítica",
+                      "examples": {
+                        "correct": [
+                          "@FindBy(xpath = \"//*[text()='Acesso do usuário']\")\nprivate WebElement btnAcessoUsuario;",
+                          "@FindBy(xpath = \"//*[text()='Salvar']\")\nprivate WebElement btnSalvar;"
+                        ],
+                        "incorrect": [
+                          "@FindBy(xpath = \"//*[text()='Acesso do usuario']\")\nprivate WebElement btnAcessoUsuario;",
+                          "@FindBy(xpath = \"//*[text()='Sálvar']\")\nprivate WebElement btnSalvar;"
+                        ]
+                      },
+                      "reason": "Garante que o localizador encontre exatamente o elemento desejado, respeitando a grafia original do texto na tela"
+                    }
+                  },
+                  "naming": {
+                    "rule": "Nome do elemento deve começar com 'btn' seguido do texto do botão em PascalCase",
+                    "examples": {
+                      "correct": [
+                        "btnSalvar",
+                        "btnCancelar",
+                        "btnPesquisar",
+                        "btnTextoParcial"
+                      ],
+                      "incorrect": [
+                        "botaoSalvar",
+                        "buttonCancelar",
+                        "btn_pesquisar"
+                      ]
+                    }
+                  },
+                  "xpathRules": {
+                    "exactMatch": {
+                      "rule": "Para texto exato, usar //*[text()='texto']",
+                      "example": "@FindBy(xpath = \"//*[text()='Salvar']\")\nprivate WebElement btnSalvar;"
+                    },
+                    "partialMatch": {
+                      "rule": "Para texto parcial, usar //*[contains(text(),'texto')]",
+                      "example": "@FindBy(xpath = \"//*[contains(text(),'Texto Parcial')]\")\nprivate WebElement btnTextoParcial;"
+                    }
+                  },
+                  "reason": "Facilita a manutenção e torna os testes mais resilientes a mudanças de classes ou IDs",
+                  "scope": {
+                    "affected": [
+                      "Botões de ação",
+                      "Links que funcionam como botões",
+                      "Elementos clicáveis com texto visível"
+                    ],
+                    "exceptions": [
+                      "Botões sem texto visível",
+                      "Botões com ícones",
+                      "Botões com texto dinâmico"
+                    ]
+                  }
+                }
+              ],
+              "imports": [
+                "lombok.Getter",
+                "org.openqa.selenium.WebElement",
+                "org.openqa.selenium.support.FindBy",
+                "org.openqa.selenium.support.PageFactory",
+                "org.br.com.web.pages.MasterPageFactory",
+                "org.br.com.web.driver.Driver"
+              ]
+            }
+          },
+          {
+            "name": "{PageName}Logic.java",
+            "description": "Lógica de negócio",
+            "implementation": {
+              "fields": [
+                "private final {PageName}Elements {pageName}Elements",
+                "private final CustomActions actions"
+              ],
+              "constructor": "Inicializar {pageName}Elements e actions",
+              "methodRules": [
+                "Métodos devem ser públicos",
+                "Usar actions para interações com elementos",
+                "Incluir validações com assertTrue"
+              ],
+              "imports": [
+                "org.br.com.web.driver.CustomActions",
+                "static org.junit.jupiter.api.Assertions.assertTrue",
+                "org.br.com.web.utils.LogFormatter"
+              ]
+            }
+          },
+          {
+            "name": "{PageName}Steps.java",
+            "description": "Passos de teste",
+            "implementation": {
+              "fields": [
+                "private final {PageName}Logic {pageName}Logic"
+              ],
+              "constructor": "Inicializar {pageName}Logic",
+              "methodRules": [
+                "Métodos devem ser públicos",
+                "Usar {pageName}Logic para operações",
+                "Implementar todos os steps da feature"
+              ],
+              "imports": [
+                "io.cucumber.java.en.Given",
+                "io.cucumber.java.en.When",
+                "io.cucumber.java.en.And",
+                "io.cucumber.java.en.Then",
+                "org.br.com.web.utils.LogFormatter"
+              ],
+              "cucumberRules": {
+                "annotations": {
+                  "@Given": "Use for precondition steps",
+                  "@When": "Use for action steps",
+                  "@And": "Use for additional action or precondition steps",
+                  "@Then": "Use for validation steps"
+                },
+                "naming": {
+                  "methods": "Descriptive and in English",
+                  "pattern": "camelCase",
+                  "description": "Names should match feature steps"
+                }
+              },
+              "implementationRules": [
+                "Cada método deve chamar apenas um método da classe Logic",
+                "Sem lógica de negócio direta na classe Steps",
+                "Métodos organizados na ordem dos steps da feature",
+                "Um método por step",
+                "Sem duplicação de código"
+              ],
+              "errorHandling": {
+                "validations": "Devem ser feitas na classe Logic",
+                "steps": "Devem apenas repassar chamadas para a Logic"
+              },
+              "documentation": {
+                "methods": "Nomes autoexplicativos"
+              },
+              "bestPractices": [
+                "Manter a classe Steps simples e focada",
+                "Evitar lógica condicional complexa",
+                "Usar a classe Logic para toda lógica de negócio"
+              ],
+              "integration": [
+                "Manter compatibilidade com o framework de relatórios",
+                "Seguir padrões de logging do projeto",
+                "Manter consistência com outras classes Steps"
+              ]
+            }
+          }
+        ],
+        "importance": "crítica"
+      }
+    },
+    "namingConventions": {
+      "pageName": "PascalCase",
+      "classSuffixes": ["Elements", "Logic", "Steps"],
+      "importance": "alta"
+    },
+    "classResponsibilities": {
+      "Elements": {
+        "responsibilities": [
+          "Conter apenas localizadores (By, WebElement)",
+          "Ser final com construtor privado",
+          "Métodos devem retornar WebElement ou By"
+        ],
+        "importance": "alta"
+      },
+      "Logic": {
+        "responsibilities": [
+          "Implementar lógica de negócio",
+          "Usar elementos definidos em Elements",
+          "Métodos públicos retornando void ou boolean"
+        ],
+        "importance": "alta"
+      },
+      "Steps": {
+        "responsibilities": [
+          "Implementar passos de teste",
+          "Usar lógica definida em Logic",
+          "Métodos públicos retornando void"
+        ],
+        "importance": "alta"
+      }
+    },
+    "implementationRules": {
+      "documentation": {
+        "rule": "Todas as classes devem ter JavaDoc",
+        "importance": "alta"
+      },
+      "naming": {
+        "rule": "Métodos em português e descritivos",
+        "importance": "alta"
+      },
+      "exceptions": {
+        "rule": "Implementar tratamento de exceções adequado",
+        "importance": "crítica"
+      },
+      "annotations": {
+        "rule": "Usar anotações do Selenium quando necessário",
+        "importance": "alta"
+      },
+      "customActions": {
+        "rule": "Sempre verificar os métodos disponíveis no CustomActions antes de implementar",
+        "importance": "crítica",
+        "availableMethods": {
+          "waitElementDisplayed": "Usar para validar visibilidade de elementos com espera explícita",
+          "waitPopupDisplayed": "Usar para validar visibilidade de popups",
+          "sendKeys": "Usar para preencher campos de texto",
+          "click": "Usar para clicar em elementos",
+          "scrollElemento": "Usar para rolar até um elemento",
+          "sleep": "Usar para pausas forçadas (evitar quando possível)"
+        },
+        "bestPractices": [
+          "NUNCA criar métodos que já existem no CustomActions",
+          "SEMPRE usar waitElementDisplayed para validações de visibilidade",
+          "NUNCA usar isElementDisplayed (método não existe)",
+          "SEMPRE tratar exceções específicas do Selenium",
+          "SEMPRE usar o timeout padrão de 10 segundos",
+          "NUNCA criar métodos duplicados de interação com elementos"
+        ],
+        "validationRules": {
+          "visibility": "Sempre usar waitElementDisplayed para validações de visibilidade",
+          "interaction": "Sempre usar click e sendKeys para interações",
+          "scrolling": "Usar scrollElemento quando necessário",
+          "timeouts": "Respeitar o timeout padrão de 10 segundos"
+        }
+      }
+    },
+    "bestPractices": {
+      "elements": "Manter elementos visíveis em Elements",
+      "duplication": "Evitar duplicação de código entre páginas",
+      "inheritance": "Usar herança quando apropriado para elementos comuns",
+      "pageLoad": "Implementar métodos de verificação de carregamento",
+      "logging": "Incluir logs para rastreabilidade",
+      "importance": "alta"
+    },
+    "validations": {
+      "required": [
+        "Verificar carregamento da página",
+        "Validar elementos obrigatórios",
+        "Implementar esperas explícitas",
+        "Tratar exceções específicas"
+      ],
+      "importance": "crítica"
+    },
+    "frameworkIntegration": {
+      "dependencyInjection": "Usar quando aplicável",
+      "factoryPattern": "Implementar para criação de páginas",
+      "reporting": "Manter compatibilidade com relatórios",
+      "logging": "Seguir padrões do projeto",
+      "importance": "alta"
+    }
+  },
+  "thinkingTool": {
+    "description": "Ferramenta para raciocínio iterativo e adaptável, ideal para resolver problemas técnicos complexos com múltiplas etapas.",
+    "whenToUse": [
+      "Problemas de testes com múltiplas camadas (unitário, integração, E2E)",
+      "Planejamento de estratégias de cobertura de testes",
+      "Análise de falhas intermitentes ou flakey tests",
+      "Refatorações que exigem validação contínua",
+      "Cenários com dependências externas ou mocks complexos"
+    ],
+    "keyFeatures": [
+      "Raciocínio iterativo com validação contínua",
+      "Capacidade de revisar e ramificar ideias",
+      "Exploração de hipóteses e alternativas",
+      "Foco em clareza, precisão e rastreabilidade"
+    ],
+    "parameters": {
+      "thought": "Etapa atual do raciocínio técnico",
+      "thought_number": "Número sequencial do pensamento",
+      "total_thoughts": "Estimativa de passos necessários",
+      "next_thought_needed": "True se mais raciocínio for necessário",
+      "is_revision": "True se estiver revisando um pensamento anterior",
+      "revises_thought": "Número do pensamento revisado",
+      "branch_from_thought": "Número do pensamento que originou a ramificação",
+      "branch_id": "Identificador do ramo atual",
+      "needs_more_thoughts": "Indica se o processo deve continuar mesmo após uma conclusão aparente"
+    },
+    "thinkingGuidelines": [
+      "Comece com uma estimativa de passos, mas ajuste conforme necessário",
+      "Revise pensamentos anteriores quando necessário",
+      "Adicione novas ideias mesmo após uma conclusão",
+      "Ignore o que for irrelevante para o raciocínio técnico",
+      "Valide hipóteses com base em evidências do código",
+      "Repita até chegar a uma solução robusta e validada"
+    ]
+  }
+}
