@@ -243,6 +243,23 @@ export async function registerPixKey(type: 'CPF' | 'EMAIL', key: string): Promis
     }
 }
 
+// Método: resetPassword - Solicita a redefinição de senha
+export async function resetPassword(cpf: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post('/auth/request-password-reset', { cpf }, {
+            // No auth header is needed for this public endpoint
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const data = res.data;
+        if (data?.success) {
+            return { success: true, message: data.message || 'Solicitação de redefinição de senha enviada com sucesso.' };
+        }
+        return { success: false, message: data?.message || 'Falha ao solicitar a redefinição de senha.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao solicitar a redefinição de senha.' };
+    }
+}
+
 // Método: getUserMe - Implementação REAL que chama a API backend
 export async function getUserMe(): Promise<{ success: boolean; message?: string; user?: User }> {
     try {
