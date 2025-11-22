@@ -2,7 +2,7 @@ import React from 'react';
 
 interface BottomNavBarProps {
     currentView: string;
-    onNavigate: (view: 'home' | 'cards' | 'shop' | 'products' | 'profile') => void;
+    onNavigate: (view: 'home' | 'cards' | 'shop' | 'profile') => void;
 }
 
 const NavButton: React.FC<{
@@ -23,7 +23,6 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) 
         { label: 'Início', view: 'home', icon: 'home' },
         { label: 'Cartões', view: 'cards', icon: 'credit_card' },
         { label: 'Shop', view: 'shop', icon: 'storefront' },
-        { label: 'Produtos', view: 'products', icon: 'grid_view' },
         { label: 'Perfil', view: 'profile', icon: 'person' },
     ];
 
@@ -35,7 +34,7 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) 
                     label={item.label}
                     icon={item.icon}
                     isActive={currentView === item.view}
-                    onClick={() => onNavigate(item.view as 'home' | 'cards' | 'shop' | 'products' | 'profile')}
+                    onClick={() => onNavigate(item.view as 'home' | 'cards' | 'shop' | 'profile')}
                 />
            ))}
         </nav>

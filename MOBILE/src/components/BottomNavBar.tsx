@@ -45,7 +45,6 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) 
         { label: 'Início', view: 'home', icon: 'home', showIndicator: true },
         { label: 'Cartões', view: 'cards', icon: 'credit_card', showIndicator: false },
         { label: 'Shop', view: 'shop', icon: 'storefront', showIndicator: false },
-        { label: 'Produtos', view: 'products', icon: 'grid_view', showIndicator: false },
         { label: 'Perfil', view: 'profile', icon: 'person', showIndicator: false },
     ];
 
@@ -69,7 +68,7 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) 
                     icon={item.icon}
                     isActive={currentView === item.view}
                     showIndicator={item.showIndicator}
-                    onClick={() => onNavigate(item.view as 'home' | 'cards' | 'shop' | 'products' | 'profile')}
+                    onClick={() => onNavigate(item.view as 'home' | 'cards' | 'shop' | 'profile')}
                 />
            ))}
         </nav>
