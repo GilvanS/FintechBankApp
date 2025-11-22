@@ -136,3 +136,20 @@ Este documento detalha o planejamento e as etapas para transformar o projeto `WE
     -   **Descrição:** A função initializeApi não estava sendo chamada no startup do aplicativo MOBILE
     -   **Impacto:** Cache da URL da API não funcionava, endereço da API não persistia entre sessões
     -   **Solução:** Adicionada chamada para initializeApi() na inicialização do App.tsx
+
+---
+
+### **Fase 14: Ajustes Finais e Validação de Componentes (Concluídos)**
+
+-   [x] **Tarefa 14.1:** Correção de Parâmetros Incompatíveis no Home.tsx
+    -   **Descrição:** Componente HomeView estava recebendo propriedade news que foi removida em atualizações anteriores
+    -   **Impacto:** Erros de execução e falha na renderização da tela Home
+    -   **Solução:** Atualizada chamada do HomeView para remover o parâmetro news e limpeza de código desnecessário
+-   [x] **Tarefa 14.2:** Atualização de Texto para Validação Visual
+    -   **Descrição:** Alteração do texto "Acessar minha conta" para "Entre na conta" no PreLoginDashboard
+    -   **Impacto:** Facilita verificação visual de que as correções estão presentes no APK
+    -   **Solução:** Atualizado texto do botão principal de login para indicar que as atualizações estão aplicadas
+-   [x] **Tarefa 14.3:** Validação Completa das Correções Realizadas
+    -   **Descrição:** Verificação final de todas as correções implementadas nas fases anteriores
+    -   **Impacto:** Garantia de que todos os bugs identificados foram devidamente corrigidos
+    -   **Solução:** Revisão completa dos componentes principais (Dashboard, HomeView, App, Home) para assegurar consistência

@@ -21,7 +21,6 @@ import BlockedCardModal from '../components/BlockedCardModal';
 
 const Home: React.FC = () => {
     const { user, logout, updateUser, view, navigateTo } = useAuth();
-    const [news, setNews] = useState<Article[]>([]);
     const [cart, setCart] = useState<PurchasedItem[]>([]);
     const [currentItem, setCurrentItem] = useState<PurchasedItem | null>(null);
     const [checkoutTotal, setCheckoutTotal] = useState(0);
@@ -36,18 +35,6 @@ const Home: React.FC = () => {
     const passwordActionPayload = useRef<any>(null);
     const [passwordModalInfo, setPasswordModalInfo] = useState({ title: '', description: '' });
 
-    useEffect(() => {
-        const fetchNews = async () => {
-            try {
-                const newsData = await api.getNews();
-                setNews(newsData);
-            } catch (error) {
-                console.error("Failed to fetch news", error);
-            }
-        };
-
-        fetchNews();
-    }, []);
 
     const handleAddToCart = (item: PurchasedItem) => {
         setCart(prevCart => {
@@ -216,7 +203,7 @@ const Home: React.FC = () => {
                 return <PurchaseConfirmation details={confirmationDetails} onClose={() => navigateTo('home')} />;
             case 'home':
             default:
-                return <HomeView user={user} onNavigate={navigateTo} news={news} />;
+                return <HomeView user={user} onNavigate={navigateTo} />;
         }
     };
 

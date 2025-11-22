@@ -58,7 +58,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
           <div className="flex flex-col items-center gap-4">
             {/* O botão principal de login agora usa a prop onNavigateToLogin */}
             <button onClick={onNavigateToLogin} className="w-full max-w-xs px-8 py-4 font-semibold text-white transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50">
-              Acessar minha conta
+              Entre na conta
             </button>
             {/* O botão de abrir conta pode ter sua própria função de navegação no futuro */}
             <button className="w-full max-w-xs px-8 py-3 font-semibold transition-colors duration-300 border border-subtle-dark/50 rounded-lg text-subtle-dark hover:text-primary hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50">
