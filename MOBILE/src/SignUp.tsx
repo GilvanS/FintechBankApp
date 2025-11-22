@@ -1,11 +1,7 @@
 
 import React, { useState } from 'react';
 import { useToast, ToastContainer } from './components/Toast';
-
-// Vamos assumir que a função signUp será adicionada na api.ts em breve
-// import { signUp } from './services/api'; 
-
-// E que temos um formatador de CPF
+import { signUp } from './services/api';
 import { formatCPF } from './utils/formatters';
 
 interface SignUpProps {
@@ -40,19 +36,16 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin }) => {
 
     setLoading(true);
     
-    // Placeholder para a chamada da API
-    // A função `signUp` ainda precisa ser criada no arquivo `services/api.ts`
     try {
-        // const result = await signUp({ fullName, cpf: unformattedCpf, email, password });
-        // if (result.success) {
-        //   addToast('Cadastro realizado com sucesso! Redirecionando para o login.', 'success');
-        //   setTimeout(() => onNavigateToLogin(), 2000);
-        // } else {
-        //   setError(result.message || 'Ocorreu um erro no cadastro.');
-        // }
-        setError("A função de cadastro na API ainda não foi implementada.");
-        addToast('Funcionalidade indisponível no momento.', 'error');
-
+        const result = await signUp({ fullName, cpf: unformattedCpf, email, password });
+        if (result.success) {
+          addToast('Cadastro realizado com sucesso! Redirecionando para o login.', 'success');
+          setTimeout(() => onNavigateToLogin(), 2000);
+        } else {
+          const errorMessage = result.message || 'Ocorreu um erro no cadastro.';
+          setError(errorMessage);
+          addToast(errorMessage, 'error');
+        }
     } catch (err) {
       setError('Falha ao conectar com o servidor.');
       addToast('Erro de conexão.', 'error');

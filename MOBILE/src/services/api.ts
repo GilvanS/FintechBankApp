@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
-import { PixContact, User, PasswordResetRequest, LimitIncreaseRequest } from '../types';
+import { PixContact, User, PasswordResetRequest, LimitIncreaseRequest, SignUpData } from '../types';
 
 const DEV_API_URL = '__NGROK_URL__'; // substitute pelo seu URL ngrok
 const API_CACHE_KEY = 'apiBaseUrlCache';
@@ -257,6 +257,22 @@ export async function resetPassword(cpf: string): Promise<{ success: boolean; me
         return { success: false, message: data?.message || 'Falha ao solicitar a redefinição de senha.' };
     } catch (error: any) {
         return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao solicitar a redefinição de senha.' };
+    }
+}
+
+// Método: signUp - Cadastra um novo usuário
+export async function signUp(signUpData: SignUpData): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post('/auth/signup', signUpData, {
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const data = res.data;
+        if (data?.success) {
+            return { success: true, message: data.message || 'Cadastro realizado com sucesso.' };
+        }
+        return { success: false, message: data?.message || 'Ocorreu um erro no cadastro.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Falha ao conectar com o servidor.' };
     }
 }
 
