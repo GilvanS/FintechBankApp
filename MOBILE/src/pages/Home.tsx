@@ -18,8 +18,9 @@ import PurchaseConfirmation from '../components/PurchaseConfirmation';
 import InstallmentModal from '../components/InstallmentModal';
 import PasswordModal from '../components/PasswordModal';
 import BlockedCardModal from '../components/BlockedCardModal';
+import ClosedInvoiceView from '../components/ClosedInvoiceView';
 
-type View = 'home' | 'cards' | 'shop' | 'profile' | 'pix' | 'statement' | 'shoppingCart' | 'paymentMethods' | 'purchaseConfirmation';
+type View = 'home' | 'cards' | 'shop' | 'profile' | 'pix' | 'statement' | 'shoppingCart' | 'paymentMethods' | 'purchaseConfirmation' | 'closedInvoice';
 
 const Home: React.FC<{ user: User, onLogout: () => void, refreshUserData: () => void }> = ({ user, onLogout, refreshUserData }) => {
     const [view, setView] = useState<View>('home');
@@ -139,9 +140,10 @@ const Home: React.FC<{ user: User, onLogout: () => void, refreshUserData: () => 
             case 'shop': return <Shop onBack={() => navigateTo('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.length} onNavigate={navigateTo} />;
             case 'cards': return <CardDashboard user={user} onBack={() => navigateTo('home')} onNavigate={navigateTo} />;
             case 'statement': return <Statement user={user} onBack={() => navigateTo('home')} />;
-            case 'shoppingCart': return <ShoppingCart cart={cart} onBack={() => navigateTo('shop')} onCheckout={handleCheckout} onUpdateQuantity={handleUpdateCartQuantity} />;
+            case 'shoppingCart': return <ShoppingCart cart={cart} onBack={() => navigateTo('shop')} onCheckout={handleCheckout} onUpdateQuantity={handleUpdateQuantity} />;
             case 'paymentMethods': return <PaymentMethods user={user} item={currentItem} onBack={() => cart.length > 0 ? navigateTo('shoppingCart') : navigateTo('shop')} onSelectMethod={handleSelectMethod} />;
             case 'purchaseConfirmation': return <PurchaseConfirmation details={confirmationDetails} onClose={() => navigateTo('home')} />;
+            case 'closedInvoice': return <ClosedInvoiceView user={user} onBack={() => navigateTo('cards')} onNavigate={navigateTo} />;
             case 'home':
             default: return <HomeView user={user} onNavigate={navigateTo} />;
         }
