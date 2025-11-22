@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { IonApp, setupIonicReact } from '@ionic/react';
 import { Preferences } from '@capacitor/preferences';
@@ -141,7 +140,7 @@ const App: React.FC = () => {
     }
   }, [user]);
 
-  const navigateTo = (newView: string) => {
+  const navigateTo = (newView: 'home' | 'cards' | 'shop' | 'profile' | 'login' | 'prelogin') => {
     setView(newView);
   };
 
@@ -159,6 +158,9 @@ const App: React.FC = () => {
       case 'login':
         return <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} />;
       case 'home':
+      case 'cards':
+      case 'shop':
+      case 'profile':
         return user ? <Home user={user} onLogout={handleLogout} refreshUserData={handleUpdateUser} /> : <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} />;
       case 'prelogin':
       default:

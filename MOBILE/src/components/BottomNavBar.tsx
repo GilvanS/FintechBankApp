@@ -2,7 +2,7 @@ import React from 'react';
 
 interface BottomNavBarProps {
     currentView: string;
-    onNavigate: (view: 'home' | 'cards' | 'shop' | 'products' | 'profile') => void;
+    onNavigate: (view: 'home' | 'cards' | 'shop' | 'profile') => void;
 }
 
 const NavButton: React.FC<{
@@ -40,7 +40,6 @@ const NavButton: React.FC<{
 
 const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) => {
     
-    // FIX: Removed PIX from the nav items to match the reference image.
     const navItems = [
         { label: 'Início', view: 'home', icon: 'home', showIndicator: true },
         { label: 'Cartões', view: 'cards', icon: 'credit_card', showIndicator: false },
