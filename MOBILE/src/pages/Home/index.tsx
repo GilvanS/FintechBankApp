@@ -73,7 +73,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
     }
     
     switch (currentView) {
-        case 'home': return <HomeView user={user} onNavigate={handleNavigate} news={news} />;
+        case 'home': return <HomeView user={user} onNavigate={handleNavigate} />;
         case 'pix': return <Pix onBack={() => handleNavigate('home')} />;
         case 'cards': return <CardDashboard user={user} onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
         case 'shop': return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((s, i) => s + (i.quantity || 0), 0)} onNavigate={handleNavigate} />;
@@ -83,7 +83,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
         case 'closedInvoice': return <ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} />;
         case 'products': return <Products />;
         case 'profile': return <Profile user={user} onLogout={handleLogout} />;
-        default: return <HomeView user={user} onNavigate={handleNavigate} news={news} />;
+        default: return <HomeView user={user} onNavigate={handleNavigate} />;
     }
   };
 
