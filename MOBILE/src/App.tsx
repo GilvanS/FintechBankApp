@@ -99,40 +99,11 @@ const App: React.FC = () => {
     const initApp = async () => {
       // Initialize API with cached URL if available
       await initializeApi();
-
-      const checkAuth = async () => {
-        try {
-          // Verifica se há token antes de tentar buscar o perfil
-          const token = localStorage.getItem('authToken');
-          if (!token) {
-            console.log('Nenhum token encontrado. Redirecionando para login.');
-            setView('prelogin');
-            return;
-          }
-
-          // Tenta buscar o perfil do usuário usando a API real
-          const result = await getProfile();
-          
-          if (result.success && result.user) {
-            const normalizedUser = normalizeUserShape(result.user);
-            setUser(normalizedUser);
-            setView('home');
-          } else {
-            // Se não conseguiu obter o perfil, limpa o token e redireciona para login
-            console.log('Falha na autenticação:', result.message);
-            localStorage.removeItem('authToken');
-            await Preferences.remove({ key: 'token' });
-            setView('prelogin');
-          }
-        } catch (error) {
-          console.error('Erro ao verificar autenticação:', error);
-          // Em caso de erro, limpa tokens e redireciona para login
-          localStorage.removeItem('authToken');
-          Preferences.remove({ key: 'token' });
-          setView('prelogin');
-        }
-      };
-      checkAuth();
+      
+      // SEMPRE começa no PreLoginDashboard
+      // Não faz verificação automática de token na inicialização
+      // O usuário deve clicar em "Entrar" para ir para a tela de login
+      setView('prelogin');
     };
     initApp();
   }, []);
