@@ -129,6 +129,7 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                         <p className="text-gray-500">Nenhuma compra na sua fatura fechada.</p>
                     </div>
                 )}
+                </div>
             </main>
         </div>
     );
