@@ -95,8 +95,6 @@ Este documento detalha o planejamento e as etapas para transformar o projeto `WE
 ### **Fase 11: Correção do Mecanismo de Cache da API**
 
 -   [x] **Tarefa 11.1:** Análise e Documentação do Bug de Persistência
--   [x] **Tarefa 11.2:** Implementação da Correção
-
--   [ ] **Tarefa 11.3: Validação pelo Usuário e Encerramento**
-    -   **Responsável:** Usuário.
-    -   **Ação:** Gerar um novo APK, instalar no dispositivo Android e validar se o endereço da API (ngrok) persiste após fechar e reabrir o aplicativo.
+-   [x] **Tarefa 11.2:** Implementação da Correção no Código
+-   [ ] **Tarefa 11.3:** Validação da Correção pelo Usuário
+    -   **Ação Pendente:** Usuário deve realizar `git pull`, compilar o APK, instalar e testar a persistência do endereço da API entre as sessões do aplicativo.
