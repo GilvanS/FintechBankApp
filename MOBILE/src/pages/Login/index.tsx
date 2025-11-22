@@ -219,7 +219,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
-                <span className="text-subtle-dark">{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Checando'}</span>
+                <span className="text-subtle-dark">{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Offline' : 'Checando'}</span>
               </div>
               <div className="flex items-center gap-4">
                 <button onClick={() => checkServerStatus(tempApiUrl)} className="text-primary font-semibold">Testar</button>
