@@ -13,15 +13,15 @@ const NavButton: React.FC<{
 }> = ({ label, icon, isActive, onClick }) => (
     <button 
         onClick={onClick} 
-        className={`flex flex-col items-center justify-center space-y-1 w-full h-full transition-colors ${isActive ? 'text-primary' : 'text-subtle-dark hover:text-text-dark'}`}
+        className={`flex flex-col items-center justify-center space-y-1 w-full h-full transition-colors ${isActive ? 'text-primary' : 'text-white/70 hover:text-white'}`}
     >
         <span 
-            className="material-symbols-outlined"
+            className="material-symbols-outlined text-2xl"
             style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
         >
             {icon}
         </span>
-        <span className="text-xs font-medium">{label}</span>
+        <span className={`text-xs font-medium ${isActive ? 'text-primary' : 'text-white/70'}`}>{label}</span>
     </button>
 );
 
@@ -37,14 +37,14 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) 
     ];
 
     return (
-        <nav className="flex-shrink-0 bg-surface-dark border-t border-subtle-dark/20 flex justify-around items-start h-[calc(56px+env(safe-area-inset-bottom))] pt-2 pb-[env(safe-area-inset-bottom)]">
+        <nav className="flex-shrink-0 bg-surface-dark border-t border-white/10 flex justify-around items-center h-[calc(56px+env(safe-area-inset-bottom))] pt-2 pb-[env(safe-area-inset-bottom)]">
            {navItems.map(item => (
                 <NavButton 
                     key={item.view}
                     label={item.label}
                     icon={item.icon}
                     isActive={currentView === item.view}
-                   onClick={() => onNavigate(item.view as 'home' | 'cards' | 'shop' | 'products' | 'profile')}
+                    onClick={() => onNavigate(item.view as 'home' | 'cards' | 'shop' | 'products' | 'profile')}
                 />
            ))}
         </nav>
