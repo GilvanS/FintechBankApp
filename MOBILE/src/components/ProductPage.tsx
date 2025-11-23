@@ -12,11 +12,11 @@ interface ProductPageProps {
 
 const ProductPage: React.FC<ProductPageProps> = ({ product, onBack, onPurchase, onAddToCart }) => {
     const [selectedTab, setSelectedTab] = useState('details');
-    const { addToast } = useToast();
+    const { toast, showSuccess, hide } = useToast();
 
     const handleAddToCart = () => {
         onAddToCart(product);
-        addToast(`${product.name} foi adicionado ao carrinho!`, 'success');
+        showSuccess(`${product.name} foi adicionado ao carrinho!`);
     };
 
     const handlePurchase = () => {
@@ -28,7 +28,7 @@ const ProductPage: React.FC<ProductPageProps> = ({ product, onBack, onPurchase, 
 
     return (
         <>
-            <ToastContainer />
+            <ToastContainer toast={toast} onClose={hide} />
             <div className="font-display bg-background-dark text-text-dark antialiased flex flex-col min-h-screen">
                 <header className="w-full p-4 safe-top bg-surface-dark shadow-md z-10">
                     <div className="w-full max-w-4xl mx-auto flex items-center">
@@ -77,7 +77,7 @@ const ProductPage: React.FC<ProductPageProps> = ({ product, onBack, onPurchase, 
                     </div>
                 </main>
 
-                <footer className="w-full p-4 safe-bottom bg-surface-dark shadow-up-md z-50 sticky bottom-0">
+                <footer className="w-full px-4 pt-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] bg-surface-dark shadow-up-md z-[9999] sticky bottom-0">
                     <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
                         <button onClick={handleAddToCart} className="flex-1 px-6 py-4 font-semibold text-primary transition-colors duration-300 border-2 border-primary rounded-lg hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/50 active:bg-primary/20">
                             Adicionar ao Carrinho

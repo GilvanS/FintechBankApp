@@ -31,6 +31,31 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [useCredit, setUseCredit] = useState(false);
     const [localError, setLocalError] = useState('');
 
+    const handlePixKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let value = e.target.value;
+
+        // Remove formatting characters to check content type
+        const cleanValue = value.replace(/[^a-zA-Z0-9]/g, '');
+
+        // Check if it's numeric (potential CPF)
+        // We only apply mask if the input starts with a number or is empty
+        const isNumeric = /^\d*$/.test(cleanValue);
+
+        if (isNumeric && cleanValue.length > 0) {
+            // Limit to 11 digits
+            const limitedValue = cleanValue.slice(0, 11);
+
+            // Apply CPF mask
+            value = limitedValue
+                .replace(/(\d{3})(\d)/, '$1.$2')
+                .replace(/(\d{3})(\d)/, '$1.$2')
+                .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+                .replace(/(-\d{2})\d+?$/, '$1');
+        }
+
+        setPixKey(value);
+    };
+
     useEffect(() => {
         if (selectedContact) {
             setPixKey(selectedContact.key);
@@ -154,7 +179,7 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             <div>
                                 <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-key">Chave PIX</label>
                                 <div className="relative">
-                                    <input value={pixKey} onChange={e => setPixKey(e.target.value)} className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" id="pix-key" placeholder="Digite CPF/CNPJ, celular, etc." type="text" />
+                                    <input value={pixKey} onChange={handlePixKeyChange} className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" id="pix-key" placeholder="Digite CPF, celular, e-mail, etc." type="text" />
                                     {contacts.length > 0 && (
                                         <button type="button" title="Usar contato salvo" onClick={() => setSubView('contacts')} className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full text-white/60 hover:bg-white/10 hover:text-primary transition-colors">
                                             <span className="material-symbols-outlined">contact_page</span>

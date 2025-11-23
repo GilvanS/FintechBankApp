@@ -17,9 +17,9 @@ const InfoPopupBottom: React.FC<InfoPopupBottomProps> = ({ isOpen, onClose, titl
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-end" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="popup-title">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-end" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="popup-title">
       <div 
-        className="w-full bg-gray-800 text-white rounded-t-2xl p-6 shadow-2xl z-50 animate-slide-up"
+        className="w-full bg-gray-800 text-white rounded-t-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-2xl z-[10000] animate-slide-up"
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
       >
         <div className="flex justify-between items-center mb-3">
