@@ -22,7 +22,7 @@ import ClosedInvoiceView from '../components/ClosedInvoiceView';
 
 type View = 'home' | 'cards' | 'shop' | 'profile' | 'pix' | 'statement' | 'shoppingCart' | 'paymentMethods' | 'purchaseConfirmation' | 'closedInvoice';
 
-const Home: React.FC<{ user: User, onLogout: () => void, refreshUserData: () => void }> = ({ user, onLogout, refreshUserData }) => {
+const Home: React.FC<{ user: User, onLogout: () => void, refreshUserData: () => void, onNavigateApp: (view: any) => void }> = ({ user, onLogout, refreshUserData, onNavigateApp }) => {
     const [view, setView] = useState<View>('home');
     const [cart, setCart] = useState<PurchasedItem[]>([]);
     const [currentItem, setCurrentItem] = useState<PurchasedItem | null>(null);
@@ -46,7 +46,7 @@ const Home: React.FC<{ user: User, onLogout: () => void, refreshUserData: () => 
         });
     };
 
-    const handleUpdateCartQuantity = (itemId: string, quantity: number) => {
+    const handleUpdateQuantity = (itemId: string, quantity: number) => {
         if (quantity <= 0) {
             setCart(prev => prev.filter(item => item.id !== itemId));
         } else {
@@ -72,7 +72,7 @@ const Home: React.FC<{ user: User, onLogout: () => void, refreshUserData: () => 
         navigateTo('paymentMethods');
     };
 
-    const handleSelectPaymentMethod = (method: 'debit' | 'credit') => {
+    const handleSelectMethod = (method: 'debit' | 'credit') => {
         if (!currentItem) return;
         if (method === 'credit' && user.creditCard.isBlocked) {
             setIsBlockedModalOpen(true);
@@ -135,7 +135,7 @@ const Home: React.FC<{ user: User, onLogout: () => void, refreshUserData: () => 
 
     const renderContent = () => {
         switch (view) {
-            case 'profile': return <Profile user={user} onLogout={onLogout} />;
+            case 'profile': return <Profile onNavigate={(v) => v === 'admin' ? onNavigateApp('admin') : navigateTo(v as View)} />;
             case 'pix': return <Pix user={user} onBack={() => navigateTo('home')} refreshUserData={refreshUserData} />;
             case 'shop': return <Shop onBack={() => navigateTo('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.length} onNavigate={navigateTo} />;
             case 'cards': return <CardDashboard user={user} onBack={() => navigateTo('home')} onNavigate={navigateTo} />;

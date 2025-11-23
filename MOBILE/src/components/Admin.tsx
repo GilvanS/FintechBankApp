@@ -94,7 +94,6 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
 
     const closeModal = () => {
         setModalState({ isOpen: false, action: null, data: null });
-        // FIX: Corrected typo and completed the function to reset modal state.
         setDenyReason('');
         setDepositAmount('');
     };
@@ -165,16 +164,16 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     };
 
     return (
-        <div className="bg-background-dark text-text-dark min-h-full flex flex-col p-4 sm:p-6 lg:p-8">
-            <header className="flex items-center justify-between mb-8">
-                <div className="flex items-center space-x-3">
-                    <span className="material-symbols-outlined text-primary text-4xl">admin_panel_settings</span>
-                    <div>
-                        <h1 className="text-2xl font-bold text-text-dark">Painel do Administrador</h1>
-                        <p className="text-sm text-subtle-dark">Bem-vindo, {adminUser?.fullName.split(' ')[0]}</p>
+        <div className="bg-background-dark text-text-dark h-full flex flex-col p-4 overflow-hidden">
+            <header className="flex items-center justify-between mb-6 shrink-0">
+                <div className="flex items-center space-x-3 overflow-hidden">
+                    <span className="material-symbols-outlined text-primary text-3xl shrink-0">admin_panel_settings</span>
+                    <div className="overflow-hidden">
+                        <h1 className="text-xl font-bold text-text-dark truncate">Painel Admin</h1>
+                        <p className="text-xs text-subtle-dark truncate">Olá, {adminUser?.fullName.split(' ')[0]}</p>
                     </div>
                 </div>
-                <button onClick={onBack} className="p-2 rounded-full hover:bg-surface-dark transition-colors">
+                <button onClick={onBack} className="p-2 rounded-full hover:bg-surface-dark transition-colors shrink-0 z-10">
                     <span className="material-symbols-outlined">logout</span>
                 </button>
             </header>

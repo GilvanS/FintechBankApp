@@ -8,6 +8,7 @@ import PreLoginDashboard from './pages/PreLoginDashboard';
 import Home from './pages/Home';
 import SignUp from './SignUp';
 import ResetPassword from './components/ResetPassword';
+import Admin from './components/Admin';
 import { initializeApi, getUserMe as getProfile } from './services/api';
 
 /* Core CSS & Theme */
@@ -136,7 +137,7 @@ const App: React.FC = () => {
     }
   }, [user]);
 
-  const navigateTo = (newView: 'home' | 'cards' | 'shop' | 'profile' | 'login' | 'prelogin' | 'signup' | 'resetPassword') => {
+  const navigateTo = (newView: 'home' | 'cards' | 'shop' | 'profile' | 'login' | 'prelogin' | 'signup' | 'resetPassword' | 'admin') => {
     setView(newView);
   };
 
@@ -162,11 +163,13 @@ const App: React.FC = () => {
         return <SignUp onNavigateToLogin={() => setView('login')} />;
       case 'resetPassword':
         return <ResetPassword onNavigateToLogin={() => setView('login')} />;
+      case 'admin':
+        return <Admin onBack={() => setView('home')} />;
       case 'home':
       case 'cards':
       case 'shop':
       case 'profile':
-        return user ? <Home user={user} onLogout={handleLogout} refreshUserData={handleUpdateUser} /> : <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} onNavigateToSignUp={() => setView('signup')} onNavigateToResetPassword={() => setView('resetPassword')} />;
+        return user ? <Home user={user} onLogout={handleLogout} refreshUserData={handleUpdateUser} onNavigateApp={navigateTo} /> : <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} onNavigateToSignUp={() => setView('signup')} onNavigateToResetPassword={() => setView('resetPassword')} />;
       case 'prelogin':
       default:
         return <PreLoginDashboard onNavigateToLogin={() => setView('login')} onNavigateToSignUp={() => setView('signup')} />;

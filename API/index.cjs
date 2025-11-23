@@ -1285,13 +1285,19 @@ apiRouter.get('/admin/users/:cpf', bearerAuth(), authenticateAdmin, asyncHandler
     }
 
     // Incluir purchasedItems para consistencia nas telas administrativas
-    const purchaseRows = await databricksService.executeQuery(`
-        SELECT id, name, description, price, image_url, quantity, points_earned, purchase_date
-        FROM ${databricksService.fq('purchased_items')}
-        WHERE cpf='${cpf}'
-        ORDER BY purchase_date DESC
-        LIMIT 50
-    `);
+    let purchaseRows = [];
+    try {
+        purchaseRows = await databricksService.executeQuery(`
+            SELECT id, name, description, price, image_url, quantity, points_earned, purchase_date
+            FROM ${databricksService.fq('purchased_items')}
+            WHERE cpf='${cpf}'
+            ORDER BY purchase_date DESC
+            LIMIT 50
+        `);
+    } catch (error) {
+        console.warn('⚠️ Erro ao buscar purchased_items (tabela pode não existir):', error.message);
+        purchaseRows = [];
+    }
 
     user.purchasedItems = (purchaseRows || []).map(r => ({
         id: r.id,
@@ -1304,7 +1310,7 @@ apiRouter.get('/admin/users/:cpf', bearerAuth(), authenticateAdmin, asyncHandler
         purchaseDate: r.purchase_date
     }));
 
-    res.json(user);
+    res.json({ success: true, user });
 }));
 
 apiRouter.post('/admin/users/:cpf/deposit', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
