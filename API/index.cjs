@@ -381,7 +381,14 @@ apiRouter.get('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(
 // --- Rotas de Autenticação ---
 apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
     const { fullName, cpf, email, password } = req.body;
-    const existingUser = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}' OR email = '${email}'`);
+    
+    // Escapar strings para evitar SQL injection e problemas com aspas
+    const escapeSQL = (str) => {
+        if (!str) return '';
+        return str.replace(/'/g, "''").trim();
+    };
+    
+    const existingUser = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${escapeSQL(cpf)}' OR email = '${escapeSQL(email)}'`);
     if (existingUser.length > 0) {
         return res.status(400).json({ success: false, message: 'CPF ou email ja cadastrado.' });
     }
@@ -397,11 +404,29 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     const defaultPixDailyLimit = 2000.00;
     const defaultPasswordResetRequested = false;
     
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('users')} (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
-        VALUES ('${cpf}', '${fullName}', '${email}', '${hashedPassword}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, '${now}', '${now}')
-    `);
-    res.status(200).json({ success: true, message: 'Conta criada com sucesso!' });
+    try {
+        // Escapar hash da senha também (pode conter caracteres especiais)
+        const escapedHash = hashedPassword.replace(/'/g, "''");
+        
+        await databricksService.executeQuery(`
+            INSERT INTO ${databricksService.fq('users')} (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
+            VALUES ('${escapeSQL(cpf)}', '${escapeSQL(fullName)}', '${escapeSQL(email)}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, '${now}', '${now}')
+        `);
+        
+        // Verificar se o usuário foi criado com sucesso
+        const verifyUser = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${escapeSQL(cpf)}'`);
+        if (verifyUser.length === 0) {
+            console.error('❌ Erro: Usuário não foi criado após INSERT');
+            return res.status(500).json({ success: false, message: 'Erro ao criar conta. Tente novamente.' });
+        }
+        
+        console.log(`✅ Usuário ${cpf} criado com sucesso!`);
+        res.status(200).json({ success: true, message: 'Conta criada com sucesso!' });
+    } catch (error) {
+        console.error('❌ Erro ao criar usuário:', error.message);
+        console.error('❌ Stack:', error.stack);
+        return res.status(500).json({ success: false, message: 'Erro ao criar conta. Tente novamente.' });
+    }
 }));
 
 apiRouter.post('/auth/login', loginValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {

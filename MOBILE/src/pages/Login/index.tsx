@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import './Login.css';
 import { Preferences } from '@capacitor/preferences';
 import api, { setApiBaseUrl, getUserByCpf } from '../../services/api';
@@ -81,9 +81,21 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
   }, []);
 
   useIonViewWillEnter(() => {
-    // Forçar uso do IP correto ao entrar
-    checkServerStatus();
+    // Aguardar um pouco para garantir que initializeApi() terminou
+    // e então verificar status do servidor
+    setTimeout(() => {
+      checkServerStatus();
+    }, 500);
   });
+  
+  // Também verificar quando o componente monta
+  React.useEffect(() => {
+    // Aguardar inicialização da API
+    const timer = setTimeout(() => {
+      checkServerStatus();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

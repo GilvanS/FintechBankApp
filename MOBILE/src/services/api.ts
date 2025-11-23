@@ -72,27 +72,23 @@ export const setApiBaseUrl = async (url: string) => {
  */
 export const initializeApi = async () => {
     // No APK, sempre usar URL absoluta (não há proxy)
-    // Verificar cache primeiro
-    const { value: cachedData } = await Preferences.get({ key: API_CACHE_KEY });
-
-    if (cachedData) {
-        const { url, timestamp } = JSON.parse(cachedData);
-        const isCacheValid = (Date.now() - timestamp) < CACHE_DURATION_MS;
-
-        if (isCacheValid && !url.startsWith('/')) {
-            // Só usar cache se for URL absoluta (não relativa de preview)
-            console.log('API URL carregada do cache:', url);
-            await setApiBaseUrl(url);
-            return;
-        }
-        console.log('Cache da API URL expirado ou inválido.');
-    }
-
-    // Usar URL padrão (absoluta para APK)
     console.log('🚀 Inicializando API...');
+    console.log('📱 Ambiente:', typeof window !== 'undefined' ? 'Browser/APK' : 'SSR');
+    
+    // SEMPRE usar a URL padrão no APK (ignorar cache para garantir que está correto)
+    // O cache pode ter URLs antigas ou inválidas
     console.log(`🔧 Usando API URL padrão: ${DEV_API_URL}`);
     await setApiBaseUrl(DEV_API_URL);
     console.log(`✅ BaseURL configurada: ${api.defaults.baseURL}`);
+    
+    // Testar conexão imediatamente após configurar
+    try {
+        console.log('🧪 Testando conexão inicial...');
+        const testRes = await api.get('/health', { timeout: 5000 });
+        console.log('✅ Conexão inicial OK:', testRes.status);
+    } catch (testError: any) {
+        console.warn('⚠️ Conexão inicial falhou (pode ser normal se API não estiver rodando):', testError.message);
+    }
 };
 
 export async function healthCheck(): Promise<boolean> {
