@@ -12,6 +12,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { products } = require('./data/mockSeed');
+const DatabaseFactory = require('./services/database/DatabaseFactory');
 
 // --- Repositórios / Contexto ---
 const repoContext = require('./repositories/context');
@@ -30,152 +31,14 @@ const { bearerAuth, requireScope, pinGuard, withReqId, auditLog } = require('./m
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'fintech-super-secret-key-change-me';
 
-const databricksConfig = {
-    serverHostname: process.env.DATABRICKS_SERVER_HOSTNAME,
-    httpPath: process.env.DATABRICKS_HTTP_PATH,
-    token: process.env.DATABRICKS_TOKEN,
-    catalog: process.env.DATABRICKS_CATALOG || 'workspace', // Usar 'workspace' como padrão
-    schema: process.env.DATABRICKS_SCHEMA || 'default'
-};
+// --- Serviço de Banco de Dados ---
+// Inicializado via Factory com base em DB_PROVIDER
+const dbService = DatabaseFactory.createDatabaseService();
+// Alias para compatibilidade com código existente
+const databricksService = dbService;
 
-// --- Classe de Serviço Databricks ---
-class DatabricksService {
-    constructor() {
-        this.client = null;
-        this.session = null;
-        this.catalog = databricksConfig.catalog;
-        this.schema = databricksConfig.schema;
-        this.mockMode = false;
-    }
-
-    generateUUID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-            const r = (Math.random() * 16) | 0;
-            const v = c === 'x' ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
-        });
-    }
-
-    async connect() {
-        const isMissingEnv =
-            !databricksConfig.serverHostname ||
-            !databricksConfig.httpPath ||
-            !databricksConfig.token;
-        const looksLikePlaceholder =
-            String(databricksConfig.token || '').toUpperCase().includes('PAT') ||
-            String(databricksConfig.token || '').includes('DATABRICKS_TOKEN') ||
-            String(databricksConfig.token || '').includes('CHANGE_ME');
-
-        if (isMissingEnv || looksLikePlaceholder) {
-            console.warn('⚠️ Configuracao Databricks ausente ou token placeholder. Ativando mockMode.');
-            this.mockMode = true;
-            this.client = null;
-            this.session = null;
-            return;
-        }
-
-        try {
-            this.client = new DBSQLClient();
-            const connectedClient = await this.client.connect({
-                host: databricksConfig.serverHostname,
-                path: databricksConfig.httpPath,
-                token: databricksConfig.token,
-            });
-            this.session = await connectedClient.openSession({
-                initialCatalog: databricksConfig.catalog,
-                initialSchema: databricksConfig.schema,
-            });
-            console.log("✅ Conectado ao Databricks com sucesso.");
-            console.log(`📋 Catalog configurado: ${this.catalog}`);
-            console.log(`📋 Schema configurado: ${this.schema}`);
-
-            // Detectar catálogo disponível automaticamente
-            await this.detectAvailableCatalog();
-            
-            // Verificar se catalog e schema são iguais (pode causar problemas)
-            if (this.catalog === this.schema) {
-                console.warn(`⚠️  ATENÇÃO: Catalog e Schema são iguais (${this.catalog}).`);
-                console.log(`💡 Ajustando para usar schema 'default' automaticamente.`);
-                // Ajustar para usar 'default' como schema quando são iguais
-                this.schema = 'default';
-                databricksConfig.schema = 'default';
-                console.log(`✅ Schema ajustado para: ${this.schema}`);
-            }
-            
-            this.mockMode = false;
-        } catch (error) {
-            console.error('❌ Falha ao conectar com Databricks:', error.message);
-            console.warn('⚠️ Ativando mockMode para desenvolvimento local.');
-            this.mockMode = true;
-            this.client = null;
-            this.session = null;
-        }
-    }
-
-    async detectAvailableCatalog() {
-        try {
-            console.log("🔍 Detectando catálogo disponível no workspace...");
-            
-            // Tentar listar catálogos disponíveis
-            const catalogs = await this.executeQuery("SHOW CATALOGS");
-            console.log("📋 Catálogos disponíveis:", catalogs.map(c => c.catalog).join(', '));
-            
-            // Verificar se o catálogo configurado existe
-            const availableCatalogs = catalogs.map(c => c.catalog);
-            if (availableCatalogs.includes(this.catalog)) {
-                console.log(`✅ Catálogo '${this.catalog}' encontrado e será usado.`);
-            } else {
-                // Prioridade de fallback: workspace > samples > hive_metastore > primeiro disponível
-                let fallbackCatalog = null;
-                
-                if (availableCatalogs.includes('workspace')) {
-                    fallbackCatalog = 'workspace';
-                } else if (availableCatalogs.includes('samples')) {
-                    fallbackCatalog = 'samples';
-                } else if (availableCatalogs.includes('hive_metastore')) {
-                    fallbackCatalog = 'hive_metastore';
-                } else if (availableCatalogs.length > 0) {
-                    fallbackCatalog = availableCatalogs[0];
-                }
-                
-                if (fallbackCatalog) {
-                    console.log(`⚠️  Catálogo '${this.catalog}' não encontrado. Usando '${fallbackCatalog}' como padrão.`);
-                    this.catalog = fallbackCatalog;
-                    databricksConfig.catalog = fallbackCatalog;
-                } else {
-                    throw new Error("Nenhum catálogo disponível encontrado");
-                }
-            }
-            
-            console.log(`✅ Usando catálogo: ${this.catalog}`);
-        } catch (error) {
-            console.warn("⚠️  Não foi possível detectar catálogos. Usando configuração padrão:", error.message);
-            console.log(`📋 Tentando usar catálogo configurado: ${this.catalog}`);
-        }
-    }
-
-    async disconnect() {
-        if (this.session) await this.session.close();
-        if (this.client) await this.client.close();
-        console.log("Desconectado do Databricks");
-    }
-
-    async executeQuery(query) {
-        if (this.mockMode) {
-            throw new Error('MockMode ativo: operacao de banco nao disponivel no desenvolvimento local.');
-        }
-        console.log("Executing Query:", query);
-        const operation = await this.session.executeStatement(query, { runAsync: false, maxRows: 10000 });
-        const result = await operation.fetchAll();
-        await operation.close();
-        return result;
-    }
-
-    fq(tableName) {
-        // Sempre usar catalog.schema.table (schema já foi ajustado para 'default' se necessário)
-        return `\`${this.catalog}\`.\`${this.schema}\`.\`${tableName}\``;
-    }
-}
+// Conectar ao banco
+dbService.connect();
 
 // --- Funções de Normalização (snake_case do DB para camelCase do App) ---
 const normalizeUser = (dbUser) => {
@@ -234,7 +97,6 @@ const asyncHandler = fn => (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
 };
 
-const databricksService = new DatabricksService();
 const app = express();
 
 // Injetar contexto para repositories
@@ -1076,46 +938,20 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
 }));
 
 // --- Rotas PIX ---
-apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
-    const { toKey, amount, description, pin } = req.body || {};
-    if (!toKey || typeof amount !== 'number' || amount <= 0 || !pin || pin.length !== 4) {
-        return res.status(400).json({ success: false, message: 'Payload invalido.' });
-    }
-    if (!req.user?.cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
-
-    const fromCpf = req.user.cpf;
-    const numericAmount = parseFloat(amount);
-
-    auditLog(req, 'pix_transfer', 'info', { toKey: req.body?.toKey, amount: req.body?.amount });
-    
-    const fromUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${fromCpf}'`);
-    const fromUser = fromUsers[0];
-    const toUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${toKey}' OR email = '${toKey}'`);
-    const toUser = toUsers[0];
-
-    if (!toUser) return res.status(400).json({ success: false, message: 'Chave PIX de destino não encontrada.' });
-    if (fromUser.balance < numericAmount) return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
-    if (fromUser.cpf === toUser.cpf) return res.status(400).json({ success: false, message: 'Não é permitido transferir para si mesmo.' });
-    
-    const newFromBalance = fromUser.balance - numericAmount;
-    const newToBalance = toUser.balance + numericAmount;
-    const now = new Date().toISOString();
-    const txId = databricksService.generateUUID();
-
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance = ${newFromBalance} WHERE cpf = '${fromCpf}'`);
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance = ${newToBalance} WHERE cpf = '${toUser.cpf}'`);
-    await databricksService.executeQuery(`INSERT INTO ${databricksService.fq('transactions')} VALUES ('${txId}_sent', '${fromCpf}', 'PIX_SENT', ${-numericAmount}, '${description || 'Transferência PIX'}', '${fromUser.full_name}', '${toUser.full_name}', '${toKey}', '${now}')`);
-    await databricksService.executeQuery(`INSERT INTO ${databricksService.fq('transactions')} VALUES ('${txId}_received', '${toUser.cpf}', 'PIX_RECEIVED', ${numericAmount}, '${description || 'Transferência PIX'}', '${fromUser.full_name}', '${toUser.full_name}', '${toKey}', '${now}')`);
-
-    res.json({ success: true, message: 'PIX enviado com sucesso!' });
-}));
 
 // PIX Contacts (mantido)
 apiRouter.get('/pix/contacts/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
     if (req.user.cpf !== req.params.cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
     const list = await pixRepo.listContacts(req.params.cpf);
+    
+    // Map database fields to frontend expected format
+    const contacts = list.map(contact => ({
+        name: contact.contact_name,
+        key: contact.contact_cpf
+    }));
+    
     auditLog(req, 'pix_contacts_list');
-    res.json({ success: true, contacts: list });
+    res.json({ success: true, contacts });
 }));
 
 apiRouter.post('/pix/contacts/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
@@ -1133,6 +969,26 @@ apiRouter.delete('/pix/contacts/:cpf/:contactKey', bearerAuth(), asyncHandler(as
     if (!ok) return res.status(404).json({ success: false, message: 'Contato nao encontrado' });
     auditLog(req, 'pix_contact_delete', 'warn');
     res.json({ success: true, message: 'Contato removido' });
+}));
+
+// --- PIX Recipient Info ---
+apiRouter.get('/pix/recipient-info', asyncHandler(async (req, res) => {
+    const { key, senderCpf } = req.query;
+    if (!key) return res.status(400).json({ success: false, message: 'Chave PIX nao fornecida.' });
+    
+    // Determine key type (CPF, EMAIL, etc.)
+    const keyType = key.includes('@') ? 'EMAIL' : 'CPF';
+    
+    const recipient = await pixRepo.findRecipientByKey(keyType, key);
+    if (!recipient) {
+        return res.json({ success: false, message: 'Chave PIX nao encontrada.' });
+    }
+    
+    if (senderCpf && recipient.cpf === senderCpf) {
+        return res.json({ success: false, message: 'Nao e possivel adicionar voce mesmo como contato.' });
+    }
+    
+    res.json({ success: true, name: recipient.name, cpf: recipient.cpf });
 }));
 
 // --- PIX Keys (novos endpoints via repositório) ---
@@ -1206,6 +1062,93 @@ apiRouter.post('/pix/recipient-info', bearerAuth(), asyncHandler(async (req, res
     auditLog(req, 'pix_recipient_info', 'info', { type });
     res.json({ success: true, recipient });
 }));
+
+// --- PIX Transfer ---
+apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
+    console.log('🔵 [PIX TRANSFER] Requisição recebida:', JSON.stringify(req.body, null, 2));
+    const { cpf: fromCpf, key, amount, description } = req.body || {};
+    const numericAmount = parseFloat(amount);
+    
+    if (!key) {
+        console.log('❌ [PIX TRANSFER] Chave não fornecida');
+        return res.status(400).json({ success: false, message: 'Chave PIX não fornecida.' });
+    }
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+        return res.status(400).json({ success: false, message: 'Valor inválido.' });
+    }
+    if (!req.user || !req.user.cpf) {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    
+    const senderCpf = fromCpf || req.user.cpf;
+    
+    // Determine key type
+    const keyType = key.includes('@') ? 'EMAIL' : 'CPF';
+    
+    // Find recipient
+    const recipient = await pixRepo.findRecipientByKey(keyType, key);
+    if (!recipient) {
+        return res.status(404).json({ success: false, message: 'Destinatário não encontrado.' });
+    }
+    
+    const toCpf = recipient.cpf;
+    if (senderCpf === toCpf) {
+        return res.status(400).json({ success: false, message: 'Não é possível transferir para si mesmo.' });
+    }
+    
+    // Get sender info
+    const fromUserRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf='${senderCpf}'`);
+    if (!fromUserRows || fromUserRows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Usuário remetente não encontrado.' });
+    }
+    const fromUser = fromUserRows[0];
+    const balance = parseFloat(fromUser.balance || 0);
+    if (balance < numericAmount) {
+        return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
+    }
+    
+    // Check daily limit
+    const today = new Date().toISOString().split('T')[0];
+    const dailyUsageRows = await databricksService.executeQuery(`
+        SELECT COALESCE(SUM(ABS(amount)), 0) as total
+        FROM ${databricksService.fq('transactions')}
+        WHERE cpf='${senderCpf}' AND type IN ('PIX_SENT','PIX_CREDIT_SENT') AND date >= '${today}'
+    `);
+    const dailyUsage = parseFloat(dailyUsageRows[0]?.total || 0);
+    const pixDailyLimit = parseFloat(fromUser.pix_daily_limit || 2000.00);
+    
+    if (dailyUsage + numericAmount > pixDailyLimit) {
+        return res.status(400).json({ success: false, message: `Limite diário de PIX excedido. Usado: R$ ${dailyUsage.toFixed(2)}, Tentando: R$ ${numericAmount.toFixed(2)}, Limite: R$ ${pixDailyLimit.toFixed(2)}` });
+    }
+    
+    // Execute transfer
+    const newBalance = balance - numericAmount;
+    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance=${newBalance}, updated_at=CURRENT_TIMESTAMP WHERE cpf='${senderCpf}'`);
+    
+    const toUserRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf='${toCpf}'`);
+    if (toUserRows && toUserRows.length > 0) {
+        const toBalance = parseFloat(toUserRows[0].balance || 0);
+        await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance=${toBalance + numericAmount}, updated_at=CURRENT_TIMESTAMP WHERE cpf='${toCpf}'`);
+    }
+    
+    // Record transactions
+    const txId = databricksService.generateUUID();
+    const now = new Date().toISOString();
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date, to_user, to_key)
+        VALUES ('${txId}', '${senderCpf}', 'PIX_SENT', ${-numericAmount}, '${description || 'Transferência PIX'}', '${now}', '${toCpf}', '${key}')
+    `);
+    
+    const txId2 = databricksService.generateUUID();
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date, from_user)
+        VALUES ('${txId2}', '${toCpf}', 'PIX_RECEIVED', ${numericAmount}, '${description || 'Transferência PIX'}', '${now}', '${senderCpf}')
+    `);
+    
+    auditLog(req, 'pix_transfer', 'info', { from: senderCpf, to: toCpf, amount: numericAmount });
+    res.json({ success: true, message: 'Transferência realizada com sucesso!' });
+}));
+
 
 apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
     const { fromCpf, toKey, amount, description, installments, interestRate } = req.body || {};
@@ -1819,9 +1762,17 @@ app.use((err, req, res, next) => {
 });
 
 async function initializeDatabase() {
+    // Skip Databricks-specific initialization if using Postgres
+    const provider = process.env.DB_PROVIDER || process.env.DB_DIALECT;
+    if (provider === 'postgres') {
+        console.log('ℹ️  Usando PostgreSQL. Inicialização automática de schema (Databricks) pulada.');
+        console.log('💡 Certifique-se de ter executado schema_pg.sql no seu banco Postgres.');
+        return;
+    }
+
     try {
-        console.log('🔧 Inicializando estrutura do banco de dados...');
-        console.log(`📋 Usando catálogo: ${databricksConfig.catalog}, schema: ${databricksConfig.schema}`);
+        console.log('🔧 Inicializando estrutura do banco de dados (Databricks)...');
+        // console.log(`📋 Usando catálogo: ${databricksConfig.catalog}, schema: ${databricksConfig.schema}`); // Removed to fix error
         
         // Verificar se a tabela users existe e tem a estrutura correta
         try {

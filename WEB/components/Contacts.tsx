@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { PixContact } from '../types';
-import { getPixContacts, addPixContact, deletePixContact } from '../services/api';
+import { getPixContacts, addPixContact, deletePixContact, getPixRecipientInfo } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import InfoPopupBottom from './InfoPopupBottom';
 import { useToast, ToastContainer } from './Toast';
@@ -24,12 +24,14 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
     const [newContactKey, setNewContactKey] = useState('');
     const [error, setError] = useState('');
     const { toast, showSuccess, showError, hide } = useToast();
+    const [recipientInfo, setRecipientInfo] = useState<{ name: string; cpf: string } | null>(null);
+    const [isSearching, setIsSearching] = useState(false);
 
     const fetchContacts = async () => {
         if (user) {
             setIsLoading(true);
-            const result = await getPixContacts(user.cpf);
-            if (result.success) setContacts(result.contacts!);
+            const contacts = await getPixContacts(user.cpf);
+            setContacts(contacts);
             setIsLoading(false);
         }
     };
@@ -43,10 +45,11 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
         setShowAddModal(true);
     };
 
-    const handleAddContact = async (e: React.FormEvent) => {
-        e.preventDefault();
+
+    const handleSearchKey = async () => {
         if (!user) return;
         setError('');
+        setRecipientInfo(null);
 
         const onlyDigits = newContactKey.replace(/\D/g, '');
         if (onlyDigits.length !== 11) {
@@ -56,16 +59,37 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
             return;
         }
 
-        const result = await addPixContact(user.cpf, { name: newContactName, key: onlyDigits });
+        setIsSearching(true);
+        const result = await getPixRecipientInfo(onlyDigits, user.cpf);
+        setIsSearching(false);
+
+        if (result.success && result.name && result.cpf) {
+            setRecipientInfo({ name: result.name, cpf: result.cpf });
+            setNewContactName(result.name);
+        } else {
+            const msg = result.message || 'Chave PIX nao encontrada no sistema.';
+            setError(msg);
+            showError(msg);
+        }
+    };
+
+    const handleAddContact = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!user || !recipientInfo) return;
+        setError('');
+
+        const onlyDigits = newContactKey.replace(/\D/g, '');
+        const result = await addPixContact(user.cpf, { name: recipientInfo.name, key: onlyDigits });
         if (result.success) {
             setShowAddModal(false);
             setNewContactName('');
             setNewContactKey('');
+            setRecipientInfo(null);
             showSuccess('Contato salvo com sucesso');
             fetchContacts();
         } else {
             const msg = result.message || 'Falha ao salvar contato.';
-            if (/duplic/gi.test(msg)) {
+            if (/duplic/gi.test(msg) || /unique/gi.test(msg)) {
                 showError('Contato com esta chave ja existe');
             } else {
                 showError(msg);
@@ -132,32 +156,79 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
                 </InfoPopupBottom>
             )}
 
+
             {showAddModal && (
                  <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
                     <div className="bg-surface-dark p-8 rounded-lg shadow-xl w-full max-w-md">
                         <h2 className="text-2xl font-bold mb-4 text-white">Novo Contato</h2>
                         <form onSubmit={handleAddContact} className="space-y-4">
                             <div>
-                               <label className="text-sm font-medium text-gray-300">Nome do Contato</label>
-                               <input type="text" value={newContactName} onChange={e => setNewContactName(e.target.value)} required className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 mt-1 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" />
-                            </div>
-                            <div>
                                <label className="text-sm font-medium text-gray-300">Chave PIX (CPF)</label>
-                               <input
-                                   type="text"
-                                   inputMode="numeric"
-                                   pattern="[0-9]*"
-                                   value={newContactKey}
-                                   onChange={e => setNewContactKey(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                                   required
-                                   className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 mt-1 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all"
-                               />
-                               <p className="text-xs text-gray-400 mt-1">Digite apenas os 11 digitos do CPF.</p>
+                                <div className="flex gap-2 mt-1">
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        value={newContactKey}
+                                        onChange={e => setNewContactKey(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                                        required
+                                        disabled={!!recipientInfo}
+                                        className="flex-1 bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
+                                    />
+                                    {!recipientInfo && (
+                                        <button
+                                            type="button"
+                                            onClick={handleSearchKey}
+                                            disabled={isSearching || newContactKey.replace(/\D/g, '').length !== 11}
+                                            className="px-4 py-3 bg-primary text-background-dark font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isSearching ? 'Buscando...' : 'Buscar'}
+                                        </button>
+                                    )}
+                                </div>
+                                <p className="text-xs text-gray-400 mt-1">Digite o CPF e clique em Buscar.</p>
                             </div>
+
+                            {recipientInfo && (
+                                <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
+                                    <p className="text-xs text-gray-400 mb-1">Destinatário encontrado:</p>
+                                    <p className="text-white font-semibold">{recipientInfo.name}</p>
+                                    <p className="text-white/60 text-sm">{recipientInfo.cpf}</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setRecipientInfo(null);
+                                            setNewContactKey('');
+                                            setNewContactName('');
+                                        }}
+                                        className="text-xs text-primary hover:underline mt-2"
+                                    >
+                                        Buscar outro CPF
+                                    </button>
+                                </div>
+                            )}
+
                             {error && <p className="text-sm text-red-400">{error}</p>}
                             <div className="flex justify-end space-x-4 mt-6">
-                                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-white bg-white/10 rounded-md hover:bg-white/20">Cancelar</button>
-                                <button type="submit" className="px-4 py-2 text-black bg-primary font-semibold rounded-md hover:bg-primary/90">Salvar</button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowAddModal(false);
+                                        setRecipientInfo(null);
+                                        setNewContactKey('');
+                                        setNewContactName('');
+                                    }}
+                                    className="px-4 py-2 text-white bg-white/10 rounded-md hover:bg-white/20"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={!recipientInfo}
+                                    className="px-4 py-2 text-black bg-primary font-semibold rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Salvar
+                                </button>
                             </div>
                         </form>
                     </div>

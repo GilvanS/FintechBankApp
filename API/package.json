@@ -23,6 +23,7 @@
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.9.7",
     "newman-reporter-html": "^1.0.5",
+    "pg": "^8.16.3",
     "swagger-autogen": "^2.23.7",
     "swagger-ui-express": "^5.0.1",
     "yamljs": "^0.3.0"

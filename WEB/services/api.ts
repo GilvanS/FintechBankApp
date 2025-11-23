@@ -81,7 +81,7 @@ export const getUserMe = async (): Promise<{ success: boolean; message?: string;
 
 export const getUserStatement = async (cpf: string): Promise<{ success: boolean; message?: string; transactions?: any[] }> => {
   try {
-    const result = await apiCall<{ success: boolean; transactions?: any[] }>(`/users/${cpf}/transactions`, {
+    const result = await apiCall<{ success: boolean; transactions?: any[] }>(`/users/${cpf}/statement`, {
       method: 'GET',
     });
     return result;
@@ -104,8 +104,16 @@ export const requestNewPassword = async (cpf: string): Promise<{ success: boolea
 
 export const performPix = async (cpf: string, key: string, amount: number, description: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
   try {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return { success: false, message: 'Não autenticado.' };
+    }
+
     const result = await apiCall<{ success: boolean; message: string; user?: any; transaction?: Transaction }>('/pix/transfer', {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
       body: JSON.stringify({ cpf, key, amount, description }),
     });
     return result;
@@ -116,8 +124,16 @@ export const performPix = async (cpf: string, key: string, amount: number, descr
 
 export const getPixContacts = async (cpf: string): Promise<PixContact[]> => {
   try {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return [];
+    }
+
       const result = await apiCall<{ contacts: PixContact[] }>(`/pix/contacts/${cpf}`, {
         method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
       return result.contacts || [];
     } catch (error) {
@@ -145,5 +161,44 @@ export const performPixCreditInstallment = async (cpf: string, amount: number, i
     return result;
   } catch (error: any) {
     return { success: false, message: error.message || 'Erro ao realizar PIX no crédito' };
+  }
+};
+
+export const addPixContact = async (cpf: string, contact: { name: string; key: string }): Promise<{ success: boolean; message: string }> => {
+  try {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return { success: false, message: 'Não autenticado.' };
+    }
+
+    const result = await apiCall<{ success: boolean; message: string }>(`/pix/contacts/${cpf}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ contactCpf: contact.key, contactName: contact.name }),
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao adicionar contato' };
+  }
+};
+
+export const deletePixContact = async (cpf: string, key: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return { success: false, message: 'Não autenticado.' };
+    }
+
+    const result = await apiCall<{ success: boolean; message: string }>(`/pix/contacts/${cpf}/${key}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao remover contato' };
   }
 };
