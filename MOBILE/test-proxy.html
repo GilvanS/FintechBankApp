@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Proxy</title>
+</head>
+<body>
+    <h1>Testando Proxy do Vite</h1>
+    <button onclick="testProxy()">Testar /api/health</button>
+    <pre id="result"></pre>
+    
+    <script>
+        async function testProxy() {
+            const resultEl = document.getElementById('result');
+            resultEl.textContent = 'Testando...';
+            
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                resultEl.textContent = 'SUCESSO!\n' + JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultEl.textContent = 'ERRO!\n' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
+

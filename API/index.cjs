@@ -94,8 +94,12 @@ class DatabricksService {
             
             // Verificar se catalog e schema são iguais (pode causar problemas)
             if (this.catalog === this.schema) {
-                console.warn(`⚠️  ATENÇÃO: Catalog e Schema são iguais (${this.catalog}). Isso pode causar duplicação no nome das tabelas.`);
-                console.warn(`💡 Considere usar schema 'default' ou outro nome diferente do catalog.`);
+                console.warn(`⚠️  ATENÇÃO: Catalog e Schema são iguais (${this.catalog}).`);
+                console.log(`💡 Ajustando para usar schema 'default' automaticamente.`);
+                // Ajustar para usar 'default' como schema quando são iguais
+                this.schema = 'default';
+                databricksConfig.schema = 'default';
+                console.log(`✅ Schema ajustado para: ${this.schema}`);
             }
             
             this.mockMode = false;
@@ -168,10 +172,7 @@ class DatabricksService {
     }
 
     fq(tableName) {
-        // Evitar duplicação se catalog e schema forem iguais
-        if (this.catalog === this.schema) {
-            return `\`${this.catalog}\`.\`${tableName}\``;
-        }
+        // Sempre usar catalog.schema.table (schema já foi ajustado para 'default' se necessário)
         return `\`${this.catalog}\`.\`${this.schema}\`.\`${tableName}\``;
     }
 }
@@ -1694,49 +1695,48 @@ async function initializeDatabase() {
                 console.log('⚠️  Tabela users existe mas não tem a estrutura correta (faltam colunas). Recriando...');
                 await databricksService.executeQuery(`DROP TABLE IF EXISTS ${databricksService.fq('users')}`);
                 await databricksService.executeQuery(`DROP TABLE IF EXISTS ${databricksService.fq('transactions')}`);
-                // Forçar recriação da tabela pix_contacts com estrutura correta
-                console.log('🔄 Recriando tabela pix_contacts com estrutura correta...');
-                await databricksService.executeQuery(`DROP TABLE IF EXISTS ${databricksService.fq('pix_contacts')}`);
-                
-                await databricksService.executeQuery(`
-                    CREATE TABLE ${databricksService.fq('pix_contacts')} (
-                        id STRING NOT NULL,
-                        pix_account_id STRING NOT NULL,
-                        contact_cpf STRING NOT NULL,
-                        contact_name STRING NOT NULL,
-                        created_at TIMESTAMP NOT NULL
-                    ) USING DELTA
-                `);
             }
-        } catch (error) {
-            console.log('📋 Tabelas não existem ainda. Criando estrutura completa...');
+        } catch (describeError) {
+            // Tabela não existe ou erro ao descrever - isso é normal na primeira execução
+            const errorMsg = describeError.message || String(describeError);
+            if (errorMsg.includes('does not exist') || errorMsg.includes('not found') || errorMsg.includes('TABLE_OR_VIEW_NOT_FOUND')) {
+                console.log('ℹ️  Tabela users não existe ainda. Será criada agora...');
+            } else {
+                console.warn('⚠️  Erro ao verificar tabela users:', errorMsg);
+                // Continuar com a criação das tabelas mesmo assim
+            }
         }
         
-        // Verificar se o catálogo existe e criar schema
+        // Forçar recriação da tabela pix_contacts com estrutura correta (se necessário)
         try {
-            // Usar a configuração atualizada do serviço (que pode ter sido alterada na detecção)
+            await databricksService.executeQuery(`DESCRIBE TABLE ${databricksService.fq('pix_contacts')}`);
+            console.log('✅ Tabela pix_contacts já existe com estrutura correta.');
+        } catch (pixContactsError) {
+            console.log('🔄 Recriando tabela pix_contacts com estrutura correta...');
+            await databricksService.executeQuery(`DROP TABLE IF EXISTS ${databricksService.fq('pix_contacts')}`);
+            await databricksService.executeQuery(`
+                CREATE TABLE ${databricksService.fq('pix_contacts')} (
+                    id STRING NOT NULL,
+                    pix_account_id STRING NOT NULL,
+                    contact_cpf STRING NOT NULL,
+                    contact_name STRING NOT NULL,
+                    created_at TIMESTAMP NOT NULL
+                ) USING DELTA
+            `);
+        }
+        
+        // Criar schema se necessário (schema já foi ajustado para 'default' se catalog e schema eram iguais)
+        try {
             const currentCatalog = databricksService.catalog;
-            const schemaQuery = `CREATE SCHEMA IF NOT EXISTS \`${currentCatalog}\`.\`${databricksConfig.schema}\``;
+            const currentSchema = databricksService.schema;
+            const schemaQuery = `CREATE SCHEMA IF NOT EXISTS \`${currentCatalog}\`.\`${currentSchema}\``;
             console.log(`🔍 Executando: ${schemaQuery}`);
             await databricksService.executeQuery(schemaQuery);
-            console.log(`✅ Schema ${currentCatalog}.${databricksConfig.schema} verificado/criado com sucesso.`);
+            console.log(`✅ Schema ${currentCatalog}.${currentSchema} verificado/criado com sucesso.`);
         } catch (schemaError) {
-            console.error(`❌ Erro ao criar schema ${databricksService.catalog}.${databricksConfig.schema}:`, schemaError.message);
-            
-            // Tentar criar apenas o schema sem especificar catálogo
-            console.log("🔄 Tentando criar schema sem especificar catálogo...");
-            try {
-                await databricksService.executeQuery(`CREATE SCHEMA IF NOT EXISTS \`${databricksConfig.schema}\``);
-                console.log(`✅ Schema ${databricksConfig.schema} criado com sucesso.`);
-                
-                // Atualizar a referência do catálogo para usar o padrão do workspace
-                console.log("🔄 Ajustando configuração para usar catálogo padrão do workspace...");
-                databricksService.catalog = 'samples'; // Usar samples como padrão
-                databricksConfig.catalog = 'samples';
-            } catch (fallbackError) {
-                console.error("❌ Erro mesmo com fallback:", fallbackError.message);
-                throw fallbackError;
-            }
+            console.error(`❌ Erro ao criar schema ${databricksService.catalog}.${databricksService.schema}:`, schemaError.message);
+            // Não é crítico - o schema pode já existir
+            console.log("ℹ️  Continuando sem criar schema explicitamente...");
         }
 
         // Criar tabela users se não existir (sem DEFAULT values para compatibilidade com Databricks)
@@ -1768,7 +1768,14 @@ async function initializeDatabase() {
         console.log('✅ Tabela users verificada/criada com sucesso.');
 
         // Adicionar colunas extras se faltarem
-        const currentCols = await databricksService.executeQuery(`DESCRIBE TABLE ${databricksService.fq('users')}`);
+        let currentCols = [];
+        try {
+            currentCols = await databricksService.executeQuery(`DESCRIBE TABLE ${databricksService.fq('users')}`);
+        } catch (describeError) {
+            console.warn('⚠️  Erro ao descrever tabela users para verificar colunas:', describeError.message);
+            // Continuar sem adicionar colunas extras - a tabela pode ter sido criada corretamente
+            currentCols = [];
+        }
         const colSet = new Set(currentCols.map(c => c.col_name));
         const addIfMissing = async (name, type) => {
             if (!colSet.has(name)) {

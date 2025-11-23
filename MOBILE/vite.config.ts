@@ -11,17 +11,37 @@ export default defineConfig(({ mode }) => {
         proxy: {
           '/api': {
             target: 'http://192.168.0.105:3001', // IP fixo da rede WiFi
-            changeOrigin: true
+            changeOrigin: true,
+            secure: false,
+            configure: (proxy, _options) => {
+              proxy.on('error', (err, _req, _res) => {
+                console.log('proxy error', err);
+              });
+              proxy.on('proxyReq', (proxyReq, req, _res) => {
+                console.log('Proxying:', req.method, req.url, '→', proxyReq.path);
+              });
+            },
           }
         }
       },
       preview: {
-        port: 3000,
+        port: 3002, // Porta diferente: WEB=3000, API=3001, MOBILE=3002
         host: '0.0.0.0', // Permite acesso via IP da rede no preview também
+        cors: true, // Habilita CORS no preview
         proxy: {
           '/api': {
-            target: 'http://192.168.0.105:3001', // IP fixo da rede WiFi
-            changeOrigin: true
+            target: 'http://192.168.0.105:3001', // IP fixo da rede WiFi - API na porta 3001
+            changeOrigin: true,
+            secure: false, // Para HTTP local
+            ws: true, // Para WebSocket se necessário
+            configure: (proxy, _options) => {
+              proxy.on('error', (err, _req, _res) => {
+                console.log('proxy error', err);
+              });
+              proxy.on('proxyReq', (proxyReq, req, _res) => {
+                console.log('Proxying request:', req.method, req.url, '→', proxyReq.path);
+              });
+            },
           }
         }
       },

@@ -32,19 +32,50 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
 
   const checkServerStatus = useCallback(async () => {
     setServerStatus('checking');
+    
+    // No APK, sempre usar URL absoluta
     const url = 'http://192.168.0.105:3001';
-    console.log('Verificando status em:', url);
+    
+    console.log('🔍 Verificando status da API em:', url);
+    console.log('🔍 BaseURL atual:', api.defaults.baseURL);
 
     try {
-      setApiBaseUrl(url);
-      await api.get('/health', { timeout: 5000 });
+      await setApiBaseUrl(url);
+      console.log('✅ BaseURL configurada:', api.defaults.baseURL);
+      
+      const response = await api.get('/health', { 
+        timeout: 10000, // Aumentado para 10 segundos
+        validateStatus: (status) => status < 500
+      });
+      
+      console.log('✅ Health check OK:', response.status, response.data);
       setServerStatus('online');
       setError('');
       return true;
     } catch (e: any) {
-      console.error('Erro de conexão:', e);
+      console.error('❌ Erro de conexão:', e.message);
+      console.error('❌ Detalhes do erro:', {
+        code: e.code,
+        message: e.message,
+        response: e.response?.data,
+        status: e.response?.status,
+        baseURL: api.defaults.baseURL,
+        urlCompleta: `${api.defaults.baseURL}/health`
+      });
+      
       setServerStatus('offline');
-      setError(`Erro ao conectar em ${url}. Verifique se a API está rodando.`);
+      
+      // Mensagem de erro mais detalhada
+      let errorMsg = `Erro ao conectar em ${url}`;
+      if (e.code === 'ECONNREFUSED' || e.code === 'ERR_NETWORK') {
+        errorMsg += '\nVerifique se a API está rodando e se o IP está correto.';
+      } else if (e.code === 'ETIMEDOUT') {
+        errorMsg += '\nTimeout - verifique a conexão de rede.';
+      } else if (e.response) {
+        errorMsg += `\nStatus: ${e.response.status}`;
+      }
+      
+      setError(errorMsg);
       return false;
     }
   }, []);

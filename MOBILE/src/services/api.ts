@@ -2,7 +2,9 @@ import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
 import { PixContact, User, PasswordResetRequest, LimitIncreaseRequest, SignUpData } from '../types';
 
-const DEV_API_URL = 'http://192.168.0.105:3001'; // IP da rede (funciona no PC e Mobile)
+// URL da API para APK - sempre usar URL absoluta
+// No APK (Capacitor), não há proxy, então sempre usa URL absoluta
+const DEV_API_URL = 'http://192.168.0.105:3001';
 const API_CACHE_KEY = 'apiBaseUrlCache';
 const CACHE_DURATION_MS = 60 * 60 * 1000; // 60 minutos
 
@@ -28,13 +30,27 @@ export function getAuthHeaders(contentType: 'json' | 'none' = 'json') {
 export const setApiBaseUrl = async (url: string) => {
     const t = url.trim().replace(/\/+$/, '');
     let base = t;
-    if (t.endsWith('/api/v1')) {
-        base = t;
-    } else if (t.endsWith('/api')) {
-        base = t + '/v1';
+    
+    // Se for URL relativa (começa com /), usar como está (proxy do Vite vai cuidar)
+    if (t.startsWith('/')) {
+        if (t.endsWith('/api/v1')) {
+            base = t;
+        } else if (t.endsWith('/api')) {
+            base = t + '/v1';
+        } else {
+            base = t + '/v1';
+        }
     } else {
-        base = t + '/api/v1';
+        // URL absoluta - adicionar /api/v1
+        if (t.endsWith('/api/v1')) {
+            base = t;
+        } else if (t.endsWith('/api')) {
+            base = t + '/v1';
+        } else {
+            base = t + '/api/v1';
+        }
     }
+    
     api.defaults.baseURL = base;
 
     // Salva a URL e o timestamp no Preferences (armazenamento nativo)
@@ -55,27 +71,74 @@ export const setApiBaseUrl = async (url: string) => {
  * Tenta carregar a URL do cache se ela não tiver expirado.
  */
 export const initializeApi = async () => {
+    // No APK, sempre usar URL absoluta (não há proxy)
+    // Verificar cache primeiro
     const { value: cachedData } = await Preferences.get({ key: API_CACHE_KEY });
 
     if (cachedData) {
         const { url, timestamp } = JSON.parse(cachedData);
         const isCacheValid = (Date.now() - timestamp) < CACHE_DURATION_MS;
 
-        if (isCacheValid) {
+        if (isCacheValid && !url.startsWith('/')) {
+            // Só usar cache se for URL absoluta (não relativa de preview)
             console.log('API URL carregada do cache:', url);
-            await setApiBaseUrl(url); // Usa a função async e espera
+            await setApiBaseUrl(url);
             return;
         }
-        console.log('Cache da API URL expirado.');
+        console.log('Cache da API URL expirado ou inválido.');
     }
 
-    if (DEV_API_URL !== '__NGROK_URL__') {
-        console.log(`Usando API URL de desenvolvimento: ${DEV_API_URL}`);
-        await setApiBaseUrl(DEV_API_URL);
-    } else {
-        console.log('Nenhuma API URL válida encontrada. Por favor, configure na tela de login.');
-    }
+    // Usar URL padrão (absoluta para APK)
+    console.log('🚀 Inicializando API...');
+    console.log(`🔧 Usando API URL padrão: ${DEV_API_URL}`);
+    await setApiBaseUrl(DEV_API_URL);
+    console.log(`✅ BaseURL configurada: ${api.defaults.baseURL}`);
 };
+
+export async function healthCheck(): Promise<boolean> {
+    try {
+        // Health check endpoint - baseURL já inclui /api/v1
+        const baseURL = api.defaults.baseURL || 'não configurado';
+        console.log('🔍 Health check - BaseURL:', baseURL);
+        console.log('🔍 Health check - URL completa:', `${baseURL}/health`);
+        
+        const res = await api.get('/health', { 
+            timeout: 10000, // Aumentado para 10 segundos
+            validateStatus: (status) => status < 500 // Aceita 4xx como resposta válida
+        });
+        
+        console.log('✅ Health check response:', res.status, res.data);
+        // Aceita tanto {success: true} quanto {status: 'ok'}
+        return res.data?.success === true || res.data?.status === 'ok';
+    } catch (error: any) {
+        console.error('❌ Health check failed:', error.message);
+        console.error('❌ Error details:', {
+            message: error.message,
+            code: error.code,
+            response: error.response?.data,
+            status: error.response?.status,
+            baseURL: api.defaults.baseURL
+        });
+        return false;
+    }
+}
+
+export async function login(cpf: string, password: string): Promise<{ success: boolean; message: string; user?: User; token?: string }> {
+    try {
+        const res = await api.post('/auth/login', { cpf, password });
+        const data = res.data;
+        if (data?.success) {
+            if (data.token) {
+                localStorage.setItem('authToken', data.token);
+                await Preferences.set({ key: 'token', value: data.token });
+            }
+            return { success: true, message: data.message || 'Login realizado com sucesso.', user: data.user };
+        }
+        return { success: false, message: data?.message || 'Falha no login.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao realizar login.' };
+    }
+}
 
 // Método: getPixKeys
 export async function getPixKeys(): Promise<{ success: boolean; message?: string; keys?: Array<{ type: 'CPF' | 'EMAIL'; key: string }> }> {
@@ -259,6 +322,9 @@ export async function resetPassword(cpf: string): Promise<{ success: boolean; me
         return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao solicitar a redefinição de senha.' };
     }
 }
+
+// Alias para compatibilidade
+export const requestNewPassword = resetPassword;
 
 // Método: signUp - Cadastra um novo usuário
 export async function signUp(signUpData: SignUpData): Promise<{ success: boolean; message: string }> {

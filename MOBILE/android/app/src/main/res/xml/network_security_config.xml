@@ -1,9 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- Permite HTTP (cleartext) para desenvolvimento local -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    
+    <!-- Configuração específica para IPs locais -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">10.0.2.2</domain>
-        <!-- Permite IPs locais comuns -->
+        <!-- IP específico do servidor -->
+        <domain includeSubdomains="true">192.168.0.105</domain>
+        <!-- Faixas de IP locais -->
         <domain includeSubdomains="true">192.168.0.0</domain>
         <domain includeSubdomains="true">192.168.1.0</domain>
         <domain includeSubdomains="true">192.168.15.0</domain>
