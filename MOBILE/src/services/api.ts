@@ -594,12 +594,33 @@ export async function adminDenyLimitRequest(cpf: string, reason: string): Promis
     }
 }
 
+// Função para obter extrato do usuário
+export async function getUserStatement(cpf: string): Promise<{ success: boolean; message?: string; transactions?: any[] }> {
+    try {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            return { success: false, message: 'Não autenticado.' };
+        }
+
+        const res = await api.get(`/users/${cpf}/statement`, {
+            headers: getAuthHeaders('none'),
+        });
+
+        const data = res.data;
+        if (data?.success !== false) {
+            return { success: true, transactions: data.transactions || data };
+        }
+        return { success: false, message: data?.message || 'Falha ao obter extrato.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao obter extrato.' };
+    }
+}
+
 // ========== FUNÇÕES AINDA USANDO MOCK (TEMPORÁRIO) ==========
 export {
     updateUserProfile,
     purchaseWithDebit,
     purchaseWithCard,
-    getUserStatement,
     payCreditCardInvoice,
     parcelCreditCardInvoice
 } from './mockApi';

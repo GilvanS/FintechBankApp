@@ -13,6 +13,8 @@ export interface Transaction {
     installments?: string; // Added for compatibility
     totalInstallments?: number; // Added for compatibility
     currentInstallment?: number; // Added for compatibility
+    category?: string; // Category for shop purchases (food, transport, shopping, etc.)
+    toKey?: string; // PIX key for transfers
 }
 
 export interface CardTransaction {
