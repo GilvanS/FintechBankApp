@@ -48,14 +48,16 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
                     {cartItemCount > 0 && <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-primary text-background-dark text-xs font-bold">{cartItemCount}</span>}
                 </button>
             </header>
-            <main className="flex-grow overflow-y-auto no-scrollbar p-4">
+            <main className="flex-grow overflow-y-auto no-scrollbar p-4 pb-24">
                 <div className="grid grid-cols-2 gap-4">
                     {products.map(product => (
-                        <div key={product.id} onClick={() => handleProductClick(product)} className="bg-surface-dark rounded-lg overflow-hidden cursor-pointer group">
-                            <img src={product.imageUrl} alt={product.name} className="w-full h-32 object-cover group-hover:opacity-80 transition-opacity" />
-                            <div className="p-3">
-                                <h3 className="font-semibold text-white truncate">{product.name}</h3>
-                                <p className="text-sm text-primary font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.price)}</p>
+                        <div key={product.id} onClick={() => handleProductClick(product)} className="bg-surface-dark rounded-lg overflow-hidden cursor-pointer group flex flex-col">
+                            <div className="relative w-full h-40 overflow-hidden">
+                                <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:opacity-80 transition-opacity" />
+                            </div>
+                            <div className="p-3 flex-1 flex flex-col justify-between min-h-[80px]">
+                                <h3 className="font-semibold text-white text-sm mb-2 line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
+                                <p className="text-base text-primary font-bold mt-auto">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.price)}</p>
                             </div>
                         </div>
                     ))}

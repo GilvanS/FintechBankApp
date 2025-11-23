@@ -31,7 +31,16 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
 
     const MainView = () => {
         const SettingButton: React.FC<{label: string, icon: React.ReactNode, onClick: () => void, notification?: boolean }> = ({ label, icon, onClick, notification }) => (
-            <button onClick={onClick} className="w-full text-left p-4 bg-surface-dark rounded-lg font-medium text-white hover:bg-white/10 flex justify-between items-center relative">
+            <button 
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🔵 [Profile] SettingButton clicado:', label);
+                    onClick();
+                }} 
+                className="w-full text-left p-4 bg-surface-dark rounded-lg font-medium text-white hover:bg-white/10 active:bg-white/20 flex justify-between items-center relative z-10 cursor-pointer"
+                style={{ pointerEvents: 'auto' }}
+            >
                 <div className="flex items-center space-x-4">
                     <div className="text-primary">{icon}</div>
                     <span>{label}</span>
@@ -46,14 +55,14 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
         const iconClasses = "w-6 h-6";
 
         return (
-             <div className="bg-background-dark min-h-screen">
+             <div className="bg-background-dark min-h-screen" style={{ position: 'relative', zIndex: 1 }}>
                 <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-subtle-dark/50 pt-[calc(1rem+env(safe-area-inset-top))] shadow-md">
                     <div className="w-6"></div>
                     <h1 className="text-xl font-bold text-white">Meu Perfil</h1>
                     <div className="w-6"></div>
                 </header>
 
-                <div className="p-4 space-y-4">
+                <div className="p-4 space-y-4 pb-24" style={{ position: 'relative', zIndex: 1 }}>
                      <div className="text-center">
                         <div className="w-24 h-24 rounded-full bg-surface-dark text-white flex items-center justify-center font-bold text-4xl mx-auto mb-3 border-4 border-subtle-dark">
                             {user.fullName.charAt(0)}
@@ -68,7 +77,16 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
                         <SettingButton label="Notificações" notification icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>} onClick={() => setView('notifications')} />
                         <SettingButton label="Fintech Loop" icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v1h- опасен.5V5a.5.5 0 00-.5-.5H7a.5.5 0 00-.5.5v.5H2v10a2 2 0 002 2h10a2 2 0 002-2V19h.5v.5a.5.5 0 01-.5.5H7a.5.5 0 01-.5-.5v-1H5v1z" /></svg>} onClick={() => setView('points')} />
                         {user.role === 'admin' && (
-                            <SettingButton label="Painel do Admin" icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>} onClick={() => onNavigate('admin')} />
+                            <SettingButton 
+                                label="Painel do Admin" 
+                                icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>} 
+                                onClick={() => {
+                                    console.log('🔵 [Profile] Botão Painel do Admin clicado');
+                                    console.log('🔵 [Profile] User role:', user.role);
+                                    console.log('🔵 [Profile] Chamando onNavigate com "admin"');
+                                    onNavigate('admin');
+                                }} 
+                            />
                         )}
                     </div>
 

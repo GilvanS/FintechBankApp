@@ -68,7 +68,18 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
     fetchNews();
   }, []);
 
-  const handleNavigate = (view: View) => setCurrentView(view);
+  // Log para debug da navegação
+  useEffect(() => {
+    console.log('🔵 [Home] currentView mudou para:', currentView);
+    console.log('🔵 [Home] User role:', user?.role);
+  }, [currentView, user?.role]);
+
+  const handleNavigate = (view: View) => {
+    console.log('🔵 [Home] handleNavigate chamado com view:', view);
+    console.log('🔵 [Home] User role:', user?.role);
+    setCurrentView(view);
+    console.log('🔵 [Home] currentView atualizado para:', view);
+  };
 
   const handleAddToCart = (item: PurchasedItem) => {
     setCart(prev => {
@@ -352,7 +363,17 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
         case 'invoicePaymentReceipt': return invoicePaymentDetails ? <InvoicePaymentReceipt details={invoicePaymentDetails} onClose={() => handleNavigate('home')} /> : <CardDashboard user={user} onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
         case 'products': return <Products onNavigate={handleNavigate} />;
         case 'profile': return <Profile onNavigate={handleNavigate} />;
-        case 'admin': return user?.role === 'admin' ? <Admin onBack={() => handleNavigate('profile')} /> : <Profile onNavigate={handleNavigate} />;
+        case 'admin': {
+            console.log('🔵 [Home] Renderizando view admin');
+            console.log('🔵 [Home] User role:', user?.role);
+            if (user?.role === 'admin') {
+                console.log('✅ [Home] Renderizando componente Admin');
+                return <Admin onBack={() => handleNavigate('profile')} />;
+            } else {
+                console.log('❌ [Home] Usuário não é admin, redirecionando para profile');
+                return <Profile onNavigate={handleNavigate} />;
+            }
+        }
         default: return <HomeView user={user} onNavigate={handleNavigate} />;
     }
   };

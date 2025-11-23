@@ -77,12 +77,12 @@ const ProductPage: React.FC<ProductPageProps> = ({ product, onBack, onPurchase, 
                     </div>
                 </main>
 
-                <footer className="w-full p-4 safe-bottom bg-surface-dark shadow-up-md">
+                <footer className="w-full p-4 safe-bottom bg-surface-dark shadow-up-md z-50 sticky bottom-0">
                     <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
-                        <button onClick={handleAddToCart} className="flex-1 px-6 py-4 font-semibold text-primary transition-colors duration-300 border border-primary rounded-lg hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/50">
+                        <button onClick={handleAddToCart} className="flex-1 px-6 py-4 font-semibold text-primary transition-colors duration-300 border-2 border-primary rounded-lg hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/50 active:bg-primary/20">
                             Adicionar ao Carrinho
                         </button>
-                        <button onClick={handlePurchase} className="flex-1 px-6 py-4 font-semibold text-white transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50">
+                        <button onClick={handlePurchase} className="flex-1 px-6 py-4 font-semibold text-white transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50 active:scale-95">
                             Comprar Agora
                         </button>
                     </div>
