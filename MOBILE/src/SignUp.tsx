@@ -35,22 +35,35 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin }) => {
     }
 
     setLoading(true);
+    setError(''); // Limpar erro anterior
     
     try {
+        console.log('🔵 [SignUp Component] Iniciando cadastro...');
         const result = await signUp({ fullName, cpf: unformattedCpf, email, password });
+        console.log('🔵 [SignUp Component] Resultado recebido:', result);
+        
         if (result.success) {
+          console.log('✅ [SignUp Component] Cadastro bem-sucedido!');
+          setError(''); // Limpar qualquer erro
           addToast('Cadastro realizado com sucesso! Redirecionando para o login.', 'success');
-          setTimeout(() => onNavigateToLogin(), 2000);
+          setTimeout(() => {
+            console.log('🔵 [SignUp Component] Redirecionando para login...');
+            onNavigateToLogin();
+          }, 2000);
         } else {
+          console.log('❌ [SignUp Component] Cadastro falhou:', result.message);
           const errorMessage = result.message || 'Ocorreu um erro no cadastro.';
           setError(errorMessage);
           addToast(errorMessage, 'error');
         }
-    } catch (err) {
-      setError('Falha ao conectar com o servidor.');
-      addToast('Erro de conexão.', 'error');
+    } catch (err: any) {
+      console.error('❌ [SignUp Component] Exceção capturada:', err);
+      const errorMessage = err?.message || 'Falha ao conectar com o servidor.';
+      setError(errorMessage);
+      addToast(errorMessage, 'error');
     } finally {
       setLoading(false);
+      console.log('🔵 [SignUp Component] Loading finalizado');
     }
   };
 

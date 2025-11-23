@@ -378,9 +378,45 @@ apiRouter.get('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(
     }
 }));
 
+// Endpoint temporário para deletar usuário (apenas desenvolvimento)
+apiRouter.delete('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    console.log(`🗑️  Deletando usuário ${cpf}...`);
+    
+    try {
+        // Verificar se existe
+        const checkQuery = `SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`;
+        const exists = await databricksService.executeQuery(checkQuery);
+        
+        if (exists.length === 0) {
+            return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+        }
+        
+        // Deletar usuário
+        const deleteQuery = `DELETE FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`;
+        await databricksService.executeQuery(deleteQuery);
+        
+        console.log(`✅ Usuário ${cpf} deletado com sucesso`);
+        res.json({ success: true, message: `Usuário ${cpf} deletado com sucesso` });
+        
+    } catch (error) {
+        console.error(`❌ Erro ao deletar usuário ${cpf}:`, error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Erro ao deletar usuário',
+            error: error.message 
+        });
+    }
+}));
+
 // --- Rotas de Autenticação ---
 apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
+    console.log('🔵 [SIGNUP] Endpoint chamado');
+    console.log('🔵 [SIGNUP] Body recebido:', JSON.stringify(req.body));
+    
     const { fullName, cpf, email, password } = req.body;
+    
+    console.log('🔵 [SIGNUP] Dados extraídos:', { fullName, cpf, email, passwordLength: password?.length });
     
     // Escapar strings para evitar SQL injection e problemas com aspas
     const escapeSQL = (str) => {
@@ -388,12 +424,18 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
         return str.replace(/'/g, "''").trim();
     };
     
+    console.log('🔵 [SIGNUP] Verificando se usuário já existe...');
     const existingUser = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${escapeSQL(cpf)}' OR email = '${escapeSQL(email)}'`);
+    console.log('🔵 [SIGNUP] Resultado da verificação:', existingUser.length > 0 ? 'Usuário já existe' : 'Usuário não existe');
+    
     if (existingUser.length > 0) {
+        console.log('❌ [SIGNUP] Usuário já cadastrado:', existingUser);
         return res.status(400).json({ success: false, message: 'CPF ou email ja cadastrado.' });
     }
-    console.log(`✅ Usuário não existe. Criando conta para ${cpf}...`);
+    console.log(`✅ [SIGNUP] Usuário não existe. Criando conta para ${cpf}...`);
+    console.log('🔵 [SIGNUP] Gerando hash da senha...');
     const hashedPassword = await bcrypt.hash(password, 10);
+    console.log('🔵 [SIGNUP] Hash gerado, tamanho:', hashedPassword.length);
     
     // Valores padrão definidos no código (já que o Databricks não permite DEFAULT)
     const now = new Date().toISOString();
@@ -407,24 +449,45 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     try {
         // Escapar hash da senha também (pode conter caracteres especiais)
         const escapedHash = hashedPassword.replace(/'/g, "''");
+        const escapedCpf = escapeSQL(cpf);
+        const escapedFullName = escapeSQL(fullName);
+        const escapedEmail = escapeSQL(email);
         
-        await databricksService.executeQuery(`
+        console.log('🔵 [SIGNUP] Valores escapados:', { 
+            cpf: escapedCpf, 
+            fullName: escapedFullName.substring(0, 30) + '...', 
+            email: escapedEmail,
+            hashLength: escapedHash.length 
+        });
+        
+        const insertQuery = `
             INSERT INTO ${databricksService.fq('users')} (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
-            VALUES ('${escapeSQL(cpf)}', '${escapeSQL(fullName)}', '${escapeSQL(email)}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, '${now}', '${now}')
-        `);
+            VALUES ('${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, '${now}', '${now}')
+        `;
+        
+        console.log('🔵 [SIGNUP] Executando INSERT...');
+        await databricksService.executeQuery(insertQuery);
+        console.log('🔵 [SIGNUP] INSERT executado com sucesso');
         
         // Verificar se o usuário foi criado com sucesso
-        const verifyUser = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${escapeSQL(cpf)}'`);
+        console.log('🔵 [SIGNUP] Verificando se usuário foi criado...');
+        const verifyUser = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${escapedCpf}'`);
+        console.log('🔵 [SIGNUP] Resultado da verificação pós-INSERT:', verifyUser.length > 0 ? 'Usuário encontrado' : 'Usuário NÃO encontrado');
+        
         if (verifyUser.length === 0) {
-            console.error('❌ Erro: Usuário não foi criado após INSERT');
+            console.error('❌ [SIGNUP] Erro: Usuário não foi criado após INSERT');
             return res.status(500).json({ success: false, message: 'Erro ao criar conta. Tente novamente.' });
         }
         
-        console.log(`✅ Usuário ${cpf} criado com sucesso!`);
-        res.status(200).json({ success: true, message: 'Conta criada com sucesso!' });
+        console.log(`✅ [SIGNUP] Usuário ${cpf} criado com sucesso!`);
+        const response = { success: true, message: 'Conta criada com sucesso!' };
+        console.log('🔵 [SIGNUP] Enviando resposta:', response);
+        res.status(200).json(response);
+        console.log('🔵 [SIGNUP] Resposta enviada com sucesso');
     } catch (error) {
-        console.error('❌ Erro ao criar usuário:', error.message);
-        console.error('❌ Stack:', error.stack);
+        console.error('❌ [SIGNUP] Erro ao criar usuário:', error.message);
+        console.error('❌ [SIGNUP] Stack:', error.stack);
+        console.error('❌ [SIGNUP] Error completo:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
         return res.status(500).json({ success: false, message: 'Erro ao criar conta. Tente novamente.' });
     }
 }));
@@ -1081,8 +1144,52 @@ apiRouter.get('/pix/keys', bearerAuth(), asyncHandler(async (req, res) => {
 apiRouter.post('/pix/keys', bearerAuth(), asyncHandler(async (req, res) => {
     const { type, key } = req.body || {};
     if (!type || !key) return res.status(400).json({ success: false, message: 'Payload invalido.' });
-    await pixRepo.addKey({ cpf: req.user.cpf, type, key });
-    res.status(201).json({ success: true, message: 'Chave cadastrada' });
+    
+    console.log(`🔵 [PIX KEY] Cadastro solicitado - Tipo: ${type}, Chave: ${key}, CPF: ${req.user.cpf}`);
+    
+    // Validar se o tipo é válido
+    if (type !== 'CPF' && type !== 'EMAIL') {
+        return res.status(400).json({ success: false, message: 'Tipo de chave inválido. Use CPF ou EMAIL.' });
+    }
+    
+    // Normalizar a chave
+    let normalizedKey = key.trim();
+    if (type === 'CPF') {
+        normalizedKey = normalizedKey.replace(/\D/g, '');
+        if (normalizedKey.length !== 11) {
+            return res.status(400).json({ success: false, message: 'CPF deve ter 11 dígitos.' });
+        }
+    } else if (type === 'EMAIL') {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedKey)) {
+            return res.status(400).json({ success: false, message: 'Email inválido.' });
+        }
+        normalizedKey = normalizedKey.toLowerCase();
+    }
+    
+    // Verificar se a chave já existe para este usuário
+    const existingKeys = await pixRepo.listKeys(req.user.cpf);
+    if (existingKeys.some(k => k.key === normalizedKey || k.key.toLowerCase() === normalizedKey.toLowerCase())) {
+        console.log('❌ [PIX KEY] Chave já cadastrada para este usuário');
+        return res.status(400).json({ success: false, message: 'Chave já cadastrada para este usuário.' });
+    }
+    
+    // Verificar se a chave já está cadastrada para outro usuário
+    const allKeys = await databricksService.executeQuery(`
+        SELECT cpf, key FROM ${databricksService.fq('pix_keys')} WHERE LOWER(key) = LOWER('${normalizedKey.replace(/'/g, "''")}')
+    `);
+    if (allKeys.length > 0) {
+        const otherUserCpf = allKeys[0].cpf;
+        if (otherUserCpf !== req.user.cpf) {
+            console.log('❌ [PIX KEY] Chave já cadastrada para outro usuário:', otherUserCpf);
+            return res.status(400).json({ success: false, message: 'Chave já cadastrada em outra conta.' });
+        }
+    }
+    
+    // Cadastrar a chave
+    console.log(`✅ [PIX KEY] Cadastrando chave para usuário ${req.user.cpf}`);
+    await pixRepo.addKey({ cpf: req.user.cpf, type, key: normalizedKey });
+    console.log(`✅ [PIX KEY] Chave cadastrada com sucesso`);
+    res.status(201).json({ success: true, message: 'Chave cadastrada com sucesso.' });
 }));
 
 apiRouter.delete('/pix/keys/:key', bearerAuth(), asyncHandler(async (req, res) => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import * as mockApi from '../services/mockApi';
+import { getPixKeys, registerPixKey, deletePixKey } from '../services/api';
 import { PixKey } from '../types';
 import { useToast, ToastContainer } from './Toast';
 
@@ -8,9 +8,8 @@ interface PixKeyManagementProps {
     onBack: () => void;
 }
 
-// DEV-NOTE: This component has been reverted to its original purpose of managing the user's own PIX keys, using the mockApi for persistence.
 const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
-    const { user, refreshUser } = useAuth(); // Assuming refreshUser updates the user context
+    const { user, refreshUser } = useAuth();
     const [keys, setKeys] = useState<PixKey[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -25,11 +24,18 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
         if (user) {
             setIsLoading(true);
             try {
-                const userKeys = await mockApi.getPixKeys(user.cpf);
-                setKeys(userKeys || []); 
-            } catch (err) {
+                console.log('🔵 [PixKeyManagement] Buscando chaves PIX...');
+                const result = await getPixKeys();
+                if (result.success && result.keys) {
+                    console.log('✅ [PixKeyManagement] Chaves carregadas:', result.keys);
+                    setKeys(result.keys || []); 
+                } else {
+                    console.log('⚠️ [PixKeyManagement] Nenhuma chave encontrada');
+                    setKeys([]);
+                }
+            } catch (err: any) {
+                console.error('❌ [PixKeyManagement] Erro ao carregar chaves:', err);
                 showError('Falha ao carregar suas chaves PIX.');
-                console.error(err);
                 setKeys([]);
             }
             setIsLoading(false);
@@ -46,9 +52,25 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
             setError('O valor da chave é obrigatório.');
             return;
         }
+        
+        // Validação básica
+        if (newKeyType === 'EMAIL' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newKeyValue)) {
+            setError('Email inválido.');
+            return;
+        }
+        
+        if (newKeyType === 'CPF' && newKeyValue.replace(/\D/g, '').length !== 11) {
+            setError('CPF deve ter 11 dígitos.');
+            return;
+        }
+        
         setError('');
+        setIsLoading(true);
         try {
-            const result = await mockApi.registerPixKey(user.cpf, newKeyType, newKeyValue);
+            console.log('🔵 [PixKeyManagement] Cadastrando chave PIX:', { type: newKeyType, key: newKeyValue });
+            const result = await registerPixKey(newKeyType, newKeyValue);
+            console.log('🔵 [PixKeyManagement] Resultado do cadastro:', result);
+            
             if (result.success) {
                 showSuccess(result.message);
                 await fetchKeys(); // Re-fetch the keys to update the list
@@ -60,15 +82,21 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                 setError(result.message);
             }
         } catch (err: any) {
-            showError('Falha ao cadastrar a chave.');
-            setError('Falha ao cadastrar a chave.');
+            console.error('❌ [PixKeyManagement] Erro ao cadastrar chave:', err);
+            const errorMessage = err?.message || 'Falha ao cadastrar a chave.';
+            showError(errorMessage);
+            setError(errorMessage);
+        } finally {
+            setIsLoading(false);
         }
     };
 
     const handleDeleteKey = async (key: string) => {
         if (user && window.confirm('Tem certeza que deseja remover esta chave PIX?')) {
+            setIsLoading(true);
             try {
-                const result = await mockApi.deletePixKey(user.cpf, key);
+                console.log('🔵 [PixKeyManagement] Removendo chave PIX:', key);
+                const result = await deletePixKey(key);
                 if (result.success) {
                     showSuccess(result.message);
                     await fetchKeys();
@@ -77,7 +105,10 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                     showError(result.message);
                 }
             } catch (err: any) {
+                console.error('❌ [PixKeyManagement] Erro ao remover chave:', err);
                 showError('Falha ao remover a chave.');
+            } finally {
+                setIsLoading(false);
             }
         }
     };

@@ -351,8 +351,8 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
         case 'installmentReviewInvoice': return parcelDetails ? <InstallmentReviewInvoice user={user} details={parcelDetails} onConfirm={handleConfirmParcelInvoice} onBack={() => handleNavigate('installmentOptions')} /> : <ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
         case 'invoicePaymentReceipt': return invoicePaymentDetails ? <InvoicePaymentReceipt details={invoicePaymentDetails} onClose={() => handleNavigate('home')} /> : <CardDashboard user={user} onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
         case 'products': return <Products onNavigate={handleNavigate} />;
-        case 'profile': return <Profile user={user} onLogout={handleLogout} onNavigate={handleNavigate} />;
-        case 'admin': return user?.role === 'admin' ? <Admin onBack={() => handleNavigate('profile')} /> : <Profile user={user} onLogout={handleLogout} onNavigate={handleNavigate} />;
+        case 'profile': return <Profile onNavigate={handleNavigate} />;
+        case 'admin': return user?.role === 'admin' ? <Admin onBack={() => handleNavigate('profile')} /> : <Profile onNavigate={handleNavigate} />;
         default: return <HomeView user={user} onNavigate={handleNavigate} />;
     }
   };

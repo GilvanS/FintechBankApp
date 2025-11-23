@@ -139,14 +139,19 @@ export async function login(cpf: string, password: string): Promise<{ success: b
 // Método: getPixKeys
 export async function getPixKeys(): Promise<{ success: boolean; message?: string; keys?: Array<{ type: 'CPF' | 'EMAIL'; key: string }> }> {
     try {
+        console.log('🔵 [getPixKeys] Buscando chaves PIX...');
         const res = await api.get('/pix/keys', {
             headers: getAuthHeaders('none'),
         });
         const data = res.data;
+        console.log('🔵 [getPixKeys] Resposta recebida:', data);
 
-        const keys = Array.isArray(data) ? data : (data.keys || []);
+        // A API retorna { success: true, keys: [...] }
+        const keys = Array.isArray(data) ? data : (data?.keys || []);
+        console.log('✅ [getPixKeys] Chaves encontradas:', keys.length);
         return { success: true, keys };
     } catch (error: any) {
+        console.error('❌ [getPixKeys] Erro:', error?.response?.data || error.message);
         return { success: false, message: error?.response?.data?.message || 'Erro de conexao ao listar chaves.' };
     }
 }
@@ -325,16 +330,60 @@ export const requestNewPassword = resetPassword;
 // Método: signUp - Cadastra um novo usuário
 export async function signUp(signUpData: SignUpData): Promise<{ success: boolean; message: string }> {
     try {
+        console.log('🔵 [SIGNUP] Iniciando cadastro...', { cpf: signUpData.cpf, email: signUpData.email });
+        
         const res = await api.post('/auth/signup', signUpData, {
             headers: { 'Content-Type': 'application/json' },
+            timeout: 30000, // 30 segundos - cadastro pode demorar mais
+            validateStatus: (status) => status < 500, // Aceita 2xx, 3xx, 4xx como resposta válida
         });
+        
+        console.log('🔵 [SIGNUP] Resposta recebida:', { status: res.status, data: res.data });
+        
         const data = res.data;
-        if (data?.success) {
-            return { success: true, message: data.message || 'Cadastro realizado com sucesso.' };
+        
+        // Verificar se a resposta indica sucesso
+        // Aceitar status 200 ou 201 como sucesso
+        if (res.status === 200 || res.status === 201) {
+            // Se data.success é true OU não está definido (mas status é 200/201), considerar sucesso
+            if (data?.success === true || (data?.success === undefined && res.status === 200)) {
+                console.log('✅ [SIGNUP] Cadastro realizado com sucesso!');
+                return { success: true, message: data?.message || 'Cadastro realizado com sucesso.' };
+            }
         }
+        
+        // Se status 400, é erro de validação (usuário já existe, etc)
+        if (res.status === 400) {
+            console.log('❌ [SIGNUP] Erro de validação:', data?.message);
+            return { success: false, message: data?.message || 'Erro ao criar conta. Verifique os dados.' };
+        }
+        
+        // Outros erros
+        console.log('❌ [SIGNUP] Erro na resposta:', { status: res.status, data });
         return { success: false, message: data?.message || 'Ocorreu um erro no cadastro.' };
     } catch (error: any) {
-        return { success: false, message: error?.response?.data?.message || 'Falha ao conectar com o servidor.' };
+        console.error('❌ [SIGNUP] Erro na requisição:', {
+            message: error.message,
+            code: error.code,
+            response: error.response?.data,
+            status: error.response?.status,
+        });
+        
+        // Tratar diferentes tipos de erro
+        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+            return { success: false, message: 'Tempo de conexão esgotado. Verifique sua conexão e tente novamente.' };
+        }
+        
+        if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED') {
+            return { success: false, message: 'Não foi possível conectar ao servidor. Verifique sua conexão.' };
+        }
+        
+        // Se houver resposta do servidor, usar a mensagem dela
+        if (error.response?.data?.message) {
+            return { success: false, message: error.response.data.message };
+        }
+        
+        return { success: false, message: 'Falha ao conectar com o servidor.' };
     }
 }
 
