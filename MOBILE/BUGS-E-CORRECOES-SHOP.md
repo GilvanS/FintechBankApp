@@ -196,3 +196,4 @@ const handleUpdateQuantity = onUpdateQuantity || ((itemId: string, quantity: num
 - Layout responsivo mantido
 - Performance não afetada
 
+

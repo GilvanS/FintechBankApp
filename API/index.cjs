@@ -704,16 +704,13 @@ apiRouter.get('/users/:cpf/balance', bearerAuth(), asyncHandler(async (req, res)
 }));
 
 apiRouter.get('/users/:cpf/statement', bearerAuth(), asyncHandler(async (req, res) => {
-    console.log(`📊 Solicitação de extrato para CPF: ${req.params.cpf}`);
-    console.log(`👤 Usuário autenticado: ${req.user.cpf}, Role: ${req.user.role}`);
-    
     if (req.user.cpf !== req.params.cpf && req.user.role !== 'admin') {
-        console.log(`❌ Acesso negado - usuário ${req.user.cpf} tentou acessar extrato de ${req.params.cpf}`);
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
     
     try {
-        // Apenas transacoes de conta corrente devem aparecer no extrato
+        const { esc } = require('./repositories/context');
+        const cpf = req.params.cpf;
         const allowedTypes = [
             'PIX_SENT',
             'PIX_RECEIVED',
@@ -723,18 +720,19 @@ apiRouter.get('/users/:cpf/statement', bearerAuth(), asyncHandler(async (req, re
             'INVOICE_PAYMENT',
             'PAYMENT'
         ];
-        const query = `SELECT * FROM ${databricksService.fq('transactions')} WHERE cpf = '${req.params.cpf}' AND type IN (${allowedTypes.map(t => `'${t}'`).join(',')}) ORDER BY date DESC LIMIT 50`;
-        console.log(`🔍 Executando query: ${query}`);
-        
+        const typesList = allowedTypes.map(t => esc(t)).join(',');
+        const query = `SELECT * FROM ${databricksService.fq('transactions')} WHERE cpf = ${esc(cpf)} AND type IN (${typesList}) ORDER BY date DESC LIMIT 50`;
+  
         const transactions = await databricksService.executeQuery(query);
-        console.log(`📋 Encontradas ${transactions.length} transações para ${req.params.cpf}`);
+        const normalized = transactions.map(normalizeTransaction).filter(tx => tx !== null);
         
         res.json({ 
             success: true, 
-            transactions: transactions.map(normalizeTransaction) 
+            transactions: normalized 
         });
     } catch (error) {
         console.error(`❌ Erro ao buscar extrato para ${req.params.cpf}:`, error.message);
+        console.error(error.stack);
         throw error;
     }
 }));
@@ -1132,18 +1130,23 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
     }
     
     // Record transactions
+    const { esc } = require('./repositories/context');
     const txId = databricksService.generateUUID();
     const now = new Date().toISOString();
+    const txDescription = description || 'Transferência PIX';
+    
     await databricksService.executeQuery(`
         INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date, to_user, to_key)
-        VALUES ('${txId}', '${senderCpf}', 'PIX_SENT', ${-numericAmount}, '${description || 'Transferência PIX'}', '${now}', '${toCpf}', '${key}')
+        VALUES (${esc(txId)}, ${esc(senderCpf)}, ${esc('PIX_SENT')}, ${-numericAmount}, ${esc(txDescription)}, ${esc(now)}, ${esc(toCpf)}, ${esc(key)})
     `);
     
     const txId2 = databricksService.generateUUID();
     await databricksService.executeQuery(`
         INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date, from_user)
-        VALUES ('${txId2}', '${toCpf}', 'PIX_RECEIVED', ${numericAmount}, '${description || 'Transferência PIX'}', '${now}', '${senderCpf}')
+        VALUES (${esc(txId2)}, ${esc(toCpf)}, ${esc('PIX_RECEIVED')}, ${numericAmount}, ${esc(txDescription)}, ${esc(now)}, ${esc(senderCpf)})
     `);
+    
+    console.log(`✅ Transações PIX registradas: PIX_SENT (${txId}) e PIX_RECEIVED (${txId2})`);
     
     auditLog(req, 'pix_transfer', 'info', { from: senderCpf, to: toCpf, amount: numericAmount });
     res.json({ success: true, message: 'Transferência realizada com sucesso!' });

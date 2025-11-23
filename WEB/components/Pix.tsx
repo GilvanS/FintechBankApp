@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getPixContacts, getPixRecipientInfo, performPix, performPixCreditInstallment, getUserByCpf } from '../services/api';
+import { getPixContacts, getPixRecipientInfo, performPix, performPixCreditInstallment, getUserByCpf, getUserStatement } from '../services/api';
 import { PixContact, Transaction, User } from '../types';
 import Contacts from './Contacts';
 import PixKeyManagement from './PixKeyManagement';
@@ -160,8 +160,17 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 result = await performPix(user.cpf, transferDetails.key, transferDetails.amount, transferDetails.description);
             }
             if (result.success) {
+                // Atualizar dados do usuário (saldo, etc)
                 const refreshed = await getUserByCpf(user.cpf);
-                if (refreshed.success && refreshed.user) updateUser(refreshed.user);
+                if (refreshed.success && refreshed.user) {
+                    // Atualizar também as transações do extrato
+                    const stmt = await getUserStatement(user.cpf);
+                    if (stmt.success && stmt.transactions) {
+                        updateUser({ ...refreshed.user, transactions: stmt.transactions });
+                    } else {
+                        updateUser(refreshed.user);
+                    }
+                }
                 showSuccess('Transferencia realizada com sucesso!');
                 setSubView('transfer');
             } else {

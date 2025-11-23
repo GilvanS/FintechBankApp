@@ -81,8 +81,16 @@ export const getUserMe = async (): Promise<{ success: boolean; message?: string;
 
 export const getUserStatement = async (cpf: string): Promise<{ success: boolean; message?: string; transactions?: any[] }> => {
   try {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return { success: false, message: 'Não autenticado.' };
+    }
+
     const result = await apiCall<{ success: boolean; transactions?: any[] }>(`/users/${cpf}/statement`, {
       method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
     });
     return result;
   } catch (error: any) {

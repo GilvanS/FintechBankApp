@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Transaction, User } from '../types';
+import { getUserStatement } from '../services/api';
+import TransactionReceipt from './TransactionReceipt';
 
 interface StatementProps {
     user: User;
@@ -10,8 +12,39 @@ interface StatementProps {
 function Statement({ user, onNavigate, onBack }: StatementProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterPeriod, setFilterPeriod] = useState('all');
+    const [transactions, setTransactions] = useState<Transaction[]>(user.transactions || []);
+    const [isLoading, setIsLoading] = useState(true);
+    const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
-    const filteredTransactions = user.transactions
+    // Buscar extrato quando o componente for montado
+    useEffect(() => {
+        const fetchStatement = async () => {
+            if (!user?.cpf) return;
+            setIsLoading(true);
+            try {
+                const result = await getUserStatement(user.cpf);
+                if (result.success && result.transactions) {
+                    setTransactions(result.transactions);
+                } else {
+                    // Manter transações existentes se houver erro
+                    if (user.transactions && user.transactions.length > 0) {
+                        setTransactions(user.transactions);
+                    }
+                }
+            } catch (error) {
+                // Silenciar erro - usar transações existentes se houver
+                if (user.transactions && user.transactions.length > 0) {
+                    setTransactions(user.transactions);
+                }
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchStatement();
+    }, [user?.cpf]); // Recarregar quando o CPF mudar
+
+    const filteredTransactions = transactions
         .filter(tx => {
             const txDate = new Date(tx.date);
             if (filterPeriod === '7d') {
@@ -53,6 +86,16 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
             default: return 'receipt_long';
         }
     };
+
+    // Se uma transação foi selecionada, mostrar o comprovante
+    if (selectedTransaction) {
+        return (
+            <TransactionReceipt 
+                transaction={selectedTransaction} 
+                onBack={() => setSelectedTransaction(null)} 
+            />
+        );
+    }
 
     return (
         <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-8">
@@ -101,8 +144,21 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
                 </div>
             </div>
             <div className="flex flex-col gap-2">
-                {filteredTransactions.map((tx) => (
-                    <div key={tx.id} className="flex items-center gap-4 hover:bg-white/5 rounded-lg p-4 transition-colors duration-200">
+                {isLoading ? (
+                    <div className="flex items-center justify-center p-8">
+                        <p className="text-white/60">Carregando transações...</p>
+                    </div>
+                ) : filteredTransactions.length === 0 ? (
+                    <div className="flex items-center justify-center p-8">
+                        <p className="text-white/60">Nenhuma transação encontrada</p>
+                    </div>
+                ) : (
+                    filteredTransactions.map((tx) => (
+                    <button
+                        key={tx.id}
+                        onClick={() => setSelectedTransaction(tx)}
+                        className="w-full flex items-center gap-4 hover:bg-white/5 rounded-lg p-4 transition-colors duration-200 text-left cursor-pointer"
+                    >
                         <div className="text-white flex items-center justify-center rounded-full bg-primary/10 shrink-0 size-10">
                             <span className="material-symbols-outlined text-primary">{getIconForType(tx.type, (tx as any).category)}</span>
                         </div>
@@ -113,8 +169,9 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
                         <div className="text-right">
                             <p className={`text-base font-semibold ${tx.amount < 0 ? 'text-orange-400' : 'text-primary'}`}>{tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                         </div>
-                    </div>
-                ))}
+                    </button>
+                    ))
+                )}
             </div>
         </main>
     );
