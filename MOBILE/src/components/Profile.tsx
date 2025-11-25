@@ -8,6 +8,7 @@ import Limits from './Limits';
 import Notifications from './Notifications';
 import Settings from './Settings';
 import PointsDashboard from './PointsDashboard';
+import { AppVersion } from '../utils/AppVersion';
 
 type ProfileView = 'main' | 'myData' | 'editProfile' | 'security' | 'limits' | 'notifications' | 'points';
 
@@ -18,6 +19,7 @@ interface ProfileProps {
 const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
     const { user, logout, updateUser } = useAuth();
     const [view, setView] = useState<ProfileView>('main');
+    const [showVersionPopup, setShowVersionPopup] = useState(false);
     
     if (!user) {
         logout();
@@ -56,8 +58,35 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
 
         return (
              <div className="bg-background-dark min-h-screen" style={{ position: 'relative', zIndex: 1 }}>
+                {/* Version Popup */}
+                {showVersionPopup && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowVersionPopup(false)}>
+                        <div className="bg-surface-dark p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center border border-white/10" onClick={e => e.stopPropagation()}>
+                            <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <span className="material-symbols-outlined text-3xl text-primary">info</span>
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2">Informações do App</h3>
+                            <div className="bg-background-dark p-4 rounded-lg mb-6 text-left space-y-2">
+                                <p className="text-gray-400 text-sm">Versão do Projeto</p>
+                                <p className="text-white font-mono text-lg">{AppVersion.current}</p>
+                                <div className="h-px bg-white/10 my-2"></div>
+                                <p className="text-gray-400 text-sm">Detalhes da Build</p>
+                                <pre className="text-primary font-mono text-xs whitespace-pre-wrap">{AppVersion.fullDetails}</pre>
+                            </div>
+                            <button
+                                onClick={() => setShowVersionPopup(false)}
+                                className="w-full py-3 bg-primary text-background-dark font-bold rounded-lg hover:bg-primary-light transition-colors"
+                            >
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-subtle-dark/50 pt-[calc(1rem+env(safe-area-inset-top))] shadow-md">
-                    <div className="w-6"></div>
+                    <button onClick={() => onNavigate('home')} className="p-2 -ml-2 rounded-full hover:bg-white/10">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+                    </button>
                     <h1 className="text-xl font-bold text-white">Meu Perfil</h1>
                     <div className="w-6"></div>
                 </header>
@@ -90,9 +119,13 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
                         )}
                     </div>
 
-                    <div className="pt-4">
+                    <div className="pt-4 space-y-4">
                         <button onClick={logout} className="w-full text-center py-3 font-semibold text-red-400 bg-transparent border border-red-900/80 rounded-lg hover:bg-red-900/70">
                             Sair do App
+                        </button>
+
+                        <button onClick={() => setShowVersionPopup(true)} className="w-full text-center py-2 text-xs text-gray-500 hover:text-gray-300 transition-colors">
+                            Versão do App
                         </button>
                     </div>
                 </div>

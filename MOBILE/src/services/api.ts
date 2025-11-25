@@ -4,7 +4,7 @@ import { PixContact, User, PasswordResetRequest, LimitIncreaseRequest, SignUpDat
 
 // URL da API para APK - sempre usar URL absoluta
 // No APK (Capacitor), não há proxy, então sempre usa URL absoluta
-const DEV_API_URL = 'http://192.168.0.105:3001';
+const DEV_API_URL = 'http://192.168.0.105:3001';  // <--- Altere aqui
 const API_CACHE_KEY = 'apiBaseUrlCache';
 const CACHE_DURATION_MS = 60 * 60 * 1000; // 60 minutos
 
@@ -175,8 +175,14 @@ export async function deletePixKey(key: string): Promise<{ success: boolean; mes
 // Métodos: PIX - Transferencias
 export async function performPixTransfer(toKey: string, amount: number, description: string, pin: string, fromCpf?: string): Promise<{ success: boolean; message: string }> {
     try {
-        const payload: Record<string, any> = { toKey, amount, description, pin };
-        if (fromCpf) payload.fromCpf = fromCpf;
+        // A API espera: { cpf, key, amount, description } (igual ao WEB)
+        // O PIN não é enviado no body, a autenticação é via Bearer token
+        const payload = {
+            cpf: fromCpf,
+            key: toKey,  // API espera 'key', não 'toKey'
+            amount,
+            description
+        };
 
         const res = await api.post('/pix/transfer', payload, {
             headers: getAuthHeaders('json'),
@@ -187,6 +193,7 @@ export async function performPixTransfer(toKey: string, amount: number, descript
         }
         return { success: true, message: data?.message || 'Transferencia PIX realizada com sucesso.' };
     } catch (error: any) {
+        console.error('❌ [performPixTransfer] Erro:', error?.response?.data || error?.message);
         return { success: false, message: error?.response?.data?.message || 'Erro de conexao na transferencia PIX.' };
     }
 }
@@ -216,22 +223,28 @@ export async function performPixCreditTransfer(cpf: string, toKey: string, amoun
 // Métodos: PIX - Contatos
 export async function getPixContacts(cpf: string): Promise<{ success: boolean; contacts?: PixContact[]; message?: string; }> {
     try {
-        const res = await api.get(`/users/${cpf}/pix-contacts`, {
+        const res = await api.get(`/pix/contacts/${cpf}`, {
             headers: getAuthHeaders('none'),
         });
         const data = res.data;
+        // A API pode retornar { contacts: [...] } ou array direto
         if (data && Array.isArray(data)) {
             return { success: true, contacts: data };
         }
         return { success: true, contacts: data.contacts || [] };
     } catch (error: any) {
-        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao listar contatos.' };
+        console.error('❌ [getPixContacts] Erro:', error?.response?.data || error?.message);
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao listar contatos.', contacts: [] };
     }
 }
 
 export async function addPixContact(cpf: string, contact: { name: string, key: string }): Promise<{ success: boolean; message: string; }> {
     try {
-        const res = await api.post(`/users/${cpf}/pix-contacts`, contact, {
+        // A API espera { contactCpf, contactName } no body
+        const res = await api.post(`/pix/contacts/${cpf}`, {
+            contactCpf: contact.key,
+            contactName: contact.name
+        }, {
             headers: getAuthHeaders('json'),
         });
         const data = res.data;
@@ -240,13 +253,15 @@ export async function addPixContact(cpf: string, contact: { name: string, key: s
         }
         return { success: true, message: data?.message || 'Contato adicionado com sucesso.' };
     } catch (error: any) {
+        console.error('❌ [addPixContact] Erro:', error?.response?.data || error?.message);
         return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao adicionar contato.' };
     }
 }
 
 export async function deletePixContact(cpf: string, key: string): Promise<{ success: boolean; message: string; }> {
     try {
-        const res = await api.delete(`/users/${cpf}/pix-contacts/${encodeURIComponent(key)}`, {
+        // A API espera /pix/contacts/:cpf/:contactKey
+        const res = await api.delete(`/pix/contacts/${cpf}/${encodeURIComponent(key)}`, {
             headers: getAuthHeaders('none'),
         });
         const data = res.data;
@@ -255,14 +270,17 @@ export async function deletePixContact(cpf: string, key: string): Promise<{ succ
         }
         return { success: true, message: data?.message || 'Contato removido com sucesso.' };
     } catch (error: any) {
+        console.error('❌ [deletePixContact] Erro:', error?.response?.data || error?.message);
         return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao remover contato.' };
     }
 }
 
 // Método: getPixRecipientInfo
-export async function getPixRecipientInfo(key: string, fromCpf: string): Promise<{ success: boolean; name?: string; cpf?: string; message?: string; }> {
+export async function getPixRecipientInfo(key: string, senderCpf: string): Promise<{ success: boolean; name?: string; cpf?: string; message?: string; }> {
     try {
-        const res = await api.get(`/pix/recipient-info/${encodeURIComponent(key)}?fromCpf=${fromCpf}`, {
+        // Endpoint usa query params: ?key=...&senderCpf=...
+        // senderCpf não precisa de encodeURIComponent (igual ao WEB)
+        const res = await api.get(`/pix/recipient-info?key=${encodeURIComponent(key)}&senderCpf=${senderCpf}`, {
             headers: getAuthHeaders('none'),
         });
         const data = res.data;
@@ -271,6 +289,7 @@ export async function getPixRecipientInfo(key: string, fromCpf: string): Promise
         }
         return { success: false, message: data?.message || 'Chave PIX inválida ou não encontrada.' };
     } catch (error: any) {
+        console.error('❌ [getPixRecipientInfo] Erro:', error?.response?.data || error?.message);
         return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao validar chave.' };
     }
 }
@@ -478,6 +497,22 @@ export async function adminDeposit(cpf: string, amount: number): Promise<{ succe
     }
 }
 
+// Método: adminUpdateCreditLimit - Atualiza limite do cartão de crédito (Admin)
+export async function adminUpdateCreditLimit(cpf: string, limits: { totalLimit?: number; availableLimit?: number }): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        const res = await api.put(`/admin/users/${cpf}/credit-limit`, limits, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success && data?.user) {
+            return { success: true, message: data.message || 'Limite do cartão atualizado com sucesso.', user: data.user };
+        }
+        return { success: false, message: data?.message || 'Falha ao atualizar limite do cartão.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao atualizar limite do cartão.' };
+    }
+}
+
 // Método: adminUpdateCardDetails - Atualiza detalhes do cartão (Admin)
 export async function adminUpdateCardDetails(cpf: string, details: { dueDate?: string; invoiceDueDate?: string }): Promise<{ success: boolean; message: string; user?: User }> {
     try {
@@ -616,13 +651,113 @@ export async function getUserStatement(cpf: string): Promise<{ success: boolean;
     }
 }
 
+// Método: purchaseWithDebit - Compra no débito
+export async function purchaseWithDebit(cpf: string, items: any[], cashbackUsed: number, pin?: string): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        if (!pin || pin.length !== 4) {
+            return { success: false, message: 'PIN inválido. Deve ter 4 dígitos.' };
+        }
+
+        const res = await api.post('/shop/checkout', {
+            items: items.map(item => ({
+                productId: item.id,
+                quantity: item.quantity || 1
+            })),
+            paymentMethod: 'debit',
+            cashbackUsed: cashbackUsed || 0,
+            installments: 1,
+            pin
+        }, {
+            headers: getAuthHeaders('json'),
+        });
+
+        const data = res.data;
+        if (data?.success) {
+            // Buscar usuário atualizado
+            const refreshed = await getUserByCpf(cpf);
+            if (refreshed.success && refreshed.user) {
+                return { success: true, message: data.message || 'Compra realizada com sucesso!', user: refreshed.user };
+            }
+            return { success: true, message: data.message || 'Compra realizada com sucesso!' };
+        }
+        return { success: false, message: data?.message || 'Falha ao realizar compra.' };
+    } catch (error: any) {
+        console.error('❌ [purchaseWithDebit] Erro:', error?.response?.data || error?.message);
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao realizar compra.' };
+    }
+}
+
+// Método: purchaseWithCard - Compra no crédito
+export async function purchaseWithCard(cpf: string, items: any[], cashbackUsed: number, installments: number, pin?: string): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        if (!pin || pin.length !== 4) {
+            return { success: false, message: 'PIN inválido. Deve ter 4 dígitos.' };
+        }
+
+        const res = await api.post('/shop/checkout', {
+            items: items.map(item => ({
+                productId: item.id,
+                quantity: item.quantity || 1
+            })),
+            paymentMethod: 'credit',
+            cashbackUsed: cashbackUsed || 0,
+            installments: installments || 1,
+            pin
+        }, {
+            headers: getAuthHeaders('json'),
+        });
+
+        const data = res.data;
+        if (data?.success) {
+            // Buscar usuário atualizado
+            const refreshed = await getUserByCpf(cpf);
+            if (refreshed.success && refreshed.user) {
+                return { success: true, message: data.message || 'Compra realizada com sucesso!', user: refreshed.user };
+            }
+            return { success: true, message: data.message || 'Compra realizada com sucesso!' };
+        }
+        return { success: false, message: data?.message || 'Falha ao realizar compra.' };
+    } catch (error: any) {
+        console.error('❌ [purchaseWithCard] Erro:', error?.response?.data || error?.message);
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao realizar compra.' };
+    }
+}
+
+// Método: payCreditCardInvoice - Pagar fatura do cartão
+export async function payCreditCardInvoice(cpf: string, pin: string): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        const res = await api.post(`/users/${cpf}/card/invoice/pay`, { pin }, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success) {
+            return { success: true, message: data.message || 'Fatura paga com sucesso!', user: data.user };
+        }
+        return { success: false, message: data?.message || 'Falha ao pagar fatura.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao pagar fatura.' };
+    }
+}
+
+// Método: parcelCreditCardInvoice - Parcelar fatura
+export async function parcelCreditCardInvoice(cpf: string, details: { amount: number, installments: number }): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        const res = await api.post(`/users/${cpf}/card/invoice/parcel`, details, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success) {
+            return { success: true, message: data.message || 'Fatura parcelada com sucesso!', user: data.user };
+        }
+        return { success: false, message: data?.message || 'Falha ao parcelar fatura.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao parcelar fatura.' };
+    }
+}
+
 // ========== FUNÇÕES AINDA USANDO MOCK (TEMPORÁRIO) ==========
 export {
-    updateUserProfile,
-    purchaseWithDebit,
-    purchaseWithCard,
-    payCreditCardInvoice,
-    parcelCreditCardInvoice
+    updateUserProfile
 } from './mockApi';
 
 export default api;

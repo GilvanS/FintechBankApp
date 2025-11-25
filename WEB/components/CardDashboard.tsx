@@ -115,10 +115,25 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     </div>
 
                     <div className="pt-3">
+                        {activeTab === 'future' && transactionsToDisplay.length > 0 && (
+                            <div className="mb-4 flex justify-end">
+                                <button 
+                                    onClick={() => onNavigate('anticipateInstallments')}
+                                    className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors text-sm font-semibold"
+                                >
+                                    <span className="material-symbols-outlined text-lg">fast_forward</span>
+                                    Antecipar Parcelas
+                                </button>
+                            </div>
+                        )}
                         {transactionsToDisplay.length > 0 ? (
                             <div className="space-y-2">
                             {transactionsToDisplay.map(tx => (
-                                <div key={tx.id} className="w-full p-3 rounded-lg flex items-center bg-surface-dark space-x-3">
+                                <div 
+                                    key={tx.id} 
+                                    onClick={() => activeTab === 'future' ? onNavigate('anticipateInstallments') : null}
+                                    className={`w-full p-3 rounded-lg flex items-center bg-surface-dark space-x-3 ${activeTab === 'future' ? 'cursor-pointer hover:bg-white/5' : ''}`}
+                                >
                                     <div className="p-2 bg-background-dark rounded-full">
                                         <span className={`material-symbols-outlined ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-primary'}`}>{getIconForTx(tx.merchant)}</span>
                                     </div>
@@ -128,6 +143,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                                     </div>
                                     <div className="text-right">
                                         <p className={`font-semibold ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-white'}`}>{tx.type === 'PAYMENT' ? '+' : ''} {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                                        {activeTab === 'future' && <p className="text-xs text-primary mt-1">Toque para antecipar</p>}
                                     </div>
                                 </div>
                             ))}

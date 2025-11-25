@@ -74,19 +74,11 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
 
     const handleAddContact = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return;
+        if (!user || !recipientInfo) return; // Exige recipientInfo como no WEB
         setError('');
 
         const onlyDigits = newContactKey.replace(/\D/g, '');
-        if (onlyDigits.length !== 11) {
-            const msg = 'CPF deve ter 11 digitos numericos.';
-            setError(msg);
-            showError(msg);
-            return;
-        }
-
-        const contactName = recipientInfo ? recipientInfo.name : newContactName;
-        const result = await addPixContact(user.cpf, { name: contactName, key: onlyDigits });
+        const result = await addPixContact(user.cpf, { name: recipientInfo.name, key: onlyDigits });
         if (result.success) {
             setShowAddModal(false);
             setNewContactName('');
@@ -214,16 +206,6 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
                                 </div>
                             )}
 
-                            <div>
-                               <label className="text-sm font-medium text-gray-300">Nome do Contato</label>
-                               <input
-                                   type="text"
-                                   value={newContactName}
-                                   onChange={e => setNewContactName(e.target.value)}
-                                   required
-                                   className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 mt-1 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all"
-                               />
-                            </div>
                             {error && <p className="text-sm text-red-400">{error}</p>}
                             <div className="flex justify-end space-x-4 mt-6">
                                 <button

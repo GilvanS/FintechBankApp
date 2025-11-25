@@ -197,3 +197,6 @@ const handleUpdateQuantity = onUpdateQuantity || ((itemId: string, quantity: num
 - Performance não afetada
 
 
+
+
+

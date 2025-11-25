@@ -1,0 +1,59 @@
+{
+  "id": "fintechbankapp-dev-env",
+  "name": "FintechBankApp - Development",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001/api/v1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "userCpf",
+      "value": "11111111111",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "adminCpf",
+      "value": "99999999999",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "adminPassword",
+      "value": "admin999",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "userPassword",
+      "value": "senha123",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "pin",
+      "value": "9898",
+      "type": "secret",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment",
+  "_postman_exported_at": "2025-11-23T23:00:00.000Z",
+  "_postman_exported_using": "Postman/10.0.0"
+}
+
+

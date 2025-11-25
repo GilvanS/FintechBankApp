@@ -12,7 +12,11 @@ info:
 
 servers:
   - url: http://localhost:3001/api/v1
-    description: Servidor de desenvolvimento
+    description: Servidor de desenvolvimento local
+  - url: http://192.168.0.105:3001/api/v1
+    description: Servidor de desenvolvimento (rede local)
+  - url: https://api.fintechbankapp.com/api/v1
+    description: Servidor de produção
 
 components:
   securitySchemes:
@@ -50,8 +54,8 @@ components:
         pixDailyLimit:
           type: number
           format: float
-          description: Limite diário para PIX
-          example: 1000.00
+          description: Limite diário para PIX (valor padrão ao cadastrar: R$ 2.000,00)
+          example: 2000.00
         isBlocked:
           type: boolean
           description: Status de bloqueio do usuário
@@ -61,6 +65,28 @@ components:
           enum: [customer, admin]
           description: Papel do usuário no sistema
           example: "customer"
+        creditCard:
+          type: object
+          description: Informações do cartão de crédito do usuário
+          properties:
+            totalLimit:
+              type: number
+              format: float
+              description: Limite total do cartão de crédito (valor padrão ao cadastrar: R$ 5.000,00)
+              example: 5000.00
+            availableLimit:
+              type: number
+              format: float
+              description: Limite disponível do cartão de crédito (valor padrão ao cadastrar: R$ 5.000,00)
+              example: 5000.00
+            isBlocked:
+              type: boolean
+              description: Status de bloqueio do cartão (padrão: false - desbloqueado)
+              example: false
+            pointsBalance:
+              type: integer
+              description: Saldo de pontos do cartão (padrão: 0)
+              example: 0
 
     LoginRequest:
       type: object
@@ -162,6 +188,78 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Credenciais inválidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/signup:
+    post:
+      tags:
+        - Autenticação
+      summary: Cadastrar novo usuário
+      description: |
+        Cria uma nova conta de usuário no sistema.
+        
+        **Valores padrão definidos automaticamente ao cadastrar:**
+        - Limite diário PIX: R$ 2.000,00
+        - Limite total do cartão de crédito: R$ 5.000,00
+        - Limite disponível do cartão de crédito: R$ 5.000,00
+        - Saldo inicial: R$ 0,00
+        - Cartão de crédito: desbloqueado e pronto para uso
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fullName
+                - cpf
+                - email
+                - password
+              properties:
+                fullName:
+                  type: string
+                  description: Nome completo do usuário
+                  example: "João da Silva"
+                cpf:
+                  type: string
+                  pattern: '^[0-9]{11}$'
+                  description: CPF com 11 dígitos (apenas números)
+                  example: "12345678901"
+                email:
+                  type: string
+                  format: email
+                  description: Email do usuário
+                  example: "joao.silva@example.com"
+                password:
+                  type: string
+                  minLength: 6
+                  description: Senha do usuário (mínimo 6 caracteres)
+                  example: "MinhaSenh@123"
+      responses:
+        '200':
+          description: Conta criada com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Conta criada com sucesso!"
+        '400':
+          description: Dados inválidos ou CPF/email já cadastrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Erro ao criar conta
           content:
             application/json:
               schema:
@@ -457,6 +555,71 @@ paths:
                   user:
                     $ref: '#/components/schemas/User'
 
+  /admin/users/{cpf}/credit-limit:
+    put:
+      tags:
+        - Administração
+      summary: Alterar limite do cartão de crédito (Admin)
+      description: Altera o limite total e/ou disponível do cartão de crédito de um usuário (apenas administradores). Se apenas totalLimit for informado, o availableLimit será ajustado automaticamente se necessário.
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]{11}$'
+          description: CPF do usuário
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                totalLimit:
+                  type: number
+                  format: float
+                  minimum: 0
+                  description: Limite total do cartão de crédito
+                  example: 5000.00
+                availableLimit:
+                  type: number
+                  format: float
+                  minimum: 0
+                  description: Limite disponível do cartão de crédito. Será ajustado automaticamente se for maior que totalLimit.
+                  example: 4500.00
+              description: Pelo menos um dos campos (totalLimit ou availableLimit) deve ser informado
+      responses:
+        '200':
+          description: Limite do cartão de crédito alterado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Limite do cartao de credito atualizado"
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Erro de validação
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Usuário não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /admin/users/{cpf}/reset-password:
     put:
       tags:
@@ -540,6 +703,83 @@ paths:
                     example: "temp1234"
                   user:
                     $ref: '#/components/schemas/User'
+
+  /admin/users/{cpf}/card-details:
+    post:
+      tags:
+        - Administração
+      summary: Atualizar detalhes do cartão de crédito (Admin)
+      description: Atualiza os detalhes do cartão de crédito de um usuário, incluindo datas de vencimento, limites e pontos (apenas administradores). Se a fatura estiver vencida há mais de 7 dias, o cartão será bloqueado automaticamente.
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]{11}$'
+          description: CPF do usuário
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dueDate:
+                  type: string
+                  format: date-time
+                  description: Data de vencimento do cartão
+                  example: "2025-12-31T00:00:00.000Z"
+                invoiceDueDate:
+                  type: string
+                  format: date-time
+                  description: Data de vencimento da fatura. Se estiver há mais de 7 dias no passado, o cartão será bloqueado automaticamente.
+                  example: "2025-11-30T03:00:00.000Z"
+                availableLimit:
+                  type: number
+                  format: float
+                  minimum: 0
+                  description: Limite disponível do cartão
+                  example: 1800.00
+                totalLimit:
+                  type: number
+                  format: float
+                  minimum: 0
+                  description: Limite total do cartão
+                  example: 2000.00
+                pointsBalance:
+                  type: integer
+                  minimum: 0
+                  description: Saldo de pontos do cartão
+                  example: 1500
+              description: Pelo menos um campo deve ser informado
+      responses:
+        '200':
+          description: Detalhes do cartão atualizados com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Erro de validação (nenhum campo informado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Usuário não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /users/{cpf}/pix-daily-usage:
     get:

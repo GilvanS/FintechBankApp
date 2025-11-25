@@ -305,8 +305,12 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     const defaultRole = 'customer';
     const defaultIsBlocked = false;
     const defaultLoginAttempts = 0;
-    const defaultPixDailyLimit = 2000.00;
+    const defaultPixDailyLimit = 2000.00; // Limite diário de PIX: R$ 2.000,00
     const defaultPasswordResetRequested = false;
+    const defaultCreditCardTotalLimit = 5000.00; // Limite total do cartão: R$ 5.000,00
+    const defaultCreditCardAvailableLimit = 5000.00; // Limite disponível do cartão: R$ 5.000,00
+    const defaultCreditCardIsBlocked = false;
+    const defaultCreditCardPointsBalance = 0;
     
     try {
         // Escapar hash da senha também (pode conter caracteres especiais)
@@ -323,8 +327,8 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
         });
         
         const insertQuery = `
-            INSERT INTO ${databricksService.fq('users')} (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
-            VALUES ('${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, '${now}', '${now}')
+            INSERT INTO ${databricksService.fq('users')} (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, credit_card_total_limit, credit_card_available_limit, credit_card_is_blocked, credit_card_points_balance, created_at, updated_at)
+            VALUES ('${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, ${defaultCreditCardTotalLimit}, ${defaultCreditCardAvailableLimit}, ${defaultCreditCardIsBlocked}, ${defaultCreditCardPointsBalance}, '${now}', '${now}')
         `;
         
         console.log('🔵 [SIGNUP] Executando INSERT...');
@@ -490,8 +494,36 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
 
     normalized.creditCard = normalized.creditCard || {};
     normalized.creditCard.transactions = cardTransactions;
+    // Fatura aberta: incluir INVOICE_INSTALLMENT (parcelas) e CREDIT/SHOP_CREDIT (compras a vista) com data <= invoiceDueDate
+    // Para compras parceladas, contar apenas as parcelas (não o SHOP_CREDIT). Para compras a vista, contar o SHOP_CREDIT
     normalized.creditCard.currentInvoice = cardTransactions
-        .filter(tx => tx.type === 'INVOICE_INSTALLMENT' && (!invoiceDueDateEndOfDay || new Date(tx.date).getTime() <= invoiceDueDateEndOfDay.getTime()))
+        .filter(tx => {
+            const txDate = new Date(tx.date).getTime();
+            const isInPeriod = !invoiceDueDateEndOfDay || txDate <= invoiceDueDateEndOfDay.getTime();
+            if (!isInPeriod) return false;
+            
+            // Sempre incluir parcelas
+            if (tx.type === 'INVOICE_INSTALLMENT') return true;
+            
+            // Para CREDIT/SHOP_CREDIT, incluir apenas se não houver parcelas relacionadas (compra a vista)
+            // Verificar se existe alguma parcela com descrição similar e mesma data aproximada (dentro de 5 minutos)
+            if (tx.type === 'CREDIT') {
+                const txTime = new Date(tx.date).getTime();
+                const hasRelatedInstallment = cardTransactions.some(installment => {
+                    if (installment.type !== 'INVOICE_INSTALLMENT') return false;
+                    const instTime = new Date(installment.date).getTime();
+                    const timeDiff = Math.abs(txTime - instTime);
+                    // Se houver parcela na mesma descrição base (sem o "(1/12)") e mesma data aproximada, é compra parcelada
+                    const txDescBase = tx.merchant?.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim() || '';
+                    const instDescBase = installment.merchant?.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim() || '';
+                    return (txDescBase && instDescBase && txDescBase === instDescBase && timeDiff < 5 * 60 * 1000);
+                });
+                // Contar apenas se NÃO tiver parcela relacionada (é compra a vista)
+                return !hasRelatedInstallment;
+            }
+            
+            return false;
+        })
         .reduce((sum, tx) => sum + tx.amount, 0);
 
     const isBlocked = Boolean(normalized.creditCard?.isBlocked);
@@ -605,8 +637,36 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
 
     normalized.creditCard = normalized.creditCard || {};
     normalized.creditCard.transactions = cardTransactions;
+    // Fatura aberta: incluir INVOICE_INSTALLMENT (parcelas) e CREDIT/SHOP_CREDIT (compras a vista) com data <= invoiceDueDate
+    // Para compras parceladas, contar apenas as parcelas (não o SHOP_CREDIT). Para compras a vista, contar o SHOP_CREDIT
     normalized.creditCard.currentInvoice = cardTransactions
-        .filter(tx => tx.type === 'INVOICE_INSTALLMENT' && (!invoiceDueDateEndOfDay || new Date(tx.date).getTime() <= invoiceDueDateEndOfDay.getTime()))
+        .filter(tx => {
+            const txDate = new Date(tx.date).getTime();
+            const isInPeriod = !invoiceDueDateEndOfDay || txDate <= invoiceDueDateEndOfDay.getTime();
+            if (!isInPeriod) return false;
+            
+            // Sempre incluir parcelas
+            if (tx.type === 'INVOICE_INSTALLMENT') return true;
+            
+            // Para CREDIT/SHOP_CREDIT, incluir apenas se não houver parcelas relacionadas (compra a vista)
+            // Verificar se existe alguma parcela com descrição similar e mesma data aproximada (dentro de 5 minutos)
+            if (tx.type === 'CREDIT') {
+                const txTime = new Date(tx.date).getTime();
+                const hasRelatedInstallment = cardTransactions.some(installment => {
+                    if (installment.type !== 'INVOICE_INSTALLMENT') return false;
+                    const instTime = new Date(installment.date).getTime();
+                    const timeDiff = Math.abs(txTime - instTime);
+                    // Se houver parcela na mesma descrição base (sem o "(1/12)") e mesma data aproximada, é compra parcelada
+                    const txDescBase = tx.merchant?.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim() || '';
+                    const instDescBase = installment.merchant?.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim() || '';
+                    return (txDescBase && instDescBase && txDescBase === instDescBase && timeDiff < 5 * 60 * 1000);
+                });
+                // Contar apenas se NÃO tiver parcela relacionada (é compra a vista)
+                return !hasRelatedInstallment;
+            }
+            
+            return false;
+        })
         .reduce((sum, tx) => sum + tx.amount, 0);
 
     const isBlocked = Boolean(normalized.creditCard?.isBlocked);
@@ -811,20 +871,72 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
     const netDebit = total - cashback;
 
     if (paymentMethod === 'debit') {
+        const { esc } = require('./repositories/context');
         const user = await usersRepo.findByCpf(req.user.cpf);
         const balance = parseFloat(user.balance || 0);
         if (balance < netDebit) return res.status(400).json({ success: false, message: 'Saldo insuficiente' });
         await usersRepo.updateBalance(req.user.cpf, (balance - netDebit).toFixed(2));
+        
+        // Criar descrição amigável com nome do produto (similar ao crédito)
+        let productDesc;
+        if (Array.isArray(items) && items.length === 1) {
+            const p0 = productById.get(items[0].productId);
+            productDesc = (p0 && p0.name) ? p0.name : 'Compra shop (debito)';
+        } else if (Array.isArray(items) && items.length > 1) {
+            const p0 = productById.get(items[0].productId);
+            const baseName = (p0 && p0.name) ? p0.name : 'Item';
+            productDesc = `${baseName} + ${(items.length - 1)} itens`;
+        } else {
+            productDesc = 'Compra shop (debito)';
+        }
+        
+        const txId = databricksService.generateUUID();
+        const now = new Date().toISOString();
+        // Valor NEGATIVO pois é um débito (saída de dinheiro)
         await databricksService.executeQuery(`
             INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
-            VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'SHOP_DEBIT', ${netDebit.toFixed(2)}, 'Compra shop (debito)', current_timestamp())
+            VALUES (${esc(txId)}, ${esc(req.user.cpf)}, ${esc('SHOP_DEBIT')}, ${-netDebit.toFixed(2)}, ${esc(productDesc)}, ${esc(now)})
         `);
+        
         if (cashback > 0) {
+            const cashbackTxId = databricksService.generateUUID();
             await databricksService.executeQuery(`
                 INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
-                VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'CASHBACK_CREDIT', ${cashback.toFixed(2)}, 'Cashback shop', current_timestamp())
+                VALUES (${esc(cashbackTxId)}, ${esc(req.user.cpf)}, ${esc('CASHBACK_CREDIT')}, ${cashback.toFixed(2)}, ${esc('Cashback shop')}, ${esc(now)})
             `);
         }
+        
+        // Persistir itens comprados e pontos por item (para débito)
+        for (const it of items) {
+            const p = productById.get(it.productId);
+            const itemTotal = Number(p.price) * it.quantity;
+            const itemPoints = Math.floor(itemTotal * pointsRate);
+            await databricksService.executeQuery(`
+                INSERT INTO ${databricksService.fq('purchased_items')}
+                (id, cpf, product_id, name, description, price, image_url, quantity, points_earned, purchase_date, payment_method, cashback_used, installments)
+                VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', '${p.id}', '${p.name.replace(/'/g,"''")}', '${(p.description||'').replace(/'/g,"''")}', ${Number(p.price).toFixed(2)}, '${p.image_url || p.imageUrl || ''}', ${it.quantity}, ${itemPoints}, current_timestamp(), '${paymentMethod}', ${Number(cashback).toFixed(2)}, NULL)
+            `);
+        }
+
+        // Registrar pontos ganhos
+        await databricksService.executeQuery(`
+            INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+            VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'POINTS_EARNED', ${points}, 'Pontos ganhos no shop', current_timestamp())
+        `);
+        
+        // Retornar sucesso com a transação criada
+        res.status(201).json({ 
+            success: true, 
+            message: 'Compra realizada com sucesso',
+            transaction: {
+                id: txId,
+                type: 'SHOP_DEBIT',
+                amount: -netDebit,
+                description: productDesc,
+                date: now
+            }
+        });
+        return;
     } else if (paymentMethod === 'credit') {
         if (!Number.isInteger(installments) || installments < 1 || installments > 24) {
             return res.status(400).json({ success: false, message: 'Parcelas invalidas.' });
@@ -843,20 +955,74 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
         if (user.credit_card_is_blocked) return res.status(403).json({ success: false, message: 'Cartao bloqueado.' });
 
-        const availableLimit = parseFloat(user.credit_card_available_limit || 0);
+        // Validar que o limite do cartão existe e está configurado
+        const totalLimit = parseFloat(user.credit_card_total_limit || 0);
+        
+        // Se o limite não estiver configurado, retornar erro específico
+        if (!Number.isFinite(totalLimit) || totalLimit <= 0) {
+            return res.status(400).json({ success: false, message: 'Limite do cartao de credito nao configurado. Entre em contato com o suporte.' });
+        }
+        
+        // Buscar limite disponível - se for NULL ou não definido, usar o limite total
+        let availableLimit = parseFloat(user.credit_card_available_limit);
+        
+        // Se o limite disponível não estiver definido, for inválido, ou for maior que o limite total, corrigir
+        // IMPORTANTE: Se o limite disponível for maior que o total, algo está errado e precisa ser corrigido
+        if (!Number.isFinite(availableLimit) || availableLimit < 0 || availableLimit > totalLimit) {
+            // Se o limite disponível não estiver definido ou for inválido, inicializar com o limite total
+            availableLimit = totalLimit;
+            const { esc } = require('./repositories/context');
+            await databricksService.executeQuery(`
+                UPDATE ${databricksService.fq('users')}
+                SET credit_card_available_limit = ${totalLimit.toFixed(2)}
+                WHERE cpf = ${esc(req.user.cpf)}
+            `);
+            // Atualizar o objeto user para refletir a correção
+            user.credit_card_available_limit = totalLimit;
+        }
+        
+        // Garantir que o limite disponível não seja maior que o limite total (correção de segurança)
+        if (availableLimit > totalLimit) {
+            availableLimit = totalLimit;
+            const { esc } = require('./repositories/context');
+            await databricksService.executeQuery(`
+                UPDATE ${databricksService.fq('users')}
+                SET credit_card_available_limit = ${totalLimit.toFixed(2)}
+                WHERE cpf = ${esc(req.user.cpf)}
+            `);
+        }
+        
+        const finalAvailableLimit = availableLimit;
+        
+        // Calcular valor a ser consumido do limite
         const creditAmount = qty === 1 ? (total * 0.90) : total; // 1x: 10% desconto, sem parcelas
-        const totalParcelado = qty >= 2 ? (qty >= 13 ? total * (1 + rate) : total) : 0; // 2..12: sem juros; 13..24: com juros
+        // Para parcelas: 2-12 sem juros = valor total; 13-24 com juros = valor total + juros
+        const totalParcelado = qty >= 2 ? (qty >= 13 ? total * (1 + rate) : total) : 0;
+        // Consumo do limite: 
+        // - Para 1x: desconto de 10% (total * 0.90)
+        // - Para 2-12 parcelas SEM JUROS: consome apenas o valor total da compra
+        // - Para 13-24 parcelas COM JUROS: consome o valor total + juros
         const consumoLimite = qty === 1 ? creditAmount : totalParcelado;
+        
+        // Log para debug (pode remover depois)
+        console.log(`[CHECKOUT CREDIT] CPF: ${req.user.cpf}, Total: R$ ${total.toFixed(2)}, Parcelas: ${qty}, Taxa: ${rate}, TotalParcelado: R$ ${totalParcelado.toFixed(2)}, ConsumoLimite: R$ ${consumoLimite.toFixed(2)}, LimiteDisponivel: R$ ${finalAvailableLimit.toFixed(2)}`);
 
-        if (!Number.isFinite(availableLimit) || availableLimit < consumoLimite) {
-            return res.status(400).json({ success: false, message: 'Limite de credito insuficiente' });
+        // Validar limite disponível - IMPORTANTE: usar limite do cartão, NÃO o saldo da conta
+        if (!Number.isFinite(finalAvailableLimit) || finalAvailableLimit < consumoLimite) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Limite de credito insuficiente. Disponivel: R$ ${finalAvailableLimit.toFixed(2)}, Necessario: R$ ${consumoLimite.toFixed(2)}` 
+            });
         }
 
-        // Debitar limite disponível
+        // Debitar limite disponível do CARTÃO DE CRÉDITO (não do saldo da conta)
+        // IMPORTANTE: NUNCA debitar do balance (saldo da conta) para compras no crédito
+        const newAvailableLimit = finalAvailableLimit - consumoLimite;
+        const { esc } = require('./repositories/context');
         await databricksService.executeQuery(`
             UPDATE ${databricksService.fq('users')}
-            SET credit_card_available_limit = ${(availableLimit - consumoLimite).toFixed(2)}
-            WHERE cpf = '${req.user.cpf}'
+            SET credit_card_available_limit = ${newAvailableLimit.toFixed(2)}
+            WHERE cpf = ${esc(req.user.cpf)}
         `);
 
         const nowIso = new Date().toISOString();
@@ -905,10 +1071,19 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             nextDueDate.setMonth(firstDue.getMonth() + 1);
 
             const planId = databricksService.generateUUID();
+            const { esc } = require('./repositories/context');
+            const planNow = new Date().toISOString();
+            // original_amount = valor original da compra (sem juros), total_amount = valor total parcelado (com juros se houver)
+            // total_with_interest = mesmo que total_amount para compras com juros, ou total para compras sem juros
+            const originalAmount = total; // Valor original sem juros
+            const totalWithInterest = totalParcelado; // Valor total com juros (se houver) - igual ao total_amount
+            
+            // Inserir plano de parcelamento - sempre incluir total_with_interest (mesmo valor que total_amount)
+            // Se a coluna não existir, será criada automaticamente na inicialização
             await databricksService.executeQuery(`
                 INSERT INTO ${databricksService.fq('installment_plans')}
-                (id, cpf, purchase_tx_id, description, total_amount, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
-                VALUES ('${planId}', '${req.user.cpf}', '${txId}', 'Compra shop (credito)', ${totalParcelado.toFixed(2)}, ${qty}, ${parcela.toFixed(2)}, ${typeof rate === 'number' ? rate.toFixed(2) : (Number(rate) || 0)}, ${remainingBalance}, ${qty - 1}, '${nextDueDate.toISOString()}', 'ACTIVE', current_timestamp(), current_timestamp())
+                (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
+                VALUES (${esc(planId)}, ${esc(req.user.cpf)}, ${esc(txId)}, ${esc('Compra shop (credito)')}, ${originalAmount.toFixed(2)}, ${totalParcelado.toFixed(2)}, ${totalWithInterest.toFixed(2)}, ${qty}, ${parcela.toFixed(2)}, ${typeof rate === 'number' ? rate.toFixed(4) : '0.0000'}, ${remainingBalance}, ${qty - 1}, ${esc(nextDueDate.toISOString())}, ${esc('ACTIVE')}, ${esc(planNow)}, ${esc(planNow)})
             `);
         }
     } else {
@@ -972,18 +1147,35 @@ apiRouter.delete('/pix/contacts/:cpf/:contactKey', bearerAuth(), asyncHandler(as
 // --- PIX Recipient Info ---
 apiRouter.get('/pix/recipient-info', asyncHandler(async (req, res) => {
     const { key, senderCpf } = req.query;
+    console.log('🔵 [PIX RECIPIENT INFO] Requisição recebida:', { key, senderCpf });
+    
     if (!key) return res.status(400).json({ success: false, message: 'Chave PIX nao fornecida.' });
     
     // Determine key type (CPF, EMAIL, etc.)
     const keyType = key.includes('@') ? 'EMAIL' : 'CPF';
     
-    const recipient = await pixRepo.findRecipientByKey(keyType, key);
+    // Normalizar CPF se necessário (remover formatação)
+    let normalizedKey = key;
+    if (keyType === 'CPF') {
+        normalizedKey = key.replace(/\D/g, ''); // Remove tudo que não é dígito
+        console.log('🔵 [PIX RECIPIENT INFO] CPF normalizado:', { original: key, normalized: normalizedKey });
+    }
+    
+    console.log('🔵 [PIX RECIPIENT INFO] Buscando destinatário:', { keyType, normalizedKey });
+    const recipient = await pixRepo.findRecipientByKey(keyType, normalizedKey);
+    
     if (!recipient) {
+        console.log('❌ [PIX RECIPIENT INFO] Destinatário não encontrado para:', normalizedKey);
         return res.json({ success: false, message: 'Chave PIX nao encontrada.' });
     }
     
-    if (senderCpf && recipient.cpf === senderCpf) {
-        return res.json({ success: false, message: 'Nao e possivel adicionar voce mesmo como contato.' });
+    console.log('✅ [PIX RECIPIENT INFO] Destinatário encontrado:', { cpf: recipient.cpf, name: recipient.name });
+    
+    // Normalizar senderCpf para comparação
+    const normalizedSenderCpf = senderCpf ? senderCpf.replace(/\D/g, '') : null;
+    if (normalizedSenderCpf && recipient.cpf === normalizedSenderCpf) {
+        console.log('❌ [PIX RECIPIENT INFO] Tentativa de enviar para si mesmo');
+        return res.json({ success: false, message: 'Nao e possivel enviar PIX para si mesmo.' });
     }
     
     res.json({ success: true, name: recipient.name, cpf: recipient.cpf });
@@ -1291,6 +1483,77 @@ apiRouter.put('/admin/users/:cpf/pix-limit', bearerAuth(), authenticateAdmin, as
     }
     await updatePixLimit(cpf, newLimit);
     res.json({ success: true, message: 'Limite PIX atualizado' });
+}));
+
+// Alterar limite do cartão de crédito de qualquer usuário (Admin)
+apiRouter.put('/admin/users/:cpf/credit-limit', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { cpf } = req.params;
+    const { totalLimit, availableLimit } = req.body || {};
+    
+    // Validar que pelo menos um limite foi informado
+    if (totalLimit == null && availableLimit == null) {
+        return res.status(400).json({ success: false, message: 'Informe totalLimit ou availableLimit.' });
+    }
+    
+    // Validar tipos e valores
+    if (totalLimit != null && (typeof totalLimit !== 'number' || totalLimit < 0)) {
+        return res.status(400).json({ success: false, message: 'totalLimit invalido.' });
+    }
+    
+    if (availableLimit != null && (typeof availableLimit !== 'number' || availableLimit < 0)) {
+        return res.status(400).json({ success: false, message: 'availableLimit invalido.' });
+    }
+    
+    // Verificar se o usuário existe
+    const user = await usersRepo.findByCpf(cpf);
+    if (!user) {
+        return res.status(404).json({ success: false, message: 'Usuario nao encontrado.' });
+    }
+    
+    const sets = [];
+    
+    // Se totalLimit foi informado, atualizar
+    if (totalLimit != null) {
+        sets.push(`credit_card_total_limit = ${Number(totalLimit).toFixed(2)}`);
+        // Se availableLimit não foi informado e o limite total está sendo reduzido,
+        // ajustar o availableLimit para não ficar maior que o totalLimit
+        if (availableLimit == null) {
+            const currentAvailable = parseFloat(user.credit_card_available_limit || 0);
+            const newAvailable = Math.min(currentAvailable, totalLimit);
+            sets.push(`credit_card_available_limit = ${newAvailable.toFixed(2)}`);
+        }
+    }
+    
+    // Se availableLimit foi informado, atualizar
+    if (availableLimit != null) {
+        const finalTotalLimit = totalLimit != null ? totalLimit : parseFloat(user.credit_card_total_limit || 0);
+        // Garantir que availableLimit não seja maior que totalLimit
+        const finalAvailableLimit = Math.min(availableLimit, finalTotalLimit);
+        sets.push(`credit_card_available_limit = ${finalAvailableLimit.toFixed(2)}`);
+    }
+    
+    if (sets.length === 0) {
+        return res.status(400).json({ success: false, message: 'Nenhum limite para atualizar.' });
+    }
+    
+    const { esc } = require('./repositories/context');
+    const now = new Date().toISOString();
+    
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET ${sets.join(', ')}, updated_at = ${esc(now)}
+        WHERE cpf = ${esc(cpf)}
+    `);
+    
+    auditLog(req, 'admin_credit_limit_update', 'info', { cpf, totalLimit, availableLimit });
+    
+    // Buscar usuário atualizado
+    const updatedUser = await usersRepo.findByCpf(cpf);
+    res.json({ 
+        success: true, 
+        message: 'Limite do cartao de credito atualizado',
+        user: normalizeUser(updatedUser)
+    });
 }));
 
 // Resetar senha de usuário (Admin)
@@ -1768,7 +2031,89 @@ async function initializeDatabase() {
     // Skip Databricks-specific initialization if using Postgres
     const provider = process.env.DB_PROVIDER || process.env.DB_DIALECT;
     if (provider === 'postgres') {
-        console.log('ℹ️  Usando PostgreSQL. Inicialização automática de schema (Databricks) pulada.');
+        console.log('ℹ️  Usando PostgreSQL. Verificando estrutura das tabelas...');
+        
+        // Verificar e corrigir estrutura da tabela limit_increase_requests se necessário
+        try {
+            const columnCheck = await databricksService.executeQuery(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'fintech' 
+                AND table_name = 'limit_increase_requests' 
+                AND column_name = 'requested_at'
+            `);
+            
+            if (!columnCheck || columnCheck.length === 0) {
+                console.log('⚠️  Coluna requested_at não encontrada. Adicionando...');
+                await databricksService.executeQuery(`
+                    ALTER TABLE ${databricksService.fq('limit_increase_requests')}
+                    ADD COLUMN requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                `);
+                console.log('✅ Coluna requested_at adicionada com sucesso.');
+            }
+        } catch (error) {
+            console.warn('⚠️  Erro ao verificar/corrigir tabela limit_increase_requests:', error.message);
+            // Tentar criar a tabela se não existir
+            try {
+                await databricksService.executeQuery(`
+                    CREATE TABLE IF NOT EXISTS ${databricksService.fq('limit_increase_requests')} (
+                        id VARCHAR(255) NOT NULL,
+                        cpf VARCHAR(11) NOT NULL,
+                        requested_limit DECIMAL(15,2) NOT NULL,
+                        status VARCHAR(50) DEFAULT 'PENDING',
+                        requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        decided_at TIMESTAMP,
+                        admin_cpf VARCHAR(11),
+                        PRIMARY KEY (id)
+                    )
+                `);
+                console.log('✅ Tabela limit_increase_requests criada com sucesso.');
+            } catch (createError) {
+                console.error('❌ Erro ao criar tabela limit_increase_requests:', createError.message);
+            }
+        }
+        
+        // Verificar e corrigir estrutura da tabela installment_plans - adicionar total_with_interest se necessário
+        try {
+            const installmentColumnCheck = await databricksService.executeQuery(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'fintech' 
+                AND table_name = 'installment_plans' 
+                AND column_name = 'total_with_interest'
+            `);
+            
+            if (!installmentColumnCheck || installmentColumnCheck.length === 0) {
+                console.log('⚠️  Coluna total_with_interest não encontrada. Adicionando...');
+                try {
+                    // Adicionar a coluna com DEFAULT primeiro
+                    await databricksService.executeQuery(`
+                        ALTER TABLE ${databricksService.fq('installment_plans')}
+                        ADD COLUMN total_with_interest DECIMAL(15,2) DEFAULT 0.00
+                    `);
+                    // Atualizar valores existentes para igualar total_amount
+                    await databricksService.executeQuery(`
+                        UPDATE ${databricksService.fq('installment_plans')}
+                        SET total_with_interest = COALESCE(total_amount, 0)
+                        WHERE total_with_interest IS NULL OR total_with_interest = 0
+                    `);
+                    // Tornar NOT NULL após atualizar valores
+                    await databricksService.executeQuery(`
+                        ALTER TABLE ${databricksService.fq('installment_plans')}
+                        ALTER COLUMN total_with_interest SET NOT NULL
+                    `);
+                    console.log('✅ Coluna total_with_interest adicionada com sucesso.');
+                } catch (alterError) {
+                    console.error('❌ Erro ao adicionar coluna total_with_interest:', alterError.message);
+                    console.log('💡 Execute o script fix_installment_plans.sql manualmente.');
+                }
+            } else {
+                console.log('✅ Coluna total_with_interest já existe na tabela installment_plans.');
+            }
+        } catch (error) {
+            console.warn('⚠️  Erro ao verificar coluna total_with_interest:', error.message);
+        }
+        
         console.log('💡 Certifique-se de ter executado schema_pg.sql no seu banco Postgres.');
         return;
     }
@@ -2146,6 +2491,19 @@ async function bootstrap() {
 app.use('/api', apiRouter);
 app.use('/api/v1', apiRouter);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// Endpoint para servir o Swagger JSON (necessário para importação no Postman)
+app.get('/api-docs/swagger.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(swaggerDocument, null, 2));
+});
+
+app.get('/api-docs/swagger.yaml', (req, res) => {
+    res.setHeader('Content-Type', 'text/yaml');
+    const fs = require('fs');
+    const path = require('path');
+    res.send(fs.readFileSync(path.join(__dirname, 'swagger.yaml'), 'utf8'));
+});
 
 bootstrap().catch((err) => {
     console.error("❌ Erro no bootstrap:", err.message);

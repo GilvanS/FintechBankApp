@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { MOCK_PRODUCTS } from '../data/mockData';
 import { PurchasedItem } from '../types';
 import ProductPage from './ProductPage';
+import PromotionalPopup from './PromotionalPopup';
 
 // FIX: Updated ShopProps interface to include all necessary handlers from the parent component.
 interface ShopProps {
@@ -20,6 +22,8 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
     const [selectedProduct, setSelectedProduct] = useState<PurchasedItem | null>(null);
     const [products, setProducts] = useState<PurchasedItem[]>([]);
 
+    const [showPopup, setShowPopup] = useState(true);
+
     useEffect(() => {
         // Shuffle products on mount to give a dynamic feel
         setProducts([...MOCK_PRODUCTS].sort(() => Math.random() - 0.5));
@@ -36,7 +40,8 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
     }
 
     return (
-        <div className="bg-background-dark text-white min-h-full flex flex-col">
+        <div className="bg-background-dark text-white min-h-full flex flex-col relative">
+            <PromotionalPopup isOpen={showPopup} onClose={() => setShowPopup(false)} />
             <header className="flex items-center justify-between p-4 border-b border-subtle-dark/50">
                 <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>

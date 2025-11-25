@@ -210,3 +210,92 @@ export const deletePixContact = async (cpf: string, key: string): Promise<{ succ
     return { success: false, message: error.message || 'Erro ao remover contato' };
   }
 };
+
+export const purchaseWithCard = async (cpf: string, items: PurchasedItem[], cashbackUsed: number, installments: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+  try {
+    const token = localStorage.getItem('authToken');
+    if (!token) return { success: false, message: 'Não autenticado.' };
+
+    const result = await apiCall<{ success: boolean; message: string; user?: any }>('/shop/checkout', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        items,
+        cashbackUsed,
+        method: 'credit',
+        installments
+      })
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao realizar compra com cartão' };
+  }
+};
+
+export const purchaseWithDebit = async (cpf: string, items: PurchasedItem[], cashbackUsed: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+  try {
+    const token = localStorage.getItem('authToken');
+    if (!token) return { success: false, message: 'Não autenticado.' };
+
+    const result = await apiCall<{ success: boolean; message: string; user?: any }>('/shop/checkout', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        items,
+        cashbackUsed,
+        method: 'debit'
+      })
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao realizar compra com débito' };
+  }
+};
+
+export const payCreditCardInvoice = async (cpf: string, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+  try {
+    const token = localStorage.getItem('authToken');
+    if (!token) return { success: false, message: 'Não autenticado.' };
+
+    const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/users/${cpf}/card/invoice/pay`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ pin })
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao pagar fatura' };
+  }
+};
+
+export const parcelCreditCardInvoice = async (cpf: string, details: { amount: number, installments: number }): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+  try {
+    const token = localStorage.getItem('authToken');
+    if (!token) return { success: false, message: 'Não autenticado.' };
+
+    const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/users/${cpf}/card/invoice/parcel`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(details)
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao parcelar fatura' };
+  }
+};
+
+export const anticipateCreditCardInstallments = async (cpf: string, transactionIds: string[]): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+  try {
+    const token = localStorage.getItem('authToken');
+    if (!token) return { success: false, message: 'Não autenticado.' };
+
+    const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/users/${cpf}/card/installments/anticipate`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ transactionIds })
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao antecipar parcelas' };
+  }
+};

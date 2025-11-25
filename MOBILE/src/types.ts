@@ -135,6 +135,6 @@ export interface Invoice {
     items: Transaction[];
 }
 
-export type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart' | 'currentInvoice' | 'closedInvoice' | 'paymentMethods' | 'purchaseConfirmation' | 'installmentReviewInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'menu' | 'notifications' | 'admin';
+export type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart' | 'currentInvoice' | 'closedInvoice' | 'paymentMethods' | 'purchaseConfirmation' | 'installmentReviewInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'menu' | 'notifications' | 'admin' | 'transactionReceipt';
 
 export type SignUpData = Omit<User, 'balance' | 'transactions' | 'isBlocked' | 'role' | 'pixDailyLimit' | 'pixKeys' | 'pixContacts' | 'limitIncreaseRequest' | 'purchasedItems' | 'creditCard'>;

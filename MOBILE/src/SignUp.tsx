@@ -16,7 +16,7 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { addToast } = useToast();
+  const { toast, showSuccess, showError, hide } = useToast();
 
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -45,7 +45,7 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin }) => {
         if (result.success) {
           console.log('✅ [SignUp Component] Cadastro bem-sucedido!');
           setError(''); // Limpar qualquer erro
-          addToast('Cadastro realizado com sucesso! Redirecionando para o login.', 'success');
+          showSuccess('Cadastro realizado com sucesso! Redirecionando para o login.');
           setTimeout(() => {
             console.log('🔵 [SignUp Component] Redirecionando para login...');
             onNavigateToLogin();
@@ -54,13 +54,13 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin }) => {
           console.log('❌ [SignUp Component] Cadastro falhou:', result.message);
           const errorMessage = result.message || 'Ocorreu um erro no cadastro.';
           setError(errorMessage);
-          addToast(errorMessage, 'error');
+          showError(errorMessage);
         }
     } catch (err: any) {
       console.error('❌ [SignUp Component] Exceção capturada:', err);
       const errorMessage = err?.message || 'Falha ao conectar com o servidor.';
       setError(errorMessage);
-      addToast(errorMessage, 'error');
+      showError(errorMessage);
     } finally {
       setLoading(false);
       console.log('🔵 [SignUp Component] Loading finalizado');
@@ -69,7 +69,7 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin }) => {
 
   return (
     <>
-      <ToastContainer />
+      <ToastContainer toast={toast} onClose={hide} />
       <div className="font-display bg-background-dark text-text-dark antialiased">
           <div className="flex flex-col min-h-screen">
               <header className="w-full p-4 safe-top">

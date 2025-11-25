@@ -19,8 +19,8 @@ async function upsertSeed({ cpf, fullName, email, passwordHash, balance, role })
         const now = new Date().toISOString();
         await db.executeQuery(`
             INSERT INTO ${db.fq('users')}
-            (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
-            VALUES (${esc(cpf)}, ${esc(fullName)}, ${esc(email)}, ${esc(passwordHash)}, ${esc(balance)}, ${esc(role)}, false, 0, 2000.00, false, ${esc(now)}, ${esc(now)})
+            (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, credit_card_total_limit, credit_card_available_limit, credit_card_is_blocked, credit_card_points_balance, created_at, updated_at)
+            VALUES (${esc(cpf)}, ${esc(fullName)}, ${esc(email)}, ${esc(passwordHash)}, ${esc(balance)}, ${esc(role)}, false, 0, 2000.00, false, 5000.00, 5000.00, false, 0, ${esc(now)}, ${esc(now)})
         `);
     }
 }

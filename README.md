@@ -12,7 +12,17 @@ Se der erro dizendo que o IP já existe, use este para garantir que está tudo c
 
 powershell
 Set-NetIPAddress -InterfaceAlias "Wi-Fi" -IPAddress "192.168.0.105" -PrefixLength 24; Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses "8.8.8.8","8.8.4.4"
-A
+
+
+MOBILE/src/services/api.ts (Linha 7)
+Este é o IP padrão usado na inicialização do app.
+typescript
+const DEV_API_URL = 'http://192.168.0.105:3001'; // <--- Altere aqui
+MOBILE/src/pages/Login/index.tsx  (Linha 37)
+Este é o IP usado especificamente na tela de login para verificar se o servidor está online.
+typescript
+const url = 'http://192.168.0.105:3001'; // <--- Altere aqui também
+
 MOBILE/src/types.t# FintechBankApp
 
 FintechBankApp é um projeto didático desenvolvido para treinamento de desenvolvimento Web e APIs com foco em boas práticas aplicáveis ao ecossistema Java + frameworks (conceitos, padrões e arquitetura). A implementação de referência desta branch usa Node.js (Express) no backend e Vite + React + TypeScript no frontend para acelerar a prática e a validação dos fluxos.

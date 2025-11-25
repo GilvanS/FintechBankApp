@@ -11,7 +11,8 @@ import {
     adminGetLimitRequests,
     adminApproveLimitRequest,
     adminDenyLimitRequest,
-    adminUpdateCardDetails
+    adminUpdateCardDetails,
+    adminUpdateCreditLimit
 } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
@@ -47,6 +48,8 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     // State for card details form
     const [cardDueDate, setCardDueDate] = useState('');
     const [cardInvoiceDate, setCardInvoiceDate] = useState('');
+    const [cardTotalLimit, setCardTotalLimit] = useState('');
+    const [cardAvailableLimit, setCardAvailableLimit] = useState('');
 
     useEffect(() => {
         if (searchedUser) {
@@ -55,6 +58,8 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             const invoiceDate = new Date(invoiceDateStr);
             const formattedDate = invoiceDate.toISOString().split('T')[0];
             setCardInvoiceDate(formattedDate);
+            setCardTotalLimit(searchedUser.creditCard.totalLimit?.toString() || '');
+            setCardAvailableLimit(searchedUser.creditCard.availableLimit?.toString() || '');
         }
     }, [searchedUser]);
 
@@ -104,6 +109,30 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
         const result = await adminUpdateCardDetails(searchedUser.cpf, {
             dueDate: cardDueDate,
             invoiceDueDate: new Date(cardInvoiceDate + 'T00:00:00Z').toISOString()
+        });
+        if (result.success && result.user) {
+            setSearchedUser(result.user);
+            showToast(result.message, 'success');
+        } else {
+            showToast(result.message, 'error');
+        }
+        setIsLoadingAction(false);
+    };
+
+    const handleUpdateCreditLimit = async () => {
+        if (!searchedUser) return;
+        const totalLimit = cardTotalLimit ? parseFloat(cardTotalLimit) : undefined;
+        const availableLimit = cardAvailableLimit ? parseFloat(cardAvailableLimit) : undefined;
+        
+        if (totalLimit === undefined && availableLimit === undefined) {
+            showToast('Informe pelo menos um limite (total ou disponível)', 'error');
+            return;
+        }
+        
+        setIsLoadingAction(true);
+        const result = await adminUpdateCreditLimit(searchedUser.cpf, {
+            totalLimit,
+            availableLimit
         });
         if (result.success && result.user) {
             setSearchedUser(result.user);
@@ -244,6 +273,37 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                                 </div>
                                 <button onClick={handleUpdateCard} disabled={isLoadingAction} className="btn-secondary mt-4 w-full sm:w-auto disabled:opacity-50">
                                     {isLoadingAction ? 'Salvando...' : 'Salvar Alterações do Cartão'}
+                                </button>
+                            </div>
+
+                            <div className="border-t border-subtle-dark/50 pt-4">
+                                <h4 className="font-semibold text-text-dark mb-2">Alterar Limites do Cartão de Crédito</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs text-subtle-dark">Limite Total (R$)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={cardTotalLimit}
+                                            onChange={(e) => setCardTotalLimit(e.target.value)}
+                                            placeholder="5000.00"
+                                            className="w-full bg-surface-dark p-2 rounded-md mt-1 text-text-dark"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-subtle-dark">Limite Disponível (R$)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={cardAvailableLimit}
+                                            onChange={(e) => setCardAvailableLimit(e.target.value)}
+                                            placeholder="5000.00"
+                                            className="w-full bg-surface-dark p-2 rounded-md mt-1 text-text-dark"
+                                        />
+                                    </div>
+                                </div>
+                                <button onClick={handleUpdateCreditLimit} disabled={isLoadingAction} className="btn-secondary mt-4 w-full sm:w-auto disabled:opacity-50">
+                                    {isLoadingAction ? 'Salvando...' : 'Salvar Limites do Cartão'}
                                 </button>
                             </div>
                         </div>

@@ -1,0 +1,1229 @@
+{
+  "info": {
+    "name": "FintechBankApp API - Complete Collection",
+    "description": "Collection completa da API FintechBankApp com todos os endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "fintechbankapp"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userCpf",
+      "value": "11111111111",
+      "type": "string"
+    },
+    {
+      "key": "adminCpf",
+      "value": "99999999999",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Sistema",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Verifica se a API está funcionando"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Autenticação",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.token) {",
+                  "        pm.collectionVariables.set('authToken', json.token);",
+                  "        pm.environment.set('authToken', json.token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{userCpf}}\",\n  \"password\": \"senha123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Autentica um usuário no sistema"
+          },
+          "response": []
+        },
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.token) {",
+                  "        pm.collectionVariables.set('adminToken', json.token);",
+                  "        pm.environment.set('adminToken', json.token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{adminCpf}}\",\n  \"password\": \"admin999\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login do administrador"
+          },
+          "response": []
+        },
+        {
+          "name": "Cadastrar Usuário",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"João da Silva\",\n  \"cpf\": \"12345678901\",\n  \"email\": \"joao@example.com\",\n  \"password\": \"senha123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "signup"]
+            },
+            "description": "Cria uma nova conta de usuário. Valores padrão: PIX daily limit R$ 2.000,00, Credit card limit R$ 5.000,00"
+          },
+          "response": []
+        },
+        {
+          "name": "Solicitar Reset de Senha",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{userCpf}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/request-password-reset",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "request-password-reset"]
+            },
+            "description": "Solicita reset de senha"
+          },
+          "response": []
+        },
+        {
+          "name": "Reset de Senha",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{userCpf}}\",\n  \"token\": \"reset-token\",\n  \"newPassword\": \"novaSenha123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset-password"]
+            },
+            "description": "Reseta a senha do usuário"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Usuários",
+      "item": [
+        {
+          "name": "Meus Dados",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            },
+            "description": "Retorna os dados do usuário autenticado"
+          },
+          "response": []
+        },
+        {
+          "name": "Consultar Usuário por CPF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/:cpf",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":cpf"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                }
+              ]
+            },
+            "description": "Retorna os dados de um usuário específico"
+          },
+          "response": []
+        },
+        {
+          "name": "Extrato",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/:cpf/statement",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":cpf", "statement"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                }
+              ]
+            },
+            "description": "Retorna o extrato de transações do usuário"
+          },
+          "response": []
+        },
+        {
+          "name": "Saldo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/:cpf/balance",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":cpf", "balance"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                }
+              ]
+            },
+            "description": "Retorna o saldo da conta do usuário"
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Perfil",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"joaosilva\",\n  \"profileDescription\": \"Descrição do perfil\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/:cpf/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":cpf", "profile"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                }
+              ]
+            },
+            "description": "Atualiza o perfil do usuário"
+          },
+          "response": []
+        },
+        {
+          "name": "Notificações",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/:cpf/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":cpf", "notifications"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                }
+              ]
+            },
+            "description": "Lista as notificações do usuário"
+          },
+          "response": []
+        },
+        {
+          "name": "Marcar Notificação como Lida",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/:cpf/notifications/:id/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":cpf", "notifications", ":id", "read"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                },
+                {
+                  "key": "id",
+                  "value": "notification-id"
+                }
+              ]
+            },
+            "description": "Marca uma notificação como lida"
+          },
+          "response": []
+        },
+        {
+          "name": "Meus Dados (Compatibilidade)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/user/me/:cpf",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "me", ":cpf"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                }
+              ]
+            },
+            "description": "Retorna dados do usuário, transações e contatos PIX (rota de compatibilidade)"
+          },
+          "response": []
+        },
+        {
+          "name": "PIX Uso Diário",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/user/pix-daily-usage/:cpf",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "pix-daily-usage", ":cpf"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                }
+              ]
+            },
+            "description": "Retorna o total enviado via PIX no dia corrente"
+          },
+          "response": []
+        },
+        {
+          "name": "Compras",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/:cpf/purchases",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":cpf", "purchases"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                }
+              ]
+            },
+            "description": "Lista as compras realizadas pelo usuário"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "PIX",
+      "item": [
+        {
+          "name": "Info do Destinatário",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pix/recipient-info?key=:key&senderCpf=:senderCpf",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "recipient-info"],
+              "query": [
+                {
+                  "key": "key",
+                  "value": "11111111111",
+                  "description": "Chave PIX (CPF, email, telefone ou chave aleatória)"
+                },
+                {
+                  "key": "senderCpf",
+                  "value": "{{userCpf}}",
+                  "description": "CPF do remetente"
+                }
+              ]
+            },
+            "description": "Obtém informações do destinatário pela chave PIX"
+          },
+          "response": []
+        },
+        {
+          "name": "Info do Destinatário (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"11111111111\",\n  \"senderCpf\": \"{{userCpf}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pix/recipient-info",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "recipient-info"]
+            },
+            "description": "Obtém informações do destinatário pela chave PIX (método POST)"
+          },
+          "response": []
+        },
+        {
+          "name": "Transferir PIX",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"88888888888\",\n  \"amount\": 100.00,\n  \"description\": \"Transferência PIX\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pix/transfer",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "transfer"]
+            },
+            "description": "Realiza uma transferência PIX (requer PIN via bearerAuth)"
+          },
+          "response": []
+        },
+        {
+          "name": "Transferir PIX Crédito",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"88888888888\",\n  \"amount\": 100.00,\n  \"description\": \"Transferência PIX Crédito\",\n  \"pin\": \"9898\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pix/transfer-credit",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "transfer-credit"]
+            },
+            "description": "Realiza uma transferência PIX usando crédito (requer PIN)"
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Chaves PIX",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pix/keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "keys"]
+            },
+            "description": "Lista as chaves PIX cadastradas"
+          },
+          "response": []
+        },
+        {
+          "name": "Cadastrar Chave PIX",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CPF\",\n  \"key\": \"{{userCpf}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pix/keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "keys"]
+            },
+            "description": "Cadastra uma nova chave PIX"
+          },
+          "response": []
+        },
+        {
+          "name": "Deletar Chave PIX",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pix/keys/:key",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "keys", ":key"],
+              "variable": [
+                {
+                  "key": "key",
+                  "value": "chave-pix"
+                }
+              ]
+            },
+            "description": "Remove uma chave PIX"
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Contatos PIX",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pix/contacts/:cpf",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "contacts", ":cpf"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                }
+              ]
+            },
+            "description": "Lista os contatos PIX salvos"
+          },
+          "response": []
+        },
+        {
+          "name": "Adicionar Contato PIX",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contactCpf\": \"88888888888\",\n  \"contactName\": \"João Silva\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pix/contacts/:cpf",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "contacts", ":cpf"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                }
+              ]
+            },
+            "description": "Adiciona um contato PIX"
+          },
+          "response": []
+        },
+        {
+          "name": "Remover Contato PIX",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pix/contacts/:cpf/:contactKey",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "contacts", ":cpf", ":contactKey"],
+              "variable": [
+                {
+                  "key": "cpf",
+                  "value": "{{userCpf}}"
+                },
+                {
+                  "key": "contactKey",
+                  "value": "88888888888"
+                }
+              ]
+            },
+            "description": "Remove um contato PIX"
+          },
+          "response": []
+        },
+        {
+          "name": "Solicitar Aumento de Limite PIX",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestedLimit\": 5000.00\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pix/limit/request",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "limit", "request"]
+            },
+            "description": "Solicita aumento do limite diário PIX"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Shop",
+      "item": [
+        {
+          "name": "Listar Produtos",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/shop/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "products"]
+            },
+            "description": "Lista todos os produtos disponíveis na loja"
+          },
+          "response": []
+        },
+        {
+          "name": "Checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"1\",\n      \"quantity\": 1\n    }\n  ],\n  \"paymentMethod\": \"debit\",\n  \"pin\": \"9898\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shop/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "checkout"]
+            },
+            "description": "Realiza o checkout de uma compra. paymentMethod: 'debit' ou 'credit'"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Cartão de Crédito",
+      "item": [
+        {
+          "name": "Pagar Fatura",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{userCpf}}\",\n  \"amount\": 500.00,\n  \"pin\": \"9898\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cards/invoice/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["cards", "invoice", "pay"]
+            },
+            "description": "Paga a fatura do cartão de crédito"
+          },
+          "response": []
+        },
+        {
+          "name": "Parcelar Fatura",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{userCpf}}\",\n  \"installments\": 3,\n  \"pin\": \"9898\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cards/invoice/parcel",
+              "host": ["{{baseUrl}}"],
+              "path": ["cards", "invoice", "parcel"]
+            },
+            "description": "Parcela a fatura do cartão de crédito"
+          },
+          "response": []
+        },
+        {
+          "name": "Antecipar Parcelas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{userCpf}}\",\n  \"pin\": \"9898\",\n  \"installmentTransactionIds\": [\"tx-id-1\", \"tx-id-2\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cards/invoice/anticipate",
+              "host": ["{{baseUrl}}"],
+              "path": ["cards", "invoice", "anticipate"]
+            },
+            "description": "Antecipa parcelas da fatura com desconto"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{adminToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Usuários",
+          "item": [
+            {
+              "name": "Listar Usuários",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users"]
+                },
+                "description": "Lista todos os usuários (apenas administradores)"
+              },
+              "response": []
+            },
+            {
+              "name": "Consultar Usuário",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/:cpf",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", ":cpf"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Consulta dados de um usuário específico"
+              },
+              "response": []
+            },
+            {
+              "name": "Fazer Depósito",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 500.00\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/:cpf/deposit",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", ":cpf", "deposit"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Realiza um depósito na conta do usuário"
+              },
+              "response": []
+            },
+            {
+              "name": "Bloquear Usuário",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/:cpf/block",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", ":cpf", "block"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Bloqueia um usuário"
+              },
+              "response": []
+            },
+            {
+              "name": "Desbloquear Usuário",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/:cpf/unblock",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", ":cpf", "unblock"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Desbloqueia um usuário"
+              },
+              "response": []
+            },
+            {
+              "name": "Alterar Limite PIX",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"newLimit\": 5000.00\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/:cpf/pix-limit",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", ":cpf", "pix-limit"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Altera o limite diário PIX de um usuário"
+              },
+              "response": []
+            },
+            {
+              "name": "Alterar Limite Cartão de Crédito",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"totalLimit\": 5000.00,\n  \"availableLimit\": 4500.00\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/:cpf/credit-limit",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", ":cpf", "credit-limit"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Altera o limite total e/ou disponível do cartão de crédito"
+              },
+              "response": []
+            },
+            {
+              "name": "Resetar Senha",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"newPassword\": \"novaSenha123\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/:cpf/reset-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", ":cpf", "reset-password"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Reseta a senha de um usuário"
+              },
+              "response": []
+            },
+            {
+              "name": "Gerar Senha Temporária",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/:cpf/generate-temp-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", ":cpf", "generate-temp-password"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Gera uma senha temporária para um usuário"
+              },
+              "response": []
+            },
+            {
+              "name": "Atualizar Detalhes do Cartão",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"dueDate\": \"2025-12-31T00:00:00.000Z\",\n  \"invoiceDueDate\": \"2025-11-30T03:00:00.000Z\",\n  \"availableLimit\": 1800.00,\n  \"totalLimit\": 2000.00,\n  \"pointsBalance\": 1500\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/:cpf/card-details",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", ":cpf", "card-details"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Atualiza os detalhes do cartão de crédito"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Solicitações",
+          "item": [
+            {
+              "name": "Listar Solicitações de Limite",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/requests/limit",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "requests", "limit"]
+                },
+                "description": "Lista todas as solicitações de aumento de limite PIX"
+              },
+              "response": []
+            },
+            {
+              "name": "Aprovar Solicitação de Limite",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/requests/limit/:cpf/approve",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "requests", "limit", ":cpf", "approve"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Aprova uma solicitação de aumento de limite PIX"
+              },
+              "response": []
+            },
+            {
+              "name": "Negar Solicitação de Limite",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/requests/limit/:cpf/deny",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "requests", "limit", ":cpf", "deny"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Nega uma solicitação de aumento de limite PIX"
+              },
+              "response": []
+            },
+            {
+              "name": "Listar Solicitações de Reset de Senha",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/requests/password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "requests", "password"]
+                },
+                "description": "Lista todas as solicitações de reset de senha"
+              },
+              "response": []
+            },
+            {
+              "name": "Aprovar Solicitação de Reset de Senha",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/requests/password/:cpf/approve",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "requests", "password", ":cpf", "approve"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Aprova uma solicitação de reset de senha"
+              },
+              "response": []
+            },
+            {
+              "name": "Negar Solicitação de Reset de Senha",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/requests/password/:cpf/deny",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "requests", "password", ":cpf", "deny"],
+                  "variable": [
+                    {
+                      "key": "cpf",
+                      "value": "{{userCpf}}"
+                    }
+                  ]
+                },
+                "description": "Nega uma solicitação de reset de senha"
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Outros",
+      "item": [
+        {
+          "name": "Stories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stories",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories"]
+            },
+            "description": "Lista as stories disponíveis"
+          },
+          "response": []
+        },
+        {
+          "name": "Notícias (Proxy)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/proxy/news",
+              "host": ["{{baseUrl}}"],
+              "path": ["proxy", "news"]
+            },
+            "description": "Obtém notícias via proxy"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
+
+

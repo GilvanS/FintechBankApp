@@ -34,7 +34,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
     setServerStatus('checking');
     
     // No APK, sempre usar URL absoluta
-    const url = 'http://192.168.0.105:3001';
+    const url = 'http://192.168.0.105:3001'; // <--- Altere aqui também
     
     console.log('🔍 Verificando status da API em:', url);
     console.log('🔍 BaseURL atual:', api.defaults.baseURL);

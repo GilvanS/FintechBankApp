@@ -20,6 +20,7 @@ import BlockedCardModal from '../../components/BlockedCardModal';
 import InstallmentOptions from '../../components/InstallmentOptions';
 import InstallmentReviewInvoice from '../../components/InstallmentReviewInvoice';
 import InvoicePaymentReceipt from '../../components/InvoicePaymentReceipt';
+import TransactionReceipt from '../../components/TransactionReceipt';
 import { Article } from '../../components/NewsSection';
 import { PurchasedItem, View, User, Transaction } from '../../types';
 import { purchaseWithDebit, purchaseWithCard, getUserMe, getUserByCpf, getUserStatement, payCreditCardInvoice, parcelCreditCardInvoice } from '../../services/api';
@@ -48,6 +49,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
   const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
   const [parcelDetails, setParcelDetails] = useState<{ amount: number, installments: number } | null>(null);
   const [invoicePaymentDetails, setInvoicePaymentDetails] = useState<{ amountPaid: number; date: string; cardLast4: string; transactionId: string } | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
     const fetchNews = async () => {
@@ -166,9 +168,9 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
 
     try {
         if (details.method === 'debit') {
-            result = await purchaseWithDebit(user.cpf, details.items, details.cashbackUsed);
+            result = await purchaseWithDebit(user.cpf, details.items, details.cashbackUsed, pin);
         } else {
-            result = await purchaseWithCard(user.cpf, details.items, details.cashbackUsed, details.installments);
+            result = await purchaseWithCard(user.cpf, details.items, details.cashbackUsed, details.installments, pin);
         }
 
         if (result.success) {
@@ -184,48 +186,104 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
                 }
             }
 
-            // Atualiza o extrato da conta SOMENTE para compras no debito
+            // Buscar comprovante da compra (debito ou credito)
             if (details.method === 'debit') {
                 const stmt = await getUserStatement(latestUser.cpf);
                 if (stmt.success && stmt.transactions) {
                     latestUser = { ...latestUser, transactions: stmt.transactions as Transaction[] };
+                    
+                    // Buscar a transação mais recente (a compra que acabou de ser feita)
+                    // Filtrar apenas transações SHOP_DEBIT e pegar a mais recente
+                    const shopTransactions = stmt.transactions.filter(tx => tx.type === 'SHOP_DEBIT');
+                    if (shopTransactions.length > 0) {
+                        // A mais recente é a primeira (ordenada por DESC)
+                        const purchaseTransaction = shopTransactions[0];
+                        // Criar nome do merchant baseado nos itens comprados
+                        const merchantName = cart.length > 1 ? `${cart.length} itens` : details.items[0].name;
+                        // Adicionar informações da compra para o comprovante
+                        const transactionWithDetails: Transaction = {
+                            ...purchaseTransaction,
+                            merchant: merchantName,
+                            category: 'shopping',
+                            description: purchaseTransaction.description || `Compra shop - ${merchantName}`
+                        };
+                        setSelectedTransaction(transactionWithDetails);
+                        setCart([]);
+                        updateUser(latestUser);
+                        await refreshUserData();
+                        setIsProcessing(false);
+                        setIsPasswordModalOpen(false);
+                        passwordActionPayload.current = null;
+                        setCurrentView('transactionReceipt');
+                        return; // Sair aqui para mostrar o comprovante
+                    }
+                }
+            } else if (details.method === 'credit') {
+                // Para compras no credito, buscar a transacao SHOP_CREDIT ou INVOICE_INSTALLMENT mais recente
+                // Atualizar dados do usuario para pegar as transacoes do cartao
+                await refreshUserData();
+                const refreshedMe = await getUserMe();
+                if (refreshedMe.success && refreshedMe.user) {
+                    latestUser = refreshedMe.user as User;
+                }
+                
+                const creditCard = latestUser.creditCard;
+                if (creditCard && creditCard.transactions && creditCard.transactions.length > 0) {
+                    // Buscar transacao SHOP_CREDIT mais recente (compra a vista) ou INVOICE_INSTALLMENT (compra parcelada)
+                    const shopCreditTx = creditCard.transactions.find(tx => 
+                        tx.type === 'CREDIT' && tx.merchant && tx.merchant !== 'Pagamento fatura' && tx.merchant !== 'Antecipacao de parcelas'
+                    );
+                    
+                    if (shopCreditTx) {
+                        // Criar nome do merchant baseado nos itens comprados
+                        const merchantName = cart.length > 1 ? `${cart.length} itens` : (details.items[0].name || 'Compra shop');
+                        // Adicionar informações da compra para o comprovante
+                        const transactionWithDetails: Transaction = {
+                            ...shopCreditTx,
+                            type: shopCreditTx.type as any,
+                            merchant: shopCreditTx.merchant || merchantName,
+                            category: 'shopping',
+                            description: shopCreditTx.merchant || `Compra shop - ${merchantName}`,
+                            installments: details.installments > 1 ? `${details.installments}x` : undefined,
+                            totalInstallments: details.installments > 1 ? details.installments : undefined,
+                            currentInstallment: details.installments > 1 ? 1 : undefined
+                        };
+                        setSelectedTransaction(transactionWithDetails);
+                        setCart([]);
+                        updateUser(latestUser);
+                        await refreshUserData();
+                        setIsProcessing(false);
+                        setIsPasswordModalOpen(false);
+                        passwordActionPayload.current = null;
+                        setCurrentView('transactionReceipt');
+                        return; // Sair aqui para mostrar o comprovante
+                    }
                 }
             }
 
             updateUser(latestUser);
             await refreshUserData();
-
-            const totalAmount = details.items.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
-            const finalAmount = totalAmount - details.cashbackUsed;
-
-            const confirmationProduct: PurchasedItem = {
-                id: 'purchase-confirm',
-                name: cart.length > 1 ? `${cart.length} itens` : details.items[0].name,
-                description: `Pagamento de ${finalAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`,
-                price: finalAmount,
-                imageUrl: details.items[0].imageUrl,
-            };
-
-            setConfirmationDetails({ 
-                product: confirmationProduct, 
-                transaction: undefined,
-                message: result.message
-            });
             setCart([]);
-            setCurrentView('purchaseConfirmation');
+            setIsProcessing(false);
+            setIsPasswordModalOpen(false);
+            passwordActionPayload.current = null;
+            setCurrentView('home');
         } else {
-            if (result.message.includes('cartão de crédito está bloqueado')) {
+            setIsProcessing(false);
+            setIsPasswordModalOpen(false);
+            if (result.message && result.message.includes('cartão de crédito está bloqueado')) {
                 setIsBlockedModalOpen(true);
             } else {
-                alert(result.message);
+                alert(result.message || 'Erro ao processar compra.');
             }
+            passwordActionPayload.current = null;
         }
     } catch (error: any) {
-        alert(error?.message || 'Erro ao processar compra.');
-    } finally {
         setIsProcessing(false);
         setIsPasswordModalOpen(false);
         passwordActionPayload.current = null;
+        console.error('❌ [executePurchase] Erro:', error);
+        alert(error?.message || 'Erro ao processar compra.');
     }
   };
 
@@ -355,6 +413,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
             return <PaymentMethods user={user} item={paymentItem} onBack={() => handleNavigate('shoppingCart')} onSelectMethod={handleSelectPaymentMethod} />;
         }
         case 'purchaseConfirmation': return confirmationDetails ? <PurchaseConfirmation details={confirmationDetails} onClose={() => handleNavigate('home')} /> : <HomeView user={user} onNavigate={handleNavigate} />;
+        case 'transactionReceipt': return selectedTransaction ? <TransactionReceipt transaction={selectedTransaction} onBack={() => { setSelectedTransaction(null); handleNavigate('home'); }} /> : <HomeView user={user} onNavigate={handleNavigate} />;
         case 'statement': return <Statement user={user} onBack={() => handleNavigate('home')} />;
         case 'currentInvoice': return <CurrentInvoiceView user={user} onBack={() => handleNavigate('cards')} />;
         case 'closedInvoice': return <ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
