@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-interface Article {
+export interface Article {
     title: string;
     description: string;
     url: string;

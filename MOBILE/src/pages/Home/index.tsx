@@ -29,9 +29,10 @@ interface HomeProps {
   user: User;
   onLogout: () => void;
   refreshUserData: () => Promise<void>;
+    onNavigateApp: (newView: 'admin' | 'login' | 'home' | 'cards' | 'shop' | 'profile' | 'prelogin' | 'signup' | 'resetPassword') => void;
 }
 
-const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
+const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigateApp }) => {
   const [currentView, setCurrentView] = useState<View>('home');
   const { logout, updateUser } = useAuth(); 
   const [news, setNews] = useState<Article[]>([]);
@@ -48,7 +49,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
   const [confirmationDetails, setConfirmationDetails] = useState<any>(null);
   const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
   const [parcelDetails, setParcelDetails] = useState<{ amount: number, installments: number } | null>(null);
-  const [invoicePaymentDetails, setInvoicePaymentDetails] = useState<{ amountPaid: number; date: string; cardLast4: string; transactionId: string } | null>(null);
+    const [invoicePaymentDetails, setInvoicePaymentDetails] = useState<{ amountPaid: number; date: string; cardLast4: string; transactionId: string; title?: string; amountLabel?: string } | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
@@ -370,8 +371,18 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
                 updateUser(refreshed.user);
                 await refreshUserData();
             }
-            alert(result.message);
-            setCurrentView('cards');
+
+            const fallbackCardLast4 = user.creditCard?.number?.slice(-4) || '----';
+            setInvoicePaymentDetails({
+                amountPaid: details.amount,
+                date: new Date().toISOString(),
+                cardLast4: fallbackCardLast4,
+                transactionId: `inv-parcel-${Date.now()}`,
+                title: 'Parcelamento Realizado!',
+                amountLabel: 'Valor Parcelado'
+            });
+
+            setCurrentView('invoicePaymentReceipt');
         } else {
             alert(result.message);
         }
@@ -398,7 +409,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
         case 'home': 
             return <HomeView user={user} onNavigate={handleNavigate} />;
         case 'pix': return <Pix onBack={() => handleNavigate('home')} />;
-        case 'cards': return <CardDashboard user={user} onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
+        case 'cards': return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
         case 'shop': return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((s, i) => s + (i.quantity || 0), 0)} onNavigate={handleNavigate} />;
         case 'shoppingCart': return <ShoppingCart onBack={() => handleNavigate('shop')} cart={cart} onCheckout={handleCheckout} onUpdateQuantity={handleUpdateCartQuantity} />;
         case 'paymentMethods': {
@@ -414,12 +425,12 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData }) => {
         }
         case 'purchaseConfirmation': return confirmationDetails ? <PurchaseConfirmation details={confirmationDetails} onClose={() => handleNavigate('home')} /> : <HomeView user={user} onNavigate={handleNavigate} />;
         case 'transactionReceipt': return selectedTransaction ? <TransactionReceipt transaction={selectedTransaction} onBack={() => { setSelectedTransaction(null); handleNavigate('home'); }} /> : <HomeView user={user} onNavigate={handleNavigate} />;
-        case 'statement': return <Statement user={user} onBack={() => handleNavigate('home')} />;
+        case 'statement': return <Statement onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
         case 'currentInvoice': return <CurrentInvoiceView user={user} onBack={() => handleNavigate('cards')} />;
         case 'closedInvoice': return <ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
         case 'installmentOptions': return <InstallmentOptions user={user} onBack={() => handleNavigate('closedInvoice')} onSelectOption={handleSelectInstallmentOption} />;
         case 'installmentReviewInvoice': return parcelDetails ? <InstallmentReviewInvoice user={user} details={parcelDetails} onConfirm={handleConfirmParcelInvoice} onBack={() => handleNavigate('installmentOptions')} /> : <ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
-        case 'invoicePaymentReceipt': return invoicePaymentDetails ? <InvoicePaymentReceipt details={invoicePaymentDetails} onClose={() => handleNavigate('home')} /> : <CardDashboard user={user} onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
+        case 'invoicePaymentReceipt': return invoicePaymentDetails ? <InvoicePaymentReceipt details={invoicePaymentDetails} onClose={() => handleNavigate('home')} /> : <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
         case 'products': return <Products onNavigate={handleNavigate} />;
         case 'profile': return <Profile onNavigate={handleNavigate} />;
         case 'admin': {

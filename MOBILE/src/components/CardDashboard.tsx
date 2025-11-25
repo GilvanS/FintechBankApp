@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { View } from '../types';
+import { View, Transaction } from '../types';
+import TransactionReceipt from './TransactionReceipt';
 
 interface CardDashboardProps {
     onBack: () => void;
@@ -10,6 +11,7 @@ interface CardDashboardProps {
 const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'current' | 'future'>('current');
+    const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
     if (!user || !user.creditCard) {
         return (
@@ -59,6 +61,15 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
         if (lowerMerchant.includes('pagamento') || lowerMerchant.includes('antecipação') || lowerMerchant.includes('parcelamento')) return 'check_circle';
         return 'receipt_long';
     };
+
+    if (selectedTransaction) {
+        return (
+            <TransactionReceipt
+                transaction={selectedTransaction}
+                onBack={() => setSelectedTransaction(null)}
+            />
+        );
+    }
 
     return (
         <div className="bg-background-dark text-white min-h-screen flex flex-col">
@@ -136,7 +147,11 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                         {transactionsToDisplay.length > 0 ? (
                             <div className="space-y-2">
                             {transactionsToDisplay.map(tx => (
-                                <div key={tx.id} className="w-full p-3 rounded-lg flex items-center bg-surface-dark space-x-3">
+                                <button
+                                    key={tx.id}
+                                    onClick={() => setSelectedTransaction(tx)}
+                                    className="w-full p-3 rounded-lg flex items-center bg-surface-dark space-x-3 hover:bg-white/5 transition-colors text-left"
+                                >
                                     <div className="p-2 bg-background-dark rounded-full">
                                         <span className={`material-symbols-outlined ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-primary'}`}>{getIconForTx(tx.merchant)}</span>
                                     </div>
@@ -147,7 +162,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                                     <div className="text-right">
                                         <p className={`font-semibold ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-white'}`}>{tx.type === 'PAYMENT' ? '+' : ''} {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                                     </div>
-                                </div>
+                                </button>
                             ))}
                             </div>
                         ) : (

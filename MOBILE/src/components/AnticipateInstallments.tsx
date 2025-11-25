@@ -1,3 +1,10 @@
+import React, { useState, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
+
+interface AnticipateInstallmentsProps {
+    onBack: () => void;
+    onConfirmAnticipation: (selectedIds: string[]) => void;
+    isProcessing: boolean;
 }
 
 const AnticipateInstallments: React.FC<AnticipateInstallmentsProps> = ({ onBack, onConfirmAnticipation, isProcessing }) => {

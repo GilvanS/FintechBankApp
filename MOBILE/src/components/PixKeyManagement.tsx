@@ -9,7 +9,7 @@ interface PixKeyManagementProps {
 }
 
 const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
-    const { user, refreshUser } = useAuth();
+    const { user, updateUser } = useAuth();
     const [keys, setKeys] = useState<PixKey[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -74,7 +74,14 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
             if (result.success) {
                 showSuccess(result.message);
                 await fetchKeys(); // Re-fetch the keys to update the list
-                if (refreshUser) await refreshUser(); // Refresh global user state
+
+                // Refresh global user state
+                const { getUserMe } = await import('../services/api');
+                const refreshed = await getUserMe();
+                if (refreshed.success && refreshed.user) {
+                    updateUser(refreshed.user);
+                }
+
                 setShowAddModal(false);
                 setNewKeyValue('');
             } else {
@@ -100,7 +107,11 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                 if (result.success) {
                     showSuccess(result.message);
                     await fetchKeys();
-                    if (refreshUser) await refreshUser();
+                    const { getUserMe } = await import('../services/api');
+                    const refreshed = await getUserMe();
+                    if (refreshed.success && refreshed.user) {
+                        updateUser(refreshed.user);
+                    }
                 } else {
                     showError(result.message);
                 }

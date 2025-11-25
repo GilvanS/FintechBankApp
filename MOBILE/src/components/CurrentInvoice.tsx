@@ -1,5 +1,6 @@
-import React from 'react';
-import { User } from '../types';
+import React, { useState } from 'react';
+import { User, Transaction } from '../types';
+import TransactionReceipt from './TransactionReceipt';
 
 interface CurrentInvoiceProps {
   user: User;
@@ -25,6 +26,7 @@ const getIconForTx = (merchant: string) => {
 
 const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
   const { creditCard } = user;
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   const hasInvoiceDueDate = !!creditCard.invoiceDueDate && !isNaN(new Date(creditCard.invoiceDueDate).getTime());
   const invoiceDueDate = hasInvoiceDueDate ? new Date(creditCard.invoiceDueDate) : null;
@@ -38,6 +40,15 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
   const vencimentoLabel = hasInvoiceDueDate
     ? new Date(creditCard.invoiceDueDate).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})
     : '--';
+
+  if (selectedTransaction) {
+    return (
+      <TransactionReceipt
+        transaction={selectedTransaction}
+        onBack={() => setSelectedTransaction(null)}
+      />
+    );
+  }
 
   return (
     <div className="bg-background-dark text-white min-h-full flex flex-col">
@@ -61,7 +72,11 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
             {currentTransactions.length > 0 ? (
                 <div className="space-y-1">
                 {currentTransactions.map(tx => (
-                    <div key={tx.id} className="w-full p-3 rounded-lg flex items-center bg-surface-dark space-x-3">
+                  <button
+                    key={tx.id}
+                    onClick={() => setSelectedTransaction(tx)}
+                    className="w-full p-3 rounded-lg flex items-center bg-surface-dark space-x-3 hover:bg-white/5 transition-colors text-left"
+                  >
                          <div className="p-2 bg-background-dark rounded-full">
                             <span className={`material-symbols-outlined ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-primary'}`}>{getIconForTx(tx.merchant)}</span>
                         </div>
@@ -72,7 +87,7 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
                         <div className="text-right">
                            <p className={`font-semibold ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-white'}`}>{tx.type === 'PAYMENT' ? '+' : ''} {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                         </div>
-                    </div>
+                  </button>
                 ))}
                 </div>
             ) : (

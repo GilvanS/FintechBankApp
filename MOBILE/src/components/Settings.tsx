@@ -1,3 +1,9 @@
+import React from 'react';
+import { User } from '../types';
+import { formatCPF } from '../utils/formatters';
+
+interface SettingsProps {
+    user: User;
     onLogout: () => void;
     onBack: () => void;
     onNavigateToAdmin: () => void;

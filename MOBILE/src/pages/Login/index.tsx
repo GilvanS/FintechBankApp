@@ -1,10 +1,36 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import './Login.css';
-import { Preferences } from '@capacitor/preferences';
-import api, { setApiBaseUrl, getUserByCpf } from '../../services/api';
+import React, { useState, useCallback } from 'react';
 import { useIonViewWillEnter } from '@ionic/react';
-import { useAuth } from '../../context/AuthContext';
+import { Preferences } from '@capacitor/preferences';
 import { User } from '../../types';
+import api, { setApiBaseUrl, getUserByCpf } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import InfoCarousel from '../../components/InfoCarousel';
+import { API_BASE_URL } from '../../apiConfig';
+
+interface StatusMessageProps {
+  type: 'error' | 'success';
+  message: string;
+  onClose: () => void;
+}
+
+const StatusMessage: React.FC<StatusMessageProps> = ({ type, message, onClose }) => {
+  if (!message) return null;
+
+  const bgClass = type === 'error' ? 'bg-red-500/10 border-red-500/50 text-red-200' : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-200';
+  const icon = type === 'error' ? 'error' : 'check_circle';
+
+  return (
+    <div className={`flex items-center justify-between p-3 rounded-lg border ${bgClass} mb-4 animate-fade-in`}>
+      <div className="flex items-center gap-2">
+        <span className="material-symbols-outlined text-sm">{icon}</span>
+        <span className="text-sm font-medium">{message}</span>
+      </div>
+      <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full transition-colors">
+        <span className="material-symbols-outlined text-sm">close</span>
+      </button>
+    </div>
+  );
+};
 
 interface LoginProps {
   onLoginSuccess: (user: User) => void;
@@ -34,7 +60,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
     setServerStatus('checking');
     
     // No APK, sempre usar URL absoluta
-    const url = 'http://192.168.0.105:3001'; // <--- Altere aqui também
+    const url = API_BASE_URL; 
     
     console.log('🔍 Verificando status da API em:', url);
     console.log('🔍 BaseURL atual:', api.defaults.baseURL);
@@ -195,7 +221,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
                 </div>
               </div>
 
-              {error && <p className="text-red-500 text-sm text-center mt-4">{error}</p>}
+              <StatusMessage type="error" message={error} onClose={() => setError('')} />
 
               <div className="mt-8">
                 <button type="submit" disabled={loading} className="w-full px-8 py-4 font-semibold text-white transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50 disabled:bg-primary/70 disabled:scale-100">
@@ -211,8 +237,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
         </main>
 
         <footer className="w-full bg-surface-dark p-3 safe-bottom-strong">
-          <div className="w-full max-w-sm mx-auto flex justify-start items-center text-xs">
-            <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
+          <div className="w-full max-w-sm mx-auto">
+            <InfoCarousel />
+            <div className="flex justify-start items-center text-xs mt-4">
+              <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
+            </div>
           </div>
         </footer>
       </div>

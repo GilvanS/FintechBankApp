@@ -1,7 +1,7 @@
 
 // Dentro do componente ResetPassword
 import React, { useState } from 'react';
-import { resetPassword } from '../services/api';
+import { confirmPasswordReset } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useToast, ToastContainer } from './Toast';
 
@@ -31,7 +31,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onResetSuccess, onNavigat
         setError('');
         setSuccess('');
 
-        const result = await resetPassword(
+        const result = await confirmPasswordReset(
             cpf.replace(/\D/g, ''),
             token,
             newPassword

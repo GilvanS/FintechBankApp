@@ -22,3 +22,4 @@ AND table_name = 'installment_plans'
 ORDER BY ordinal_position;
 
 
+

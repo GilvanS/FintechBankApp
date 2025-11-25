@@ -13,7 +13,7 @@ info:
 servers:
   - url: http://localhost:3001/api/v1
     description: Servidor de desenvolvimento local
-  - url: http://192.168.0.105:3001/api/v1
+  - url: http://192.168.0.110:3001/api/v1
     description: Servidor de desenvolvimento (rede local)
   - url: https://api.fintechbankapp.com/api/v1
     description: Servidor de produção

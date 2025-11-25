@@ -2515,6 +2515,6 @@ app.get('/api/health', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API ouvindo em http://0.0.0.0:${PORT}`);
-  console.log(`🌐 Acesse via rede local: http://192.168.0.105:${PORT}`);
-  console.log(`📋 Swagger: http://192.168.0.105:${PORT}/api-docs`);
+  console.log(`🌐 Acesse via rede local: http://192.168.0.110:${PORT}`);
+  console.log(`📋 Swagger: http://192.168.0.110:${PORT}/api-docs`);
 });

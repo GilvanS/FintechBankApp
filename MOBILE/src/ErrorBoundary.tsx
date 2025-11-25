@@ -1,19 +1,19 @@
-import React from 'react';
+import React, { Component, ErrorInfo, PropsWithChildren } from 'react';
 
 type ErrorBoundaryState = {
   hasError: boolean;
   error?: Error;
-  info?: React.ErrorInfo;
+  info?: ErrorInfo;
 };
 
-export default class ErrorBoundary extends React.Component<React.PropsWithChildren<{}>, ErrorBoundaryState> {
+export default class ErrorBoundary extends Component<PropsWithChildren<{}>, ErrorBoundaryState> {
   state: ErrorBoundaryState = { hasError: false };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
+  componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('Runtime error capturado pelo ErrorBoundary:', error, info);
     this.setState({ info });
   }

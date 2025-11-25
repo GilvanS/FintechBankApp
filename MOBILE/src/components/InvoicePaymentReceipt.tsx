@@ -6,6 +6,8 @@ interface InvoicePaymentReceiptProps {
     date: string;
     cardLast4: string;
     transactionId: string;
+    title?: string;
+    amountLabel?: string;
   };
   onClose: () => void;
 }
@@ -29,13 +31,13 @@ const InvoicePaymentReceipt: React.FC<InvoicePaymentReceiptProps> = ({ details, 
         <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="material-symbols-outlined text-orange-500 text-4xl">check_circle</span>
         </div>
-        <h2 className="text-2xl font-bold">Pagamento realizado com sucesso!</h2>
+        <h2 className="text-2xl font-bold">{details.title || 'Pagamento realizado com sucesso!'}</h2>
       </header>
 
       <main className="flex-grow my-8">
         <div className="bg-white/10 rounded-lg p-4">
             <InfoRow 
-                label="Valor Pago"
+            label={details.amountLabel || "Valor Pago"}
                 value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(details.amountPaid)}
                 icon="attach_money"
             />

@@ -162,7 +162,7 @@ const App: React.FC = () => {
       case 'signup':
         return <SignUp onSignUpSuccess={() => setView('login')} onNavigateToLogin={() => setView('login')} />;
       case 'resetPassword':
-        return <ResetPassword onNavigateToLogin={() => setView('login')} />;
+        return <ResetPassword onNavigateToLogin={() => setView('login')} onResetSuccess={() => setView('login')} />;
       case 'admin':
         return <Admin onBack={() => setView('home')} />;
       case 'home':

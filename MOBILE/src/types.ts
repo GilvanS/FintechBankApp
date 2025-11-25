@@ -1,10 +1,10 @@
 
 export interface Transaction {
     id: string;
-    type: 'PIX_SENT' | 'PIX_RECEIVED' | 'DEPOSIT' | 'PAYMENT' | 'PIX_CREDIT_SENT' | 'SHOP_DEBIT' | 'CASHBACK_CREDIT' | 'POINTS_EARNED' | 'INVOICE_INSTALLMENT' | 'CREDIT';
+    type: 'PIX_SENT' | 'PIX_RECEIVED' | 'DEPOSIT' | 'PAYMENT' | 'PIX_CREDIT_SENT' | 'SHOP_DEBIT' | 'CASHBACK_CREDIT' | 'POINTS_EARNED' | 'INVOICE_INSTALLMENT' | 'CREDIT' | 'SHOP_CREDIT' | 'INVOICE_PAYMENT';
     amount: number;
     date: string;
-    description: string;
+    description?: string;
     to?: string;
     from?: string;
     recipientName?: string;
@@ -22,10 +22,11 @@ export interface CardTransaction {
     date: string;
     merchant: string;
     amount: number;
-    type: 'CREDIT' | 'PAYMENT' | 'INVOICE_INSTALLMENT';
+    type: 'CREDIT' | 'PAYMENT' | 'INVOICE_INSTALLMENT' | 'SHOP_CREDIT' | 'INVOICE_PAYMENT';
     installments?: string;
     totalInstallments?: number;
     currentInstallment?: number;
+    description?: string;
 }
 
 export interface CreditCard {
@@ -65,10 +66,13 @@ export interface LimitIncreaseRequest {
 }
 
 export interface Story {
+    id: string;
     title: string;
     description: string;
+    imageUrl?: string;
     icon?: string;
-    image?: string;
+    viewed: boolean;
+    expiresAt: string;
     url?: string;
 }
 
@@ -135,6 +139,6 @@ export interface Invoice {
     items: Transaction[];
 }
 
-export type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart' | 'currentInvoice' | 'closedInvoice' | 'paymentMethods' | 'purchaseConfirmation' | 'installmentReviewInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'menu' | 'notifications' | 'admin' | 'transactionReceipt';
+export type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart' | 'currentInvoice' | 'closedInvoice' | 'paymentMethods' | 'purchaseConfirmation' | 'installmentReviewInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'menu' | 'notifications' | 'admin' | 'transactionReceipt' | 'anticipateInstallments' | 'points' | 'investments';
 
 export type SignUpData = Omit<User, 'balance' | 'transactions' | 'isBlocked' | 'role' | 'pixDailyLimit' | 'pixKeys' | 'pixContacts' | 'limitIncreaseRequest' | 'purchasedItems' | 'creditCard'>;

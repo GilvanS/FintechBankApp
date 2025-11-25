@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0', // Permite acesso via IP da rede
         proxy: {
           '/api': {
-            target: 'http://192.168.0.105:3001', // IP fixo da rede WiFi
+            target: 'http://192.168.0.110:3001', // IP fixo da rede WiFi
             changeOrigin: true,
             secure: false,
             configure: (proxy, _options) => {

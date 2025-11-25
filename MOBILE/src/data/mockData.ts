@@ -155,29 +155,41 @@ export const MOCK_USERS: User[] = [
 
 export const MOCK_STORIES: Story[] = [
     {
+        id: '1',
         title: "Segurança em Dobro",
-        description: "Ative a verificação em duas etapas e proteja sua conta ainda mais.",
+        description: "Saiba como proteger sua conta contra fraudes digitais com nossas novas ferramentas de segurança.",
         icon: "🛡️",
-        imageUrl: "https://images.pexels.com/photos/60504/security-protection-anti-virus-software-60504.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
+        imageUrl: "https://images.pexels.com/photos/60504/security-protection-anti-virus-software-60504.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
+        viewed: false,
+        expiresAt: new Date(Date.now() + 86400000).toISOString()
     },
     {
+        id: '2',
         title: "Conheça o PIX no Crédito",
-        description: "Envie PIX mesmo sem saldo na conta, usando seu limite do cartão de crédito.",
+        description: "Agora você pode fazer PIX usando o limite do seu cartão de crédito. Confira as taxas.",
         icon: "💳",
-        imageUrl: "https://images.pexels.com/photos/50987/money-card-business-credit-card-50987.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
+        imageUrl: "https://images.pexels.com/photos/50987/money-card-business-credit-card-50987.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
+        viewed: false,
+        expiresAt: new Date(Date.now() + 86400000).toISOString()
     },
     {
+        id: '3',
         title: "Novidades no Shop",
-        description: "Confira as últimas ofertas e ganhe cashback em suas lojas favoritas.",
+        description: "Grandes marcas chegaram no nosso marketplace com cashback turbinado. Aproveite!",
         icon: "🛍️",
-        imageUrl: "https://images.pexels.com/photos/3769747/pexels-photo-3769747.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
+        imageUrl: "https://images.pexels.com/photos/3769747/pexels-photo-3769747.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
+        viewed: false,
+        expiresAt: new Date(Date.now() + 86400000).toISOString()
     },
     {
+        id: '4',
         title: "Seu Jornal Financeiro",
-        description: "Acesse notícias do mercado financeiro e tome decisões mais inteligentes.",
+        description: "Acompanhe as notícias do mercado financeiro diretamente no app.",
         icon: "📰",
-        url: "#",
-        imageUrl: "https://images.pexels.com/photos/261621/pexels-photo-261621.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
+        url: "/news",
+        imageUrl: "https://images.pexels.com/photos/261621/pexels-photo-261621.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
+        viewed: false,
+        expiresAt: new Date(Date.now() + 86400000).toISOString()
     }
 ];
 

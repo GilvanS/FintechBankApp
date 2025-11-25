@@ -6,9 +6,10 @@ import { formatCPF } from './utils/formatters';
 
 interface SignUpProps {
   onNavigateToLogin: () => void;
+  onSignUpSuccess: () => void;
 }
 
-const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin }) => {
+const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) => {
   const [fullName, setFullName] = useState('');
   const [cpf, setCpf] = useState('');
   const [email, setEmail] = useState('');
@@ -39,7 +40,7 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin }) => {
     
     try {
         console.log('🔵 [SignUp Component] Iniciando cadastro...');
-        const result = await signUp({ fullName, cpf: unformattedCpf, email, password });
+      const result = await signUp({ fullName, cpf: unformattedCpf, email, password, showStoriesPopup: true });
         console.log('🔵 [SignUp Component] Resultado recebido:', result);
         
         if (result.success) {
@@ -48,7 +49,7 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin }) => {
           showSuccess('Cadastro realizado com sucesso! Redirecionando para o login.');
           setTimeout(() => {
             console.log('🔵 [SignUp Component] Redirecionando para login...');
-            onNavigateToLogin();
+            onSignUpSuccess();
           }, 2000);
         } else {
           console.log('❌ [SignUp Component] Cadastro falhou:', result.message);

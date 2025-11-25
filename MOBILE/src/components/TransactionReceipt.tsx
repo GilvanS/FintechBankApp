@@ -35,7 +35,10 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
             case 'PIX_CREDIT_SENT': return 'PIX Parcelado Enviado';
             case 'DEPOSIT': return 'Depósito';
             case 'PAYMENT': return 'Pagamento';
-            case 'SHOP_DEBIT': return 'Compra';
+            case 'SHOP_DEBIT': return 'Compra no Débito';
+            case 'SHOP_CREDIT': return 'Compra no Crédito';
+            case 'INVOICE_INSTALLMENT': return 'Parcela de Fatura';
+            case 'INVOICE_PAYMENT': return 'Pagamento de Fatura';
             case 'CASHBACK_CREDIT': return 'Cashback';
             case 'POINTS_EARNED': return 'Pontos Ganhos';
             default: return 'Transação';
@@ -50,6 +53,9 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
             case 'PAYMENT': return 'receipt_long';
             case 'DEPOSIT': return 'savings';
             case 'SHOP_DEBIT': return 'shopping_cart';
+            case 'SHOP_CREDIT': return 'credit_card';
+            case 'INVOICE_INSTALLMENT': return 'event_repeat';
+            case 'INVOICE_PAYMENT': return 'check_circle';
             case 'CASHBACK_CREDIT': return 'redeem';
             case 'POINTS_EARNED': return 'star';
             default: return 'receipt_long';
@@ -62,6 +68,9 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
             case 'PIX_RECEIVED':
             case 'PIX_CREDIT_SENT': return 'Transferência via PIX';
             case 'SHOP_DEBIT': return 'Pagamento por aproximação com cartão físico';
+            case 'SHOP_CREDIT': return 'Compra no Crédito';
+            case 'INVOICE_INSTALLMENT': return 'Parcelamento de Fatura';
+            case 'INVOICE_PAYMENT': return 'Pagamento de Fatura';
             case 'PAYMENT': return 'Pagamento de fatura';
             case 'DEPOSIT': return 'Depósito em conta';
             default: return 'Transação';
@@ -122,7 +131,9 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                 {/* Transaction Type and Date */}
                 <div>
                     <p className="text-sm text-gray-400">
-                        {transaction.type === 'SHOP_DEBIT' ? 'Compra' : getTransactionTypeLabel(transaction.type)}
+                        {transaction.type === 'SHOP_DEBIT' ? 'Compra no Débito' :
+                            transaction.type === 'SHOP_CREDIT' ? 'Compra no Crédito' :
+                                getTransactionTypeLabel(transaction.type)}
                         {(transaction as any).category && ` › ${(transaction as any).category}`}
                     </p>
                     <p className="text-sm text-gray-400">{date}, às {time}</p>
@@ -148,7 +159,7 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                 {/* Payment Method */}
                 <div className="bg-gray-900 rounded-lg p-4 flex items-center gap-4">
                     <span className="material-symbols-outlined text-primary">
-                        {transaction.type === 'SHOP_DEBIT' ? 'contactless' : getTransactionIcon(transaction.type)}
+                        {transaction.type === 'SHOP_DEBIT' || transaction.type === 'SHOP_CREDIT' ? 'contactless' : getTransactionIcon(transaction.type)}
                     </span>
                     <p className="text-white">{getPaymentMethodLabel(transaction.type)}</p>
                 </div>
@@ -169,7 +180,7 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                         <InfoRow label="Chave PIX" value={(transaction as any).toKey} />
                     )}
 
-                    {transaction.description && transaction.type !== 'SHOP_DEBIT' && !(transaction as any).merchant && (
+                    {transaction.description && transaction.type !== 'SHOP_DEBIT' && transaction.type !== 'SHOP_CREDIT' && !(transaction as any).merchant && (
                         <InfoRow label="Descrição" value={transaction.description} />
                     )}
 

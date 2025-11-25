@@ -1,10 +1,11 @@
 import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
-import { PixContact, User, PasswordResetRequest, LimitIncreaseRequest, SignUpData } from '../types';
+import { User, PixContact, SignUpData, PasswordResetRequest, LimitIncreaseRequest } from '../types';
+import { API_BASE_URL } from '../apiConfig';
 
 // URL da API para APK - sempre usar URL absoluta
 // No APK (Capacitor), não há proxy, então sempre usa URL absoluta
-const DEV_API_URL = 'http://192.168.0.105:3001';  // <--- Altere aqui
+const DEV_API_URL = API_BASE_URL;
 const API_CACHE_KEY = 'apiBaseUrlCache';
 const CACHE_DURATION_MS = 60 * 60 * 1000; // 60 minutos
 
@@ -629,6 +630,27 @@ export async function adminDenyLimitRequest(cpf: string, reason: string): Promis
     }
 }
 
+// Método: adminUpdatePixLimit - Atualiza limite PIX diário (Admin)
+export async function adminUpdatePixLimit(cpf: string, newLimit: number): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        const res = await api.put(`/admin/users/${cpf}/pix-limit`, { newLimit }, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success) {
+            // Buscar usuário atualizado
+            const refreshed = await adminGetUserByCpf(cpf);
+            if (refreshed.success && refreshed.user) {
+                return { success: true, message: data.message || 'Limite PIX atualizado.', user: refreshed.user };
+            }
+            return { success: true, message: data.message || 'Limite PIX atualizado.' };
+        }
+        return { success: false, message: data?.message || 'Falha ao atualizar limite PIX.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao atualizar limite PIX.' };
+    }
+}
+
 // Função para obter extrato do usuário
 export async function getUserStatement(cpf: string): Promise<{ success: boolean; message?: string; transactions?: any[] }> {
     try {
@@ -726,7 +748,7 @@ export async function purchaseWithCard(cpf: string, items: any[], cashbackUsed: 
 // Método: payCreditCardInvoice - Pagar fatura do cartão
 export async function payCreditCardInvoice(cpf: string, pin: string): Promise<{ success: boolean; message: string; user?: User }> {
     try {
-        const res = await api.post(`/users/${cpf}/card/invoice/pay`, { pin }, {
+        const res = await api.post('/cards/invoice/pay', { cpf, pin }, {
             headers: getAuthHeaders('json'),
         });
         const data = res.data;
@@ -740,9 +762,9 @@ export async function payCreditCardInvoice(cpf: string, pin: string): Promise<{ 
 }
 
 // Método: parcelCreditCardInvoice - Parcelar fatura
-export async function parcelCreditCardInvoice(cpf: string, details: { amount: number, installments: number }): Promise<{ success: boolean; message: string; user?: User }> {
+export async function parcelCreditCardInvoice(cpf: string, details: { amount: number, installments: number }, pin?: string): Promise<{ success: boolean; message: string; user?: User }> {
     try {
-        const res = await api.post(`/users/${cpf}/card/invoice/parcel`, details, {
+        const res = await api.post('/cards/invoice/parcel', { cpf, ...details, pin }, {
             headers: getAuthHeaders('json'),
         });
         const data = res.data;
@@ -752,6 +774,38 @@ export async function parcelCreditCardInvoice(cpf: string, details: { amount: nu
         return { success: false, message: data?.message || 'Falha ao parcelar fatura.' };
     } catch (error: any) {
         return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao parcelar fatura.' };
+    }
+}
+
+// Método: anticipateCreditCardInstallments - Antecipar parcelas
+export async function anticipateCreditCardInstallments(cpf: string, transactionIds: string[], pin?: string): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        const res = await api.post('/cards/invoice/anticipate', { cpf, transactionIds, pin }, {
+            headers: getAuthHeaders('json'),
+        });
+        const data = res.data;
+        if (data?.success) {
+            return { success: true, message: data.message || 'Parcelas antecipadas com sucesso!', user: data.user };
+        }
+        return { success: false, message: data?.message || 'Falha ao antecipar parcelas.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao antecipar parcelas.' };
+    }
+}
+
+// Método: confirmPasswordReset - Confirmar redefinição de senha
+export async function confirmPasswordReset(cpf: string, token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post('/auth/reset-password', { cpf, token, newPassword }, {
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const data = res.data;
+        if (data?.success) {
+            return { success: true, message: data.message || 'Senha redefinida com sucesso.' };
+        }
+        return { success: false, message: data?.message || 'Falha ao redefinir senha.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao redefinir senha.' };
     }
 }
 

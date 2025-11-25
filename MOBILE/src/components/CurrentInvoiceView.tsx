@@ -51,7 +51,7 @@ const CurrentInvoiceView: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => 
             </header>
 
             <main className="flex-grow overflow-y-auto p-4 space-y-6">
-                {transactionGroups.length > 0 ? transactionGroups.map(([date, txs]) => (
+                {transactionGroups.length > 0 ? transactionGroups.map(([date, txs]: [string, Transaction[]]) => (
                     <div key={date} className="space-y-4">
                         <p className="font-semibold text-gray-400">{date}</p>
                         <div className="space-y-2">

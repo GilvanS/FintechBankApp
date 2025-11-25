@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { PurchasedItem, Transaction, User } from '../types';
+import { PurchasedItem, Transaction, User, View } from '../types';
 import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement } from '../services/api';
 
 import HomeView from './HomeView';
@@ -61,7 +61,7 @@ const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; o
 };
 
 
-type View = 'home' | 'cards' | 'shop' | 'investments' | 'profile' | 'statement' | 'pix' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'currentInvoice';
+
 
 const Dashboard: React.FC = () => {
     const { user, updateUser, logout, view: topLevelView, navigateTo } = useAuth();
@@ -430,7 +430,7 @@ const Dashboard: React.FC = () => {
             case 'pix':
                 return <Pix onBack={() => handleNavigate('home')} />;
             case 'statement':
-                return <Statement user={user!} onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
+                return <Statement onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
             case 'cards':
                 return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
             case 'shop':

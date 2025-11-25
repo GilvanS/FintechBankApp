@@ -18,17 +18,16 @@ const PurchaseConfirmation: React.FC<PurchaseConfirmationProps> = ({ details, on
       setProgress(oldProgress => {
         if (oldProgress >= 100) {
           clearInterval(timer);
-          onClose();
           return 100;
         }
         return oldProgress + 1;
       });
-    }, 40);
+    }, 10); // Faster animation
 
     return () => {
       clearInterval(timer);
     };
-  }, [onClose]);
+  }, []);
 
   if (!details) return null;
   const { product, message } = details;
@@ -49,13 +48,21 @@ const PurchaseConfirmation: React.FC<PurchaseConfirmationProps> = ({ details, on
                 </div>
             )}
 
-            <div className="w-full bg-white/10 rounded-full h-1 mt-4">
+        <div className="w-full bg-white/10 rounded-full h-1 mt-4 mb-6">
                 <div 
                     className="bg-primary h-1 rounded-full" 
-                    style={{ width: `${progress}%`, transition: 'width 40ms linear' }}
+            style={{ width: `${progress}%`, transition: 'width 10ms linear' }}
                 ></div>
             </div>
-            <p className="text-xs text-subtle-dark mt-2">Redirecionando para o início...</p>
+
+        {progress >= 100 && (
+          <button
+            onClick={onClose}
+            className="w-full py-3 bg-primary text-background-dark font-bold rounded-lg hover:bg-primary/90 transition-colors animate-fade-in"
+          >
+            Voltar para o Início
+          </button>
+        )}
 
         </div>
          <style>{`

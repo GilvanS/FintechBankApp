@@ -12,7 +12,8 @@ import {
     adminApproveLimitRequest,
     adminDenyLimitRequest,
     adminUpdateCardDetails,
-    adminUpdateCreditLimit
+    adminUpdateCreditLimit,
+    adminUpdatePixLimit
 } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
@@ -50,6 +51,7 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     const [cardInvoiceDate, setCardInvoiceDate] = useState('');
     const [cardTotalLimit, setCardTotalLimit] = useState('');
     const [cardAvailableLimit, setCardAvailableLimit] = useState('');
+    const [pixLimit, setPixLimit] = useState('');
 
     useEffect(() => {
         if (searchedUser) {
@@ -60,6 +62,7 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             setCardInvoiceDate(formattedDate);
             setCardTotalLimit(searchedUser.creditCard.totalLimit?.toString() || '');
             setCardAvailableLimit(searchedUser.creditCard.availableLimit?.toString() || '');
+            setPixLimit(searchedUser.pixDailyLimit?.toString() || '');
         }
     }, [searchedUser]);
 
@@ -134,6 +137,26 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             totalLimit,
             availableLimit
         });
+        if (result.success && result.user) {
+            setSearchedUser(result.user);
+            showToast(result.message, 'success');
+        } else {
+            showToast(result.message, 'error');
+        }
+        setIsLoadingAction(false);
+    };
+
+    const handleUpdatePixLimit = async () => {
+        if (!searchedUser) return;
+        const limit = parseFloat(pixLimit);
+
+        if (isNaN(limit) || limit < 0) {
+            showToast('Informe um valor válido para o limite PIX', 'error');
+            return;
+        }
+
+        setIsLoadingAction(true);
+        const result = await adminUpdatePixLimit(searchedUser.cpf, limit);
         if (result.success && result.user) {
             setSearchedUser(result.user);
             showToast(result.message, 'success');
@@ -304,6 +327,26 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                                 </div>
                                 <button onClick={handleUpdateCreditLimit} disabled={isLoadingAction} className="btn-secondary mt-4 w-full sm:w-auto disabled:opacity-50">
                                     {isLoadingAction ? 'Salvando...' : 'Salvar Limites do Cartão'}
+                                </button>
+                            </div>
+
+                            <div className="border-t border-subtle-dark/50 pt-4">
+                                <h4 className="font-semibold text-text-dark mb-2">Alterar Limite Pix Diário</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs text-subtle-dark">Limite Diário (R$)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={pixLimit}
+                                            onChange={(e) => setPixLimit(e.target.value)}
+                                            placeholder="2000.00"
+                                            className="w-full bg-surface-dark p-2 rounded-md mt-1 text-text-dark"
+                                        />
+                                    </div>
+                                </div>
+                                <button onClick={handleUpdatePixLimit} disabled={isLoadingAction} className="btn-secondary mt-4 w-full sm:w-auto disabled:opacity-50">
+                                    {isLoadingAction ? 'Salvando...' : 'Salvar Limite Pix'}
                                 </button>
                             </div>
                         </div>

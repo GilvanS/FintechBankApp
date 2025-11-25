@@ -98,7 +98,7 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
 
                 <div>
                     <h3 className="font-bold text-white mb-3 text-lg">Lançamentos da Fatura Fechada</h3>
-                    {transactionGroups.length > 0 ? transactionGroups.map(([date, txs]) => (
+                    {transactionGroups.length > 0 ? transactionGroups.map(([date, txs]: [string, Transaction[]]) => (
                      <div key={date} className="space-y-4">
                         <p className="font-semibold text-gray-400">{date}</p>
                         <div className="space-y-2">
