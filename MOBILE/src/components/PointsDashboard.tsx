@@ -35,7 +35,7 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
           </button>
         <div className="text-center flex-grow">
-            <h2 className="text-lg font-bold text-white">Fintech Loop</h2>
+                  <h2 className="text-lg font-bold text-white">Fintech Cashback</h2>
         </div>
         <div className="w-10">
              <button className="p-2 rounded-full hover:bg-white/10">
@@ -82,7 +82,7 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
                     <img src="https://i.imgur.com/2sfh1cS.png" alt="Coin" className="w-16 h-16" />
                     <div className="flex-grow">
                         <p className="font-bold text-white">Débito Automático</p>
-                        <p className="text-sm text-gray-400">Ative o Débito Automático da fatura para ganhar pontos no Fintech Loop.</p>
+                              <p className="text-sm text-gray-400">Ative o Débito Automático da fatura para ganhar pontos no Fintech Cashback.</p>
                     </div>
                     <button className="px-4 py-2 bg-orange-500 text-background-dark font-bold text-sm rounded-lg hover:bg-orange-600">Ativar agora</button>
                 </div>

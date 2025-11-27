@@ -37,18 +37,18 @@ const InstallmentReviewInvoice: React.FC<InstallmentReviewInvoiceProps> = ({ use
     const { totalAmount, installmentValue, firstInstallmentDate, interestRatePerInstallment, totalInterest } = calculations;
 
     return (
-        <div className="bg-background-dark text-white min-h-full flex flex-col">
-             <header className="flex items-center p-4 border-b border-subtle-dark/50">
-                <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10">
-                    <span className="material-symbols-outlined">arrow_back</span>
+        <div className="bg-black text-white h-screen flex flex-col">
+            <header className="flex-shrink-0 flex items-center px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-4">
+                <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-gray-800">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
                 </button>
                 <h2 className="text-xl font-bold text-white">Revise as informações</h2>
             </header>
-            <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-4">
+            <main className="flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-4 px-4">
                 <p className="text-sm text-gray-400">Essas são as condições de contratação para prosseguir com a operação.</p>
 
-                <div className="bg-surface-dark rounded-lg p-4">
-                    <div className="flex justify-between items-baseline py-3 border-b border-white/10">
+                <div className="bg-gray-900 rounded-lg p-4">
+                    <div className="flex justify-between items-baseline py-3 border-b border-gray-800">
                         <span className="text-gray-400">Valor da Fatura</span>
                         <span className="font-bold text-2xl text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount)}</span>
                     </div>
@@ -58,7 +58,7 @@ const InstallmentReviewInvoice: React.FC<InstallmentReviewInvoiceProps> = ({ use
                     </div>
                 </div>
 
-                <div className="bg-surface-dark rounded-lg p-4">
+                <div className="bg-gray-900 rounded-lg p-4">
                     <InfoRow label="Parcelas" value={`${installments}x de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(installmentValue)}`} />
                     <InfoRow label="1ª parcela (débito)" value={`${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(installmentValue)} - Será debitada agora`} />
                     <InfoRow label="Demais parcelas" value={`${installments - 1}x de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(installmentValue)} - Na fatura`} />
@@ -69,15 +69,15 @@ const InstallmentReviewInvoice: React.FC<InstallmentReviewInvoiceProps> = ({ use
                 <div className="space-y-2 text-sm">
                     <button className="w-full flex justify-between items-center text-gray-300">
                         <span>Leia mais condições</span>
-                        <span className="material-symbols-outlined text-sm">chevron_right</span>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
                     </button>
                      <button className="w-full flex justify-between items-center text-gray-300">
                         <span>Leia seus direitos e regras</span>
-                         <span className="material-symbols-outlined text-sm">chevron_right</span>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
                     </button>
                 </div>
 
-                <div className="pt-4">
+                <div className="pt-4 pb-4">
                     <label className="flex items-start space-x-3 cursor-pointer">
                         <input type="checkbox" checked={termsAccepted} onChange={() => setTermsAccepted(!termsAccepted)} className="mt-1 h-5 w-5 text-orange-500 bg-gray-700 border-gray-600 rounded focus:ring-orange-600" />
                         <span className="text-sm text-gray-400">
@@ -86,7 +86,7 @@ const InstallmentReviewInvoice: React.FC<InstallmentReviewInvoiceProps> = ({ use
                     </label>
                 </div>
             </main>
-            <footer className="p-4 border-t border-subtle-dark/50">
+            <footer className="flex-shrink-0 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4">
                 <button onClick={onConfirm} disabled={!termsAccepted} className="w-full py-4 font-semibold text-background-dark bg-orange-500 rounded-lg hover:bg-orange-600 disabled:bg-gray-600 disabled:cursor-not-allowed">
                     Continuar
                 </button>
@@ -96,4 +96,3 @@ const InstallmentReviewInvoice: React.FC<InstallmentReviewInvoiceProps> = ({ use
 };
 
 export default InstallmentReviewInvoice;
-

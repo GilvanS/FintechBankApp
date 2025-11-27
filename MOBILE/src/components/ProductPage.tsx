@@ -2,21 +2,36 @@
 import React, { useState } from 'react';
 import { PurchasedItem } from '../types';
 import { useToast, ToastContainer } from './Toast';
+import AddToCartModal from './AddToCartModal';
 
 interface ProductPageProps {
     product: PurchasedItem;
     onBack: () => void;
     onPurchase: (item: PurchasedItem) => void;
     onAddToCart: (item: PurchasedItem) => void;
+    onNavigateToCart?: () => void;
 }
 
-const ProductPage: React.FC<ProductPageProps> = ({ product, onBack, onPurchase, onAddToCart }) => {
+const ProductPage: React.FC<ProductPageProps> = ({ product, onBack, onPurchase, onAddToCart, onNavigateToCart }) => {
     const [selectedTab, setSelectedTab] = useState('details');
+    const [showCartModal, setShowCartModal] = useState(false);
     const { toast, showSuccess, hide } = useToast();
 
     const handleAddToCart = () => {
         onAddToCart(product);
-        showSuccess(`${product.name} foi adicionado ao carrinho!`);
+        setShowCartModal(true);
+    };
+
+    const handleGoToCart = () => {
+        setShowCartModal(false);
+        if (onNavigateToCart) {
+            onNavigateToCart();
+        }
+    };
+
+    const handleContinueShopping = () => {
+        setShowCartModal(false);
+        onBack();
     };
 
     const handlePurchase = () => {
@@ -88,6 +103,14 @@ const ProductPage: React.FC<ProductPageProps> = ({ product, onBack, onPurchase, 
                     </div>
                 </footer>
             </div>
+
+            {/* Add to Cart Confirmation Modal */}
+            <AddToCartModal
+                isOpen={showCartModal}
+                productName={product.name}
+                onGoToCart={handleGoToCart}
+                onContinueShopping={handleContinueShopping}
+            />
         </>
     );
 };

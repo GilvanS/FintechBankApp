@@ -748,7 +748,9 @@ export async function purchaseWithCard(cpf: string, items: any[], cashbackUsed: 
 // Método: payCreditCardInvoice - Pagar fatura do cartão
 export async function payCreditCardInvoice(cpf: string, pin: string): Promise<{ success: boolean; message: string; user?: User }> {
     try {
-        const res = await api.post('/cards/invoice/pay', { cpf, pin }, {
+        const payload = { cpf, pin };
+
+        const res = await api.post('/cards/invoice/pay', payload, {
             headers: getAuthHeaders('json'),
         });
         const data = res.data;

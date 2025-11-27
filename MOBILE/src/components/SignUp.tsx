@@ -57,7 +57,6 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
             fullName,
             email,
             password,
-            showStoriesPopup: true,
         });
 
         setIsLoading(false);
@@ -96,7 +95,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-300">CPF</label>
-                        <input type="text" value={formatCPF(cpf)} onChange={(e) => setCpf(e.target.value)} required maxLength={14} className="w-full input-style" />
+                        <input type="text" value={formatCPF(cpf)} onChange={(e) => setCpf(e.target.value)} required maxLength={14} inputMode="numeric" className="w-full input-style" />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-300">Senha</label>

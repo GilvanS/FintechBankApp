@@ -1,7 +1,7 @@
 export class AppVersion {
-    private static readonly _version = "1.0.5";
-    private static readonly _build = "20231124";
-    private static readonly _environment = "Production";
+    private static readonly _version = "1.1.1";
+    private static readonly _build = "20251126";
+    private static readonly _environment = "HotFix";
 
     static get current(): string {
         return `${this._version}`;

@@ -257,10 +257,10 @@ export const payCreditCardInvoice = async (cpf: string, pin: string): Promise<{ 
     const token = localStorage.getItem('authToken');
     if (!token) return { success: false, message: 'Não autenticado.' };
 
-    const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/users/${cpf}/card/invoice/pay`, {
+    const result = await apiCall<{ success: boolean; message: string; user?: any }>('/cards/invoice/pay', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ pin })
+      body: JSON.stringify({ cpf, pin })
     });
     return result;
   } catch (error: any) {
@@ -268,15 +268,15 @@ export const payCreditCardInvoice = async (cpf: string, pin: string): Promise<{ 
   }
 };
 
-export const parcelCreditCardInvoice = async (cpf: string, details: { amount: number, installments: number }): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const parcelCreditCardInvoice = async (cpf: string, details: { amount: number, installments: number }, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
     const token = localStorage.getItem('authToken');
     if (!token) return { success: false, message: 'Não autenticado.' };
 
-    const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/users/${cpf}/card/invoice/parcel`, {
+    const result = await apiCall<{ success: boolean; message: string; user?: any }>('/cards/invoice/parcel', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify(details)
+      body: JSON.stringify({ cpf, ...details, pin })
     });
     return result;
   } catch (error: any) {
@@ -284,15 +284,15 @@ export const parcelCreditCardInvoice = async (cpf: string, details: { amount: nu
   }
 };
 
-export const anticipateCreditCardInstallments = async (cpf: string, transactionIds: string[]): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const anticipateCreditCardInstallments = async (cpf: string, transactionIds: string[], pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
     const token = localStorage.getItem('authToken');
     if (!token) return { success: false, message: 'Não autenticado.' };
 
-    const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/users/${cpf}/card/installments/anticipate`, {
+    const result = await apiCall<{ success: boolean; message: string; user?: any }>('/cards/invoice/anticipate', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ transactionIds })
+      body: JSON.stringify({ cpf, transactionIds, pin })
     });
     return result;
   } catch (error: any) {

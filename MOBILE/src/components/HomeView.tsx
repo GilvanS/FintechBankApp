@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import NewsSection from './NewsSection';
 import HomeBanners from './HomeBanners';
 import ShopOffersBanner from './ShopOffersBanner';
+import WelcomePopup from './WelcomePopup';
 
 interface HomeViewProps {
     user: User;
@@ -11,9 +12,52 @@ interface HomeViewProps {
 
 const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
     const [isBalanceVisible, setIsBalanceVisible] = useState(true);
+    const [showWelcomePopup, setShowWelcomePopup] = useState(false);
+
+    // Lógica para mostrar popup de boas-vindas "de vez em quando"
+    useEffect(() => {
+        const welcomeKey = `welcome_popup_${user.cpf}`;
+        const lastShown = localStorage.getItem(welcomeKey);
+        const now = Date.now();
+        const oneWeek = 7 * 24 * 60 * 60 * 1000; // 7 dias em milissegundos
+        
+        let shouldShow = false;
+        
+        // Sempre mostrar na primeira vez (nunca foi mostrado)
+        if (!lastShown) {
+            shouldShow = true;
+        } 
+        // Após uma semana, mostrar com 20% de chance aleatória
+        else {
+            const timeSinceLastShown = now - parseInt(lastShown);
+            if (timeSinceLastShown > oneWeek) {
+                shouldShow = Math.random() < 0.2; // 20% de chance
+            }
+        }
+        
+        if (shouldShow) {
+            // Delay para melhor UX (1.5 segundos após carregar a tela)
+            const timer = setTimeout(() => {
+                setShowWelcomePopup(true);
+            }, 1500);
+            return () => clearTimeout(timer);
+        }
+    }, [user.cpf]);
+
+    const handleCloseWelcomePopup = () => {
+        setShowWelcomePopup(false);
+        const welcomeKey = `welcome_popup_${user.cpf}`;
+        localStorage.setItem(welcomeKey, Date.now().toString());
+    };
 
     return (
-        <main className="flex flex-col gap-8 py-8 px-4 sm:px-6 md:px-8">
+        <>
+            <WelcomePopup 
+                isOpen={showWelcomePopup} 
+                onClose={handleCloseWelcomePopup}
+                user={user}
+            />
+            <main className="flex flex-col gap-8 py-8 px-4 sm:px-6 md:px-8">
             {/* Balance Section */}
             <section>
                 <div className="flex flex-col justify-between rounded-xl bg-surface-dark p-6">
@@ -26,6 +70,27 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
                     <div className="mt-2">
                         <p className={`text-4xl font-bold leading-tight tracking-[-0.015em] text-primary transition-all duration-300 ${!isBalanceVisible && 'blur-md'}`}>
                             {isBalanceVisible ? user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ ********'}
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            {/* Limits Section */}
+            <section>
+                <div className="grid grid-cols-2 gap-4">
+                    {/* Limite de Débito (PIX) */}
+                    <div className="flex flex-col justify-between rounded-xl bg-surface-dark p-4">
+                        <p className="text-xs font-normal leading-normal text-white/70 mb-2">Limite de Débito</p>
+                        <p className="text-xl font-bold leading-tight tracking-[-0.015em] text-primary">
+                            {user.pixDailyLimit?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'R$ 0,00'}
+                        </p>
+                    </div>
+                    
+                    {/* Limite de Crédito */}
+                    <div className="flex flex-col justify-between rounded-xl bg-surface-dark p-4">
+                        <p className="text-xs font-normal leading-normal text-white/70 mb-2">Limite de Crédito</p>
+                        <p className="text-xl font-bold leading-tight tracking-[-0.015em] text-primary">
+                            {user.creditCard?.availableLimit?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'R$ 0,00'}
                         </p>
                     </div>
                 </div>
@@ -83,7 +148,8 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
             {/* Shop Offers and News Section */}
             <ShopOffersBanner onNavigate={onNavigate} />
             <NewsSection />
-        </main>
+            </main>
+        </>
     );
 };
 

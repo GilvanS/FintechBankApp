@@ -34,7 +34,7 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
 
     if (view === 'product' && selectedProduct) {
         // FIX: Passed down `onInitiatePurchase` and `onAddToCart` from props to ProductPage.
-        return <ProductPage product={selectedProduct} onBack={() => setView('main')} onPurchase={onInitiatePurchase} onAddToCart={onAddToCart} />;
+        return <ProductPage product={selectedProduct} onBack={() => setView('main')} onPurchase={onInitiatePurchase} onAddToCart={onAddToCart} onNavigateToCart={() => onNavigate('shoppingCart')} />;
     }
 
     return (

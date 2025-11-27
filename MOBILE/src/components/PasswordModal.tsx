@@ -11,6 +11,7 @@ interface PasswordModalProps {
 
 const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfirm, title, description, isLoading }) => {
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -27,13 +28,26 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
                        <label className="text-sm font-medium text-subtle-dark">Senha</label>
-                       <input 
-                           type="password" 
-                           value={password} 
-                           onChange={e => setPassword(e.target.value)} 
-                           required 
-                           className="w-full bg-white/5 border border-white/20 rounded-lg py-3 px-4 mt-1 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" 
-                       />
+                        <div className="relative mt-1">
+                            <input 
+                                type={showPassword ? "text" : "password"}
+                                value={password}
+                                onChange={e => setPassword(e.target.value)} 
+                                inputMode="numeric"
+                                required 
+                                className="w-full bg-white/5 border border-white/20 rounded-lg py-3 px-4 pr-12 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle-dark hover:text-primary transition-colors"
+                                aria-label={showPassword ? "Ocultar PIN" : "Mostrar PIN"}
+                            >
+                                <span className="material-symbols-outlined text-xl">
+                                    {showPassword ? 'visibility_off' : 'visibility'}
+                                </span>
+                            </button>
+                        </div>
                     </div>
                     <div className="flex justify-end space-x-4 pt-2">
                         <button type="button" onClick={onClose} className="px-4 py-2 text-white bg-white/10 rounded-md hover:bg-white/20">Cancelar</button>

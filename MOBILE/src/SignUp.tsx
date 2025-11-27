@@ -29,9 +29,28 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
       return;
     }
     
-    const unformattedCpf = cpf.replace(/\D/g, '');
-    if (unformattedCpf.length !== 11) {
-        setError('CPF deve ter 11 numeros.');
+    // Remover formatação e validar CPF (igual ao WEB que está funcionando)
+    const cpfDigits = cpf.replace(/\D/g, '');
+    if (cpfDigits.length !== 11) {
+        setError('CPF deve ter 11 dígitos.');
+        return;
+    }
+    
+    // Validar senha (igual ao WEB)
+    if (password.length < 6 || password.length > 12) {
+        setError('A senha deve ter entre 6 e 12 caracteres.');
+        return;
+    }
+    
+    // Validar nome completo (igual ao WEB)
+    if (!fullName.trim()) {
+        setError('Nome completo é obrigatório.');
+        return;
+    }
+    
+    // Validar email (igual ao WEB)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setError('Formato de email inválido.');
         return;
     }
 
@@ -40,7 +59,7 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
     
     try {
         console.log('🔵 [SignUp Component] Iniciando cadastro...');
-      const result = await signUp({ fullName, cpf: unformattedCpf, email, password, showStoriesPopup: true });
+      const result = await signUp({ cpf: cpfDigits, fullName, email, password, showStoriesPopup: true });
         console.log('🔵 [SignUp Component] Resultado recebido:', result);
         
         if (result.success) {
@@ -94,7 +113,17 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
                           </div>
                           <div>
                             <label htmlFor="cpf" className="text-sm font-medium text-subtle-dark mb-1 block">CPF</label>
-                            <input id="cpf" type="text" value={formatCPF(cpf)} onChange={(e) => setCpf(e.target.value)} required inputMode="numeric" placeholder="999.999.999-99" className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"/>
+                            <input 
+                              id="cpf" 
+                              type="text" 
+                              value={formatCPF(cpf)} 
+                              onChange={(e) => setCpf(e.target.value)} 
+                              required 
+                              inputMode="numeric" 
+                              placeholder="999.999.999-99" 
+                              maxLength={14}
+                              className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
                           </div>
                           <div>
                             <label htmlFor="email" className="text-sm font-medium text-subtle-dark mb-1 block">Email</label>

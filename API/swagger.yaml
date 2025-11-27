@@ -202,10 +202,10 @@ paths:
         Cria uma nova conta de usuário no sistema.
         
         **Valores padrão definidos automaticamente ao cadastrar:**
+        - Saldo inicial em conta: R$ 2.000,00
         - Limite diário PIX: R$ 2.000,00
         - Limite total do cartão de crédito: R$ 5.000,00
         - Limite disponível do cartão de crédito: R$ 5.000,00
-        - Saldo inicial: R$ 0,00
         - Cartão de crédito: desbloqueado e pronto para uso
       requestBody:
         required: true
@@ -814,28 +814,178 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
 
-  /cards/invoice/anticipate:
+  /cards/invoice/pay:
     post:
       tags: [Card]
-      summary: Antecipar parcelas da fatura do cartao
-      description: Antecipacao de parcelas com regra de desconto e atualizacao de fatura/transacoes.
+      summary: Pagar fatura do cartao de credito
+      description: Paga a fatura fechada do cartao de credito, debitando do saldo da conta e restaurando o limite disponivel. O sistema busca todas as parcelas vencidas ate a data de vencimento da fatura e as paga.
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [cpf, pin, installmentTransactionIds]
+              required: [cpf, pin]
               properties:
-                cpf: { type: string, pattern: '^[0-9]{11}$' }
-                pin: { type: string, minLength: 4, maxLength: 4 }
-                installmentTransactionIds:
-                  type: array
-                  items: { type: string }
+                cpf:
+                  type: string
+                  pattern: '^[0-9]{11}$'
+                  description: CPF do usuario
+                  example: '12345678901'
+                pin:
+                  type: string
+                  minLength: 4
+                  maxLength: 4
+                  description: PIN do cartao (4 digitos)
+                  example: '1234'
               example:
                 cpf: '12345678901'
                 pin: '1234'
-                installmentTransactionIds: ['tx-inv-001', 'tx-inv-002']
+      responses:
+        '200':
+          description: Fatura paga com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: 'Fatura paga com sucesso.'
+        '400':
+          description: Dados invalidos, saldo insuficiente ou nenhuma parcela vencida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Acesso negado (CPF nao corresponde ao usuario autenticado)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Usuario nao encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /cards/invoice/parcel:
+    post:
+      tags: [Card]
+      summary: Parcelar fatura do cartao de credito
+      description: Parcela a fatura fechada em um numero de parcelas entre 2 e 24. O valor sera debitado do saldo da conta em parcelas.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cpf, amount, installments, pin]
+              properties:
+                cpf:
+                  type: string
+                  pattern: '^[0-9]{11}$'
+                  description: CPF do usuario
+                  example: '12345678901'
+                amount:
+                  type: number
+                  format: float
+                  minimum: 0.01
+                  description: Valor total a ser parcelado
+                  example: 500.00
+                installments:
+                  type: integer
+                  minimum: 2
+                  maximum: 24
+                  description: Numero de parcelas (entre 2 e 24)
+                  example: 12
+                pin:
+                  type: string
+                  minLength: 4
+                  maxLength: 4
+                  description: PIN do cartao (4 digitos)
+                  example: '1234'
+              example:
+                cpf: '12345678901'
+                amount: 500.00
+                installments: 12
+                pin: '1234'
+      responses:
+        '200':
+          description: Parcelamento realizado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: 'Parcelamento realizado'
+        '400':
+          description: Dados invalidos (payload invalido)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Acesso negado (CPF nao corresponde ao usuario autenticado)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /cards/invoice/anticipate:
+    post:
+      tags: [Card]
+      summary: Antecipar parcelas da fatura do cartao
+      description: Antecipacao de parcelas com regra de desconto e atualizacao de fatura/transacoes.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cpf, transactionIds, pin]
+              properties:
+                cpf:
+                  type: string
+                  pattern: '^[0-9]{11}$'
+                  description: CPF do usuario
+                  example: '12345678901'
+                transactionIds:
+                  type: array
+                  items: { type: string }
+                  description: IDs das transacoes de parcelas a serem antecipadas
+                  example: ['tx-inv-001', 'tx-inv-002']
+                pin:
+                  type: string
+                  minLength: 4
+                  maxLength: 4
+                  description: PIN do cartao (4 digitos)
+                  example: '1234'
+              example:
+                cpf: '12345678901'
+                transactionIds: ['tx-inv-001', 'tx-inv-002']
+                pin: '1234'
       responses:
         '200':
           description: Parcelas antecipadas com sucesso
@@ -849,6 +999,11 @@ paths:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Acesso negado (CPF nao corresponde ao usuario autenticado)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }

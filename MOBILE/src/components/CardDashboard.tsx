@@ -121,7 +121,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 <button onClick={() => onNavigate('points')} className="w-full flex items-center p-4 bg-surface-dark rounded-lg hover:bg-white/10 transition-colors text-left space-x-4">
                     <span className="material-symbols-outlined text-2xl text-orange-400">workspace_premium</span>
                     <div className="flex-grow">
-                        <p className="font-bold text-white">Fintech Loop</p>
+                        <p className="font-bold text-white">Fintech Cashback</p>
                         <p className="text-sm text-gray-400">{creditCard.pointsBalance.toLocaleString('pt-BR')} pontos</p>
                     </div>
                     <span className="material-symbols-outlined text-gray-500">chevron_right</span>

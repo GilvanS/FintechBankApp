@@ -17,15 +17,15 @@ const ShoppingCart: React.FC<ShoppingCartProps> = ({ cart, onBack, onCheckout, o
     });
 
     return (
-        <div className="bg-background-dark text-white min-h-full flex flex-col">
-            <header className="flex items-center justify-between p-4 border-b border-subtle-dark/50">
+        <div className="bg-background-dark text-white h-screen flex flex-col safe-top safe-bottom">
+            <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-subtle-dark/50 pt-[calc(1rem+env(safe-area-inset-top))]">
                 <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
                 <h2 className="text-2xl font-bold text-white">Carrinho</h2>
                 <div className="w-6"></div>
             </header>
-            <main className="flex-grow overflow-y-auto no-scrollbar p-4 pb-24">
+            <main className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-4">
                 {cart.length === 0 ? (
                     <div className="text-center text-subtle-dark py-8">
                         <p className="text-lg">Seu carrinho está vazio.</p>
@@ -71,7 +71,7 @@ const ShoppingCart: React.FC<ShoppingCartProps> = ({ cart, onBack, onCheckout, o
                     </div>
                 )}
             </main>
-            <footer className="p-4 border-t border-subtle-dark/50 bg-surface-dark sticky bottom-0 z-50">
+            <footer className="flex-shrink-0 p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] border-t border-subtle-dark/50 bg-surface-dark">
                 <div className="flex justify-between items-center mb-4">
                     <span className="text-lg font-semibold text-white">Total:</span>
                     <span className="text-xl font-bold text-primary">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>

@@ -124,14 +124,23 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
 
     const handleUpdateCreditLimit = async () => {
         if (!searchedUser) return;
-        const totalLimit = cardTotalLimit ? parseFloat(cardTotalLimit) : undefined;
-        const availableLimit = cardAvailableLimit ? parseFloat(cardAvailableLimit) : undefined;
+
+        // Converte os valores para decimal, garantindo formato correto
+        const totalLimit = cardTotalLimit ? Number(parseFloat(cardTotalLimit).toFixed(2)) : undefined;
+        const availableLimit = cardAvailableLimit ? Number(parseFloat(cardAvailableLimit).toFixed(2)) : undefined;
         
         if (totalLimit === undefined && availableLimit === undefined) {
             showToast('Informe pelo menos um limite (total ou disponível)', 'error');
             return;
         }
         
+        // Validação de valores
+        if ((totalLimit !== undefined && (isNaN(totalLimit) || totalLimit < 0)) ||
+            (availableLimit !== undefined && (isNaN(availableLimit) || availableLimit < 0))) {
+            showToast('Valores devem ser números válidos e positivos', 'error');
+            return;
+        }
+
         setIsLoadingAction(true);
         const result = await adminUpdateCreditLimit(searchedUser.cpf, {
             totalLimit,
@@ -148,7 +157,7 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
 
     const handleUpdatePixLimit = async () => {
         if (!searchedUser) return;
-        const limit = parseFloat(pixLimit);
+        const limit = Number(parseFloat(pixLimit).toFixed(2));
 
         if (isNaN(limit) || limit < 0) {
             showToast('Informe um valor válido para o limite PIX', 'error');
@@ -305,22 +314,44 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                                     <div>
                                         <label className="text-xs text-subtle-dark">Limite Total (R$)</label>
                                         <input
-                                            type="number"
-                                            step="0.01"
+                                            type="text"
+                                            inputMode="decimal"
                                             value={cardTotalLimit}
-                                            onChange={(e) => setCardTotalLimit(e.target.value)}
-                                            placeholder="5000.00"
+                                            onChange={(e) => {
+                                                // Aceita apenas números e pontos/vírgulas
+                                                const value = e.target.value.replace(/[^0-9.,]/g, '');
+                                                setCardTotalLimit(value);
+                                            }}
+                                            onBlur={(e) => {
+                                                // Formata ao perder foco
+                                                const value = e.target.value.replace(',', '.');
+                                                if (value && !isNaN(parseFloat(value))) {
+                                                    setCardTotalLimit(parseFloat(value).toFixed(2));
+                                                }
+                                            }}
+                                            placeholder="5000 ou 5000.00"
                                             className="w-full bg-surface-dark p-2 rounded-md mt-1 text-text-dark"
                                         />
                                     </div>
                                     <div>
                                         <label className="text-xs text-subtle-dark">Limite Disponível (R$)</label>
                                         <input
-                                            type="number"
-                                            step="0.01"
+                                            type="text"
+                                            inputMode="decimal"
                                             value={cardAvailableLimit}
-                                            onChange={(e) => setCardAvailableLimit(e.target.value)}
-                                            placeholder="5000.00"
+                                            onChange={(e) => {
+                                                // Aceita apenas números e pontos/vírgulas
+                                                const value = e.target.value.replace(/[^0-9.,]/g, '');
+                                                setCardAvailableLimit(value);
+                                            }}
+                                            onBlur={(e) => {
+                                                // Formata ao perder foco
+                                                const value = e.target.value.replace(',', '.');
+                                                if (value && !isNaN(parseFloat(value))) {
+                                                    setCardAvailableLimit(parseFloat(value).toFixed(2));
+                                                }
+                                            }}
+                                            placeholder="5000 ou 5000.00"
                                             className="w-full bg-surface-dark p-2 rounded-md mt-1 text-text-dark"
                                         />
                                     </div>
@@ -336,11 +367,20 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                                     <div>
                                         <label className="text-xs text-subtle-dark">Limite Diário (R$)</label>
                                         <input
-                                            type="number"
-                                            step="0.01"
+                                            type="text"
+                                            inputMode="decimal"
                                             value={pixLimit}
-                                            onChange={(e) => setPixLimit(e.target.value)}
-                                            placeholder="2000.00"
+                                            onChange={(e) => {
+                                                const value = e.target.value.replace(/[^0-9.,]/g, '');
+                                                setPixLimit(value);
+                                            }}
+                                            onBlur={(e) => {
+                                                const value = e.target.value.replace(',', '.');
+                                                if (value && !isNaN(parseFloat(value))) {
+                                                    setPixLimit(parseFloat(value).toFixed(2));
+                                                }
+                                            }}
+                                            placeholder="2000 ou 2000.00"
                                             className="w-full bg-surface-dark p-2 rounded-md mt-1 text-text-dark"
                                         />
                                     </div>

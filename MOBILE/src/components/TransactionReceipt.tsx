@@ -114,8 +114,8 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
     }
 
     return (
-        <div className="p-4 bg-black min-h-full text-white flex flex-col">
-            <header className="flex items-center justify-between mb-6">
+        <div className="p-4 bg-black h-screen text-white flex flex-col safe-top safe-bottom">
+            <header className="flex items-center justify-between mb-6 flex-shrink-0">
                 <div className="flex items-center">
                     <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-gray-800">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
@@ -127,7 +127,7 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                 </button>
             </header>
 
-            <main className="flex-grow space-y-6">
+            <main className="flex-grow overflow-y-auto no-scrollbar space-y-6 pb-4">
                 {/* Transaction Type and Date */}
                 <div>
                     <p className="text-sm text-gray-400">
@@ -227,7 +227,7 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                 </button>
             </main>
 
-            <footer className="mt-auto pt-4">
+            <footer className="mt-4 pt-4 flex-shrink-0">
                 <button onClick={handleShare} className="w-full py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500">
                     Compartilhar Comprovante
                 </button>

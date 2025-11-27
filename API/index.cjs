@@ -25,6 +25,7 @@ const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequeste
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const cardRepo = require('./repositories/cardRepo');
 const invoiceRepo = require('./repositories/invoiceRepo');
+const invoiceLifecycleRepo = require('./repositories/invoiceLifecycleRepo');
 const { bearerAuth, requireScope, pinGuard, withReqId, auditLog } = require('./middlewares/auth');
 
 // --- Configurações ---
@@ -51,7 +52,7 @@ const normalizeUser = (dbUser) => {
         role: dbUser.role,
         isBlocked: dbUser.is_blocked,
         loginAttempts: dbUser.login_attempts || 0,
-        pixDailyLimit: parseFloat(dbUser.pix_daily_limit) || 0,
+        pixDailyLimit: dbUser.pix_daily_limit !== null && dbUser.pix_daily_limit !== undefined ? parseFloat(dbUser.pix_daily_limit) : 2000.00,
         passwordResetRequested: dbUser.password_reset_requested,
         // Novos campos de perfil
         username: dbUser.username,
@@ -301,7 +302,7 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     
     // Valores padrão definidos no código (já que o Databricks não permite DEFAULT)
     const now = new Date().toISOString();
-    const defaultBalance = 0;
+    const defaultBalance = 2000.00; // Saldo inicial: R$ 2.000,00
     const defaultRole = 'customer';
     const defaultIsBlocked = false;
     const defaultLoginAttempts = 0;
@@ -332,13 +333,32 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
         `;
         
         console.log('🔵 [SIGNUP] Executando INSERT...');
+        console.log('🔵 [SIGNUP] Valores sendo inseridos:', {
+            balance: defaultBalance,
+            pixDailyLimit: defaultPixDailyLimit,
+            creditCardTotalLimit: defaultCreditCardTotalLimit,
+            creditCardAvailableLimit: defaultCreditCardAvailableLimit
+        });
         await databricksService.executeQuery(insertQuery);
         console.log('🔵 [SIGNUP] INSERT executado com sucesso');
         
-        // Verificar se o usuário foi criado com sucesso
+        // Verificar se o usuário foi criado com sucesso e verificar os valores inseridos
         console.log('🔵 [SIGNUP] Verificando se usuário foi criado...');
-        const verifyUser = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${escapedCpf}'`);
+        const verifyUser = await databricksService.executeQuery(`
+            SELECT cpf, balance, pix_daily_limit, credit_card_total_limit, credit_card_available_limit 
+            FROM ${databricksService.fq('users')} 
+            WHERE cpf = '${escapedCpf}'
+        `);
         console.log('🔵 [SIGNUP] Resultado da verificação pós-INSERT:', verifyUser.length > 0 ? 'Usuário encontrado' : 'Usuário NÃO encontrado');
+        if (verifyUser.length > 0) {
+            console.log('🔵 [SIGNUP] Valores inseridos no banco:', {
+                cpf: verifyUser[0].cpf,
+                balance: verifyUser[0].balance,
+                pix_daily_limit: verifyUser[0].pix_daily_limit,
+                credit_card_total_limit: verifyUser[0].credit_card_total_limit,
+                credit_card_available_limit: verifyUser[0].credit_card_available_limit
+            });
+        }
         
         if (verifyUser.length === 0) {
             console.error('❌ [SIGNUP] Erro: Usuário não foi criado após INSERT');
@@ -2032,6 +2052,100 @@ async function initializeDatabase() {
     const provider = process.env.DB_PROVIDER || process.env.DB_DIALECT;
     if (provider === 'postgres') {
         console.log('ℹ️  Usando PostgreSQL. Verificando estrutura das tabelas...');
+        
+        // =====================================================
+        // Verificar e atualizar valores padrão de signup
+        // =====================================================
+        try {
+            console.log('🔍 Verificando e atualizando valores padrão de signup...');
+            
+            // Verificar se as colunas de cartão de crédito existem
+            const creditCardColumns = await databricksService.executeQuery(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'fintech' 
+                AND table_name = 'users' 
+                AND column_name IN ('credit_card_total_limit', 'credit_card_available_limit', 'credit_card_points_balance', 'credit_card_is_blocked')
+            `);
+            
+            const existingColumns = creditCardColumns.map(c => c.column_name);
+            
+            // Adicionar colunas de cartão de crédito se não existirem
+            if (!existingColumns.includes('credit_card_total_limit')) {
+                console.log('🔧 Adicionando coluna credit_card_total_limit...');
+                await databricksService.executeQuery(`
+                    ALTER TABLE ${databricksService.fq('users')}
+                    ADD COLUMN credit_card_total_limit DECIMAL(15,2) DEFAULT 5000.00
+                `);
+                console.log('✅ Coluna credit_card_total_limit adicionada.');
+            }
+            
+            if (!existingColumns.includes('credit_card_available_limit')) {
+                console.log('🔧 Adicionando coluna credit_card_available_limit...');
+                await databricksService.executeQuery(`
+                    ALTER TABLE ${databricksService.fq('users')}
+                    ADD COLUMN credit_card_available_limit DECIMAL(15,2) DEFAULT 5000.00
+                `);
+                console.log('✅ Coluna credit_card_available_limit adicionada.');
+            }
+            
+            if (!existingColumns.includes('credit_card_points_balance')) {
+                console.log('🔧 Adicionando coluna credit_card_points_balance...');
+                await databricksService.executeQuery(`
+                    ALTER TABLE ${databricksService.fq('users')}
+                    ADD COLUMN credit_card_points_balance INTEGER DEFAULT 0
+                `);
+                console.log('✅ Coluna credit_card_points_balance adicionada.');
+            }
+            
+            if (!existingColumns.includes('credit_card_is_blocked')) {
+                console.log('🔧 Adicionando coluna credit_card_is_blocked...');
+                await databricksService.executeQuery(`
+                    ALTER TABLE ${databricksService.fq('users')}
+                    ADD COLUMN credit_card_is_blocked BOOLEAN DEFAULT FALSE
+                `);
+                console.log('✅ Coluna credit_card_is_blocked adicionada.');
+            }
+            
+            // Atualizar DEFAULT de pix_daily_limit para 2000.00
+            console.log('🔧 Atualizando DEFAULT de pix_daily_limit para 2000.00...');
+            await databricksService.executeQuery(`
+                ALTER TABLE ${databricksService.fq('users')}
+                ALTER COLUMN pix_daily_limit SET DEFAULT 2000.00
+            `);
+            
+            // Atualizar DEFAULT de credit_card_total_limit para 5000.00
+            console.log('🔧 Atualizando DEFAULT de credit_card_total_limit para 5000.00...');
+            await databricksService.executeQuery(`
+                ALTER TABLE ${databricksService.fq('users')}
+                ALTER COLUMN credit_card_total_limit SET DEFAULT 5000.00
+            `);
+            
+            // Atualizar DEFAULT de credit_card_available_limit para 5000.00
+            console.log('🔧 Atualizando DEFAULT de credit_card_available_limit para 5000.00...');
+            await databricksService.executeQuery(`
+                ALTER TABLE ${databricksService.fq('users')}
+                ALTER COLUMN credit_card_available_limit SET DEFAULT 5000.00
+            `);
+            
+            // Atualizar usuários existentes que não têm limites de crédito definidos
+            console.log('🔧 Atualizando usuários existentes sem limites de crédito...');
+            await databricksService.executeQuery(`
+                UPDATE ${databricksService.fq('users')}
+                SET 
+                    credit_card_total_limit = COALESCE(credit_card_total_limit, 5000.00),
+                    credit_card_available_limit = COALESCE(credit_card_available_limit, 5000.00),
+                    credit_card_points_balance = COALESCE(credit_card_points_balance, 0),
+                    credit_card_is_blocked = COALESCE(credit_card_is_blocked, FALSE)
+                WHERE credit_card_total_limit IS NULL 
+                   OR credit_card_available_limit IS NULL
+            `);
+            
+            console.log('✅ Valores padrão de signup atualizados com sucesso!');
+        } catch (error) {
+            console.warn('⚠️  Erro ao atualizar valores padrão de signup:', error.message);
+            // Não bloquear a inicialização se houver erro
+        }
         
         // Verificar e corrigir estrutura da tabela limit_increase_requests se necessário
         try {

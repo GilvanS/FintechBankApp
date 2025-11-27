@@ -55,9 +55,9 @@ const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onClose, it
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-end sm:items-center justify-center z-50 animate-fade-in">
-            <div className="bg-gray-900 w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 flex flex-col max-h-[90vh]">
-                <div className="flex justify-between items-center mb-4">
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 animate-fade-in p-4">
+            <div className="bg-gray-900 w-full max-w-sm rounded-2xl p-6 flex flex-col max-h-[85vh]">
+                <div className="flex justify-between items-center mb-4 flex-shrink-0">
                     <h2 className="text-xl font-bold text-white">
                         {step === 1 ? 'Usar Cashback?' : 'Em quantas vezes?'}
                     </h2>
@@ -81,12 +81,12 @@ const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onClose, it
 
                 {step === 2 && (
                     <>
-                        <div className="text-center mb-4 p-3 bg-gray-800 rounded-lg">
+                        <div className="text-center mb-4 p-3 bg-gray-800 rounded-lg flex-shrink-0">
                              <p className="text-sm text-gray-400">Valor da compra</p>
                              <p className="font-bold text-xl text-white">{priceAfterCashback.toLocaleString('pt-BR', {style:'currency', currency: 'BRL'})}</p>
                              {cashbackToUse > 0 && <p className="text-xs text-green-400">(-{cashbackToUse.toLocaleString('pt-BR', {style:'currency', currency: 'BRL'})} de cashback)</p>}
                         </div>
-                        <div className="flex-grow overflow-y-auto no-scrollbar -mx-2 px-2 space-y-2">
+                        <div className="flex-grow overflow-y-auto no-scrollbar -mx-2 px-2 space-y-2 min-h-0 max-h-[45vh]">
                             {installmentOptions.map(opt => (
                                 <button key={opt.count} onClick={() => setSelectedInstallments(opt.count)} className={`w-full text-left p-3 rounded-lg border-2 transition-colors ${selectedInstallments === opt.count ? 'bg-green-900/50 border-green-500' : 'bg-gray-800 border-transparent hover:border-gray-700'}`}>
                                     <p className="font-bold text-white">{opt.count}x de {opt.value.toLocaleString('pt-BR', {style:'currency', currency: 'BRL'})}</p>
@@ -94,7 +94,7 @@ const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onClose, it
                                 </button>
                             ))}
                         </div>
-                        <button onClick={handleConfirm} className="w-full mt-4 py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500">
+                        <button onClick={handleConfirm} className="w-full mt-4 py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500 flex-shrink-0">
                             Continuar
                         </button>
                     </>

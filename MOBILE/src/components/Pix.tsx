@@ -27,6 +27,7 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     const [pixKey, setPixKey] = useState('');
     const [amount, setAmount] = useState('');
+    const [displayAmount, setDisplayAmount] = useState('');
     const [description, setDescription] = useState('');
     const [useCredit, setUseCredit] = useState(false);
     const [localError, setLocalError] = useState('');
@@ -54,6 +55,30 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         }
 
         setPixKey(value);
+    };
+
+    const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        // Remove tudo exceto números
+        const numericValue = value.replace(/\D/g, '');
+
+        if (numericValue === '') {
+            setAmount('');
+            setDisplayAmount('');
+            return;
+        }
+
+        // Converte para número com centavos
+        const numValue = parseInt(numericValue, 10) / 100;
+
+        // Formata para exibição
+        const formatted = numValue.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+
+        setAmount(numValue.toString());
+        setDisplayAmount(formatted);
     };
 
     useEffect(() => {
@@ -188,7 +213,7 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             <div>
                                 <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-key">Chave PIX</label>
                                 <div className="relative">
-                                    <input value={pixKey} onChange={handlePixKeyChange} className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" id="pix-key" placeholder="Digite CPF, celular, e-mail, etc." type="text" />
+                                    <input value={pixKey} onChange={handlePixKeyChange} className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" id="pix-key" placeholder="Digite CPF, celular, e-mail, etc." type="text" inputMode="numeric" />
                                     {contacts.length > 0 && (
                                         <button type="button" title="Usar contato salvo" onClick={() => setSubView('contacts')} className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full text-white/60 hover:bg-white/10 hover:text-primary transition-colors">
                                             <span className="material-symbols-outlined">contact_page</span>
@@ -198,7 +223,7 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-amount">Valor</label>
-                                <input value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" id="pix-amount" placeholder="R$ 0,00" type="text" />
+                                <input value={displayAmount} onChange={handleAmountChange} className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all" id="pix-amount" placeholder="0,00" type="text" inputMode="decimal" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-description">Descrição (Opcional)</label>

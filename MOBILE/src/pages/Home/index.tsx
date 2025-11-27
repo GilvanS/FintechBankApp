@@ -289,9 +289,8 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
   };
 
   const handlePasswordConfirm = (password: string) => {
-    if (passwordActionPayload.current) {
-        (passwordActionPayload.current as any).pin = password;
-    }
+    // Garantir que passwordActionPayload.current existe e incluir o PIN
+    passwordActionPayload.current = { ...(passwordActionPayload.current || {}), pin: password };
     if (passwordAction) {
         passwordAction();
     }
@@ -299,6 +298,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
 
   // ========== FLUXO DE PAGAMENTO DE FATURA ==========
   const handlePayInvoice = () => {
+    passwordActionPayload.current = {}; // Inicializar objeto para receber o PIN
     setPasswordAction(() => () => executePayInvoice());
     setPasswordModalInfo({ title: 'Pagar Fatura', description: 'Digite seu PIN para confirmar o pagamento.' });
     setIsPasswordModalOpen(true);
@@ -309,6 +309,15 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
     const amountToPay = user.creditCard.closedInvoice;
     setIsProcessing(true);
     const pin = (passwordActionPayload.current as any)?.pin;
+
+    // Validar PIN antes de prosseguir
+    if (!pin || pin.length !== 4) {
+        alert('PIN inválido. Por favor, digite um PIN de 4 dígitos.');
+        setIsProcessing(false);
+        setIsPasswordModalOpen(false);
+        passwordActionPayload.current = null;
+        return;
+    }
 
     // Prepara dados do recibo antes do refresh - evita perder o comprovante se o refresh falhar
     const fallbackCardLast4 = user.creditCard?.number?.slice(-4) || '----';
