@@ -390,6 +390,12 @@ apiRouter.post('/auth/login', loginValidationRules, handleValidationErrors, asyn
     if (!user) return res.status(401).json({ success: false, code: 'AUTH_USER_NOT_FOUND', message: 'CPF ou senha invalida.' });
     if (user.is_blocked) return res.status(401).json({ success: false, code: 'AUTH_BLOCKED', message: 'Conta bloqueada. Solicite nova senha.' });
 
+    // Verificar se password_hash existe
+    if (!user.password_hash || user.password_hash.trim() === '') {
+        console.log(`⚠️ Usuario ${user.cpf} nao possui senha definida (password_hash esta NULL ou vazio)`);
+        return res.status(401).json({ success: false, code: 'AUTH_NO_PASSWORD', message: 'Conta sem senha definida. Solicite redefinicao de senha.' });
+    }
+
     console.log(`🔐 Verificando senha para usuario ${user.cpf}...`);
     const isMatch = await bcrypt.compare(password, user.password_hash);
     console.log(`🔐 Senha ${isMatch ? 'CORRETA' : 'INCORRETA'} para usuario ${user.cpf}`);
@@ -1071,9 +1077,31 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         // Gerar somente a 1a parcela na fatura atual e criar plano agregado para as futuras
         if (qty >= 2) {
             const invoiceDueStr = user.credit_card_invoice_due_date;
-            let firstDue = invoiceDueStr ? new Date(invoiceDueStr) : new Date();
             const now = new Date();
-            if (firstDue < now) firstDue = now; // garante exibição na fatura vigente quando o vencimento está passado
+            
+            // Determinar em qual fatura a primeira parcela deve entrar
+            // Se não há data de vencimento, usar data atual como referência
+            let firstDue;
+            if (!invoiceDueStr) {
+                // Se não há data de vencimento configurada, criar uma para o próximo mês
+                firstDue = new Date(now);
+                firstDue.setMonth(now.getMonth() + 1);
+                firstDue.setUTCHours(23, 59, 59, 999);
+            } else {
+                const invoiceDue = new Date(invoiceDueStr);
+                invoiceDue.setUTCHours(23, 59, 59, 999);
+                
+                // Se a fatura ainda não venceu (ou vence hoje), a primeira parcela entra na fatura atual
+                // Se a fatura já venceu, a primeira parcela entra na próxima fatura
+                if (invoiceDue >= now) {
+                    // Fatura ainda está aberta, parcela entra na fatura atual
+                    firstDue = invoiceDue;
+                } else {
+                    // Fatura já venceu, parcela entra na próxima fatura (mês seguinte)
+                    firstDue = new Date(invoiceDue);
+                    firstDue.setMonth(invoiceDue.getMonth() + 1);
+                }
+            }
 
             const parcela = totalParcelado / qty;
 
@@ -1366,21 +1394,51 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
 
 
 apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
-    const { fromCpf, toKey, amount, description, installments, interestRate } = req.body || {};
+    console.log('🔵 [PIX TRANSFER CREDIT] Requisição recebida:', JSON.stringify(req.body, null, 2));
+    const { fromCpf: fromCpfBody, toKey, key, amount, description, installments, interestRate } = req.body || {};
     const numericAmount = parseFloat(amount);
     const nInstallments = Number.isInteger(installments) ? installments : 12;
     const rate = typeof interestRate === 'number' ? interestRate : 0.02;
 
-    if (!fromCpf || !toKey || !numericAmount || numericAmount <= 0) {
-        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    // Usar key ou toKey (compatibilidade)
+    const recipientKey = key || toKey;
+    
+    // Validar campos obrigatórios
+    if (!recipientKey) {
+        return res.status(400).json({ success: false, message: 'Chave PIX de destino não fornecida.' });
     }
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+        return res.status(400).json({ success: false, message: 'Valor inválido.' });
+    }
+    if (!req.user || !req.user.cpf) {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    
+    // Obter CPF do remetente do token se não fornecido
+    const senderCpf = fromCpfBody || req.user.cpf;
+    
+    // Validar parcelas
     if (nInstallments < 2 || nInstallments > 24) {
-        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+        return res.status(400).json({ success: false, message: 'Número de parcelas deve estar entre 2 e 24.' });
     }
 
-    const fromUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${fromCpf}'`);
+    // Buscar usuário remetente
+    const fromUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${senderCpf}'`);
+    if (!fromUsers || fromUsers.length === 0) {
+        return res.status(404).json({ success: false, message: 'Usuário remetente não encontrado.' });
+    }
     const fromUser = fromUsers[0];
-    const toUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${toKey}' OR email = '${toKey}'`);
+    
+    // Buscar destinatário usando a mesma lógica do /pix/transfer
+    const keyType = recipientKey.includes('@') ? 'EMAIL' : 'CPF';
+    const normalizedKey = keyType === 'CPF' ? recipientKey.replace(/\D/g, '') : recipientKey;
+    const recipient = await pixRepo.findRecipientByKey(keyType, normalizedKey);
+    
+    if (!recipient) {
+        return res.status(404).json({ success: false, message: 'Chave PIX de destino não encontrada.' });
+    }
+    
+    const toUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${recipient.cpf}'`);
     const toUser = toUsers[0];
 
     if (!toUser) return res.status(400).json({ success: false, message: 'Chave PIX de destino não encontrada.' });
@@ -1400,13 +1458,21 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
         return res.status(400).json({ success: false, message: 'Saldo insuficiente para realizar a transferência no modo crédito.' });
     }
 
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance = ${newFromBalance} WHERE cpf = '${fromCpf}'`);
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance = ${newToBalance} WHERE cpf = '${toUser.cpf}'`);
+    const { esc } = require('./repositories/context');
+    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance = ${newFromBalance}, updated_at = CURRENT_TIMESTAMP WHERE cpf = '${senderCpf}'`);
+    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance = ${newToBalance}, updated_at = CURRENT_TIMESTAMP WHERE cpf = '${toUser.cpf}'`);
 
-    await databricksService.executeQuery(`INSERT INTO ${databricksService.fq('transactions')} VALUES ('${txId}_credit_sent', '${fromCpf}', 'PIX_CREDIT_SENT', ${-numericAmount}, '${description || 'Transferência PIX Crédito'}', '${fromUser.full_name}', '${toUser.full_name}', '${toKey}', '${now}')`);
-    await databricksService.executeQuery(`INSERT INTO ${databricksService.fq('transactions')} VALUES ('${txId}_credit_received', '${toUser.cpf}', 'PIX_CREDIT_RECEIVED', ${numericAmount}, '${description || 'Transferência PIX Crédito'}', '${fromUser.full_name}', '${toUser.full_name}', '${toKey}', '${now}')`);
+    const txDescription = description || 'Transferência PIX Crédito';
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date, to_user, to_key)
+        VALUES (${esc(txId + '_credit_sent')}, ${esc(senderCpf)}, 'PIX_CREDIT_SENT', ${-numericAmount}, ${esc(txDescription)}, ${esc(now)}, ${esc(toUser.cpf)}, ${esc(recipientKey)})
+    `);
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date, from_user, to_key)
+        VALUES (${esc(txId + '_credit_received')}, ${esc(toUser.cpf)}, 'PIX_CREDIT_RECEIVED', ${numericAmount}, ${esc(txDescription)}, ${esc(now)}, ${esc(fromUser.full_name)}, ${esc(recipientKey)})
+    `);
 
-    auditLog(req, 'pix_transfer_credit', 'info', { toKey: req.body?.toKey, amount: req.body?.amount, installments: req.body?.installments });
+    auditLog(req, 'pix_transfer_credit', 'info', { toKey: recipientKey, amount: numericAmount, installments: nInstallments });
 
     res.json({
         success: true,
@@ -1580,6 +1646,42 @@ apiRouter.put('/admin/users/:cpf/credit-limit', bearerAuth(), authenticateAdmin,
 apiRouter.post('/admin/users/:cpf/reset-password', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     await setPasswordResetRequested(req.params.cpf, true);
     res.json({ success: true, message: 'Solicitação de reset registrada' });
+}));
+
+// Corrigir usuário completamente (Admin) - Desbloqueia, reseta senha para admin999, limpa tentativas
+apiRouter.post('/admin/users/:cpf/fix', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { cpf } = req.params;
+    const { password } = req.body || {};
+    const newPassword = password || 'admin999';
+
+    // Verificar se usuário existe
+    const user = await findByCpf(cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+    // Gerar hash da nova senha
+    const hash = await bcrypt.hash(newPassword, 10);
+    const provider = process.env.DB_PROVIDER || process.env.DB_DIALECT || 'databricks';
+    const timestampFunc = provider === 'postgres' ? 'CURRENT_TIMESTAMP' : 'current_timestamp()';
+    
+    // Corrigir tudo de uma vez: desbloquear, resetar senha, limpar tentativas
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET is_blocked = false,
+            password_hash = '${hash.replace(/'/g, "''")}',
+            login_attempts = 0,
+            password_reset_requested = false,
+            updated_at = ${timestampFunc}
+        WHERE cpf = '${cpf}'
+    `);
+    
+    auditLog(req, 'admin_user_fix', 'info', { cpf, fixed: true });
+    
+    const updatedUser = await findByCpf(cpf);
+    res.json({ 
+        success: true, 
+        message: 'Usuario corrigido com sucesso. Senha resetada para: ' + newPassword,
+        user: normalizeUser(updatedUser)
+    });
 }));
 
 // Gerar nova senha temporária (Admin)

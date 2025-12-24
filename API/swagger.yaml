@@ -1,1031 +1,1933 @@
 openapi: 3.0.0
 info:
-  title: FintechBankApp API
-  description: API completa para o sistema bancário FintechBankApp
-  version: 1.0.0
-  contact:
-    name: FintechBankApp Team
-    email: support@fintechbankapp.com
-  license:
-    name: MIT
-    url: https://opensource.org/licenses/MIT
-
+    title: 'FintechBankApp API'
+    description: 'API completa para o sistema bancário FintechBankApp'
+    version: 1.0.0
+    contact:
+        name: 'FintechBankApp Team'
+        email: support@fintechbankapp.com
+    license:
+        name: MIT
+        url: 'https://opensource.org/licenses/MIT'
 servers:
-  - url: http://localhost:3001/api/v1
-    description: Servidor de desenvolvimento local
-  - url: http://192.168.0.110:3001/api/v1
-    description: Servidor de desenvolvimento (rede local)
-  - url: https://api.fintechbankapp.com/api/v1
-    description: Servidor de produção
-
+    -
+        url: 'http://localhost:3001/api/v1'
+        description: 'Servidor de desenvolvimento local'
+    -
+        url: 'http://192.168.0.110:3001/api/v1'
+        description: 'Servidor de desenvolvimento (rede local)'
+    -
+        url: 'https://api.fintechbankapp.com/api/v1'
+        description: 'Servidor de produção'
 components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-
-  schemas:
-    User:
-      type: object
-      properties:
-        id:
-          type: integer
-          description: ID único do usuário
-          example: 1
-        fullName:
-          type: string
-          description: Nome completo do usuário
-          example: "João da Silva"
-        cpf:
-          type: string
-          description: CPF do usuário
-          example: "12345678901"
-        email:
-          type: string
-          format: email
-          description: Email do usuário
-          example: "joao.silva@example.com"
-        balance:
-          type: number
-          format: float
-          description: Saldo atual da conta
-          example: 1500.75
-        pixDailyLimit:
-          type: number
-          format: float
-          description: Limite diário para PIX (valor padrão ao cadastrar: R$ 2.000,00)
-          example: 2000.00
-        isBlocked:
-          type: boolean
-          description: Status de bloqueio do usuário
-          example: false
-        role:
-          type: string
-          enum: [customer, admin]
-          description: Papel do usuário no sistema
-          example: "customer"
-        creditCard:
-          type: object
-          description: Informações do cartão de crédito do usuário
-          properties:
-            totalLimit:
-              type: number
-              format: float
-              description: Limite total do cartão de crédito (valor padrão ao cadastrar: R$ 5.000,00)
-              example: 5000.00
-            availableLimit:
-              type: number
-              format: float
-              description: Limite disponível do cartão de crédito (valor padrão ao cadastrar: R$ 5.000,00)
-              example: 5000.00
-            isBlocked:
-              type: boolean
-              description: Status de bloqueio do cartão (padrão: false - desbloqueado)
-              example: false
-            pointsBalance:
-              type: integer
-              description: Saldo de pontos do cartão (padrão: 0)
-              example: 0
-
-    LoginRequest:
-      type: object
-      required:
-        - cpf
-        - password
-      properties:
-        cpf:
-          type: string
-          pattern: '^[0-9]{11}$'
-          description: CPF com 11 dígitos
-          example: "12345678901"
-        password:
-          type: string
-          minLength: 6
-          example: "MinhaSenh@123"
-
-    AuthResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        message:
-          type: string
-          example: "Login realizado com sucesso"
-        user:
-          $ref: '#/components/schemas/User'
-        token:
-          type: string
-          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-
-    SuccessResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        message:
-          type: string
-          example: "Operação realizada com sucesso"
-
-    ErrorResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: false
-        message:
-          type: string
-          example: "Erro na operação"
-
-paths:
-  /health:
-    get:
-      tags:
-        - Sistema
-      summary: Health Check
-      description: Verifica se a API está funcionando
-      responses:
-        '200':
-          description: API funcionando
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: "OK"
-                  timestamp:
-                    type: string
-                    example: "2024-03-20T10:30:00Z"
-
-  /auth/login:
-    post:
-      tags:
-        - Autenticação
-      summary: Fazer login
-      description: Autentica um usuário no sistema
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
-      responses:
-        '200':
-          description: Login realizado com sucesso
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '400':
-          description: Dados inválidos
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Credenciais inválidas
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /auth/signup:
-    post:
-      tags:
-        - Autenticação
-      summary: Cadastrar novo usuário
-      description: |
-        Cria uma nova conta de usuário no sistema.
-        
-        **Valores padrão definidos automaticamente ao cadastrar:**
-        - Saldo inicial em conta: R$ 2.000,00
-        - Limite diário PIX: R$ 2.000,00
-        - Limite total do cartão de crédito: R$ 5.000,00
-        - Limite disponível do cartão de crédito: R$ 5.000,00
-        - Cartão de crédito: desbloqueado e pronto para uso
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - fullName
-                - cpf
-                - email
-                - password
-              properties:
+    securitySchemes:
+        bearerAuth:
+            type: http
+            scheme: bearer
+            bearerFormat: JWT
+    schemas:
+        User:
+            type: object
+            properties:
+                id:
+                    type: integer
+                    description: 'ID único do usuário'
+                    example: 1
                 fullName:
-                  type: string
-                  description: Nome completo do usuário
-                  example: "João da Silva"
+                    type: string
+                    description: 'Nome completo do usuário'
+                    example: 'João da Silva'
                 cpf:
-                  type: string
-                  pattern: '^[0-9]{11}$'
-                  description: CPF com 11 dígitos (apenas números)
-                  example: "12345678901"
+                    type: string
+                    description: 'CPF do usuário'
+                    example: '12345678901'
                 email:
-                  type: string
-                  format: email
-                  description: Email do usuário
-                  example: "joao.silva@example.com"
+                    type: string
+                    format: email
+                    description: 'Email do usuário'
+                    example: joao.silva@example.com
+                balance:
+                    type: number
+                    format: float
+                    description: 'Saldo atual da conta'
+                    example: 1500.75
+                pixDailyLimit:
+                    type: number
+                    format: float
+                    description: 'Limite diário para PIX (valor padrão ao cadastrar: R$ 2.000,00)'
+                    example: 2000
+                isBlocked:
+                    type: boolean
+                    description: 'Status de bloqueio do usuário'
+                    example: false
+                role:
+                    type: string
+                    enum:
+                        - customer
+                        - admin
+                    description: 'Papel do usuário no sistema'
+                    example: customer
+                creditCard:
+                    type: object
+                    description: 'Informações do cartão de crédito do usuário'
+                    properties:
+                        totalLimit:
+                            type: number
+                            format: float
+                            description: 'Limite total do cartão de crédito (valor padrão ao cadastrar: R$ 5.000,00)'
+                            example: 5000
+                        availableLimit:
+                            type: number
+                            format: float
+                            description: 'Limite disponível do cartão de crédito (valor padrão ao cadastrar: R$ 5.000,00)'
+                            example: 5000
+                        isBlocked:
+                            type: boolean
+                            description: 'Status de bloqueio do cartão (padrão: false - desbloqueado)'
+                            example: false
+                        pointsBalance:
+                            type: integer
+                            description: 'Saldo de pontos do cartão (padrão: 0)'
+                            example: 0
+        LoginRequest:
+            type: object
+            required:
+                - cpf
+                - password
+            properties:
+                cpf:
+                    type: string
+                    pattern: '^[0-9]{11}$'
+                    description: 'CPF com 11 dígitos'
+                    example: '12345678901'
                 password:
-                  type: string
-                  minLength: 6
-                  description: Senha do usuário (mínimo 6 caracteres)
-                  example: "MinhaSenh@123"
-      responses:
-        '200':
-          description: Conta criada com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
                     type: string
-                    example: "Conta criada com sucesso!"
-        '400':
-          description: Dados inválidos ou CPF/email já cadastrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Erro ao criar conta
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /users/{cpf}:
-    get:
-      tags:
-        - Usuários
-      summary: Consultar usuário
-      description: Retorna os dados de um usuário
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Dados do usuário
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
+                    minLength: 6
+                    example: MinhaSenh@123
+        AuthResponse:
+            type: object
+            properties:
+                success:
                     type: boolean
                     example: true
-                  user:
+                message:
+                    type: string
+                    example: 'Login realizado com sucesso'
+                user:
                     $ref: '#/components/schemas/User'
-        '401':
-          description: Token inválido
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Usuário não encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /users/{cpf}/statement:
-    get:
-      tags:
-        - Usuários
-      summary: Extrato do usuário
-      description: Retorna o extrato de transações do usuário
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Extrato do usuário
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
+                token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        SuccessResponse:
+            type: object
+            properties:
+                success:
                     type: boolean
                     example: true
-                  transactions:
+                message:
+                    type: string
+                    example: 'Operação realizada com sucesso'
+        ErrorResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+                    example: false
+                message:
+                    type: string
+                    example: 'Erro na operação'
+        Contact:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: 'Nome do contato'
+                    example: 'João Silva'
+                key:
+                    type: string
+                    description: 'CPF do contato (chave PIX)'
+                    example: '88888888888'
+        ContactListResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+                    example: true
+                contacts:
                     type: array
                     items:
-                      type: object
-
-  /admin/users:
-    get:
-      tags:
-        - Administração
-      summary: Listar usuários (Admin)
-      description: Lista todos os usuários (apenas administradores)
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Lista de usuários
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  users:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/User'
-
-  /admin/users/{cpf}:
-    get:
-      tags:
-        - Administração
-      summary: Consultar usuário (Admin)
-      description: Consulta dados de um usuário (apenas administradores)
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Dados do usuário
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  user:
-                    $ref: '#/components/schemas/User'
-
-  /admin/users/{cpf}/deposit:
-    post:
-      tags:
-        - Administração
-      summary: Fazer depósito (Admin)
-      description: Realiza um depósito na conta do usuário (apenas administradores)
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - amount
-              properties:
-                amount:
-                  type: number
-                  format: float
-                  minimum: 0.01
-                  description: Valor do depósito
-                  example: 500.00
-      responses:
-        '200':
-          description: Depósito realizado com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Depósito realizado com sucesso"
-                  user:
-                    $ref: '#/components/schemas/User'
-
-  /admin/users/{cpf}/block:
-    put:
-      tags:
-        - Administração
-      summary: Bloquear usuário (Admin)
-      description: Bloqueia um usuário (apenas administradores)
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Usuário bloqueado com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Usuário bloqueado com sucesso"
-                  user:
-                    $ref: '#/components/schemas/User'
-
-  /admin/users/{cpf}/unblock:
-    put:
-      tags:
-        - Administração
-      summary: Desbloquear usuário (Admin)
-      description: Desbloqueia um usuário (apenas administradores)
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Usuário desbloqueado com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Usuário desbloqueado com sucesso"
-                  user:
-                    $ref: '#/components/schemas/User'
-
-  /admin/users/{cpf}/pix-limit:
-    put:
-      tags:
-        - Administração
-      summary: Alterar limite PIX (Admin)
-      description: Altera o limite diário PIX de um usuário (apenas administradores)
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - newLimit
-              properties:
-                newLimit:
-                  type: number
-                  format: float
-                  minimum: 0
-                  description: Novo limite diário PIX
-                  example: 2000.00
-      responses:
-        '200':
-          description: Limite alterado com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Limite PIX alterado com sucesso"
-                  user:
-                    $ref: '#/components/schemas/User'
-
-  /admin/users/{cpf}/credit-limit:
-    put:
-      tags:
-        - Administração
-      summary: Alterar limite do cartão de crédito (Admin)
-      description: Altera o limite total e/ou disponível do cartão de crédito de um usuário (apenas administradores). Se apenas totalLimit for informado, o availableLimit será ajustado automaticamente se necessário.
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                totalLimit:
-                  type: number
-                  format: float
-                  minimum: 0
-                  description: Limite total do cartão de crédito
-                  example: 5000.00
-                availableLimit:
-                  type: number
-                  format: float
-                  minimum: 0
-                  description: Limite disponível do cartão de crédito. Será ajustado automaticamente se for maior que totalLimit.
-                  example: 4500.00
-              description: Pelo menos um dos campos (totalLimit ou availableLimit) deve ser informado
-      responses:
-        '200':
-          description: Limite do cartão de crédito alterado com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Limite do cartao de credito atualizado"
-                  user:
-                    $ref: '#/components/schemas/User'
-        '400':
-          description: Erro de validação
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Usuário não encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /admin/users/{cpf}/reset-password:
-    put:
-      tags:
-        - Administração
-      summary: Resetar senha (Admin)
-      description: Reseta a senha de um usuário (apenas administradores)
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - newPassword
-              properties:
-                newPassword:
-                  type: string
-                  minLength: 6
-                  maxLength: 12
-                  description: Nova senha
-                  example: "nova123"
-      responses:
-        '200':
-          description: Senha resetada com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Senha resetada com sucesso"
-                  user:
-                    $ref: '#/components/schemas/User'
-
-  /admin/users/{cpf}/generate-temp-password:
-    post:
-      tags:
-        - Administração
-      summary: Gerar senha temporária (Admin)
-      description: Gera uma senha temporária para um usuário (apenas administradores)
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Senha temporária gerada com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Senha temporária gerada com sucesso"
-                  tempPassword:
-                    type: string
-                    example: "temp1234"
-                  user:
-                    $ref: '#/components/schemas/User'
-
-  /admin/users/{cpf}/card-details:
-    post:
-      tags:
-        - Administração
-      summary: Atualizar detalhes do cartão de crédito (Admin)
-      description: Atualiza os detalhes do cartão de crédito de um usuário, incluindo datas de vencimento, limites e pontos (apenas administradores). Se a fatura estiver vencida há mais de 7 dias, o cartão será bloqueado automaticamente.
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9]{11}$'
-          description: CPF do usuário
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                dueDate:
-                  type: string
-                  format: date-time
-                  description: Data de vencimento do cartão
-                  example: "2025-12-31T00:00:00.000Z"
-                invoiceDueDate:
-                  type: string
-                  format: date-time
-                  description: Data de vencimento da fatura. Se estiver há mais de 7 dias no passado, o cartão será bloqueado automaticamente.
-                  example: "2025-11-30T03:00:00.000Z"
-                availableLimit:
-                  type: number
-                  format: float
-                  minimum: 0
-                  description: Limite disponível do cartão
-                  example: 1800.00
-                totalLimit:
-                  type: number
-                  format: float
-                  minimum: 0
-                  description: Limite total do cartão
-                  example: 2000.00
-                pointsBalance:
-                  type: integer
-                  minimum: 0
-                  description: Saldo de pontos do cartão
-                  example: 1500
-              description: Pelo menos um campo deve ser informado
-      responses:
-        '200':
-          description: Detalhes do cartão atualizados com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  user:
-                    $ref: '#/components/schemas/User'
-        '400':
-          description: Erro de validação (nenhum campo informado)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Usuário não encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /users/{cpf}/pix-daily-usage:
-    get:
-      tags: [PIX]
-      summary: Uso diario do PIX (valor enviado no dia)
-      description: Retorna o total enviado via PIX no dia corrente para o CPF informado.
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema: { type: string, pattern: '^[0-9]{11}$' }
-      responses:
-        '200':
-          description: Sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success: { type: boolean, example: true }
-                  cpf: { type: string, example: '12345678901' }
-                  date: { type: string, format: date, example: '2025-11-10' }
-                  totalSentToday: { type: number, format: float, example: 250.00 }
-        '400':
-          description: Erro
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-
-  /cards/invoice/pay:
-    post:
-      tags: [Card]
-      summary: Pagar fatura do cartao de credito
-      description: Paga a fatura fechada do cartao de credito, debitando do saldo da conta e restaurando o limite disponivel. O sistema busca todas as parcelas vencidas ate a data de vencimento da fatura e as paga.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [cpf, pin]
-              properties:
-                cpf:
-                  type: string
-                  pattern: '^[0-9]{11}$'
-                  description: CPF do usuario
-                  example: '12345678901'
-                pin:
-                  type: string
-                  minLength: 4
-                  maxLength: 4
-                  description: PIN do cartao (4 digitos)
-                  example: '1234'
-              example:
-                cpf: '12345678901'
-                pin: '1234'
-      responses:
-        '200':
-          description: Fatura paga com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: 'Fatura paga com sucesso.'
-        '400':
-          description: Dados invalidos, saldo insuficiente ou nenhuma parcela vencida
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '403':
-          description: Acesso negado (CPF nao corresponde ao usuario autenticado)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '404':
-          description: Usuario nao encontrado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-
-  /cards/invoice/parcel:
-    post:
-      tags: [Card]
-      summary: Parcelar fatura do cartao de credito
-      description: Parcela a fatura fechada em um numero de parcelas entre 2 e 24. O valor sera debitado do saldo da conta em parcelas.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [cpf, amount, installments, pin]
-              properties:
-                cpf:
-                  type: string
-                  pattern: '^[0-9]{11}$'
-                  description: CPF do usuario
-                  example: '12345678901'
-                amount:
-                  type: number
-                  format: float
-                  minimum: 0.01
-                  description: Valor total a ser parcelado
-                  example: 500.00
-                installments:
-                  type: integer
-                  minimum: 2
-                  maximum: 24
-                  description: Numero de parcelas (entre 2 e 24)
-                  example: 12
-                pin:
-                  type: string
-                  minLength: 4
-                  maxLength: 4
-                  description: PIN do cartao (4 digitos)
-                  example: '1234'
-              example:
-                cpf: '12345678901'
-                amount: 500.00
-                installments: 12
-                pin: '1234'
-      responses:
-        '200':
-          description: Parcelamento realizado com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: 'Parcelamento realizado'
-        '400':
-          description: Dados invalidos (payload invalido)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '403':
-          description: Acesso negado (CPF nao corresponde ao usuario autenticado)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-
-  /cards/invoice/anticipate:
-    post:
-      tags: [Card]
-      summary: Antecipar parcelas da fatura do cartao
-      description: Antecipacao de parcelas com regra de desconto e atualizacao de fatura/transacoes.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [cpf, transactionIds, pin]
-              properties:
-                cpf:
-                  type: string
-                  pattern: '^[0-9]{11}$'
-                  description: CPF do usuario
-                  example: '12345678901'
-                transactionIds:
-                  type: array
-                  items: { type: string }
-                  description: IDs das transacoes de parcelas a serem antecipadas
-                  example: ['tx-inv-001', 'tx-inv-002']
-                pin:
-                  type: string
-                  minLength: 4
-                  maxLength: 4
-                  description: PIN do cartao (4 digitos)
-                  example: '1234'
-              example:
-                cpf: '12345678901'
-                transactionIds: ['tx-inv-001', 'tx-inv-002']
-                pin: '1234'
-      responses:
-        '200':
-          description: Parcelas antecipadas com sucesso
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/SuccessResponse' }
-        '400':
-          description: Dados invalidos ou inconsistencia nas parcelas
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '403':
-          description: Acesso negado (CPF nao corresponde ao usuario autenticado)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-
-  /user/me/{cpf}:
-    get:
-      tags: [Users]
-      summary: Dados do usuario (compatibilidade)
-      description: Retorna dados do usuario, transacoes e contatos PIX (rota de compatibilidade).
-      parameters:
-        - name: cpf
-          in: path
-          required: true
-          schema: { type: string, pattern: '^[0-9]{11}$' }
-      responses:
-        '200':
-          description: Sucesso
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/User' }
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
+                        $ref: '#/components/schemas/Contact'
+paths:
+    /health:
+        get:
+            tags:
+                - Sistema
+            summary: 'Health Check'
+            description: 'Verifica se a API está funcionando'
+            responses:
+                '200':
+                    description: 'API funcionando'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    status:
+                                        type: string
+                                        example: OK
+                                    timestamp:
+                                        type: string
+                                        example: '2024-03-20T10:30:00Z'
+    /auth/login:
+        post:
+            tags:
+                - Autenticação
+            summary: 'Fazer login'
+            description: 'Autentica um usuário no sistema'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/LoginRequest'
+            responses:
+                '200':
+                    description: 'Login realizado com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AuthResponse'
+                '400':
+                    description: 'Dados inválidos'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '401':
+                    description: 'Credenciais inválidas'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /auth/signup:
+        post:
+            tags:
+                - Autenticação
+            summary: 'Cadastrar novo usuário'
+            description: "Cria uma nova conta de usuário no sistema.\n\n**Valores padrão definidos automaticamente ao cadastrar:**\n- Saldo inicial em conta: R$ 2.000,00\n- Limite diário PIX: R$ 2.000,00\n- Limite total do cartão de crédito: R$ 5.000,00\n- Limite disponível do cartão de crédito: R$ 5.000,00\n- Cartão de crédito: desbloqueado e pronto para uso\n"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - fullName
+                                - cpf
+                                - email
+                                - password
+                            properties:
+                                fullName:
+                                    type: string
+                                    description: 'Nome completo do usuário'
+                                    example: 'João da Silva'
+                                cpf:
+                                    type: string
+                                    pattern: '^[0-9]{11}$'
+                                    description: 'CPF com 11 dígitos (apenas números)'
+                                    example: '12345678901'
+                                email:
+                                    type: string
+                                    format: email
+                                    description: 'Email do usuário'
+                                    example: joao.silva@example.com
+                                password:
+                                    type: string
+                                    minLength: 6
+                                    description: 'Senha do usuário (mínimo 6 caracteres)'
+                                    example: MinhaSenh@123
+            responses:
+                '200':
+                    description: 'Conta criada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Conta criada com sucesso!'
+                '400':
+                    description: 'Dados inválidos ou CPF/email já cadastrado'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '500':
+                    description: 'Erro ao criar conta'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    '/users/{cpf}':
+        get:
+            tags:
+                - Usuários
+            summary: 'Consultar usuário'
+            description: 'Retorna os dados de um usuário'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Dados do usuário'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    user:
+                                        $ref: '#/components/schemas/User'
+                '401':
+                    description: 'Token inválido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '404':
+                    description: 'Usuário não encontrado'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    '/users/{cpf}/statement':
+        get:
+            tags:
+                - Usuários
+            summary: 'Extrato do usuário'
+            description: 'Retorna o extrato de transações do usuário'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Extrato do usuário'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    transactions:
+                                        type: array
+                                        items:
+                                            type: object
+    /admin/users:
+        get:
+            tags:
+                - Administração
+            summary: 'Listar usuários (Admin)'
+            description: 'Lista todos os usuários (apenas administradores)'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Lista de usuários'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    users:
+                                        type: array
+                                        items:
+                                            $ref: '#/components/schemas/User'
+    '/admin/users/{cpf}':
+        get:
+            tags:
+                - Administração
+            summary: 'Consultar usuário (Admin)'
+            description: 'Consulta dados de um usuário (apenas administradores)'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Dados do usuário'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    user:
+                                        $ref: '#/components/schemas/User'
+    '/admin/users/{cpf}/deposit':
+        post:
+            tags:
+                - Administração
+            summary: 'Fazer depósito (Admin)'
+            description: 'Realiza um depósito na conta do usuário (apenas administradores)'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - amount
+                            properties:
+                                amount:
+                                    type: number
+                                    format: float
+                                    minimum: 0.01
+                                    description: 'Valor do depósito'
+                                    example: 500
+            responses:
+                '200':
+                    description: 'Depósito realizado com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Depósito realizado com sucesso'
+                                    user:
+                                        $ref: '#/components/schemas/User'
+    '/admin/users/{cpf}/block':
+        put:
+            tags:
+                - Administração
+            summary: 'Bloquear usuário (Admin)'
+            description: 'Bloqueia um usuário (apenas administradores)'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Usuário bloqueado com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Usuário bloqueado com sucesso'
+                                    user:
+                                        $ref: '#/components/schemas/User'
+    '/admin/users/{cpf}/unblock':
+        put:
+            tags:
+                - Administração
+            summary: 'Desbloquear usuário (Admin)'
+            description: 'Desbloqueia um usuário (apenas administradores)'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Usuário desbloqueado com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Usuário desbloqueado com sucesso'
+                                    user:
+                                        $ref: '#/components/schemas/User'
+    '/admin/users/{cpf}/pix-limit':
+        put:
+            tags:
+                - Administração
+            summary: 'Alterar limite PIX (Admin)'
+            description: 'Altera o limite diário PIX de um usuário (apenas administradores)'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - newLimit
+                            properties:
+                                newLimit:
+                                    type: number
+                                    format: float
+                                    minimum: 0
+                                    description: 'Novo limite diário PIX'
+                                    example: 2000
+            responses:
+                '200':
+                    description: 'Limite alterado com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Limite PIX alterado com sucesso'
+                                    user:
+                                        $ref: '#/components/schemas/User'
+    '/admin/users/{cpf}/credit-limit':
+        put:
+            tags:
+                - Administração
+            summary: 'Alterar limite do cartão de crédito (Admin)'
+            description: 'Altera o limite total e/ou disponível do cartão de crédito de um usuário (apenas administradores). Se apenas totalLimit for informado, o availableLimit será ajustado automaticamente se necessário.'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                totalLimit:
+                                    type: number
+                                    format: float
+                                    minimum: 0
+                                    description: 'Limite total do cartão de crédito'
+                                    example: 5000
+                                availableLimit:
+                                    type: number
+                                    format: float
+                                    minimum: 0
+                                    description: 'Limite disponível do cartão de crédito. Será ajustado automaticamente se for maior que totalLimit.'
+                                    example: 4500
+                            description: 'Pelo menos um dos campos (totalLimit ou availableLimit) deve ser informado'
+            responses:
+                '200':
+                    description: 'Limite do cartão de crédito alterado com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Limite do cartao de credito atualizado'
+                                    user:
+                                        $ref: '#/components/schemas/User'
+                '400':
+                    description: 'Erro de validação'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '404':
+                    description: 'Usuário não encontrado'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    '/admin/users/{cpf}/reset-password':
+        put:
+            tags:
+                - Administração
+            summary: 'Resetar senha (Admin)'
+            description: 'Reseta a senha de um usuário (apenas administradores)'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - newPassword
+                            properties:
+                                newPassword:
+                                    type: string
+                                    minLength: 6
+                                    maxLength: 12
+                                    description: 'Nova senha'
+                                    example: nova123
+            responses:
+                '200':
+                    description: 'Senha resetada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Senha resetada com sucesso'
+                                    user:
+                                        $ref: '#/components/schemas/User'
+    '/admin/users/{cpf}/generate-temp-password':
+        post:
+            tags:
+                - Administração
+            summary: 'Gerar senha temporária (Admin)'
+            description: 'Gera uma senha temporária para um usuário (apenas administradores)'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Senha temporária gerada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Senha temporária gerada com sucesso'
+                                    tempPassword:
+                                        type: string
+                                        example: temp1234
+                                    user:
+                                        $ref: '#/components/schemas/User'
+    '/admin/users/{cpf}/card-details':
+        post:
+            tags:
+                - Administração
+            summary: 'Atualizar detalhes do cartão de crédito (Admin)'
+            description: 'Atualiza os detalhes do cartão de crédito de um usuário, incluindo datas de vencimento, limites e pontos (apenas administradores). Se a fatura estiver vencida há mais de 7 dias, o cartão será bloqueado automaticamente.'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                dueDate:
+                                    type: string
+                                    format: date-time
+                                    description: 'Data de vencimento do cartão'
+                                    example: '2025-12-31T00:00:00.000Z'
+                                invoiceDueDate:
+                                    type: string
+                                    format: date-time
+                                    description: 'Data de vencimento da fatura. Se estiver há mais de 7 dias no passado, o cartão será bloqueado automaticamente.'
+                                    example: '2025-11-30T03:00:00.000Z'
+                                availableLimit:
+                                    type: number
+                                    format: float
+                                    minimum: 0
+                                    description: 'Limite disponível do cartão'
+                                    example: 1800
+                                totalLimit:
+                                    type: number
+                                    format: float
+                                    minimum: 0
+                                    description: 'Limite total do cartão'
+                                    example: 2000
+                                pointsBalance:
+                                    type: integer
+                                    minimum: 0
+                                    description: 'Saldo de pontos do cartão'
+                                    example: 1500
+                            description: 'Pelo menos um campo deve ser informado'
+            responses:
+                '200':
+                    description: 'Detalhes do cartão atualizados com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    user:
+                                        $ref: '#/components/schemas/User'
+                '400':
+                    description: 'Erro de validação (nenhum campo informado)'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '404':
+                    description: 'Usuário não encontrado'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    '/users/{cpf}/pix-daily-usage':
+        get:
+            tags:
+                - PIX
+            summary: 'Uso diario do PIX (valor enviado no dia)'
+            description: 'Retorna o total enviado via PIX no dia corrente para o CPF informado.'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+            responses:
+                '200':
+                    description: Sucesso
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    cpf:
+                                        type: string
+                                        example: '12345678901'
+                                    date:
+                                        type: string
+                                        format: date
+                                        example: '2025-11-10'
+                                    totalSentToday:
+                                        type: number
+                                        format: float
+                                        example: 250
+                '400':
+                    description: Erro
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '401':
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+            security:
+                -
+                    bearerAuth: []
+    '/pix/contacts/{cpf}':
+        get:
+            tags:
+                - PIX
+            summary: 'Listar contatos PIX salvos'
+            description: 'Retorna a lista de contatos PIX salvos do usuário para facilitar o envio de transferências.'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Lista de contatos retornada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ContactListResponse'
+                '401':
+                    description: 'Token inválido ou não fornecido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '403':
+                    description: 'Acesso negado (CPF não corresponde ao usuário autenticado)'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+        post:
+            tags:
+                - PIX
+            summary: 'Adicionar contato PIX'
+            description: 'Adiciona um novo contato PIX à lista de contatos salvos do usuário.'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - contactCpf
+                                - contactName
+                            properties:
+                                contactCpf:
+                                    type: string
+                                    pattern: '^[0-9]{11}$'
+                                    description: 'CPF do contato a ser adicionado'
+                                    example: '88888888888'
+                                contactName:
+                                    type: string
+                                    description: 'Nome do contato'
+                                    example: 'João Silva'
+            responses:
+                '201':
+                    description: 'Contato adicionado com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Contato adicionado'
+                '400':
+                    description: 'Dados inválidos (payload inválido)'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '401':
+                    description: 'Token inválido ou não fornecido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '403':
+                    description: 'Acesso negado (CPF não corresponde ao usuário autenticado)'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    '/pix/contacts/{cpf}/{contactKey}':
+        delete:
+            tags:
+                - PIX
+            summary: 'Remover contato PIX'
+            description: 'Remove um contato PIX da lista de contatos salvos do usuário.'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+                -
+                    name: contactKey
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do contato a ser removido'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Contato removido com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Contato removido'
+                '401':
+                    description: 'Token inválido ou não fornecido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '403':
+                    description: 'Acesso negado (CPF não corresponde ao usuário autenticado)'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '404':
+                    description: 'Contato não encontrado'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /cards/invoice/pay:
+        post:
+            tags:
+                - Card
+            summary: 'Pagar fatura do cartao de credito'
+            description: 'Paga a fatura fechada do cartao de credito, debitando do saldo da conta e restaurando o limite disponivel. O sistema busca todas as parcelas vencidas ate a data de vencimento da fatura e as paga.'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - cpf
+                                - pin
+                            properties:
+                                cpf:
+                                    type: string
+                                    pattern: '^[0-9]{11}$'
+                                    description: 'CPF do usuario'
+                                    example: '12345678901'
+                                pin:
+                                    type: string
+                                    minLength: 4
+                                    maxLength: 4
+                                    description: 'PIN do cartao (4 digitos)'
+                                    example: '1234'
+                            example:
+                                cpf: '12345678901'
+                                pin: '1234'
+            responses:
+                '200':
+                    description: 'Fatura paga com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Fatura paga com sucesso.'
+                '400':
+                    description: 'Dados invalidos, saldo insuficiente ou nenhuma parcela vencida'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '401':
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '403':
+                    description: 'Acesso negado (CPF nao corresponde ao usuario autenticado)'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '404':
+                    description: 'Usuario nao encontrado'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /cards/invoice/parcel:
+        post:
+            tags:
+                - Card
+            summary: 'Parcelar fatura do cartao de credito'
+            description: 'Parcela a fatura fechada em um numero de parcelas entre 2 e 24. O valor sera debitado do saldo da conta em parcelas.'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - cpf
+                                - amount
+                                - installments
+                                - pin
+                            properties:
+                                cpf:
+                                    type: string
+                                    pattern: '^[0-9]{11}$'
+                                    description: 'CPF do usuario'
+                                    example: '12345678901'
+                                amount:
+                                    type: number
+                                    format: float
+                                    minimum: 0.01
+                                    description: 'Valor total a ser parcelado'
+                                    example: 500
+                                installments:
+                                    type: integer
+                                    minimum: 2
+                                    maximum: 24
+                                    description: 'Numero de parcelas (entre 2 e 24)'
+                                    example: 12
+                                pin:
+                                    type: string
+                                    minLength: 4
+                                    maxLength: 4
+                                    description: 'PIN do cartao (4 digitos)'
+                                    example: '1234'
+                            example:
+                                cpf: '12345678901'
+                                amount: 500
+                                installments: 12
+                                pin: '1234'
+            responses:
+                '200':
+                    description: 'Parcelamento realizado com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Parcelamento realizado'
+                '400':
+                    description: 'Dados invalidos (payload invalido)'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '401':
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '403':
+                    description: 'Acesso negado (CPF nao corresponde ao usuario autenticado)'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /cards/invoice/anticipate:
+        post:
+            tags:
+                - Card
+            summary: 'Antecipar parcelas da fatura do cartao'
+            description: 'Antecipacao de parcelas com regra de desconto e atualizacao de fatura/transacoes.'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - cpf
+                                - transactionIds
+                                - pin
+                            properties:
+                                cpf:
+                                    type: string
+                                    pattern: '^[0-9]{11}$'
+                                    description: 'CPF do usuario'
+                                    example: '12345678901'
+                                transactionIds:
+                                    type: array
+                                    items:
+                                        type: string
+                                    description: 'IDs das transacoes de parcelas a serem antecipadas'
+                                    example:
+                                        - tx-inv-001
+                                        - tx-inv-002
+                                pin:
+                                    type: string
+                                    minLength: 4
+                                    maxLength: 4
+                                    description: 'PIN do cartao (4 digitos)'
+                                    example: '1234'
+                            example:
+                                cpf: '12345678901'
+                                transactionIds:
+                                    - tx-inv-001
+                                    - tx-inv-002
+                                pin: '1234'
+            responses:
+                '200':
+                    description: 'Parcelas antecipadas com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuccessResponse'
+                '400':
+                    description: 'Dados invalidos ou inconsistencia nas parcelas'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '401':
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '403':
+                    description: 'Acesso negado (CPF nao corresponde ao usuario autenticado)'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    '/user/me/{cpf}':
+        get:
+            tags:
+                - Users
+            summary: 'Dados do usuario (compatibilidade)'
+            description: 'Retorna dados do usuario, transacoes e contatos PIX (rota de compatibilidade).'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: Sucesso
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/User'
+                '401':
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /users/me:
+        get:
+            tags:
+                - Users
+            summary: 'Dados do usuário autenticado'
+            description: 'Retorna os dados do usuário autenticado (baseado no token JWT)'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Dados do usuário'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    user:
+                                        $ref: '#/components/schemas/User'
+                '401':
+                    description: 'Token inválido ou não fornecido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /pix/transfer:
+        post:
+            tags:
+                - PIX
+            summary: 'Transferência PIX'
+            description: 'Realiza uma transferência PIX usando saldo da conta corrente'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - key
+                                - amount
+                            properties:
+                                key:
+                                    type: string
+                                    description: 'Chave PIX do destinatário (CPF ou EMAIL)'
+                                    example: '88888888888'
+                                amount:
+                                    type: number
+                                    format: float
+                                    minimum: 0.01
+                                    description: 'Valor da transferência'
+                                    example: 100
+                                description:
+                                    type: string
+                                    description: 'Descrição da transferência'
+                                    example: 'Transferência PIX'
+                                pin:
+                                    type: string
+                                    minLength: 4
+                                    maxLength: 4
+                                    description: 'PIN de 4 dígitos (opcional para débito)'
+                                    example: '1234'
+            responses:
+                '200':
+                    description: 'Transferência realizada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuccessResponse'
+                '400':
+                    description: 'Dados inválidos, saldo insuficiente ou limite diário excedido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '401':
+                    description: 'Token inválido ou não fornecido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '404':
+                    description: 'Destinatário não encontrado'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /pix/transfer-credit:
+        post:
+            tags:
+                - PIX
+            summary: 'Transferência PIX no crédito'
+            description: 'Realiza uma transferência PIX usando cartão de crédito com parcelamento'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - key
+                                - amount
+                                - pin
+                            properties:
+                                key:
+                                    type: string
+                                    description: 'Chave PIX do destinatário'
+                                    example: '88888888888'
+                                amount:
+                                    type: number
+                                    format: float
+                                    minimum: 0.01
+                                    description: 'Valor da transferência'
+                                    example: 100
+                                installments:
+                                    type: integer
+                                    minimum: 1
+                                    maximum: 24
+                                    description: 'Número de parcelas (padrão: 1)'
+                                    example: 12
+                                interestRate:
+                                    type: number
+                                    format: float
+                                    description: 'Taxa de juros (padrão: 0.02 = 2%)'
+                                    example: 0.02
+                                description:
+                                    type: string
+                                    description: 'Descrição da transferência'
+                                    example: 'PIX Crédito'
+                                pin:
+                                    type: string
+                                    minLength: 4
+                                    maxLength: 4
+                                    description: 'PIN de 4 dígitos (obrigatório)'
+                                    example: '1234'
+            responses:
+                '200':
+                    description: 'Transferência realizada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuccessResponse'
+                '400':
+                    description: 'Dados inválidos ou limite insuficiente'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '401':
+                    description: 'Token inválido ou não fornecido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /pix/keys:
+        get:
+            tags:
+                - PIX
+            summary: 'Listar chaves PIX'
+            description: 'Retorna todas as chaves PIX cadastradas do usuário autenticado'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Lista de chaves PIX'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    keys:
+                                        type: array
+                                        items:
+                                            type: object
+                                            properties:
+                                                type:
+                                                    type: string
+                                                    example: CPF
+                                                key:
+                                                    type: string
+                                                    example: '12345678901'
+                '401':
+                    description: 'Token inválido ou não fornecido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+        post:
+            tags:
+                - PIX
+            summary: 'Cadastrar chave PIX'
+            description: 'Cadastra uma nova chave PIX para o usuário autenticado'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - type
+                                - key
+                            properties:
+                                type:
+                                    type: string
+                                    enum:
+                                        - CPF
+                                        - EMAIL
+                                        - PHONE
+                                        - RANDOM
+                                    description: 'Tipo da chave PIX'
+                                    example: CPF
+                                key:
+                                    type: string
+                                    description: 'Valor da chave PIX'
+                                    example: '12345678901'
+            responses:
+                '201':
+                    description: 'Chave cadastrada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuccessResponse'
+                '400':
+                    description: 'Dados inválidos ou chave já cadastrada'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '401':
+                    description: 'Token inválido ou não fornecido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    '/pix/keys/{key}':
+        delete:
+            tags:
+                - PIX
+            summary: 'Remover chave PIX'
+            description: 'Remove uma chave PIX cadastrada'
+            security:
+                -
+                    bearerAuth: []
+            parameters:
+                -
+                    name: key
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                    description: 'Chave PIX a ser removida'
+            responses:
+                '200':
+                    description: 'Chave removida com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuccessResponse'
+                '401':
+                    description: 'Token inválido ou não fornecido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '404':
+                    description: 'Chave não encontrada'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /pix/recipient-info:
+        get:
+            tags:
+                - PIX
+            summary: 'Consultar informações do destinatário PIX'
+            description: 'Retorna informações do destinatário baseado na chave PIX (sem autenticação)'
+            parameters:
+                -
+                    name: key
+                    in: query
+                    required: true
+                    schema:
+                        type: string
+                    description: 'Chave PIX do destinatário'
+                -
+                    name: senderCpf
+                    in: query
+                    schema:
+                        type: string
+                    description: 'CPF do remetente (opcional)'
+            responses:
+                '200':
+                    description: 'Informações do destinatário'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    recipient:
+                                        type: object
+                                        properties:
+                                            name:
+                                                type: string
+                                                example: 'João Silva'
+                                            key:
+                                                type: string
+                                                example: '88888888888'
+                '404':
+                    description: 'Destinatário não encontrado'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+        post:
+            tags:
+                - PIX
+            summary: 'Consultar informações do destinatário PIX (POST)'
+            description: 'Retorna informações do destinatário baseado na chave PIX (com autenticação)'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - type
+                                - key
+                            properties:
+                                type:
+                                    type: string
+                                    enum:
+                                        - CPF
+                                        - EMAIL
+                                        - PHONE
+                                        - RANDOM
+                                    description: 'Tipo da chave PIX'
+                                    example: CPF
+                                key:
+                                    type: string
+                                    description: 'Chave PIX do destinatário'
+                                    example: '88888888888'
+            responses:
+                '200':
+                    description: 'Informações do destinatário'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    recipient:
+                                        type: object
+                                        properties:
+                                            name:
+                                                type: string
+                                                example: 'João Silva'
+                                            key:
+                                                type: string
+                                                example: '88888888888'
+                '404':
+                    description: 'Destinatário não encontrado'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /shop/products:
+        get:
+            tags:
+                - Shop
+            summary: 'Listar produtos'
+            description: 'Retorna a lista de produtos disponíveis no marketplace'
+            responses:
+                '200':
+                    description: 'Lista de produtos'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    products:
+                                        type: array
+                                        items:
+                                            type: object
+                                            properties:
+                                                id:
+                                                    type: string
+                                                    example: prod-001
+                                                name:
+                                                    type: string
+                                                    example: 'Produto Exemplo'
+                                                price:
+                                                    type: number
+                                                    format: float
+                                                    example: 99.9
+                                                description:
+                                                    type: string
+                                                    example: 'Descrição do produto'
+    /shop/checkout:
+        post:
+            tags:
+                - Shop
+            summary: 'Finalizar compra'
+            description: 'Realiza o checkout de produtos no marketplace'
+            security:
+                -
+                    bearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - items
+                                - paymentMethod
+                                - pin
+                            properties:
+                                items:
+                                    type: array
+                                    items:
+                                        type: object
+                                        required:
+                                            - productId
+                                            - quantity
+                                        properties:
+                                            productId:
+                                                type: string
+                                                example: prod-001
+                                            quantity:
+                                                type: integer
+                                                minimum: 1
+                                                example: 2
+                                paymentMethod:
+                                    type: string
+                                    enum:
+                                        - debit
+                                        - credit
+                                    description: 'Método de pagamento'
+                                    example: debit
+                                cashbackUsed:
+                                    type: number
+                                    format: float
+                                    description: 'Valor de cashback a ser usado (opcional)'
+                                    example: 10
+                                pin:
+                                    type: string
+                                    minLength: 4
+                                    maxLength: 4
+                                    description: 'PIN de 4 dígitos'
+                                    example: '1234'
+            responses:
+                '201':
+                    description: 'Compra realizada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    message:
+                                        type: string
+                                        example: 'Compra realizada com sucesso'
+                                    transactionId:
+                                        type: string
+                                        example: tx-shop-001
+                '400':
+                    description: 'Dados inválidos, saldo insuficiente ou produto não encontrado'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '401':
+                    description: 'Token inválido ou não fornecido'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /admin/requests/limit:
+        get:
+            tags:
+                - Administração
+            summary: 'Listar solicitações de aumento de limite (Admin)'
+            description: 'Retorna todas as solicitações de aumento de limite PIX pendentes'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Lista de solicitações'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    requests:
+                                        type: array
+                                        items:
+                                            type: object
+    '/admin/requests/limit/{cpf}/approve':
+        post:
+            tags:
+                - Administração
+            summary: 'Aprovar solicitação de aumento de limite (Admin)'
+            description: 'Aprova uma solicitação de aumento de limite PIX'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Solicitação aprovada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuccessResponse'
+    '/admin/requests/limit/{cpf}/deny':
+        post:
+            tags:
+                - Administração
+            summary: 'Negar solicitação de aumento de limite (Admin)'
+            description: 'Nega uma solicitação de aumento de limite PIX'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Solicitação negada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuccessResponse'
+    /admin/requests/password:
+        get:
+            tags:
+                - Administração
+            summary: 'Listar solicitações de reset de senha (Admin)'
+            description: 'Retorna todas as solicitações de reset de senha pendentes'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Lista de solicitações'
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    success:
+                                        type: boolean
+                                        example: true
+                                    requests:
+                                        type: array
+                                        items:
+                                            type: object
+    '/admin/requests/password/{cpf}/approve':
+        post:
+            tags:
+                - Administração
+            summary: 'Aprovar solicitação de reset de senha (Admin)'
+            description: 'Aprova uma solicitação de reset de senha'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Solicitação aprovada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuccessResponse'
+    '/admin/requests/password/{cpf}/deny':
+        post:
+            tags:
+                - Administração
+            summary: 'Negar solicitação de reset de senha (Admin)'
+            description: 'Nega uma solicitação de reset de senha'
+            parameters:
+                -
+                    name: cpf
+                    in: path
+                    required: true
+                    schema:
+                        type: string
+                        pattern: '^[0-9]{11}$'
+                    description: 'CPF do usuário'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Solicitação negada com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuccessResponse'
+    /admin/reset/users:
+        post:
+            tags:
+                - Administração
+            summary: 'Resetar todos os usuários (Admin)'
+            description: 'Remove todos os usuários exceto o administrador (apenas administradores)'
+            security:
+                -
+                    bearerAuth: []
+            responses:
+                '200':
+                    description: 'Usuários resetados com sucesso'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuccessResponse'

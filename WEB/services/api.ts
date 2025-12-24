@@ -211,19 +211,24 @@ export const deletePixContact = async (cpf: string, key: string): Promise<{ succ
   }
 };
 
-export const purchaseWithCard = async (cpf: string, items: PurchasedItem[], cashbackUsed: number, installments: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const purchaseWithCard = async (cpf: string, items: PurchasedItem[], cashbackUsed: number, installments: number, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
     const token = localStorage.getItem('authToken');
     if (!token) return { success: false, message: 'Não autenticado.' };
+    if (!pin || pin.length !== 4) return { success: false, message: 'PIN inválido. Deve ter 4 dígitos.' };
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/shop/checkout', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
-        items,
+        items: items.map(item => ({
+          productId: item.id,
+          quantity: item.quantity || 1
+        })),
+        paymentMethod: 'credit',
         cashbackUsed,
-        method: 'credit',
-        installments
+        installments,
+        pin
       })
     });
     return result;
@@ -232,18 +237,23 @@ export const purchaseWithCard = async (cpf: string, items: PurchasedItem[], cash
   }
 };
 
-export const purchaseWithDebit = async (cpf: string, items: PurchasedItem[], cashbackUsed: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const purchaseWithDebit = async (cpf: string, items: PurchasedItem[], cashbackUsed: number, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
     const token = localStorage.getItem('authToken');
     if (!token) return { success: false, message: 'Não autenticado.' };
+    if (!pin || pin.length !== 4) return { success: false, message: 'PIN inválido. Deve ter 4 dígitos.' };
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/shop/checkout', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
-        items,
+        items: items.map(item => ({
+          productId: item.id,
+          quantity: item.quantity || 1
+        })),
+        paymentMethod: 'debit',
         cashbackUsed,
-        method: 'debit'
+        pin
       })
     });
     return result;

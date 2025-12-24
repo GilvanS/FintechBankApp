@@ -24,7 +24,16 @@ const InfoRow: React.FC<{ label: string; value: string; valueColor?: string; has
 function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }) {
   const { creditCard, balance } = user;
   const [isLoading, setIsLoading] = useState(false);
-  const isOverdue = creditCard.closedInvoice > 0 && creditCard.closedInvoiceDueDate && new Date() > new Date(creditCard.closedInvoiceDueDate);
+  // Uma fatura só está atrasada DEPOIS do fim do dia de vencimento
+  // Se hoje for o dia de vencimento ou anterior, não está atrasada
+  const isOverdue = creditCard.closedInvoice > 0 && creditCard.closedInvoiceDueDate && (() => {
+    const dueDate = new Date(creditCard.closedInvoiceDueDate);
+    // Definir fim do dia de vencimento (23:59:59.999)
+    dueDate.setUTCHours(23, 59, 59, 999);
+    const now = new Date();
+    // Só está atrasada se a data atual for depois do fim do dia de vencimento
+    return now > dueDate;
+  })();
   // FIX: Added a check to see if the user can afford the full invoice payment.
   const canAfford = balance >= creditCard.closedInvoice;
 

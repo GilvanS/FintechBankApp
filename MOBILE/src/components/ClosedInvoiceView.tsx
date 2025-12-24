@@ -22,7 +22,16 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
     }
 
     const { creditCard } = user;
-    const isOverdue = creditCard.closedInvoice > 0 && creditCard.closedInvoiceDueDate && new Date() > new Date(creditCard.closedInvoiceDueDate);
+    // Uma fatura só está atrasada DEPOIS do fim do dia de vencimento
+    // Se hoje for o dia de vencimento ou anterior, não está atrasada
+    const isOverdue = creditCard.closedInvoice > 0 && creditCard.closedInvoiceDueDate && (() => {
+        const dueDate = new Date(creditCard.closedInvoiceDueDate);
+        // Definir fim do dia de vencimento (23:59:59.999)
+        dueDate.setUTCHours(23, 59, 59, 999);
+        const now = new Date();
+        // Só está atrasada se a data atual for depois do fim do dia de vencimento
+        return now > dueDate;
+    })();
     const canAfford = user.balance >= creditCard.closedInvoice;
 
     const handlePay = async () => {

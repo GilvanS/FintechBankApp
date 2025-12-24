@@ -23,6 +23,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState<{ cpf?: string; password?: string }>({});
     const [resetPasswordMessage, setResetPasswordMessage] = useState('');
     const { toast, showSuccess, showError, showInfo, hide } = useToast();
 
@@ -35,10 +36,33 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
             default: return 'Falha no login.';
         }
     }
+    const validateFields = (): boolean => {
+        const errors: { cpf?: string; password?: string } = {};
+        const rawCpf = cpf.replace(/\D/g, '');
+        
+        if (!rawCpf || rawCpf.length < 11) {
+            errors.cpf = 'Campo obrigatório';
+        }
+        
+        if (!password || password.trim().length === 0) {
+            errors.password = 'Campo obrigatório';
+        }
+        
+        setFieldErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsLoading(true);
         setError('');
+        setFieldErrors({});
+        
+        // Validação de campos obrigatórios
+        if (!validateFields()) {
+            return;
+        }
+        
+        setIsLoading(true);
         const rawCpf = cpf.replace(/\D/g, '');
         const result = await login(rawCpf, password);
         setIsLoading(false);
@@ -66,25 +90,27 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
         } else {
             const msg = result.message || mapLoginError(result.code);
             setError(msg);
-            showError(msg);
+            // Não mostrar toast para erros de validação, apenas para erros de API
         }
     };
 
     const handlePasswordReset = async () => {
-        if (!cpf) {
-            setError('Por favor, digite seu CPF para solicitar uma nova senha.');
+        const rawCpf = cpf.replace(/\D/g, '');
+        if (!rawCpf || rawCpf.length < 11) {
+            setFieldErrors({ cpf: 'Campo obrigatório' });
             return;
         }
         setError('');
+        setFieldErrors({});
         setResetPasswordMessage('');
         setIsLoading(true);
-        const result = await requestNewPassword(cpf.replace(/\D/g, ''));
+        const result = await requestNewPassword(rawCpf);
         setResetPasswordMessage(result.message);
         setIsLoading(false);
         if (result.success) {
             showInfo('Solicitacao de nova senha enviada. Aguarde aprovacao.');
         } else {
-            showError(result.message || 'Falha ao solicitar nova senha.');
+            setError(result.message || 'Falha ao solicitar nova senha.');
         }
     };
 
@@ -113,12 +139,24 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                 id="cpf"
                                 type="text"
                                 value={formatCPF(cpf)}
-                                onChange={(e) => setCpf(e.target.value)}
+                                onChange={(e) => {
+                                    setCpf(e.target.value);
+                                    if (fieldErrors.cpf) {
+                                        setFieldErrors({ ...fieldErrors, cpf: undefined });
+                                    }
+                                }}
                                 placeholder="000.000.000-00"
                                 maxLength={14}
-                                required
-                                className="w-full px-4 py-3 bg-surface-dark border-2 border-surface-dark rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                className={`w-full px-4 py-3 bg-surface-dark border-2 rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${
+                                    fieldErrors.cpf ? 'border-red-500 focus:ring-red-500' : 'border-surface-dark'
+                                }`}
                             />
+                            {fieldErrors.cpf && (
+                                <span className="alert block mt-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-sm">error</span>
+                                    {fieldErrors.cpf}
+                                </span>
+                            )}
                         </div>
                         <div>
                             <div className="flex justify-between items-center mb-1">
@@ -131,13 +169,30 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                 id="password-login"
                                 type="password"
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                                className="w-full px-4 py-3 bg-surface-dark border-2 border-surface-dark rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                onChange={(e) => {
+                                    setPassword(e.target.value);
+                                    if (fieldErrors.password) {
+                                        setFieldErrors({ ...fieldErrors, password: undefined });
+                                    }
+                                }}
+                                className={`w-full px-4 py-3 bg-surface-dark border-2 rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${
+                                    fieldErrors.password ? 'border-red-500 focus:ring-red-500' : 'border-surface-dark'
+                                }`}
                             />
+                            {fieldErrors.password && (
+                                <span className="alert block mt-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-sm">error</span>
+                                    {fieldErrors.password}
+                                </span>
+                            )}
                         </div>
                         
-                        {error && <p className="text-sm text-red-400">{error}</p>}
+                        {error && (
+                            <span className="alert block p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-sm">error</span>
+                                {error}
+                            </span>
+                        )}
                         {resetPasswordMessage && (
                             <div className="p-3 bg-primary/10 rounded-lg text-center">
                                 <p className="text-sm text-primary">{resetPasswordMessage}</p>
