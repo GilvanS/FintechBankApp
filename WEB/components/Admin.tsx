@@ -165,23 +165,68 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     };
 
     return (
-        <div className="bg-background-dark text-text-dark min-h-full flex flex-col p-4 sm:p-6 lg:p-8">
-            <header className="flex items-center justify-between mb-8">
+        <div 
+            className="bg-background-dark text-text-dark min-h-full flex flex-col p-4 sm:p-6 lg:p-8 test-admin-page"
+            id="admin-page"
+            data-testid="admin-page"
+            data-cy="admin-page"
+            data-playwright="admin-page"
+        >
+            <header 
+                className="flex items-center justify-between mb-8 test-admin-header"
+                id="admin-header"
+                data-testid="admin-header"
+                data-cy="admin-header"
+            >
                 <div className="flex items-center space-x-3">
-                    <span className="material-symbols-outlined text-primary text-4xl">admin_panel_settings</span>
+                    <span className="material-symbols-outlined text-primary text-4xl test-admin-icon" data-testid="admin-icon" aria-hidden="true">admin_panel_settings</span>
                     <div>
-                        <h1 className="text-2xl font-bold text-text-dark">Painel do Administrador</h1>
-                        <p className="text-sm text-subtle-dark">Bem-vindo, {adminUser?.fullName.split(' ')[0]}</p>
+                        <h1 
+                            className="text-2xl font-bold text-text-dark test-admin-title"
+                            id="admin-title"
+                            data-testid="admin-title"
+                            data-cy="admin-title"
+                            data-playwright="admin-title"
+                        >
+                            Painel do Administrador
+                        </h1>
+                        <p 
+                            className="text-sm text-subtle-dark test-admin-greeting"
+                            id="admin-greeting"
+                            data-testid="admin-greeting"
+                        >
+                            Bem-vindo, {adminUser?.fullName.split(' ')[0]}
+                        </p>
                     </div>
                 </div>
-                <button onClick={onBack} className="p-2 rounded-full hover:bg-surface-dark transition-colors">
-                    <span className="material-symbols-outlined">logout</span>
+                <button 
+                    onClick={onBack} 
+                    className="p-2 rounded-full hover:bg-surface-dark transition-colors test-admin-back-button"
+                    id="btn-admin-back"
+                    name="admin-back-button"
+                    data-testid="admin-back-button"
+                    data-cy="admin-back-button"
+                    data-playwright="admin-back-button"
+                    aria-label="Sair"
+                    type="button"
+                >
+                    <span className="material-symbols-outlined" aria-hidden="true">logout</span>
                 </button>
             </header>
 
-            <main className="flex-grow overflow-y-auto no-scrollbar space-y-8">
+            <main 
+                className="flex-grow overflow-y-auto no-scrollbar space-y-8 test-admin-main"
+                id="admin-main"
+                data-testid="admin-main"
+                data-cy="admin-main"
+            >
                 {/* Stats */}
-                <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <section 
+                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 test-admin-stats"
+                    id="admin-stats"
+                    data-testid="admin-stats"
+                    data-cy="admin-stats"
+                >
                     <StatCard title="Solicitações de Senha" value={passwordRequests.length} icon="lock_reset" />
                     <StatCard title="Solicitações de Limite" value={limitRequests.length} icon="upgrade" />
                     <StatCard title="Total de Clientes" value="-" icon="group" />
@@ -189,18 +234,54 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                 </section>
 
                 {/* User Management */}
-                <section className="bg-surface-dark p-6 rounded-xl">
-                    <h2 className="text-lg font-semibold mb-4">Gerenciar Cliente</h2>
-                    <form onSubmit={handleSearch} className="flex items-center gap-4 mb-6">
+                <section 
+                    className="bg-surface-dark p-6 rounded-xl test-admin-user-management"
+                    id="admin-user-management"
+                    data-testid="admin-user-management"
+                    data-cy="admin-user-management"
+                >
+                    <h2 
+                        className="text-lg font-semibold mb-4 test-admin-user-management-title"
+                        id="admin-user-management-title"
+                        data-testid="admin-user-management-title"
+                    >
+                        Gerenciar Cliente
+                    </h2>
+                    <form 
+                        onSubmit={handleSearch} 
+                        className="flex items-center gap-4 mb-6 test-admin-search-form"
+                        id="admin-search-form"
+                        name="admin-search-form"
+                        data-testid="admin-search-form"
+                        data-cy="admin-search-form"
+                        data-playwright="admin-search-form"
+                    >
                         <input
                             type="text"
                             value={formatCPF(cpfSearch)}
                             onChange={(e) => setCpfSearch(e.target.value)}
                             placeholder="Buscar por CPF"
                             maxLength={14}
-                            className="flex-grow px-4 py-3 bg-background-dark border-2 border-background-dark rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary"
+                            className="flex-grow px-4 py-3 bg-background-dark border-2 border-background-dark rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary test-input-cpf-search"
+                            id="admin-cpf-search"
+                            name="cpf-search"
+                            data-testid="admin-cpf-search"
+                            data-cy="admin-cpf-search"
+                            data-playwright="admin-cpf-search"
+                            aria-label="Buscar por CPF"
                         />
-                        <button type="submit" className="px-6 py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90">Buscar</button>
+                        <button 
+                            type="submit" 
+                            className="px-6 py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 test-admin-search-button"
+                            id="btn-admin-search"
+                            name="admin-search-button"
+                            data-testid="admin-search-button"
+                            data-cy="admin-search-button"
+                            data-playwright="admin-search-button"
+                            aria-label="Buscar cliente"
+                        >
+                            Buscar
+                        </button>
                     </form>
                     {searchedUser && (
                         <div className="bg-background-dark p-4 rounded-lg space-y-4">
@@ -210,13 +291,54 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                                 <p className={`text-sm font-semibold ${searchedUser.isBlocked || searchedUser.creditCard.isBlocked ? 'text-red-400' : 'text-primary'}`}>
                                     {searchedUser.isBlocked ? 'CONTA BLOQUEADA' : 'CONTA ATIVA'} / {searchedUser.creditCard.isBlocked ? 'CARTÃO BLOQUEADO' : 'CARTÃO ATIVO'}
                                 </p>
-                                <div className="flex gap-4 mt-4">
+                                <div 
+                                    className="flex gap-4 mt-4 test-admin-user-actions"
+                                    id="admin-user-actions"
+                                    data-testid="admin-user-actions"
+                                    data-cy="admin-user-actions"
+                                >
                                     {searchedUser.isBlocked ? (
-                                        <button onClick={() => openModal('unblock', searchedUser)} className="btn-secondary">Desbloquear Conta</button>
+                                        <button 
+                                            onClick={() => openModal('unblock', searchedUser)} 
+                                            className="btn-secondary test-admin-unblock-button"
+                                            id="btn-admin-unblock"
+                                            name="admin-unblock-button"
+                                            data-testid="admin-unblock-button"
+                                            data-cy="admin-unblock-button"
+                                            data-playwright="admin-unblock-button"
+                                            aria-label="Desbloquear conta"
+                                            type="button"
+                                        >
+                                            Desbloquear Conta
+                                        </button>
                                     ) : (
-                                        <button onClick={() => openModal('block', searchedUser)} className="btn-danger">Bloquear Conta</button>
+                                        <button 
+                                            onClick={() => openModal('block', searchedUser)} 
+                                            className="btn-danger test-admin-block-button"
+                                            id="btn-admin-block"
+                                            name="admin-block-button"
+                                            data-testid="admin-block-button"
+                                            data-cy="admin-block-button"
+                                            data-playwright="admin-block-button"
+                                            aria-label="Bloquear conta"
+                                            type="button"
+                                        >
+                                            Bloquear Conta
+                                        </button>
                                     )}
-                                    <button onClick={() => openModal('deposit', searchedUser)} className="btn-primary">Depositar</button>
+                                    <button 
+                                        onClick={() => openModal('deposit', searchedUser)} 
+                                        className="btn-primary test-admin-deposit-button"
+                                        id="btn-admin-deposit"
+                                        name="admin-deposit-button"
+                                        data-testid="admin-deposit-button"
+                                        data-cy="admin-deposit-button"
+                                        data-playwright="admin-deposit-button"
+                                        aria-label="Depositar"
+                                        type="button"
+                                    >
+                                        Depositar
+                                    </button>
                                 </div>
                             </div>
                             
@@ -254,37 +376,137 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                 {/* Requests */}
                 <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Password Requests */}
-                    <div className="bg-surface-dark p-6 rounded-xl">
-                         <h2 className="text-lg font-semibold mb-4">Solicitações de Senha</h2>
-                         <div className="space-y-3 max-h-64 overflow-y-auto">
+                    <div 
+                        className="bg-surface-dark p-6 rounded-xl test-admin-password-requests"
+                        id="admin-password-requests"
+                        data-testid="admin-password-requests"
+                        data-cy="admin-password-requests"
+                    >
+                         <h2 
+                            className="text-lg font-semibold mb-4 test-admin-password-requests-title"
+                            id="admin-password-requests-title"
+                            data-testid="admin-password-requests-title"
+                        >
+                            Solicitações de Senha
+                        </h2>
+                         <div 
+                            className="space-y-3 max-h-64 overflow-y-auto test-admin-password-requests-list"
+                            id="admin-password-requests-list"
+                            data-testid="admin-password-requests-list"
+                            data-cy="admin-password-requests-list"
+                        >
                             {passwordRequests.length > 0 ? passwordRequests.map(req => (
-                                <div key={req.cpf} className="bg-background-dark p-3 rounded-lg flex justify-between items-center">
-                                    <p className="font-mono text-sm">{formatCPF(req.cpf)}</p>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => openModal('approve', req)} className="btn-success-sm">Aprovar</button>
-                                        <button onClick={() => openModal('deny', req)} className="btn-danger-sm">Negar</button>
+                                <div 
+                                    key={req.cpf} 
+                                    className="bg-background-dark p-3 rounded-lg flex justify-between items-center test-admin-password-request-item"
+                                    id={`admin-password-request-${req.cpf}`}
+                                    data-testid={`admin-password-request-${req.cpf}`}
+                                    data-cy={`admin-password-request-${req.cpf}`}
+                                >
+                                    <p className="font-mono text-sm test-admin-request-cpf" data-testid={`admin-password-request-cpf-${req.cpf}`}>{formatCPF(req.cpf)}</p>
+                                    <div 
+                                        className="flex gap-2 test-admin-request-actions"
+                                        data-testid={`admin-password-request-actions-${req.cpf}`}
+                                    >
+                                        <button 
+                                            onClick={() => openModal('approve', req)} 
+                                            className="btn-success-sm test-admin-approve-button"
+                                            id={`btn-admin-approve-password-${req.cpf}`}
+                                            name={`admin-approve-password-${req.cpf}`}
+                                            data-testid={`admin-approve-password-${req.cpf}`}
+                                            data-cy={`admin-approve-password-${req.cpf}`}
+                                            data-playwright={`admin-approve-password-${req.cpf}`}
+                                            aria-label={`Aprovar solicitação de senha para ${formatCPF(req.cpf)}`}
+                                            type="button"
+                                        >
+                                            Aprovar
+                                        </button>
+                                        <button 
+                                            onClick={() => openModal('deny', req)} 
+                                            className="btn-danger-sm test-admin-deny-button"
+                                            id={`btn-admin-deny-password-${req.cpf}`}
+                                            name={`admin-deny-password-${req.cpf}`}
+                                            data-testid={`admin-deny-password-${req.cpf}`}
+                                            data-cy={`admin-deny-password-${req.cpf}`}
+                                            data-playwright={`admin-deny-password-${req.cpf}`}
+                                            aria-label={`Negar solicitação de senha para ${formatCPF(req.cpf)}`}
+                                            type="button"
+                                        >
+                                            Negar
+                                        </button>
                                     </div>
                                 </div>
-                            )) : <p className="text-subtle-dark text-sm text-center py-4">Nenhuma solicitação pendente.</p>}
+                            )) : <p className="text-subtle-dark text-sm text-center py-4 test-admin-no-requests" data-testid="admin-no-password-requests">Nenhuma solicitação pendente.</p>}
                         </div>
                     </div>
 
                     {/* Limit Requests */}
-                    <div className="bg-surface-dark p-6 rounded-xl">
-                        <h2 className="text-lg font-semibold mb-4">Solicitações de Limite</h2>
-                         <div className="space-y-3 max-h-64 overflow-y-auto">
+                    <div 
+                        className="bg-surface-dark p-6 rounded-xl test-admin-limit-requests"
+                        id="admin-limit-requests"
+                        data-testid="admin-limit-requests"
+                        data-cy="admin-limit-requests"
+                    >
+                        <h2 
+                            className="text-lg font-semibold mb-4 test-admin-limit-requests-title"
+                            id="admin-limit-requests-title"
+                            data-testid="admin-limit-requests-title"
+                        >
+                            Solicitações de Limite
+                        </h2>
+                         <div 
+                            className="space-y-3 max-h-64 overflow-y-auto test-admin-limit-requests-list"
+                            id="admin-limit-requests-list"
+                            data-testid="admin-limit-requests-list"
+                            data-cy="admin-limit-requests-list"
+                        >
                             {limitRequests.length > 0 ? limitRequests.map(req => (
-                                <div key={req.cpf} className="bg-background-dark p-3 rounded-lg flex justify-between items-center">
+                                <div 
+                                    key={req.cpf} 
+                                    className="bg-background-dark p-3 rounded-lg flex justify-between items-center test-admin-limit-request-item"
+                                    id={`admin-limit-request-${req.cpf}`}
+                                    data-testid={`admin-limit-request-${req.cpf}`}
+                                    data-cy={`admin-limit-request-${req.cpf}`}
+                                >
                                     <div>
-                                        <p className="font-mono text-sm">{formatCPF(req.cpf)}</p>
-                                        <p className="text-xs text-primary">Novo Limite: {req.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                                        <p className="font-mono text-sm test-admin-request-cpf" data-testid={`admin-limit-request-cpf-${req.cpf}`}>{formatCPF(req.cpf)}</p>
+                                        <p className="text-xs text-primary test-admin-request-amount" data-testid={`admin-limit-request-amount-${req.cpf}`}>
+                                            Novo Limite: {req.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </p>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => openModal('approve', req)} className="btn-success-sm">Aprovar</button>
-                                        <button onClick={() => openModal('deny', req)} className="btn-danger-sm">Negar</button>
+                                    <div 
+                                        className="flex gap-2 test-admin-request-actions"
+                                        data-testid={`admin-limit-request-actions-${req.cpf}`}
+                                    >
+                                        <button 
+                                            onClick={() => openModal('approve', req)} 
+                                            className="btn-success-sm test-admin-approve-button"
+                                            id={`btn-admin-approve-limit-${req.cpf}`}
+                                            name={`admin-approve-limit-${req.cpf}`}
+                                            data-testid={`admin-approve-limit-${req.cpf}`}
+                                            data-cy={`admin-approve-limit-${req.cpf}`}
+                                            data-playwright={`admin-approve-limit-${req.cpf}`}
+                                            aria-label={`Aprovar solicitação de limite para ${formatCPF(req.cpf)}`}
+                                            type="button"
+                                        >
+                                            Aprovar
+                                        </button>
+                                        <button 
+                                            onClick={() => openModal('deny', req)} 
+                                            className="btn-danger-sm test-admin-deny-button"
+                                            id={`btn-admin-deny-limit-${req.cpf}`}
+                                            name={`admin-deny-limit-${req.cpf}`}
+                                            data-testid={`admin-deny-limit-${req.cpf}`}
+                                            data-cy={`admin-deny-limit-${req.cpf}`}
+                                            data-playwright={`admin-deny-limit-${req.cpf}`}
+                                            aria-label={`Negar solicitação de limite para ${formatCPF(req.cpf)}`}
+                                            type="button"
+                                        >
+                                            Negar
+                                        </button>
                                     </div>
                                 </div>
-                            )) : <p className="text-subtle-dark text-sm text-center py-4">Nenhuma solicitação pendente.</p>}
+                            )) : <p className="text-subtle-dark text-sm text-center py-4 test-admin-no-requests" data-testid="admin-no-limit-requests">Nenhuma solicitação pendente.</p>}
                         </div>
                     </div>
                 </section>
@@ -292,9 +514,30 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
 
             {/* Modal */}
             {modalState.isOpen && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-                    <div className="bg-surface-dark p-8 rounded-xl shadow-2xl w-full max-w-md">
-                        <h2 className="text-xl font-bold mb-4">Confirmar Ação</h2>
+                <div 
+                    className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 test-admin-modal-overlay"
+                    id="admin-modal-overlay"
+                    data-testid="admin-modal-overlay"
+                    data-cy="admin-modal-overlay"
+                    data-playwright="admin-modal-overlay"
+                    role="dialog"
+                    aria-modal="true"
+                >
+                    <div 
+                        className="bg-surface-dark p-8 rounded-xl shadow-2xl w-full max-w-md test-admin-modal"
+                        id="admin-modal"
+                        data-testid="admin-modal"
+                        data-cy="admin-modal"
+                        data-playwright="admin-modal"
+                    >
+                        <h2 
+                            className="text-xl font-bold mb-4 test-admin-modal-title"
+                            id="admin-modal-title"
+                            data-testid="admin-modal-title"
+                            data-cy="admin-modal-title"
+                        >
+                            Confirmar Ação
+                        </h2>
                         {modalState.action === 'deny' && (
                             <>
                                 <p className="text-subtle-dark mb-2">Por favor, informe o motivo da recusa:</p>
@@ -310,9 +553,37 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                         {modalState.action !== 'deny' && modalState.action !== 'deposit' && (
                             <p className="text-subtle-dark mb-6">Você tem certeza que deseja executar esta ação para o CPF {formatCPF(modalState.data.cpf)}?</p>
                         )}
-                        <div className="flex justify-end gap-4 mt-6">
-                            <button onClick={closeModal} className="btn-secondary">Cancelar</button>
-                            <button onClick={handleConfirmAction} disabled={isLoadingAction} className="btn-primary disabled:opacity-50">
+                        <div 
+                            className="flex justify-end gap-4 mt-6 test-admin-modal-actions"
+                            id="admin-modal-actions"
+                            data-testid="admin-modal-actions"
+                            data-cy="admin-modal-actions"
+                        >
+                            <button 
+                                onClick={closeModal} 
+                                className="btn-secondary test-admin-modal-cancel"
+                                id="btn-admin-modal-cancel"
+                                name="admin-modal-cancel"
+                                data-testid="admin-modal-cancel"
+                                data-cy="admin-modal-cancel"
+                                data-playwright="admin-modal-cancel"
+                                aria-label="Cancelar"
+                                type="button"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                onClick={handleConfirmAction} 
+                                disabled={isLoadingAction} 
+                                className="btn-primary disabled:opacity-50 test-admin-modal-confirm"
+                                id="btn-admin-modal-confirm"
+                                name="admin-modal-confirm"
+                                data-testid="admin-modal-confirm"
+                                data-cy="admin-modal-confirm"
+                                data-playwright="admin-modal-confirm"
+                                aria-label={isLoadingAction ? 'Processando...' : 'Confirmar'}
+                                type="button"
+                            >
                                 {isLoadingAction ? 'Processando...' : 'Confirmar'}
                             </button>
                         </div>

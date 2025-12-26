@@ -225,23 +225,68 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     };
 
     return (
-        <div className="bg-background-dark text-text-dark h-full flex flex-col p-4 overflow-hidden">
-            <header className="flex items-center justify-between mb-6 shrink-0">
+        <div 
+            className="bg-background-dark text-text-dark h-full flex flex-col p-4 overflow-hidden test-admin-page"
+            id="admin-page"
+            data-testid="admin-page"
+            data-cy="admin-page"
+            data-playwright="admin-page"
+        >
+            <header 
+                className="flex items-center justify-between mb-6 shrink-0 test-admin-header"
+                id="admin-header"
+                data-testid="admin-header"
+                data-cy="admin-header"
+            >
                 <div className="flex items-center space-x-3 overflow-hidden">
-                    <span className="material-symbols-outlined text-primary text-3xl shrink-0">admin_panel_settings</span>
+                    <span className="material-symbols-outlined text-primary text-3xl shrink-0 test-admin-icon" data-testid="admin-icon" aria-hidden="true">admin_panel_settings</span>
                     <div className="overflow-hidden">
-                        <h1 className="text-xl font-bold text-text-dark truncate">Painel Admin</h1>
-                        <p className="text-xs text-subtle-dark truncate">Olá, {adminUser?.fullName.split(' ')[0]}</p>
+                        <h1 
+                            className="text-xl font-bold text-text-dark truncate test-admin-title"
+                            id="admin-title"
+                            data-testid="admin-title"
+                            data-cy="admin-title"
+                            data-playwright="admin-title"
+                        >
+                            Painel Admin
+                        </h1>
+                        <p 
+                            className="text-xs text-subtle-dark truncate test-admin-greeting"
+                            id="admin-greeting"
+                            data-testid="admin-greeting"
+                        >
+                            Olá, {adminUser?.fullName.split(' ')[0]}
+                        </p>
                     </div>
                 </div>
-                <button onClick={onBack} className="p-2 rounded-full hover:bg-surface-dark transition-colors shrink-0 z-10">
-                    <span className="material-symbols-outlined">logout</span>
+                <button 
+                    onClick={onBack} 
+                    className="p-2 rounded-full hover:bg-surface-dark transition-colors shrink-0 z-10 test-admin-back-button"
+                    id="btn-admin-back"
+                    name="admin-back-button"
+                    data-testid="admin-back-button"
+                    data-cy="admin-back-button"
+                    data-playwright="admin-back-button"
+                    aria-label="Sair"
+                    type="button"
+                >
+                    <span className="material-symbols-outlined" aria-hidden="true">logout</span>
                 </button>
             </header>
 
-            <main className="flex-grow overflow-y-auto no-scrollbar space-y-8">
+            <main 
+                className="flex-grow overflow-y-auto no-scrollbar space-y-8 test-admin-main"
+                id="admin-main"
+                data-testid="admin-main"
+                data-cy="admin-main"
+            >
                 {/* Stats */}
-                <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <section 
+                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 test-admin-stats"
+                    id="admin-stats"
+                    data-testid="admin-stats"
+                    data-cy="admin-stats"
+                >
                     <StatCard title="Solicitações de Senha" value={passwordRequests.length} icon="lock_reset" />
                     <StatCard title="Solicitações de Limite" value={limitRequests.length} icon="upgrade" />
                     <StatCard title="Total de Clientes" value="-" icon="group" />
@@ -249,18 +294,54 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                 </section>
 
                 {/* User Management */}
-                <section className="bg-surface-dark p-6 rounded-xl">
-                    <h2 className="text-lg font-semibold mb-4">Gerenciar Cliente</h2>
-                    <form onSubmit={handleSearch} className="flex items-center gap-4 mb-6">
+                <section 
+                    className="bg-surface-dark p-6 rounded-xl test-admin-user-management"
+                    id="admin-user-management"
+                    data-testid="admin-user-management"
+                    data-cy="admin-user-management"
+                >
+                    <h2 
+                        className="text-lg font-semibold mb-4 test-admin-user-management-title"
+                        id="admin-user-management-title"
+                        data-testid="admin-user-management-title"
+                    >
+                        Gerenciar Cliente
+                    </h2>
+                    <form 
+                        onSubmit={handleSearch} 
+                        className="flex items-center gap-4 mb-6 test-admin-search-form"
+                        id="admin-search-form"
+                        name="admin-search-form"
+                        data-testid="admin-search-form"
+                        data-cy="admin-search-form"
+                        data-playwright="admin-search-form"
+                    >
                         <input
                             type="text"
                             value={formatCPF(cpfSearch)}
                             onChange={(e) => setCpfSearch(e.target.value)}
                             placeholder="Buscar por CPF"
                             maxLength={14}
-                            className="flex-grow px-4 py-3 bg-background-dark border-2 border-background-dark rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary"
+                            className="flex-grow px-4 py-3 bg-background-dark border-2 border-background-dark rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary test-input-cpf-search"
+                            id="admin-cpf-search"
+                            name="cpf-search"
+                            data-testid="admin-cpf-search"
+                            data-cy="admin-cpf-search"
+                            data-playwright="admin-cpf-search"
+                            aria-label="Buscar por CPF"
                         />
-                        <button type="submit" className="px-6 py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90">Buscar</button>
+                        <button 
+                            type="submit" 
+                            className="px-6 py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 test-admin-search-button"
+                            id="btn-admin-search"
+                            name="admin-search-button"
+                            data-testid="admin-search-button"
+                            data-cy="admin-search-button"
+                            data-playwright="admin-search-button"
+                            aria-label="Buscar cliente"
+                        >
+                            Buscar
+                        </button>
                     </form>
                     {searchedUser && (
                         <div className="bg-background-dark p-4 rounded-lg space-y-4">

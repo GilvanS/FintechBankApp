@@ -115,28 +115,80 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
     };
 
     return (
-        <div className="bg-background-dark text-text-dark h-full flex flex-col justify-between p-6 sm:p-8">
-            <header>
-                <button onClick={onNavigateToPreLogin} className="flex items-center space-x-2 text-subtle-dark hover:text-text-dark">
-                    <span className="material-symbols-outlined">arrow_back</span>
+        <div 
+            className="bg-background-dark text-text-dark h-full flex flex-col justify-between p-6 sm:p-8 test-login-page"
+            id="login-page"
+            data-testid="login-page"
+            data-cy="login-page"
+            data-playwright="login-page"
+            role="main"
+        >
+            <header id="login-header" data-testid="login-header" data-cy="login-header">
+                <button 
+                    onClick={onNavigateToPreLogin} 
+                    className="flex items-center space-x-2 text-subtle-dark hover:text-text-dark test-back-button"
+                    id="btn-back"
+                    name="back-button"
+                    data-testid="login-back-button"
+                    data-cy="login-back-button"
+                    data-playwright="login-back-button"
+                    aria-label="Voltar"
+                    type="button"
+                >
+                    <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
                 </button>
             </header>
 
-            <main className="flex-grow flex flex-col justify-center -mt-16">
+            <main 
+                className="flex-grow flex flex-col justify-center -mt-16 test-login-main" 
+                id="login-main"
+                data-testid="login-main"
+                data-cy="login-main"
+            >
                 <div className="w-full max-w-sm mx-auto">
-                    <div className="text-center mb-10">
+                    <div className="text-center mb-10" id="login-header-content" data-testid="login-header-content" data-cy="login-header-content">
                          <div className="flex items-center justify-center space-x-2 mb-4">
-                            <span className="material-symbols-outlined text-primary text-3xl">verified_user</span>
-                            <h1 className="text-3xl font-bold text-text-dark">Fintech</h1>
+                            <span className="material-symbols-outlined text-primary text-3xl" aria-hidden="true">verified_user</span>
+                            <h1 
+                                className="text-3xl font-bold text-text-dark test-brand" 
+                                id="login-brand"
+                                data-testid="login-brand"
+                                data-cy="login-brand"
+                            >
+                                Fintech
+                            </h1>
                         </div>
-                        <h2 className="text-2xl font-semibold">Acesse sua conta</h2>
+                        <h2 
+                            className="text-2xl font-semibold test-login-title" 
+                            id="login-title"
+                            data-testid="login-title"
+                            data-cy="login-title"
+                            data-playwright="login-title"
+                        >
+                            Acesse sua conta
+                        </h2>
                     </div>
 
-                    <form onSubmit={handleLogin} className="space-y-4">
-                        <div>
-                            <label htmlFor="cpf" className="block text-sm font-medium text-subtle-dark mb-1">CPF</label>
+                    <form 
+                        onSubmit={handleLogin} 
+                        className="space-y-4 test-login-form" 
+                        id="login-form"
+                        name="login-form"
+                        data-testid="login-form"
+                        data-cy="login-form"
+                        data-playwright="login-form"
+                        aria-label="Formulário de login"
+                    >
+                        <div 
+                            className="test-field-cpf"
+                            id="login-field-cpf"
+                            data-testid="login-field-cpf"
+                            data-cy="login-field-cpf"
+                        >
+                            <label htmlFor="login-cpf" className="block text-sm font-medium text-subtle-dark mb-1">CPF</label>
                             <input
-                                id="cpf"
+                                id="login-cpf"
+                                name="cpf"
                                 type="text"
                                 value={formatCPF(cpf)}
                                 onChange={(e) => {
@@ -147,26 +199,57 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                 }}
                                 placeholder="000.000.000-00"
                                 maxLength={14}
-                                className={`w-full px-4 py-3 bg-surface-dark border-2 rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${
+                                className={`w-full px-4 py-3 bg-surface-dark border-2 rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent test-input-cpf ${
                                     fieldErrors.cpf ? 'border-red-500 focus:ring-red-500' : 'border-surface-dark'
                                 }`}
+                                data-testid="login-input-cpf"
+                                data-cy="login-input-cpf"
+                                data-playwright="login-input-cpf"
+                                aria-label="CPF"
+                                aria-required="true"
+                                aria-invalid={!!fieldErrors.cpf}
+                                aria-describedby={fieldErrors.cpf ? "login-cpf-error" : undefined}
+                                autoComplete="username"
+                                inputMode="numeric"
                             />
                             {fieldErrors.cpf && (
-                                <span className="alert block mt-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-sm">error</span>
+                                <span 
+                                    className="alert block mt-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-center gap-2"
+                                    id="login-cpf-error"
+                                    data-testid="login-cpf-error"
+                                    role="alert"
+                                    aria-live="polite"
+                                >
+                                    <span className="material-symbols-outlined text-sm" aria-hidden="true">error</span>
                                     {fieldErrors.cpf}
                                 </span>
                             )}
                         </div>
-                        <div>
+                        <div 
+                            className="test-field-password"
+                            id="login-field-password"
+                            data-testid="login-field-password"
+                            data-cy="login-field-password"
+                        >
                             <div className="flex justify-between items-center mb-1">
-                                <label htmlFor="password-login" className="block text-sm font-medium text-subtle-dark">Senha</label>
-                                 <button type="button" onClick={handlePasswordReset} className="text-sm font-medium text-primary hover:underline">
+                                <label htmlFor="login-password" className="block text-sm font-medium text-subtle-dark">Senha</label>
+                                 <button 
+                                    type="button" 
+                                    onClick={handlePasswordReset} 
+                                    className="text-sm font-medium text-primary hover:underline test-forgot-password"
+                                    id="btn-forgot-password"
+                                    name="forgot-password"
+                                    data-testid="login-forgot-password-button"
+                                    data-cy="login-forgot-password-button"
+                                    data-playwright="login-forgot-password-button"
+                                    aria-label="Esqueci minha senha"
+                                >
                                     Esqueci minha senha
                                 </button>
                             </div>
                             <input
-                                id="password-login"
+                                id="login-password"
+                                name="password"
                                 type="password"
                                 value={password}
                                 onChange={(e) => {
@@ -175,35 +258,81 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                         setFieldErrors({ ...fieldErrors, password: undefined });
                                     }
                                 }}
-                                className={`w-full px-4 py-3 bg-surface-dark border-2 rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${
+                                placeholder="Digite sua senha"
+                                className={`w-full px-4 py-3 bg-surface-dark border-2 rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent test-input-password ${
                                     fieldErrors.password ? 'border-red-500 focus:ring-red-500' : 'border-surface-dark'
                                 }`}
+                                data-testid="login-input-password"
+                                data-cy="login-input-password"
+                                data-playwright="login-input-password"
+                                aria-label="Senha"
+                                aria-required="true"
+                                aria-invalid={!!fieldErrors.password}
+                                aria-describedby={fieldErrors.password ? "login-password-error" : undefined}
+                                autoComplete="current-password"
                             />
                             {fieldErrors.password && (
-                                <span className="alert block mt-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-sm">error</span>
+                                <span 
+                                    className="alert block mt-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-center gap-2"
+                                    id="login-password-error"
+                                    data-testid="login-password-error"
+                                    role="alert"
+                                    aria-live="polite"
+                                >
+                                    <span className="material-symbols-outlined text-sm" aria-hidden="true">error</span>
                                     {fieldErrors.password}
                                 </span>
                             )}
                         </div>
                         
                         {error && (
-                            <span className="alert block p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-sm">error</span>
+                            <span 
+                                className="alert block p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-center gap-2"
+                                data-testid="login-error-message"
+                                role="alert"
+                                aria-live="assertive"
+                            >
+                                <span className="material-symbols-outlined text-sm" aria-hidden="true">error</span>
                                 {error}
                             </span>
                         )}
                         {resetPasswordMessage && (
-                            <div className="p-3 bg-primary/10 rounded-lg text-center">
+                            <div 
+                                className="p-3 bg-primary/10 rounded-lg text-center"
+                                data-testid="login-reset-password-message"
+                                role="status"
+                                aria-live="polite"
+                            >
                                 <p className="text-sm text-primary">{resetPasswordMessage}</p>
-                                <button type="button" onClick={onNavigateToResetPassword} className="mt-2 text-sm font-bold text-primary hover:underline">
+                                <button 
+                                    type="button" 
+                                    onClick={onNavigateToResetPassword} 
+                                    className="mt-2 text-sm font-bold text-primary hover:underline"
+                                    data-testid="login-reset-password-link"
+                                    aria-label="Redefinir senha"
+                                >
                                     Já foi aprovado? Redefinir Senha
                                 </button>
                             </div>
                         )}
 
-                        <div>
-                            <button type="submit" disabled={isLoading} className="w-full mt-4 py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity">
+                        <div 
+                            className="test-submit-container"
+                            id="login-submit-container"
+                            data-testid="login-submit-container"
+                            data-cy="login-submit-container"
+                        >
+                            <button 
+                                type="submit" 
+                                disabled={isLoading} 
+                                className="w-full mt-4 py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity test-submit-button"
+                                id="btn-login-submit"
+                                name="login-submit"
+                                data-testid="login-submit-button"
+                                data-cy="login-submit-button"
+                                data-playwright="login-submit-button"
+                                aria-label={isLoading ? 'Entrando...' : 'Entrar'}
+                            >
                                 {isLoading ? 'Entrando...' : 'Entrar'}
                             </button>
                         </div>
@@ -211,15 +340,35 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                 </div>
             </main>
 
-            <footer className="text-center">
+            <footer 
+                className="text-center test-login-footer" 
+                id="login-footer"
+                data-testid="login-footer"
+                data-cy="login-footer"
+            >
                 <p className="text-sm text-subtle-dark">
                     Não tem uma conta?{' '}
-                    <button onClick={onNavigateToSignUp} className="font-semibold text-primary hover:underline">
+                    <button 
+                        onClick={onNavigateToSignUp} 
+                        className="font-semibold text-primary hover:underline test-signup-link"
+                        id="btn-signup-link"
+                        name="signup-link"
+                        data-testid="login-signup-link"
+                        data-cy="login-signup-link"
+                        data-playwright="login-signup-link"
+                        aria-label="Cadastre-se"
+                        type="button"
+                    >
                         Cadastre-se
                     </button>
                 </p>
-                <div className="mt-4 p-3 bg-surface-dark rounded-lg flex items-center justify-center space-x-2 text-xs text-subtle-dark">
-                    <span className="material-symbols-outlined text-sm">shield</span>
+                <div 
+                    className="mt-4 p-3 bg-surface-dark rounded-lg flex items-center justify-center space-x-2 text-xs text-subtle-dark test-security-banner" 
+                    id="login-security-banner"
+                    data-testid="login-security-banner"
+                    data-cy="login-security-banner"
+                >
+                    <span className="material-symbols-outlined text-sm" aria-hidden="true">shield</span>
                     <span>Sua segurança em primeiro lugar.</span>
                 </div>
             </footer>

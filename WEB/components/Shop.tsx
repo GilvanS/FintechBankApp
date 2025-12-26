@@ -40,27 +40,121 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
     }
 
     return (
-        <div className="bg-background-dark text-white min-h-full flex flex-col relative">
+        <div 
+            className="bg-background-dark text-white min-h-full flex flex-col relative test-shop-page"
+            id="shop-page"
+            data-testid="shop-page"
+            data-cy="shop-page"
+            data-playwright="shop-page"
+        >
             <PromotionalPopup isOpen={showPopup} onClose={() => setShowPopup(false)} />
-            <header className="flex items-center justify-between p-4 border-b border-subtle-dark/50">
-                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
+            <header 
+                className="flex items-center justify-between p-4 border-b border-subtle-dark/50 test-shop-header"
+                id="shop-header"
+                data-testid="shop-header"
+                data-cy="shop-header"
+            >
+                <button 
+                    onClick={onBack} 
+                    className="p-2 -ml-2 rounded-full hover:bg-white/10 test-shop-back-button"
+                    id="btn-shop-back"
+                    name="shop-back-button"
+                    data-testid="shop-back-button"
+                    data-cy="shop-back-button"
+                    data-playwright="shop-back-button"
+                    aria-label="Voltar"
+                    type="button"
+                >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
-                <h2 className="text-2xl font-bold text-white">Fintech Shop</h2>
+                <h2 
+                    className="text-2xl font-bold text-white test-shop-title"
+                    id="shop-title"
+                    data-testid="shop-title"
+                    data-cy="shop-title"
+                    data-playwright="shop-title"
+                >
+                    Fintech Shop
+                </h2>
                 {/* FIX: Used `onNavigate` and `cartItemCount` from props to handle navigation and cart badge display. */}
-                <button onClick={() => onNavigate('shoppingCart')} className="relative p-2 rounded-full hover:bg-white/10">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                    {cartItemCount > 0 && <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-primary text-background-dark text-xs font-bold">{cartItemCount}</span>}
+                <button 
+                    onClick={() => onNavigate('shoppingCart')} 
+                    className="relative p-2 rounded-full hover:bg-white/10 test-shop-cart-button"
+                    id="btn-shop-cart"
+                    name="shop-cart-button"
+                    data-testid="shop-cart-button"
+                    data-cy="shop-cart-button"
+                    data-playwright="shop-cart-button"
+                    aria-label={`Carrinho de compras${cartItemCount > 0 ? ` com ${cartItemCount} item${cartItemCount > 1 ? 's' : ''}` : ''}`}
+                    type="button"
+                >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                    {cartItemCount > 0 && (
+                        <span 
+                            className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-primary text-background-dark text-xs font-bold test-cart-badge"
+                            id="cart-badge"
+                            data-testid="shop-cart-badge"
+                            data-cy="shop-cart-badge"
+                            data-playwright="shop-cart-badge"
+                            aria-label={`${cartItemCount} item${cartItemCount > 1 ? 's' : ''} no carrinho`}
+                        >
+                            {cartItemCount}
+                        </span>
+                    )}
                 </button>
             </header>
-            <main className="flex-grow overflow-y-auto no-scrollbar p-4">
-                <div className="grid grid-cols-2 gap-4">
+            <main 
+                className="flex-grow overflow-y-auto no-scrollbar p-4 test-shop-main"
+                id="shop-main"
+                data-testid="shop-main"
+                data-cy="shop-main"
+            >
+                <div 
+                    className="grid grid-cols-2 gap-4 test-products-grid"
+                    id="products-grid"
+                    data-testid="shop-products-grid"
+                    data-cy="shop-products-grid"
+                    data-playwright="shop-products-grid"
+                    role="grid"
+                    aria-label="Lista de produtos"
+                >
                     {products.map(product => (
-                        <div key={product.id} onClick={() => handleProductClick(product)} className="bg-surface-dark rounded-lg overflow-hidden cursor-pointer group">
-                            <img src={product.imageUrl} alt={product.name} className="w-full h-32 object-cover group-hover:opacity-80 transition-opacity" />
-                            <div className="p-3">
-                                <h3 className="font-semibold text-white truncate">{product.name}</h3>
-                                <p className="text-sm text-primary font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.price)}</p>
+                        <div 
+                            key={product.id} 
+                            onClick={() => handleProductClick(product)} 
+                            className="bg-surface-dark rounded-lg overflow-hidden cursor-pointer group test-product-card"
+                            id={`product-card-${product.id}`}
+                            data-testid={`shop-product-card-${product.id}`}
+                            data-cy={`shop-product-card-${product.id}`}
+                            data-playwright={`shop-product-card-${product.id}`}
+                            role="button"
+                            aria-label={`Produto ${product.name}`}
+                            tabIndex={0}
+                        >
+                            <img 
+                                src={product.imageUrl} 
+                                alt={product.name} 
+                                className="w-full h-32 object-cover group-hover:opacity-80 transition-opacity test-product-image"
+                                data-testid={`shop-product-image-${product.id}`}
+                            />
+                            <div className="p-3 test-product-info">
+                                <h3 
+                                    className="font-semibold text-white truncate test-product-name"
+                                    id={`product-name-${product.id}`}
+                                    data-testid={`shop-product-name-${product.id}`}
+                                    data-cy={`shop-product-name-${product.id}`}
+                                >
+                                    {product.name}
+                                </h3>
+                                <p 
+                                    className="text-sm text-primary font-bold test-product-price"
+                                    id={`product-price-${product.id}`}
+                                    data-testid={`shop-product-price-${product.id}`}
+                                    data-cy={`shop-product-price-${product.id}`}
+                                    data-playwright={`shop-product-price-${product.id}`}
+                                >
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.price)}
+                                </p>
                             </div>
                         </div>
                     ))}

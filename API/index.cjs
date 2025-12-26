@@ -241,25 +241,83 @@ apiRouter.get('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(
     }
 }));
 
-// Endpoint temporário para deletar usuário (apenas desenvolvimento)
+// Endpoint para deletar usuário - Valida dívidas e saldo antes de excluir
 apiRouter.delete('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf } = req.params;
-    console.log(`🗑️  Deletando usuário ${cpf}...`);
+    console.log(`🗑️  Verificando condições para deletar usuário ${cpf}...`);
     
     try {
-        // Verificar se existe
-        const checkQuery = `SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`;
-        const exists = await databricksService.executeQuery(checkQuery);
+        // Verificar se usuário existe
+        const userQuery = `SELECT cpf, balance, credit_card_total_limit, credit_card_available_limit FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`;
+        const userRows = await databricksService.executeQuery(userQuery);
         
-        if (exists.length === 0) {
+        if (userRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
         }
         
-        // Deletar usuário
-        const deleteQuery = `DELETE FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`;
-        await databricksService.executeQuery(deleteQuery);
+        const user = userRows[0];
+        const balance = parseFloat(user.balance || 0);
+        const totalLimit = parseFloat(user.credit_card_total_limit || 0);
+        const availableLimit = parseFloat(user.credit_card_available_limit || 0);
         
-        console.log(`✅ Usuário ${cpf} deletado com sucesso`);
+        // Validação 1: Saldo deve ser zero
+        if (balance !== 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Não é possível excluir usuário com saldo diferente de zero. Saldo atual: R$ ${balance.toFixed(2)}` 
+            });
+        }
+        
+        // Validação 2: Limite de crédito deve estar totalmente disponível
+        const usedLimit = totalLimit - availableLimit;
+        if (usedLimit > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Não é possível excluir usuário com limite de crédito utilizado. Limite usado: R$ ${usedLimit.toFixed(2)} de R$ ${totalLimit.toFixed(2)}` 
+            });
+        }
+        
+        // Validação 3: Verificar se há parcelas pendentes (INVOICE_INSTALLMENT)
+        const pendingInstallmentsQuery = `SELECT COUNT(*) as count FROM ${databricksService.fq('transactions')} WHERE cpf = '${cpf}' AND type = 'INVOICE_INSTALLMENT'`;
+        const installmentsResult = await databricksService.executeQuery(pendingInstallmentsQuery);
+        const pendingInstallmentsCount = parseInt(installmentsResult[0]?.count || 0);
+        
+        if (pendingInstallmentsCount > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Não é possível excluir usuário com parcelas pendentes. Total de parcelas: ${pendingInstallmentsCount}` 
+            });
+        }
+        
+        // Validação 4: Verificar se há faturas abertas ou vencidas
+        const openInvoicesQuery = `SELECT COUNT(*) as count FROM ${databricksService.fq('invoices')} WHERE cpf = '${cpf}' AND status IN ('ABERTA', 'VENCIDA')`;
+        const invoicesResult = await databricksService.executeQuery(openInvoicesQuery);
+        const openInvoicesCount = parseInt(invoicesResult[0]?.count || 0);
+        
+        if (openInvoicesCount > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Não é possível excluir usuário com faturas abertas ou vencidas. Total de faturas: ${openInvoicesCount}` 
+            });
+        }
+        
+        // Todas as validações passaram - deletar usuário e dados relacionados
+        console.log(`✅ Validações passadas. Deletando usuário ${cpf} e dados relacionados...`);
+        
+        // Deletar dados relacionados primeiro (cascata manual)
+        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('transactions')} WHERE cpf = '${cpf}'`);
+        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('pix_contacts')} WHERE pix_account_id = '${cpf}'`);
+        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('pix_keys')} WHERE cpf = '${cpf}'`);
+        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('notifications')} WHERE cpf = '${cpf}'`);
+        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('limit_increase_requests')} WHERE cpf = '${cpf}'`);
+        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('purchased_items')} WHERE cpf = '${cpf}'`);
+        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('installment_plans')} WHERE cpf = '${cpf}'`);
+        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('invoices')} WHERE cpf = '${cpf}'`);
+        
+        // Deletar usuário
+        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
+        
+        console.log(`✅ Usuário ${cpf} e todos os dados relacionados deletados com sucesso`);
         res.json({ success: true, message: `Usuário ${cpf} deletado com sucesso` });
         
     } catch (error) {

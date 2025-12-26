@@ -63,14 +63,36 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }) {
 
       <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-6">
         {creditCard.isBlocked ? (
-            <div className="bg-red-800 border border-red-600 text-red-200 p-4 rounded-lg text-center mb-4 animate-fade-in">
-                <h3 className="font-bold text-lg flex items-center justify-center gap-2"><span className="material-symbols-outlined">lock</span>Cartão Bloqueado</h3>
-                <p className="text-sm mt-1">Sua fatura está em atraso. Pague agora para desbloquear seu cartão e evitar mais juros.</p>
+            <div 
+                className="bg-red-800 border border-red-600 text-red-200 p-4 rounded-lg text-center mb-4 animate-fade-in"
+                data-testid="alert-card-blocked"
+                role="alert"
+                aria-live="assertive"
+                aria-atomic="true"
+            >
+                <h3 className="font-bold text-lg flex items-center justify-center gap-2" data-testid="alert-card-blocked-title">
+                    <span className="material-symbols-outlined" aria-hidden="true">lock</span>
+                    Cartão Bloqueado
+                </h3>
+                <p className="text-sm mt-1" data-testid="alert-card-blocked-message">
+                    Sua fatura está em atraso. Pague agora para desbloquear seu cartão e evitar mais juros.
+                </p>
             </div>
         ) : isOverdue && (
-            <div className="bg-orange-800 border border-orange-600 text-orange-200 p-4 rounded-lg text-center mb-4">
-                <h3 className="font-bold text-lg flex items-center justify-center gap-2"><span className="material-symbols-outlined">warning</span>Fatura Atrasada</h3>
-                <p className="text-sm mt-1">Pague agora para evitar juros e o bloqueio do seu cartão.</p>
+            <div 
+                className="bg-orange-800 border border-orange-600 text-orange-200 p-4 rounded-lg text-center mb-4"
+                data-testid="alert-invoice-overdue"
+                role="alert"
+                aria-live="polite"
+                aria-atomic="true"
+            >
+                <h3 className="font-bold text-lg flex items-center justify-center gap-2" data-testid="alert-invoice-overdue-title">
+                    <span className="material-symbols-outlined" aria-hidden="true">warning</span>
+                    Fatura Atrasada
+                </h3>
+                <p className="text-sm mt-1" data-testid="alert-invoice-overdue-message">
+                    Pague agora para evitar juros e o bloqueio do seu cartão.
+                </p>
             </div>
         )}
         <div className="bg-surface-dark rounded-lg divide-y divide-subtle-dark/50 px-4">
