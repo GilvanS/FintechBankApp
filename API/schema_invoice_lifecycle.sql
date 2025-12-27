@@ -25,9 +25,9 @@ BEGIN
         ALTER TABLE "fintech"."invoices"
         ADD COLUMN valor_total DECIMAL(15,2);
         
-        -- Atualizar valores existentes (se houver campo amount)
+        -- Atualizar valores existentes (sem coluna amount, definir como 0)
         UPDATE "fintech"."invoices"
-        SET valor_total = COALESCE(amount, 0)
+        SET valor_total = 0
         WHERE valor_total IS NULL;
         
         ALTER TABLE "fintech"."invoices"
