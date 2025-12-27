@@ -6,11 +6,23 @@ O erro foi corrigido no arquivo `schema_invoice_lifecycle.sql`. Agora você prec
 
 ## 🚀 Executar o Script Corrigido
 
+**IMPORTANTE: Você precisa estar na pasta API!**
+
 ```bash
+# 1. Navegar para a pasta API
 cd API
 
-# Executar o script corrigido
+# 2. Verificar se o arquivo existe
+ls schema_invoice_lifecycle.sql
+
+# 3. Executar o script corrigido
 docker exec -i pgdb psql -U postgres -d fintechbank < schema_invoice_lifecycle.sql
+```
+
+**OU use o caminho completo (se estiver na raiz do projeto):**
+
+```bash
+docker exec -i pgdb psql -U postgres -d fintechbank < API/schema_invoice_lifecycle.sql
 ```
 
 ---
