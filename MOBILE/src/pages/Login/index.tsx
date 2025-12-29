@@ -20,13 +20,24 @@ const StatusMessage: React.FC<StatusMessageProps> = ({ type, message, onClose })
   const icon = type === 'error' ? 'error' : 'check_circle';
 
   return (
-    <div className={`flex items-center justify-between p-3 rounded-lg border ${bgClass} mb-4 animate-fade-in`}>
+    <div 
+      className={`flex items-center justify-between p-3 rounded-lg border ${bgClass} mb-4 animate-fade-in`}
+      data-testid={type === 'error' ? 'login-error-message' : 'login-success-message'}
+      id={type === 'error' ? 'login-error-message' : 'login-success-message'}
+      role="alert"
+      aria-live="assertive"
+    >
       <div className="flex items-center gap-2">
-        <span className="material-symbols-outlined text-sm">{icon}</span>
+        <span className="material-symbols-outlined text-sm" aria-hidden="true">{icon}</span>
         <span className="text-sm font-medium">{message}</span>
       </div>
-      <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full transition-colors">
-        <span className="material-symbols-outlined text-sm">close</span>
+      <button 
+        onClick={onClose} 
+        className="p-1 hover:bg-white/10 rounded-full transition-colors"
+        data-testid={`login-${type}-message-close`}
+        aria-label="Fechar mensagem"
+      >
+        <span className="material-symbols-outlined text-sm" aria-hidden="true">close</span>
       </button>
     </div>
   );
@@ -171,80 +182,171 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
   };
 
   return (
-    <div className="font-display bg-background-dark text-text-dark antialiased">
-      <div className="flex flex-col min-h-screen">
-        <header className="w-full p-4 safe-top">
-          <div className="w-full max-w-sm mx-auto flex justify-between mt-2">
-            <button onClick={onNavigateToPreLogin} className="text-subtle-dark hover:text-primary">
-              <span className="material-symbols-outlined text-2xl">arrow_back</span>
+    <div 
+      className="font-display bg-background-dark text-text-dark antialiased min-h-screen flex flex-col"
+      data-testid="login-screen"
+      id="login-screen"
+    >
+      <header 
+        className="w-full p-4 safe-top"
+        data-testid="login-header"
+        id="login-header"
+      >
+        <button 
+          onClick={onNavigateToPreLogin} 
+          className="text-subtle-dark hover:text-primary"
+          data-testid="login-back-button"
+          id="btn-login-back"
+          aria-label="Voltar"
+        >
+          <span className="material-symbols-outlined text-2xl" aria-hidden="true">arrow_back</span>
+        </button>
+      </header>
+      
+      <main 
+        className="flex-grow flex flex-col items-center justify-center p-4"
+        data-testid="login-main"
+        id="login-main"
+      >
+        <h1 
+          data-testid="login-title"
+          id="login-title"
+          className="text-2xl font-bold text-text-dark mb-2"
+          title="Fintech - Título da aplicação"
+        >
+          Fintech
+        </h1>
+        <p 
+          className="text-subtle-dark mb-10"
+          data-testid="login-subtitle"
+          id="login-subtitle"
+          title="Acesse sua conta - Subtítulo da tela de login"
+        >
+          Acesse sua conta
+        </p>
+
+        <form 
+          onSubmit={handleLogin}
+          data-testid="login-form"
+          id="login-form"
+          className="w-full max-w-sm"
+        >
+          <label 
+            htmlFor="login-cpf-input" 
+            className="text-sm font-medium text-subtle-dark mb-1 block"
+            data-testid="login-cpf-label"
+            id="login-cpf-label"
+          >
+            CPF
+          </label>
+          <input
+            id="login-cpf-input"
+            data-testid="login-input-cpf"
+            name="cpf"
+            type="text"
+            value={formatCpf(cpf)}
+            onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
+            inputMode="numeric"
+            placeholder="999.999.999-99"
+            className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+            aria-label="CPF"
+            aria-required="true"
+            title="CPF - Campo de CPF para login"
+            autoComplete="username"
+          />
+          
+          <div className="flex justify-between items-baseline mb-1">
+            <label 
+              htmlFor="login-password-input" 
+              className="text-sm font-medium text-subtle-dark block"
+              data-testid="login-password-label"
+              id="login-password-label"
+            >
+              Senha
+            </label>
+            <button 
+              type="button" 
+              onClick={onNavigateToResetPassword} 
+              className="text-xs text-primary hover:underline"
+              data-testid="login-forgot-password-link"
+              id="link-forgot-password"
+              name="link-forgot-password"
+              aria-label="Esqueci minha senha"
+              title="Esqueci minha senha - Link para recuperar senha"
+            >
+              Esqueci minha senha
             </button>
-            {/* Settings button removed */}
           </div>
-        </header>
-        <main className="flex-grow flex flex-col items-center justify-center p-4">
-          <div className="w-full max-w-sm mx-auto">
-            <div className="text-center mb-10">
-              <div className="inline-flex items-center justify-center text-2xl font-bold text-text-dark">
-                <span className="material-symbols-outlined text-primary mr-2 text-3xl">check_circle</span>
-                Fintech
-              </div>
-              <p className="text-subtle-dark mt-2">Acesse sua conta</p>
-            </div>
+          <input
+            id="login-password-input"
+            data-testid="login-input-password"
+            name="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+            aria-label="Senha"
+            aria-required="true"
+            title="Senha - Campo de senha para login"
+            autoComplete="current-password"
+          />
 
-            <form onSubmit={handleLogin}>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="cpf" className="text-sm font-medium text-subtle-dark mb-1 block">CPF</label>
-                  <input
-                    id="cpf"
-                    type="text"
-                    value={formatCpf(cpf)}
-                    onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                    inputMode="numeric"
-                    placeholder="999.999.999-99"
-                    className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-                <div>
-                  <div className="flex justify-between items-baseline">
-                    <label htmlFor="password" className="text-sm font-medium text-subtle-dark mb-1 block">Senha</label>
-                    <button type="button" onClick={onNavigateToResetPassword} className="text-xs text-primary hover:underline">Esqueci minha senha</button>
-                  </div>
-                  <input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-              </div>
+          <StatusMessage type="error" message={error} onClose={() => setError('')} />
 
-              <StatusMessage type="error" message={error} onClose={() => setError('')} />
+          <button 
+            type="submit" 
+            disabled={loading} 
+            className="w-full px-8 py-4 font-semibold text-white transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50 disabled:bg-primary/70 disabled:scale-100 mt-8"
+            data-testid="login-submit-button"
+            id="btn-login-submit"
+            name="btn-login-submit"
+            aria-label={loading ? 'Entrando...' : 'Entrar'}
+            title="Entrar - Botão para fazer login"
+          >
+            {loading ? 'Entrando...' : 'Entrar'}
+          </button>
 
-              <div className="mt-8">
-                <button type="submit" disabled={loading} className="w-full px-8 py-4 font-semibold text-white transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50 disabled:bg-primary/70 disabled:scale-100">
-                  {loading ? 'Entrando...' : 'Entrar'}
-                </button>
-              </div>
+          <p 
+            className="text-center text-sm text-subtle-dark mt-6"
+            data-testid="login-signup-section"
+          >
+            Não tem uma conta?{' '}
+            <button 
+              type="button" 
+              onClick={onNavigateToSignUp} 
+              className="font-semibold text-primary hover:underline"
+              data-testid="login-signup-link"
+              id="link-signup"
+              name="link-signup"
+              aria-label="Cadastre-se"
+              title="Cadastre-se - Link para criar nova conta"
+            >
+              Cadastre-se
+            </button>
+          </p>
+        </form>
+      </main>
 
-              <p className="text-center text-sm text-subtle-dark mt-6">
-                Não tem uma conta? <button type="button" onClick={onNavigateToSignUp} className="font-semibold text-primary hover:underline">Cadastre-se</button>
-              </p>
-            </form>
+      <footer 
+        className="w-full bg-surface-dark p-3 safe-bottom-strong"
+        data-testid="login-footer"
+        id="login-footer"
+      >
+        <div className="w-full max-w-sm mx-auto">
+          <InfoCarousel />
+          <div 
+            className="flex justify-start items-center text-xs mt-4"
+            data-testid="login-server-status"
+          >
+            <span 
+              className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}
+              data-testid="login-server-status-indicator"
+              aria-label={`Servidor ${serverStatus === 'online' ? 'online' : serverStatus === 'offline' ? 'offline' : 'verificando'}`}
+            ></span>
           </div>
-        </main>
-
-        <footer className="w-full bg-surface-dark p-3 safe-bottom-strong">
-          <div className="w-full max-w-sm mx-auto">
-            <InfoCarousel />
-            <div className="flex justify-start items-center text-xs mt-4">
-              <span className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
-            </div>
-          </div>
-        </footer>
-      </div>
+        </div>
+      </footer>
     </div>
   );
 };

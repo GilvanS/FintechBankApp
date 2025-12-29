@@ -90,67 +90,214 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
   return (
     <>
       <ToastContainer toast={toast} onClose={hide} />
-      <div className="font-display bg-background-dark text-text-dark antialiased">
-          <div className="flex flex-col min-h-screen">
-              <header className="w-full p-4 safe-top">
-                <div className="w-full max-w-sm mx-auto flex justify-start mt-2">
-                  <button onClick={onNavigateToLogin} className="text-subtle-dark hover:text-primary">
-                    <span className="material-symbols-outlined text-2xl">arrow_back</span>
-                  </button>
-                </div>
-              </header>
-              <main className="flex-grow flex flex-col items-center justify-center p-4">
-                <div className="w-full max-w-sm mx-auto">
-                  <div className="text-center mb-10">
-                    <h1 className="text-3xl font-bold text-text-dark">Crie sua Conta</h1>
-                    <p className="text-subtle-dark mt-2">É rápido e fácil.</p>
-                  </div>
-                  <form onSubmit={handleSignUp}>
-                      <div className="space-y-4">
-                          <div>
-                            <label htmlFor="fullName" className="text-sm font-medium text-subtle-dark mb-1 block">Nome Completo</label>
-                            <input id="fullName" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"/>
-                          </div>
-                          <div>
-                            <label htmlFor="cpf" className="text-sm font-medium text-subtle-dark mb-1 block">CPF</label>
-                            <input 
-                              id="cpf" 
-                              type="text" 
-                              value={formatCPF(cpf)} 
-                              onChange={(e) => setCpf(e.target.value)} 
-                              required 
-                              inputMode="numeric" 
-                              placeholder="999.999.999-99" 
-                              maxLength={14}
-                              className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor="email" className="text-sm font-medium text-subtle-dark mb-1 block">Email</label>
-                            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="voce@email.com" className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"/>
-                          </div>
-                          <div>
-                            <label htmlFor="password" className="text-sm font-medium text-subtle-dark mb-1 block">Senha</label>
-                            <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"/>
-                          </div>
-                          <div>
-                            <label htmlFor="confirmPassword" className="text-sm font-medium text-subtle-dark mb-1 block">Confirmar Senha</label>
-                            <input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required placeholder="••••••••" className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"/>
-                          </div>
-                      </div>
-                      {error && <p className="text-red-500 text-sm text-center mt-4">{error}</p>}
-                      <div className="mt-8">
-                          <button type="submit" disabled={loading} className="w-full px-8 py-4 font-semibold text-white transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50 disabled:bg-primary/70 disabled:scale-100">
-                            {loading ? 'Cadastrando...' : 'Cadastrar'}
-                          </button>
-                      </div>
-                      <p className="text-center text-sm text-subtle-dark mt-6">
-                          Já tem uma conta? <button type="button" onClick={onNavigateToLogin} className="font-semibold text-primary hover:underline">Faça Login</button>
-                      </p>
-                  </form>
-                </div>
-              </main>
-          </div>
+      <div 
+        className="font-display bg-background-dark text-text-dark antialiased min-h-screen flex flex-col"
+        data-testid="signup-screen"
+        id="signup-screen"
+      >
+        <header 
+          className="w-full p-4 safe-top"
+          data-testid="signup-header"
+          id="signup-header"
+        >
+          <button 
+            onClick={onNavigateToLogin} 
+            className="text-subtle-dark hover:text-primary"
+            data-testid="signup-back-button"
+            id="btn-signup-back"
+            aria-label="Voltar para login"
+          >
+            <span className="material-symbols-outlined text-2xl" aria-hidden="true">arrow_back</span>
+          </button>
+        </header>
+        
+        <main 
+          className="flex-grow flex flex-col items-center justify-center p-4"
+          data-testid="signup-main"
+          id="signup-main"
+        >
+          <h1 
+            className="text-3xl font-bold text-text-dark mb-2"
+            data-testid="signup-title"
+            id="signup-title"
+          >
+            Crie sua Conta
+          </h1>
+          <p 
+            className="text-subtle-dark mb-10"
+            data-testid="signup-subtitle"
+            id="signup-subtitle"
+          >
+            É rápido e fácil.
+          </p>
+          
+          <form 
+            onSubmit={handleSignUp}
+            data-testid="signup-form"
+            id="signup-form"
+            className="w-full max-w-sm"
+          >
+            <label 
+              htmlFor="signup-fullname-input" 
+              className="text-sm font-medium text-subtle-dark mb-1 block"
+              data-testid="signup-fullname-label"
+              id="signup-fullname-label"
+            >
+              Nome Completo
+            </label>
+            <input 
+              id="signup-fullname-input"
+              data-testid="signup-input-fullname"
+              name="fullName"
+              type="text" 
+              value={fullName} 
+              onChange={(e) => setFullName(e.target.value)} 
+              required 
+              className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+              aria-label="Nome completo"
+              aria-required="true"
+              placeholder="Digite seu nome completo"
+              title="Nome completo - Campo para inserir nome completo"
+            />
+            
+            <label 
+              htmlFor="signup-cpf-input" 
+              className="text-sm font-medium text-subtle-dark mb-1 block"
+              data-testid="signup-cpf-label"
+              id="signup-cpf-label"
+            >
+              CPF
+            </label>
+            <input 
+              id="signup-cpf-input"
+              data-testid="signup-input-cpf"
+              name="cpf"
+              type="text" 
+              value={formatCPF(cpf)} 
+              onChange={(e) => setCpf(e.target.value)} 
+              required 
+              inputMode="numeric" 
+              placeholder="999.999.999-99" 
+              maxLength={14}
+              className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+              aria-label="CPF"
+              aria-required="true"
+              title="CPF - Campo para inserir CPF"
+              autoComplete="off"
+            />
+            
+            <label 
+              htmlFor="signup-email-input" 
+              className="text-sm font-medium text-subtle-dark mb-1 block"
+              data-testid="signup-email-label"
+              id="signup-email-label"
+            >
+              Email
+            </label>
+            <input 
+              id="signup-email-input"
+              data-testid="signup-input-email"
+              name="email"
+              type="email" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              required 
+              placeholder="voce@email.com" 
+              className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+              aria-label="Email"
+              aria-required="true"
+              title="Email - Campo para inserir email"
+            />
+            
+            <label 
+              htmlFor="signup-password-input" 
+              className="text-sm font-medium text-subtle-dark mb-1 block"
+              data-testid="signup-password-label"
+              id="signup-password-label"
+            >
+              Senha
+            </label>
+            <input 
+              id="signup-password-input"
+              data-testid="signup-input-password"
+              name="password"
+              type="password" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              required 
+              placeholder="••••••••" 
+              className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+              aria-label="Senha"
+              aria-required="true"
+              title="Senha - Campo para inserir senha"
+            />
+            
+            <label 
+              htmlFor="signup-confirm-password-input" 
+              className="text-sm font-medium text-subtle-dark mb-1 block"
+              data-testid="signup-confirm-password-label"
+              id="signup-confirm-password-label"
+            >
+              Confirmar Senha
+            </label>
+            <input 
+              id="signup-confirm-password-input"
+              data-testid="signup-input-confirm-password"
+              name="confirmPassword"
+              type="password" 
+              value={confirmPassword} 
+              onChange={(e) => setConfirmPassword(e.target.value)} 
+              required 
+              placeholder="••••••••" 
+              className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+              aria-label="Confirmar senha"
+              aria-required="true"
+              title="Confirmar senha - Campo para confirmar senha"
+            />
+            
+            {error && (
+              <p 
+                className="text-red-500 text-sm text-center mt-4"
+                data-testid="signup-error-message"
+                id="signup-error-message"
+                role="alert"
+                aria-live="assertive"
+              >
+                {error}
+              </p>
+            )}
+            
+            <button 
+              type="submit" 
+              disabled={loading} 
+              className="w-full px-8 py-4 font-semibold text-white transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50 disabled:bg-primary/70 disabled:scale-100 mt-8"
+              data-testid="signup-submit-button"
+              id="btn-signup-submit"
+              name="btn-signup-submit"
+              aria-label={loading ? 'Cadastrando...' : 'Cadastrar'}
+              title="Cadastrar - Botão para criar nova conta"
+            >
+              {loading ? 'Cadastrando...' : 'Cadastrar'}
+            </button>
+            
+            <p 
+              className="text-center text-sm text-subtle-dark mt-6"
+              data-testid="signup-login-section"
+            >
+              Já tem uma conta?{' '}
+              <button 
+                type="button" 
+                onClick={onNavigateToLogin} 
+                className="font-semibold text-primary hover:underline"
+                data-testid="signup-login-link"
+                id="link-signup-login"
+                aria-label="Faça Login"
+              >
+                Faça Login
+              </button>
+            </p>
+          </form>
+        </main>
       </div>
     </>
   );
