@@ -197,7 +197,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
           className="text-subtle-dark hover:text-primary"
           data-testid="login-back-button"
           id="btn-login-back"
-          aria-label="Voltar"
+          aria-label="login-back-button"
+          role="button"
         >
           <span className="material-symbols-outlined text-2xl" aria-hidden="true">arrow_back</span>
         </button>
@@ -249,8 +250,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             inputMode="numeric"
             placeholder="999.999.999-99"
             className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
-            aria-label="CPF"
+            aria-label="login-input-cpf"
             aria-required="true"
+            role="textbox"
             title="CPF - Campo de CPF para login"
             autoComplete="username"
           />
@@ -271,7 +273,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
               data-testid="login-forgot-password-link"
               id="link-forgot-password"
               name="link-forgot-password"
-              aria-label="Esqueci minha senha"
+              aria-label="login-forgot-password-link"
+              role="button"
               title="Esqueci minha senha - Link para recuperar senha"
             >
               Esqueci minha senha
@@ -286,8 +289,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
-            aria-label="Senha"
+            aria-label="login-input-password"
             aria-required="true"
+            role="textbox"
             title="Senha - Campo de senha para login"
             autoComplete="current-password"
           />
@@ -301,7 +305,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             data-testid="login-submit-button"
             id="btn-login-submit"
             name="btn-login-submit"
-            aria-label={loading ? 'Entrando...' : 'Entrar'}
+            aria-label="login-submit-button"
+            role="button"
             title="Entrar - Botão para fazer login"
           >
             {loading ? 'Entrando...' : 'Entrar'}
@@ -319,7 +324,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
               data-testid="login-signup-link"
               id="link-signup"
               name="link-signup"
-              aria-label="Cadastre-se"
+              aria-label="login-signup-link"
+              role="button"
               title="Cadastre-se - Link para criar nova conta"
             >
               Cadastre-se
