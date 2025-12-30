@@ -154,10 +154,9 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
               onChange={(e) => setFullName(e.target.value)} 
               required 
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
-              aria-label="Nome completo"
+              aria-label="signup-input-fullname"
               aria-required="true"
               placeholder="Digite seu nome completo"
-              title="Nome completo - Campo para inserir nome completo"
             />
             
             <label 
@@ -180,9 +179,8 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
               placeholder="999.999.999-99" 
               maxLength={14}
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
-              aria-label="CPF"
+              aria-label="signup-input-cpf"
               aria-required="true"
-              title="CPF - Campo para inserir CPF"
               autoComplete="off"
             />
             
@@ -204,9 +202,8 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
               required 
               placeholder="voce@email.com" 
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
-              aria-label="Email"
+              aria-label="signup-input-email"
               aria-required="true"
-              title="Email - Campo para inserir email"
             />
             
             <label 
@@ -227,9 +224,8 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
               required 
               placeholder="••••••••" 
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
-              aria-label="Senha"
+              aria-label="signup-input-password"
               aria-required="true"
-              title="Senha - Campo para inserir senha"
             />
             
             <label 
@@ -250,9 +246,8 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
               required 
               placeholder="••••••••" 
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
-              aria-label="Confirmar senha"
+              aria-label="signup-input-confirm-password"
               aria-required="true"
-              title="Confirmar senha - Campo para confirmar senha"
             />
             
             {error && (

@@ -253,7 +253,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             aria-label="login-input-cpf"
             aria-required="true"
             role="textbox"
-            title="CPF - Campo de CPF para login"
             autoComplete="username"
           />
           
@@ -292,7 +291,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             aria-label="login-input-password"
             aria-required="true"
             role="textbox"
-            title="Senha - Campo de senha para login"
             autoComplete="current-password"
           />
 
