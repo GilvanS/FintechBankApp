@@ -16,6 +16,17 @@ if (-not (Test-Path "package.json")) {
     exit 1
 }
 
+# Verificar versao ANTES de começar
+Write-Host "Verificando versao atual..." -ForegroundColor Yellow
+$appVersion = Get-Content "src\utils\AppVersion.ts" | Select-String "_version ="
+$packageVersion = (Get-Content "package.json" | ConvertFrom-Json).version
+$buildGradle = Get-Content "android\app\build.gradle" | Select-String "versionName"
+
+Write-Host "   AppVersion.ts: $appVersion" -ForegroundColor Cyan
+Write-Host "   package.json: $packageVersion" -ForegroundColor Cyan
+Write-Host "   build.gradle: $buildGradle" -ForegroundColor Cyan
+Write-Host ""
+
 # Passo 1: Limpeza TOTAL
 Write-Host "Passo 1: Limpeza TOTAL (como primeira vez)..." -ForegroundColor Yellow
 Write-Host ""
@@ -27,10 +38,10 @@ if (Test-Path "dist") {
     Write-Host "   OK: Pasta dist removida" -ForegroundColor Green
 }
 
-# Limpar cache do Vite
-if (Test-Path "node_modules\.vite") {
+# Limpar cache do Vite (mais genérico: .cache)
+if (Test-Path "node_modules\.cache") {
     Write-Host "   [1.2] Removendo cache do Vite..." -ForegroundColor Yellow
-    Remove-Item -Recurse -Force "node_modules\.vite" -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force "node_modules\.cache" -ErrorAction SilentlyContinue
     Write-Host "   OK: Cache do Vite removido" -ForegroundColor Green
 }
 
@@ -59,11 +70,12 @@ if (Test-Path "android") {
         Write-Host "      OK: build removida" -ForegroundColor Green
     }
     
-    # Limpar cache do Gradle (opcional - descomente se necessario)
-    # if (Test-Path ".gradle") {
-    #     Write-Host "      Removendo .gradle..." -ForegroundColor Yellow
-    #     Remove-Item -Recurse -Force ".gradle" -ErrorAction SilentlyContinue
-    # }
+    # Limpar cache do Gradle (importante para limpeza completa)
+    if (Test-Path ".gradle") {
+        Write-Host "      Removendo cache do Gradle..." -ForegroundColor Yellow
+        Remove-Item -Recurse -Force ".gradle" -ErrorAction SilentlyContinue
+        Write-Host "      OK: Cache do Gradle removido" -ForegroundColor Green
+    }
     
     Set-Location ".."
     Write-Host "   OK: Android limpo completamente" -ForegroundColor Green
@@ -78,26 +90,36 @@ if (Test-Path "android\app\src\main\assets") {
 
 Write-Host ""
 
-# Passo 2: Verificar versao
-Write-Host "Passo 2: Verificando versao..." -ForegroundColor Yellow
+# Passo 2: Verificar e instalar dependencias (se necessario)
+Write-Host "Passo 2: Verificando dependencias..." -ForegroundColor Yellow
+if (-not (Test-Path "node_modules")) {
+    Write-Host "   Instalando dependencias npm..." -ForegroundColor Yellow
+    npm install
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "   ERRO: Falha ao instalar dependencias" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "   OK: Dependencias instaladas" -ForegroundColor Green
+} else {
+    Write-Host "   OK: node_modules existe" -ForegroundColor Green
+}
+Write-Host ""
+
+# Passo 3: Verificar versao novamente
+Write-Host "Passo 3: Verificando versao antes de gerar APK..." -ForegroundColor Yellow
 $appVersionFile = "src\utils\AppVersion.ts"
 if (Test-Path $appVersionFile) {
     $appVersionContent = Get-Content $appVersionFile -Raw
     if ($appVersionContent -match '_version = "([^"]+)"') {
         $version = $matches[1]
         Write-Host "   Versao no AppVersion.ts: $version" -ForegroundColor Cyan
+        Write-Host "   OK: Versao verificada" -ForegroundColor Green
     }
 }
-
-$packageJson = Get-Content "package.json" | ConvertFrom-Json
-Write-Host "   Versao no package.json: $($packageJson.version)" -ForegroundColor Cyan
-
-$buildGradle = Get-Content "android\app\build.gradle" | Select-String "versionName"
-Write-Host "   Versao no build.gradle: $buildGradle" -ForegroundColor Cyan
 Write-Host ""
 
-# Passo 3: Build do projeto web
-Write-Host "Passo 3: Build do projeto web (Vite)..." -ForegroundColor Yellow
+# Passo 4: Build do projeto web
+Write-Host "Passo 4: Build do projeto web (Vite)..." -ForegroundColor Yellow
 npm run build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "   ERRO: Erro no build do Vite" -ForegroundColor Red
@@ -112,8 +134,8 @@ if (-not (Test-Path "dist")) {
 Write-Host "   OK: Build do Vite concluido" -ForegroundColor Green
 Write-Host ""
 
-# Passo 4: Sincronizar com Android
-Write-Host "Passo 4: Sincronizando com Android (Capacitor)..." -ForegroundColor Yellow
+# Passo 5: Sincronizar com Android
+Write-Host "Passo 5: Sincronizando com Android (Capacitor)..." -ForegroundColor Yellow
 npx cap sync android
 if ($LASTEXITCODE -ne 0) {
     Write-Host "   ERRO: Erro na sincronizacao do Capacitor" -ForegroundColor Red
@@ -128,8 +150,8 @@ if (Test-Path "android\app\src\main\assets\public") {
 }
 Write-Host ""
 
-# Passo 5: Build do APK via Gradle
-Write-Host "Passo 5: Gerando APK Debug via Gradle..." -ForegroundColor Yellow
+# Passo 6: Build do APK via Gradle
+Write-Host "Passo 6: Gerando APK Debug via Gradle..." -ForegroundColor Yellow
 Set-Location "android"
 
 if (Test-Path "gradlew.bat") {
@@ -160,9 +182,9 @@ if (Test-Path "gradlew.bat") {
 
 Set-Location ".."
 
-# Passo 6: Instalar APK (opcional)
+# Passo 7: Instalar APK (opcional)
 Write-Host ""
-Write-Host "Passo 6: Instalando APK no dispositivo..." -ForegroundColor Yellow
+Write-Host "Passo 7: Instalando APK no dispositivo..." -ForegroundColor Yellow
 
 $adbCheck = Get-Command adb -ErrorAction SilentlyContinue
 if ($adbCheck) {
@@ -205,3 +227,8 @@ Write-Host "Verificar versao no app:" -ForegroundColor Yellow
 Write-Host "   Abra o app -> Perfil -> Informacoes do App" -ForegroundColor White
 Write-Host ""
 
+Write-Host "DICA: Se a versao ainda estiver antiga:" -ForegroundColor Yellow
+Write-Host "   1. Verifique AppVersion.ts, package.json e build.gradle" -ForegroundColor White
+Write-Host "   2. Desinstale o app: adb uninstall com.fintechbank.app" -ForegroundColor White
+Write-Host "   3. Execute este script novamente" -ForegroundColor White
+Write-Host ""
