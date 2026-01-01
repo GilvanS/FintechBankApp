@@ -242,16 +242,16 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
               CPF
             </label>
             <input
-              id="login-cpf-input"
-              data-testid="login-input-cpf"
-              name="login-input-cpf"
+              id="cpf"
+              data-testid="cpf"
+              name="cpf"
               type="text"
               value={formatCpf(cpf)}
               onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
               inputMode="numeric"
               placeholder="999.999.999-99"
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
-              aria-label="login-input-cpf"
+              aria-label="cpf"
               aria-labelledby="login-cpf-label"
               aria-required="true"
               role="textbox"
@@ -262,7 +262,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
           <div data-testid="login-password" id="login-password">
             <div className="flex justify-between items-baseline mb-1">
               <label 
-                htmlFor="login-password-input" 
+                htmlFor="password" 
                 className="text-sm font-medium text-subtle-dark block"
                 data-testid="login-password-label"
                 id="login-password-label"
@@ -283,15 +283,15 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
               </button>
             </div>
             <input
-              id="login-password-input"
-              data-testid="login-input-password"
-              name="login-input-password"
+              id="password"
+              data-testid="password"
+              name="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
-              aria-label="login-input-password"
+              aria-label="password"
               aria-labelledby="login-password-label"
               aria-required="true"
               role="textbox"
@@ -306,9 +306,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             disabled={loading} 
             className="w-full px-8 py-4 font-semibold text-white transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50 disabled:bg-primary/70 disabled:scale-100 mt-8"
             data-testid="login-submit-button"
-            id="btn-login-submit"
-            name="login-submit-button"
-            aria-label="login-submit-button"
+            id="btn-entrar"
+            name="entrar"
+            aria-label="entrar"
             role="button"
           >
             {loading ? 'Entrando...' : 'Entrar'}

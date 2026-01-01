@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { getPixKeys, registerPixKey, deletePixKey } from '../services/api';
 import { PixKey } from '../types';
 import { useToast, ToastContainer } from './Toast';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
 
 interface PixKeyManagementProps {
     onBack: () => void;
@@ -13,6 +14,8 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     const [keys, setKeys] = useState<PixKey[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [keyToDelete, setKeyToDelete] = useState<PixKey | null>(null);
     
     // State for the new key form
     const [newKeyType, setNewKeyType] = useState<'CPF' | 'EMAIL'>('EMAIL');
@@ -98,29 +101,35 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
         }
     };
 
-    const handleDeleteKey = async (key: string) => {
-        if (user && window.confirm('Tem certeza que deseja remover esta chave PIX?')) {
-            setIsLoading(true);
-            try {
-                console.log('🔵 [PixKeyManagement] Removendo chave PIX:', key);
-                const result = await deletePixKey(key);
-                if (result.success) {
-                    showSuccess(result.message);
-                    await fetchKeys();
-                    const { getUserMe } = await import('../services/api');
-                    const refreshed = await getUserMe();
-                    if (refreshed.success && refreshed.user) {
-                        updateUser(refreshed.user);
-                    }
-                } else {
-                    showError(result.message);
+    const handleDeleteClick = (key: PixKey) => {
+        setKeyToDelete(key);
+        setShowDeleteModal(true);
+    };
+
+    const handleDeleteKey = async () => {
+        if (!user || !keyToDelete) return;
+        
+        setIsLoading(true);
+        try {
+            console.log('🔵 [PixKeyManagement] Removendo chave PIX:', keyToDelete.key);
+            const result = await deletePixKey(keyToDelete.key);
+            if (result.success) {
+                showSuccess(result.message);
+                await fetchKeys();
+                const { getUserMe } = await import('../services/api');
+                const refreshed = await getUserMe();
+                if (refreshed.success && refreshed.user) {
+                    updateUser(refreshed.user);
                 }
-            } catch (err: any) {
-                console.error('❌ [PixKeyManagement] Erro ao remover chave:', err);
-                showError('Falha ao remover a chave.');
-            } finally {
-                setIsLoading(false);
+            } else {
+                showError(result.message);
             }
+        } catch (err: any) {
+            console.error('❌ [PixKeyManagement] Erro ao remover chave:', err);
+            showError('Falha ao remover a chave.');
+        } finally {
+            setIsLoading(false);
+            setKeyToDelete(null);
         }
     };
     
@@ -133,34 +142,104 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     };
 
     return (
-        <div className="bg-background-dark text-white min-h-full">
-             <header className="flex items-center mb-6 px-4 pt-4">
-                <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-white/10">
-                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
+        <div 
+            className="bg-background-dark text-white min-h-full"
+            data-testid="pix-page"
+            id="pix-page"
+        >
+             <header 
+                className="flex items-center mb-6 px-4 pt-4"
+                data-testid="pix-header"
+                id="pix-header"
+            >
+                <button 
+                    onClick={onBack} 
+                    className="mr-2 p-2 rounded-full hover:bg-white/10"
+                    data-testid="pix-back-button"
+                    id="pix-back-button"
+                    aria-label="Voltar"
+                    role="button"
+                >
+                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
-                <h2 className="text-2xl font-bold text-white">Gerenciar Minhas Chaves PIX</h2>
+                <h2 
+                    className="text-2xl font-bold text-white"
+                    data-testid="pix-header-title"
+                    id="pix-header-title"
+                >
+                    Gerenciar Minhas Chaves PIX
+                </h2>
             </header>
-            <main className="px-4">
-                <button onClick={() => setShowAddModal(true)} className="w-full py-3 mb-6 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90">
+            <main 
+                className="px-4"
+                data-testid="pix-main"
+                id="pix-main"
+            >
+                <button 
+                    onClick={() => setShowAddModal(true)} 
+                    className="w-full py-3 mb-6 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90"
+                    data-testid="pix-add-key-button"
+                    id="pix-add-key-button"
+                    aria-label="Cadastrar Nova Chave"
+                    role="button"
+                >
                     Cadastrar Nova Chave
                 </button>
 
-                 {isLoading ? <p>Carregando...</p> : (
+                 {isLoading ? (
+                    <p data-testid="pix-loading" id="pix-loading">Carregando...</p>
+                ) : (
                     keys.length > 0 ? (
-                        <ul className="space-y-2">
-                            {keys.map(k => (
-                                <li key={k.key} className="p-3 bg-surface-dark rounded-lg flex justify-between items-center">
+                        <ul 
+                            className="space-y-2"
+                            data-testid="pix-keys-list"
+                            id="pix-keys-list"
+                        >
+                            {keys.map((k, index) => (
+                                <li 
+                                    key={k.key} 
+                                    className="p-3 bg-surface-dark rounded-lg flex justify-between items-center"
+                                    data-testid={`pix-key-item-${index}`}
+                                    id={`pix-key-item-${index}`}
+                                >
                                     <div>
-                                        <p className="font-semibold text-white capitalize">{k.type.toLowerCase()}</p>
-                                        <p className="text-sm text-gray-400 font-mono">{k.key}</p>
+                                        <p 
+                                            className="font-semibold text-white capitalize"
+                                            data-testid={`pix-key-type-${index}`}
+                                            id={`pix-key-type-${index}`}
+                                        >
+                                            {k.type.toLowerCase()}
+                                        </p>
+                                        <p 
+                                            className="text-sm text-gray-400 font-mono"
+                                            data-testid={`pix-key-value-${index}`}
+                                            id={`pix-key-value-${index}`}
+                                        >
+                                            {k.key}
+                                        </p>
                                     </div>
-                                    <button onClick={() => handleDeleteKey(k.key)} className="p-2 text-gray-500 hover:text-red-400">
-                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    <button 
+                                        onClick={() => handleDeleteClick(k)} 
+                                        className="p-2 text-gray-500 hover:text-red-400"
+                                        data-testid={`pix-key-delete-button-${index}`}
+                                        id={`pix-key-delete-button-${index}`}
+                                        aria-label={`Excluir chave PIX ${k.type.toLowerCase()} ${k.key}`}
+                                        role="button"
+                                    >
+                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                     </button>
                                 </li>
                             ))}
                         </ul>
-                    ) : <p className="text-center text-gray-500">Nenhuma chave PIX cadastrada.</p>
+                    ) : (
+                        <p 
+                            className="text-center text-gray-500"
+                            data-testid="pix-no-keys"
+                            id="pix-no-keys"
+                        >
+                            Nenhuma chave PIX cadastrada.
+                        </p>
+                    )
                 )}
             </main>
 
@@ -203,6 +282,19 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                     </div>
                 </div>
             )}
+
+            <ConfirmDeleteModal
+                isOpen={showDeleteModal}
+                onClose={() => {
+                    setShowDeleteModal(false);
+                    setKeyToDelete(null);
+                }}
+                onConfirm={handleDeleteKey}
+                title="Excluir Chave PIX"
+                message="Tem certeza que deseja remover esta chave PIX?"
+                itemName={keyToDelete ? `${keyToDelete.type}: ${keyToDelete.key}` : undefined}
+            />
+
             <ToastContainer toast={toast} onClose={hide} />
         </div>
     );

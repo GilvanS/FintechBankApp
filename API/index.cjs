@@ -38,8 +38,8 @@ const dbService = DatabaseFactory.createDatabaseService();
 // Alias para compatibilidade com código existente
 const databricksService = dbService;
 
-// Conectar ao banco
-dbService.connect();
+// Conectar ao banco será feito no bootstrap()
+// dbService.connect(); // Removido - conexão é feita no bootstrap()
 
 // --- Funções de Normalização (snake_case do DB para camelCase do App) ---
 const normalizeUser = (dbUser) => {
@@ -437,45 +437,68 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
 }));
 
 apiRouter.post('/auth/login', loginValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
+    console.log('🚀 [LOGIN] Endpoint /auth/login chamado!');
+    console.log('🚀 [LOGIN] Body recebido:', JSON.stringify(req.body));
     const { cpf, password } = req.body;
-    console.log(`🔍 Tentativa de login - CPF: ${cpf}`);
+    console.log(`🔍 Tentativa de login - CPF: ${cpf}, Password: ${password ? '***' : 'NÃO FORNECIDO'}`);
     
-    const users = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
-    const user = users[0];
-    
-    console.log(`👤 Usuario encontrado:`, user ? `CPF: ${user.cpf}, Role: ${user.role}, Email: ${user.email}` : 'Nenhum usuario encontrado');
+    try {
+        const query = `SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`;
+        console.log(`🔍 Executando query: ${query}`);
+        const users = await databricksService.executeQuery(query);
+        console.log(`🔍 Query retornou ${users ? users.length : 0} resultado(s)`);
+        console.log(`🔍 Tipo de retorno: ${Array.isArray(users) ? 'Array' : typeof users}`);
+        if (users && users.length > 0) {
+            console.log(`🔍 Primeiro resultado:`, JSON.stringify(users[0], null, 2));
+        }
+        const user = users && users.length > 0 ? users[0] : null;
+        
+        console.log(`👤 Usuario encontrado:`, user ? `CPF: ${user.cpf}, Role: ${user.role}, Email: ${user.email}` : 'Nenhum usuario encontrado');
 
-    if (!user) return res.status(401).json({ success: false, code: 'AUTH_USER_NOT_FOUND', message: 'CPF ou senha invalida.' });
-    if (user.is_blocked) return res.status(401).json({ success: false, code: 'AUTH_BLOCKED', message: 'Conta bloqueada. Solicite nova senha.' });
+        if (!user) {
+            console.log(`❌ Usuario nao encontrado para CPF: ${cpf}`);
+            return res.status(401).json({ success: false, code: 'AUTH_USER_NOT_FOUND', message: 'CPF ou senha invalida.' });
+        }
+        
+        if (user.is_blocked) {
+            console.log(`🚫 Usuario ${user.cpf} esta bloqueado`);
+            return res.status(401).json({ success: false, code: 'AUTH_BLOCKED', message: 'Conta bloqueada. Solicite nova senha.' });
+        }
 
-    // Verificar se password_hash existe
-    if (!user.password_hash || user.password_hash.trim() === '') {
-        console.log(`⚠️ Usuario ${user.cpf} nao possui senha definida (password_hash esta NULL ou vazio)`);
-        return res.status(401).json({ success: false, code: 'AUTH_NO_PASSWORD', message: 'Conta sem senha definida. Solicite redefinicao de senha.' });
-    }
+        // Verificar se password_hash existe
+        if (!user.password_hash || user.password_hash.trim() === '') {
+            console.log(`⚠️ Usuario ${user.cpf} nao possui senha definida (password_hash esta NULL ou vazio)`);
+            return res.status(401).json({ success: false, code: 'AUTH_NO_PASSWORD', message: 'Conta sem senha definida. Solicite redefinicao de senha.' });
+        }
 
-    console.log(`🔐 Verificando senha para usuario ${user.cpf}...`);
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-    console.log(`🔐 Senha ${isMatch ? 'CORRETA' : 'INCORRETA'} para usuario ${user.cpf}`);
-    
-    if (!isMatch) {
+        console.log(`🔐 Verificando senha para usuario ${user.cpf}...`);
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        console.log(`🔐 Senha ${isMatch ? 'CORRETA' : 'INCORRETA'} para usuario ${user.cpf}`);
+        
+        if (!isMatch) {
+            console.log(`❌ Senha incorreta para usuario ${user.cpf}`);
+            await databricksService.executeQuery(`
+                UPDATE ${databricksService.fq('users')}
+                SET login_attempts = COALESCE(login_attempts, 0) + 1, updated_at = current_timestamp()
+                WHERE cpf = '${cpf}'
+            `);
+            return res.status(401).json({ success: false, code: 'AUTH_INVALID_CREDENTIALS', message: 'CPF ou senha invalida.' });
+        }
+        
         await databricksService.executeQuery(`
             UPDATE ${databricksService.fq('users')}
-            SET login_attempts = COALESCE(login_attempts, 0) + 1, updated_at = current_timestamp()
+            SET login_attempts = 0, updated_at = current_timestamp()
             WHERE cpf = '${cpf}'
         `);
-        return res.status(401).json({ success: false, code: 'AUTH_INVALID_CREDENTIALS', message: 'CPF ou senha invalida.' });
-    }
-    
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
-        SET login_attempts = 0, updated_at = current_timestamp()
-        WHERE cpf = '${cpf}'
-    `);
 
-    const token = jwt.sign({ cpf: user.cpf, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
-    console.log(`✅ Login bem-sucedido para ${user.cpf} (${user.role})`);
-    res.json({ success: true, user: normalizeUser(user), token, message: 'Login realizado com sucesso.' });
+        const token = jwt.sign({ cpf: user.cpf, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
+        console.log(`✅ Login bem-sucedido para ${user.cpf} (${user.role})`);
+        res.json({ success: true, user: normalizeUser(user), token, message: 'Login realizado com sucesso.' });
+    } catch (error) {
+        console.error(`❌ Erro no login para CPF ${cpf}:`, error.message);
+        console.error(`❌ Stack:`, error.stack);
+        return res.status(500).json({ success: false, message: 'Erro interno ao processar login. Tente novamente.' });
+    }
 }));
 
 apiRouter.post('/auth/request-password-reset', asyncHandler(async (req, res) => {
@@ -2784,7 +2807,7 @@ bootstrap().catch((err) => {
 });
 
 app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'ok' });
+  res.status(200).json({ status: 'ok' });
 });
 
 app.listen(PORT, '0.0.0.0', () => {

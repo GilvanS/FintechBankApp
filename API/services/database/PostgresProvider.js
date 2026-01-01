@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const DatabaseInterface = require('./DatabaseInterface');
+const { logPostgresStatus } = require('../../utils/checkPostgresContainers');
 
 class PostgresProvider extends DatabaseInterface {
     constructor(config) {
@@ -18,6 +19,12 @@ class PostgresProvider extends DatabaseInterface {
     }
 
     async connect() {
+        console.log('');
+        console.log('🔍 [PostgresProvider] Iniciando conexão com PostgreSQL...');
+        
+        // Verificar containers PostgreSQL antes de conectar
+        await logPostgresStatus(this.config);
+        
         // Construct connection string if not provided but individual params are
         if (!this.config.connectionString && this.config.host) {
             const { user, password, host, port, database } = this.config;
@@ -25,22 +32,54 @@ class PostgresProvider extends DatabaseInterface {
         }
 
         if (!this.config.connectionString) {
-            console.warn('⚠️ Connection string do PostgreSQL ausente.');
+            console.warn('⚠️ [PostgresProvider] Connection string do PostgreSQL ausente.');
             throw new Error('Postgres connection string missing');
         }
+
+        // Mostrar informações de conexão (sem senha)
+        const connectionInfo = this.config.connectionString.replace(/:[^:@]+@/, ':****@');
+        console.log(`🔍 [PostgresProvider] Tentando conectar em: ${connectionInfo}`);
 
         try {
             this.pool = new Pool({
                 connectionString: this.config.connectionString,
-                ssl: this.config.ssl ? { rejectUnauthorized: false } : false
+                ssl: this.config.ssl ? { rejectUnauthorized: false } : false,
+                connectionTimeoutMillis: 10000,
+                idleTimeoutMillis: 30000,
+                max: 20
             });
             
             // Test connection
+            console.log('🔍 [PostgresProvider] Testando conexão...');
             const client = await this.pool.connect();
-            console.log("✅ Conectado ao PostgreSQL com sucesso.");
+            console.log("✅ [PostgresProvider] Conectado ao PostgreSQL com sucesso!");
+            
+            // Verificar se o banco existe
+            const dbCheck = await client.query('SELECT current_database()');
+            console.log(`✅ [PostgresProvider] Database atual: ${dbCheck.rows[0].current_database}`);
+            
             client.release();
+            console.log('');
         } catch (error) {
-            console.error('❌ Falha ao conectar com PostgreSQL:', error.message);
+            console.error('');
+            console.error('❌ [PostgresProvider] Falha ao conectar com PostgreSQL:');
+            console.error(`   Erro: ${error.message}`);
+            if (error.code) {
+                console.error(`   Código: ${error.code}`);
+            }
+            console.error('');
+            
+            // Sugestões baseadas no erro
+            if (error.message.includes('timeout') || error.code === 'ETIMEDOUT') {
+                console.error('💡 SUGESTÃO: Verifique se há múltiplos containers PostgreSQL rodando');
+                console.error('   Execute: docker ps | findstr postgres');
+            } else if (error.message.includes('password') || error.code === '28P01') {
+                console.error('💡 SUGESTÃO: Verifique DB_USER e DB_PASS no .env');
+            } else if (error.message.includes('does not exist') || error.code === '3D000') {
+                console.error('💡 SUGESTÃO: Verifique DB_NAME no .env');
+            }
+            console.error('');
+            
             throw error;
         }
     }
@@ -54,6 +93,7 @@ class PostgresProvider extends DatabaseInterface {
 
     async executeQuery(query) {
         if (!this.pool) {
+            console.error('❌ [PostgresProvider] Pool não está conectado!');
             throw new Error('Database not connected');
         }
         
@@ -69,12 +109,16 @@ class PostgresProvider extends DatabaseInterface {
         // Simple regex to replace backticks with double quotes:
         pgQuery = pgQuery.replace(/`/g, '"');
 
-        console.log("Executing Query (PG):", pgQuery);
+        console.log("🔵 [PostgresProvider] Executando Query:", pgQuery);
         
         const client = await this.pool.connect();
         try {
             const res = await client.query(pgQuery);
+            console.log(`🔵 [PostgresProvider] Query executada com sucesso. Retornou ${res.rows ? res.rows.length : 0} linha(s)`);
             return res.rows;
+        } catch (error) {
+            console.error(`❌ [PostgresProvider] Erro ao executar query:`, error.message);
+            throw error;
         } finally {
             client.release();
         }
