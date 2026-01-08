@@ -1,0 +1,35 @@
+meta {
+  name: Compra Fechada (12x sem juros)
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/admin/users/{{userCpf}}/card/purchase/closed
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "amount": 900.00,
+    "description": "Compra parcelada fechada",
+    "installments": 6
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Registra compra na fatura fechada (2-12x sem juros)
+}

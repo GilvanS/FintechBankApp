@@ -1,0 +1,40 @@
+meta {
+  name: Comprar Produto (Débito)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/shop/checkout
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "items": [
+      {
+        "productId": "prod-001",
+        "quantity": 1
+      }
+    ],
+    "paymentMethod": "debit",
+    "pin": "9898"
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Compra produto no débito
+}

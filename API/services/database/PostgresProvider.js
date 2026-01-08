@@ -22,13 +22,18 @@ class PostgresProvider extends DatabaseInterface {
         console.log('');
         console.log('🔍 [PostgresProvider] Iniciando conexão com PostgreSQL...');
         
-        // Verificar containers PostgreSQL antes de conectar
-        await logPostgresStatus(this.config);
+        // Verificar containers PostgreSQL de forma não bloqueante (opcional)
+        // Executar em background para não travar a conexão
+        logPostgresStatus(this.config).catch(() => {
+            // Ignorar erros silenciosamente - não é crítico para a conexão
+        });
         
         // Construct connection string if not provided but individual params are
+        console.log('🔍 [PostgresProvider] Construindo string de conexão...');
         if (!this.config.connectionString && this.config.host) {
             const { user, password, host, port, database } = this.config;
             this.config.connectionString = `postgresql://${user}:${password}@${host}:${port}/${database}`;
+            console.log('✅ [PostgresProvider] String de conexão construída');
         }
 
         if (!this.config.connectionString) {

@@ -9,8 +9,13 @@ const execAsync = promisify(exec);
 
 async function checkPostgresContainers() {
     try {
-        // Executar docker ps para listar containers PostgreSQL
-        const { stdout } = await execAsync('docker ps --format "{{.Names}}|{{.Image}}|{{.Ports}}"');
+        // Executar docker ps com timeout de 3 segundos
+        const { stdout } = await Promise.race([
+            execAsync('docker ps --format "{{.Names}}|{{.Image}}|{{.Ports}}"'),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Timeout')), 3000)
+            )
+        ]);
         
         const lines = stdout.trim().split('\n').filter(line => line.trim());
         const postgresContainers = [];

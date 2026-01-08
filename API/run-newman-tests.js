@@ -5,32 +5,57 @@ const fs = require('fs');
 // Configurações
 const config = {
     collection: path.join(__dirname, 'postman-collection.json'),
-    environment: null, // Usaremos as variáveis da collection
-    reporters: ['cli', 'json', 'html'],
-    reporter: {
-        html: {
-            export: path.join(__dirname, 'newman-report.html')
-        },
-        json: {
-            export: path.join(__dirname, 'newman-report.json')
-        }
-    },
+    environment: path.join(__dirname, 'postman-environment.json'),
+    reporters: ['cli'],
+    // Reporters HTML e JSON podem ser adicionados se newman-reporter-html estiver instalado
+    // Para usar: npm install newman-reporter-html --save-dev
+    // Depois descomente as linhas abaixo:
+    // reporters: ['cli', 'json', 'html'],
+    // reporter: {
+    //     html: {
+    //         export: path.join(__dirname, 'newman-report.html')
+    //     },
+    //     json: {
+    //         export: path.join(__dirname, 'newman-report.json')
+    //     }
+    // },
     insecure: true, // Para desenvolvimento local
     timeout: 30000, // 30 segundos timeout
     delayRequest: 500, // 500ms entre requests
     iterationCount: 1
 };
 
-console.log('🚀 Iniciando testes Newman para FintechBankApp...\n');
+console.log('🚀 Iniciando testes Newman para FintechBankApp API Simplificada...\n');
 
-// Função para verificar se o servidor está rodando, com retentativas
+// Função para verificar se o servidor está rodando
 async function checkServerHealth(retries = 5, interval = 2000) {
+    const http = require('http');
+    
     for (let i = 0; i < retries; i++) {
         try {
-            // CORREÇÃO: A URL correta é /api/health
-            const response = await fetch('http://localhost:3001/api/health');
-            if (response.ok) {
-                console.log('✅ Servidor está rodando e saudável\n');
+            const response = await new Promise((resolve, reject) => {
+                const req = http.get('http://localhost:3001/api/v1/health', (res) => {
+                    let data = '';
+                    res.on('data', chunk => data += chunk);
+                    res.on('end', () => {
+                        try {
+                            const json = JSON.parse(data);
+                            resolve({ statusCode: res.statusCode, data: json });
+                        } catch (e) {
+                            resolve({ statusCode: res.statusCode, data: null });
+                        }
+                    });
+                });
+                req.on('error', reject);
+                req.setTimeout(5000, () => {
+                    req.destroy();
+                    reject(new Error('Timeout'));
+                });
+            });
+            
+            if (response.statusCode === 200) {
+                console.log('✅ Servidor está rodando e saudável');
+                console.log(`   Status: ${response.data?.data?.status || 'OK'}\n`);
                 return true;
             }
         } catch (error) {
@@ -41,26 +66,30 @@ async function checkServerHealth(retries = 5, interval = 2000) {
     }
 
     console.log('❌ Servidor não está rodando ou não está saudável após várias tentativas.');
-    console.log('   Por favor, inicie o servidor com: npm start\n');
+    console.log('   Por favor, inicie o servidor com: npm run dev\n');
     return false;
 }
 
 // Função principal para executar os testes
 async function runTests() {
     console.log('📋 Configuração dos testes:');
-    console.log(`   Collection: ${config.collection}`);
+    console.log(`   Collection: ${path.basename(config.collection)}`);
+    console.log(`   Environment: ${path.basename(config.environment)}`);
+    console.log(`   Base URL: http://localhost:3001/api/v1`);
     console.log(`   Timeout: ${config.timeout}ms`);
     console.log(`   Delay entre requests: ${config.delayRequest}ms`);
-    console.log(`   Relatórios: CLI, JSON, HTML\n`);
+    console.log(`   Relatórios: CLI\n`);
 
-    // Verificar se o arquivo de collection existe
+    // Verificar se os arquivos existem
     if (!fs.existsSync(config.collection)) {
         console.error('❌ Arquivo de collection não encontrado:', config.collection);
         process.exit(1);
     }
-    // Pré-processa a collection para garantir base /api correta
-    const preparedCollection = prepareCollection(config.collection);
-    const newmanConfig = { ...config, collection: preparedCollection };
+    if (!fs.existsSync(config.environment)) {
+        console.error('❌ Arquivo de environment não encontrado:', config.environment);
+        process.exit(1);
+    }
+
     // Verificar se o servidor está rodando
     const serverHealthy = await checkServerHealth();
     if (!serverHealthy) {
@@ -69,82 +98,70 @@ async function runTests() {
 
     console.log('🧪 Executando testes...\n');
 
-    newman.run(newmanConfig, function (err, summary) {
+    newman.run(config, function (err, summary) {
         if (err) {
             console.error('❌ Erro ao executar os testes:', err);
             process.exit(1);
         }
 
-        console.log('\n📊 RESUMO DOS TESTES:');
-        console.log('='.repeat(50));
+        console.log('\n' + '='.repeat(60));
+        console.log('📊 RESUMO DOS TESTES');
+        console.log('='.repeat(60));
         
         // Estatísticas gerais
         const stats = summary.run.stats;
-        console.log(`📈 Requests executados: ${stats.requests.total}`);
-        console.log(`✅ Sucessos: ${stats.requests.total - stats.requests.failed}`);
-        console.log(`❌ Falhas: ${stats.requests.failed}`);
-        console.log(`⏱️  Tempo total: ${summary.run.timings.completed - summary.run.timings.started}ms`);
+        const total = stats.requests.total;
+        const passed = stats.requests.total - stats.requests.failed;
+        const failed = stats.requests.failed;
+        const assertions = stats.assertions;
+        
+        console.log(`\n📈 Requests executados: ${total}`);
+        console.log(`✅ Sucessos: ${passed}`);
+        console.log(`❌ Falhas: ${failed}`);
+        console.log(`\n📝 Assertions:`);
+        console.log(`   Total: ${assertions.total}`);
+        console.log(`   Passou: ${assertions.total - assertions.failed}`);
+        console.log(`   Falhou: ${assertions.failed}`);
+        
+        const duration = summary.run.timings.completed - summary.run.timings.started;
+        console.log(`\n⏱️  Tempo total: ${(duration / 1000).toFixed(2)}s`);
         
         // Detalhes das falhas
         if (summary.run.failures && summary.run.failures.length > 0) {
-            console.log('\n🔍 DETALHES DAS FALHAS:');
-            console.log('-'.repeat(30));
+            console.log('\n' + '-'.repeat(60));
+            console.log('🔍 DETALHES DAS FALHAS:');
+            console.log('-'.repeat(60));
             summary.run.failures.forEach((failure, index) => {
-                console.log(`${index + 1}. ${failure.source.name || 'Request'}`);
+                const item = failure.source.name || 'Request';
+                const parent = failure.source.parent ? failure.source.parent.name : '';
+                const fullName = parent ? `${parent} > ${item}` : item;
+                console.log(`\n${index + 1}. ${fullName}`);
                 console.log(`   Erro: ${failure.error.message}`);
                 if (failure.error.test) {
                     console.log(`   Teste: ${failure.error.test}`);
                 }
-                console.log('');
             });
         }
 
-        // Testes administrativos específicos
-        console.log('\n👨‍💼 TESTES ADMINISTRATIVOS:');
-        console.log('-'.repeat(30));
-        
-        const adminTests = summary.run.executions.filter(execution => 
-            execution.item.name.toLowerCase().includes('admin') ||
-            execution.item.parent().name.toLowerCase().includes('admin')
-        );
-
-        if (adminTests.length > 0) {
-            adminTests.forEach(test => {
-                const status = test.response && test.response.code < 400 ? '✅' : '❌';
-                const responseTime = test.response ? test.response.responseTime : 'N/A';
-                console.log(`${status} ${test.item.name} (${responseTime}ms)`);
-            });
-        } else {
-            console.log('ℹ️  Nenhum teste administrativo específico encontrado');
-        }
-
-        // Relatórios gerados
-        console.log('\n📄 RELATÓRIOS GERADOS:');
-        console.log('-'.repeat(20));
-        console.log(`📊 HTML: ${path.join(__dirname, 'newman-report.html')}`);
-        console.log(`📋 JSON: ${path.join(__dirname, 'newman-report.json')}`);
+        // Relatórios gerados (se configurados)
+        // console.log('\n' + '-'.repeat(60));
+        // console.log('📄 RELATÓRIOS GERADOS:');
+        // console.log('-'.repeat(60));
+        // console.log(`📊 HTML: ${path.join(__dirname, 'newman-report.html')}`);
+        // console.log(`📋 JSON: ${path.join(__dirname, 'newman-report.json')}`);
 
         // Status final
-        if (stats.requests.failed === 0) {
-            console.log('\n🎉 TODOS OS TESTES PASSARAM! 🎉');
+        console.log('\n' + '='.repeat(60));
+        if (failed === 0 && assertions.failed === 0) {
+            console.log('🎉 TODOS OS TESTES PASSARAM! 🎉');
             console.log('✅ A API está funcionando corretamente');
             process.exit(0);
         } else {
-            console.log('\n⚠️  ALGUNS TESTES FALHARAM');
+            console.log('⚠️  ALGUNS TESTES FALHARAM');
             console.log('❌ Verifique os detalhes acima e corrija os problemas');
             process.exit(1);
         }
     });
-}
-
-// Função para ajustar a collection
-function prepareCollection(originalPath) {
-    const raw = fs.readFileSync(originalPath, 'utf8');
-    const replaced = raw.replace(/\/api\/v1\b/g, '/api');
-    const fixedPath = path.join(__dirname, 'postman-collection.fixed.json');
-    fs.writeFileSync(fixedPath, replaced, 'utf8');
-    console.log(`🔧 Collection ajustada: ${fixedPath} (replace /api/v1 -> /api)`);
-    return fixedPath;
 }
 
 // Executar os testes

@@ -1,0 +1,40 @@
+meta {
+  name: Editar Produto
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/admin/shop/products/:productId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  productId: prod-001
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Produto Atualizado",
+    "description": "Nova descrição",
+    "price": 150.00,
+    "imageUrl": "https://example.com/new-image.jpg"
+  }
+}
+
+script:post-response {
+  test('Status 200', () => res.getStatus() === 200);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Edita produto existente no shop (Admin)
+}

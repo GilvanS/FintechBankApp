@@ -1,0 +1,37 @@
+meta {
+  name: Parcelar Fatura
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/cards/invoice/parcel
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "cpf": "{{userCpf}}",
+    "amount": 600.00,
+    "installments": 12,
+    "pin": "9898"
+  }
+}
+
+script:post-response {
+  test('Status 200', () => res.getStatus() === 200);
+  expect(res.getBody().success).to.be.true;
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Parcela fatura do cartão sempre com PIN 9898
+}

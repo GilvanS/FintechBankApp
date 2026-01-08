@@ -1,0 +1,40 @@
+meta {
+  name: Transferir PIX Crédito
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/pix/transfer-credit
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "fromCpf": "{{userCpf}}",
+    "toKey": "{{destinationCpf1}}",
+    "amount": 120.00,
+    "description": "PIX Crédito",
+    "installments": 12,
+    "interestRate": 0.02,
+    "pin": "9898"
+  }
+}
+
+script:post-response {
+  test('Status 200', () => res.getStatus() === 200);
+  expect(res.getBody().success).to.be.true;
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Transferência PIX no crédito com PIN 9898
+}

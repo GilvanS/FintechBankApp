@@ -1,0 +1,35 @@
+meta {
+  name: Compra Aberta (12x sem juros)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/admin/users/{{userCpf}}/card/purchase/open
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "amount": 1200.00,
+    "description": "Compra parcelada aberta",
+    "installments": 12
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Registra compra na fatura aberta (2-12x sem juros)
+}

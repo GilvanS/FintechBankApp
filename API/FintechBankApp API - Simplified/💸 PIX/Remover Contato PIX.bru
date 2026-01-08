@@ -1,0 +1,23 @@
+meta {
+  name: Remover Contato PIX
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{baseUrl}}/pix/contacts/{{userCpf}}/{{destinationCpf1}}
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  test('Status 200 ou 404', () => [200, 404].includes(res.getStatus()));
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Remove contato para enviar PIX
+}

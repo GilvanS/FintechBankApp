@@ -1,0 +1,37 @@
+meta {
+  name: Cadastrar Produto
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/admin/shop/products
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "id": "prod-001",
+    "name": "Produto Teste",
+    "description": "Descrição do produto",
+    "price": 100.00,
+    "imageUrl": "https://example.com/image.jpg"
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Cadastra novo produto no shop (Admin)
+}

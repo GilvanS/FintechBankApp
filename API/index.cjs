@@ -385,9 +385,10 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
             hashLength: escapedHash.length 
         });
         
+        const userId = databricksService.generateUUID();
         const insertQuery = `
-            INSERT INTO ${databricksService.fq('users')} (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, credit_card_total_limit, credit_card_available_limit, credit_card_is_blocked, credit_card_points_balance, created_at, updated_at)
-            VALUES ('${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, ${defaultCreditCardTotalLimit}, ${defaultCreditCardAvailableLimit}, ${defaultCreditCardIsBlocked}, ${defaultCreditCardPointsBalance}, '${now}', '${now}')
+            INSERT INTO ${databricksService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, credit_card_total_limit, credit_card_available_limit, credit_card_is_blocked, credit_card_points_balance, created_at, updated_at)
+            VALUES ('${userId}', '${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, ${defaultCreditCardTotalLimit}, ${defaultCreditCardAvailableLimit}, ${defaultCreditCardIsBlocked}, ${defaultCreditCardPointsBalance}, '${now}', '${now}')
         `;
         
         console.log('🔵 [SIGNUP] Executando INSERT...');
@@ -2620,15 +2621,27 @@ async function initializeDatabase() {
         console.log('✅ Tabela limit_increase_requests verificada/criada com sucesso.');
 
         // Criar tabela products
-        await databricksService.executeQuery(`
-            CREATE TABLE IF NOT EXISTS ${databricksService.fq('products')} (
-                id STRING NOT NULL,
-                name STRING NOT NULL,
-                description STRING,
-                price DECIMAL(15,2) NOT NULL,
-                image_url STRING
-            ) USING DELTA
-        `);
+        if (provider === 'postgres') {
+            await databricksService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${databricksService.fq('products')} (
+                    id VARCHAR(255) NOT NULL PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    price DECIMAL(15,2) NOT NULL,
+                    image_url TEXT
+                )
+            `);
+        } else {
+            await databricksService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${databricksService.fq('products')} (
+                    id STRING NOT NULL,
+                    name STRING NOT NULL,
+                    description STRING,
+                    price DECIMAL(15,2) NOT NULL,
+                    image_url STRING
+                ) USING DELTA
+            `);
+        }
         console.log('✅ Tabela products verificada/criada com sucesso.');
 
         // Criar tabela pix_keys
@@ -2695,10 +2708,11 @@ async function ensureAdminUser() {
     const adminPassword = 'admin999';
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
     const now = new Date().toISOString();
+    const adminId = databricksService.generateUUID();
     
     await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('users')} (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
-        VALUES ('${adminCpf}', 'Admin User', '${adminEmail}', '${hashedPassword}', 100000, 'admin', false, 0, 100000.00, false, '${now}', '${now}')
+        INSERT INTO ${databricksService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
+        VALUES ('${adminId}', '${adminCpf}', 'Admin User', '${adminEmail}', '${hashedPassword}', 100000, 'admin', false, 0, 100000.00, false, '${now}', '${now}')
     `);
     console.log(`✅ Usuário Admin criado. CPF: ${adminCpf}, Senha: ${adminPassword}`);
     
@@ -2741,10 +2755,11 @@ async function seedDatabase() {
                 SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf='${u.cpf}'
             `);
             if (!exists.length) {
+                const userId = databricksService.generateUUID();
                 await databricksService.executeQuery(`
                     INSERT INTO ${databricksService.fq('users')}
-                    (cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
-                    VALUES ('${u.cpf}', '${u.fullName.replace(/'/g,"''")}', '${u.email}', '${hashed}', ${u.balance}, '${u.role}', false, 0, ${u.pixDailyLimit}, false, '${now}', '${now}')
+                    (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
+                    VALUES ('${userId}', '${u.cpf}', '${u.fullName.replace(/'/g,"''")}', '${u.email}', '${hashed}', ${u.balance}, '${u.role}', false, 0, ${u.pixDailyLimit}, false, '${now}', '${now}')
                 `);
             }
             for (const k of (u.pixKeys || [])) {
@@ -2769,7 +2784,12 @@ async function seedDatabase() {
 
 async function bootstrap() {
     try {
+        console.log('');
+        console.log('🔄 [Bootstrap] Iniciando conexão com banco de dados...');
         await databricksService.connect();
+        console.log('✅ [Bootstrap] Conexão com banco de dados estabelecida!');
+        console.log('');
+        
         if (databricksService.mockMode) {
             console.log('🧪 Servidor iniciado em mockMode. Endpoints que dependem de DB retornarao erro controlado.');
         } else {
@@ -2802,16 +2822,18 @@ app.get('/api-docs/swagger.yaml', (req, res) => {
     res.send(fs.readFileSync(path.join(__dirname, 'swagger.yaml'), 'utf8'));
 });
 
-bootstrap().catch((err) => {
+// Iniciar servidor apenas após conexão com banco
+bootstrap().then(() => {
+    app.get('/api/health', (req, res) => {
+        res.status(200).json({ status: 'ok' });
+    });
+
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`API ouvindo em http://0.0.0.0:${PORT}`);
+        console.log(`🌐 Acesse via rede local: http://192.168.0.110:${PORT}`);
+        console.log(`📋 Swagger: http://192.168.0.110:${PORT}/api-docs`);
+    });
+}).catch((err) => {
     console.error("❌ Erro no bootstrap:", err.message);
-});
-
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`API ouvindo em http://0.0.0.0:${PORT}`);
-  console.log(`🌐 Acesse via rede local: http://192.168.0.110:${PORT}`);
-  console.log(`📋 Swagger: http://192.168.0.110:${PORT}/api-docs`);
+    process.exit(1);
 });

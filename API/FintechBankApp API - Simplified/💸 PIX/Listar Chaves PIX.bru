@@ -1,0 +1,24 @@
+meta {
+  name: Listar Chaves PIX
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/pix/keys
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  test('Status 200', () => res.getStatus() === 200);
+  expect(res.getBody().success).to.be.true;
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Lista chaves PIX cadastradas (email e CPF send)
+}

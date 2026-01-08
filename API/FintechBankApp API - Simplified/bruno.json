@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "FintechBankApp API - Simplified",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

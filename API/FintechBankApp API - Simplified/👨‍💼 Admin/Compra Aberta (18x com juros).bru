@@ -1,0 +1,36 @@
+meta {
+  name: Compra Aberta (18x com juros)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/admin/users/{{userCpf}}/card/purchase/open
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "amount": 2000.00,
+    "description": "Compra parcelada com juros",
+    "installments": 18,
+    "interestRate": 0.05
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Registra compra na fatura aberta (13-24x com juros 1-7%)
+}

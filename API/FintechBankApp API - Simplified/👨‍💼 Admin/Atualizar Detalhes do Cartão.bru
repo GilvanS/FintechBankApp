@@ -1,0 +1,35 @@
+meta {
+  name: Atualizar Detalhes do Cartão
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/admin/users/{{userCpf}}/card-details
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "availableLimit": 5000,
+    "totalLimit": 8000,
+    "invoiceDueDate": "2025-12-10"
+  }
+}
+
+script:post-response {
+  test('Status 200', () => res.getStatus() === 200);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Atualiza detalhes do cartão de crédito
+}

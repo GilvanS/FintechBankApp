@@ -1,0 +1,36 @@
+meta {
+  name: Compra Fechada (20x com juros)
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/admin/users/{{userCpf}}/card/purchase/closed
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "amount": 2400.00,
+    "description": "Compra parcelada com juros fechada",
+    "installments": 20,
+    "interestRate": 0.07
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Registra compra na fatura fechada (13-24x com juros 1-7%)
+}

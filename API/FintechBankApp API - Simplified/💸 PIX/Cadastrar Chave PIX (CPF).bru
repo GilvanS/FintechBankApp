@@ -1,0 +1,35 @@
+meta {
+  name: Cadastrar Chave PIX (CPF)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/pix/keys
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "type": "CPF",
+    "key": "{{userCpf}}"
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+  expect(res.getBody().success).to.be.true;
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Cadastra chave PIX do tipo CPF
+}

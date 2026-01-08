@@ -1,0 +1,27 @@
+meta {
+  name: Deletar Chave PIX
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/pix/keys/:key
+  body: none
+  auth: inherit
+}
+
+params:path {
+  key: {{userCpf}}
+}
+
+script:post-response {
+  test('Status 200 ou 404', () => [200, 404].includes(res.getStatus()));
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Deleta chave PIX (email ou CPF)
+}

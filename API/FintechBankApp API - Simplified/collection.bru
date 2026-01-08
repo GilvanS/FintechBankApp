@@ -1,0 +1,26 @@
+meta {
+  name: FintechBankApp API - Simplified
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3001/api/v1
+  token: 
+  adminToken: 
+  userCpf: 11111111111
+  adminCpf: 99999999999
+  destinationCpf1: 
+  destinationCpf2: 
+  destinationCpf3: 
+}
+
+docs {
+  Collection simplificada da API FintechBankApp com apenas os endpoints essenciais
+}

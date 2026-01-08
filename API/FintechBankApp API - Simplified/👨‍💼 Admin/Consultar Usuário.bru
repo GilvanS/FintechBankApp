@@ -1,0 +1,23 @@
+meta {
+  name: Consultar Usuário
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/admin/users/{{userCpf}}
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  test('Status 200', () => res.getStatus() === 200);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Consulta dados de um usuário específico
+}

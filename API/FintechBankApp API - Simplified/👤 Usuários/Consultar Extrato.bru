@@ -1,0 +1,28 @@
+meta {
+  name: Consultar Extrato
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/users/{{userCpf}}/statement
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  test('Status 200', () => res.getStatus() === 200);
+  const arr = res.getBody();
+  if (Array.isArray(arr)) {
+    const inst = arr.find(r => r.type === 'INVOICE_INSTALLMENT');
+    if (inst && inst.id) bru.setEnvVar('lastInstallmentId', inst.id);
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Consulta extrato do usuário (já inclui saldo e compras)
+}

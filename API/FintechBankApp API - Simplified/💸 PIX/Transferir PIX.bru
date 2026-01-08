@@ -1,0 +1,37 @@
+meta {
+  name: Transferir PIX
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/pix/transfer
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "toKey": "{{destinationCpf1}}",
+    "amount": 50.00,
+    "description": "Transferência PIX",
+    "pin": "9898"
+  }
+}
+
+script:post-response {
+  test('Status 200', () => res.getStatus() === 200);
+  expect(res.getBody().success).to.be.true;
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Transferência PIX simples (débito) com PIN 9898
+}

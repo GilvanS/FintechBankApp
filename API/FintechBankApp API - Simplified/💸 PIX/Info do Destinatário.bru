@@ -1,0 +1,34 @@
+meta {
+  name: Info do Destinatário
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/pix/recipient-info
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "type": "CPF",
+    "key": "{{destinationCpf1}}"
+  }
+}
+
+script:post-response {
+  test('Status 200 ou 404', () => [200, 404].includes(res.getStatus()));
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Verifica se existe cadastro de CPF receivers para receber PIX
+}

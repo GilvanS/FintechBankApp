@@ -1,0 +1,35 @@
+meta {
+  name: Cadastrar Chave PIX (Email)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/pix/keys
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "type": "EMAIL",
+    "key": "usuario@example.com"
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+  expect(res.getBody().success).to.be.true;
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Cadastra chave PIX do tipo Email
+}

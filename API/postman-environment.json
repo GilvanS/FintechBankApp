@@ -28,21 +28,31 @@
     },
     {
       "key": "userCpf",
-      "value": "88888888888",
+      "value": "11111111111",
       "type": "default",
-      "enabled": true
+      "enabled": true,
+      "description": "CPF principal para testes"
     },
     {
       "key": "userPassword",
-      "value": "senha123",
+      "value": "admin999",
       "type": "secret",
-      "enabled": true
+      "enabled": true,
+      "description": "Senha padrão para todos os usuários de teste"
     },
     {
-      "key": "userToken",
-      "value": "",
+      "key": "userCpf2",
+      "value": "77777777777",
       "type": "default",
-      "enabled": true
+      "enabled": true,
+      "description": "CPF secundário para testes"
+    },
+    {
+      "key": "userCpf3",
+      "value": "88888888888",
+      "type": "default",
+      "enabled": true,
+      "description": "CPF terciário para testes"
     },
     {
       "key": "token",
@@ -52,66 +62,61 @@
     },
     {
       "key": "cpf",
-      "value": "88888888888",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "cpfA",
-      "value": "55555555555",
-      "type": "default",
-      "enabled": true,
-      "description": "CPF para testes de PIX e contatos"
-    },
-    {
-      "key": "cpfB",
       "value": "11111111111",
       "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pin",
+      "value": "9898",
+      "type": "secret",
       "enabled": true,
-      "description": "CPF para testes de PIX e contatos"
+      "description": "PIN padrão para todas as operações (PIX, Cartão, Shop)"
     },
     {
-      "key": "cpfC",
-      "value": "77777777777",
+      "key": "lastInstallmentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "lastCreditTransactionId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "purchaseOpenTransactionId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "invoiceId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "destinationCpf1",
+      "value": "",
       "type": "default",
       "enabled": true,
-      "description": "CPF para testes de PIX e contatos"
+      "description": "CPF de destino 1 - Salvo automaticamente ao cadastrar usuário (signup) ou adicionar contato PIX. Máximo 3 CPFs são mantidos. Usado em transferências PIX."
     },
     {
-      "key": "passwordA",
-      "value": "senha123",
-      "type": "secret",
-      "enabled": true
-    },
-    {
-      "key": "passwordB",
-      "value": "senha123",
-      "type": "secret",
-      "enabled": true
-    },
-    {
-      "key": "passwordC",
-      "value": "senha123",
-      "type": "secret",
-      "enabled": true
-    },
-    {
-      "key": "tokenA",
+      "key": "destinationCpf2",
       "value": "",
       "type": "default",
-      "enabled": true
+      "enabled": true,
+      "description": "CPF de destino 2 - Salvo automaticamente ao cadastrar usuário (signup) ou adicionar contato PIX. Máximo 3 CPFs são mantidos. Usado em transferências PIX."
     },
     {
-      "key": "tokenB",
+      "key": "destinationCpf3",
       "value": "",
       "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "tokenC",
-      "value": "",
-      "type": "default",
-      "enabled": true
+      "enabled": true,
+      "description": "CPF de destino 3 - Salvo automaticamente ao cadastrar usuário (signup) ou adicionar contato PIX. Máximo 3 CPFs são mantidos. Quando os 3 slots estão preenchidos, os CPFs são rotacionados (FIFO). Usado em transferências PIX."
     }
   ],
   "_postman_variable_scope": "environment",

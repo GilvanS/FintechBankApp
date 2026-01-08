@@ -1,0 +1,41 @@
+meta {
+  name: Comprar Produto (Crédito 12x sem juros)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/shop/checkout
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "items": [
+      {
+        "productId": "prod-001",
+        "quantity": 1
+      }
+    ],
+    "paymentMethod": "credit",
+    "installments": 12,
+    "pin": "9898"
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Compra produto parcelado sem juros até 12x
+}

@@ -1,0 +1,42 @@
+meta {
+  name: Comprar Produto (Crédito 18x com juros)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/shop/checkout
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "items": [
+      {
+        "productId": "prod-001",
+        "quantity": 1
+      }
+    ],
+    "paymentMethod": "credit",
+    "installments": 18,
+    "interestRate": 0.05,
+    "pin": "9898"
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Compra produto parcelado de 13x até 24x com juros (1% a 7%)
+}

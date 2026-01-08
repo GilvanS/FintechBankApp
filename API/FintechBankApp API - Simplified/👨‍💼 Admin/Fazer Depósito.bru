@@ -1,0 +1,33 @@
+meta {
+  name: Fazer Depósito
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/admin/users/{{userCpf}}/deposit
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "amount": 500.00
+  }
+}
+
+script:post-response {
+  test('Status 200', () => res.getStatus() === 200);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Realiza depósito na conta do usuário
+}

@@ -1,0 +1,23 @@
+meta {
+  name: Listar Usuários
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/users
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  test('Status 200', () => res.getStatus() === 200);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Lista todos os usuários
+}

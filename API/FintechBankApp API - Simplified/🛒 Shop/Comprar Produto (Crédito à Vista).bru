@@ -1,0 +1,41 @@
+meta {
+  name: Comprar Produto (Crédito à Vista)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/shop/checkout
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "items": [
+      {
+        "productId": "prod-001",
+        "quantity": 1
+      }
+    ],
+    "paymentMethod": "credit",
+    "installments": 1,
+    "pin": "9898"
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Compra produto à vista no crédito
+}

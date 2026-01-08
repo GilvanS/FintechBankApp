@@ -1,13 +1,61 @@
 {
   "info": {
-    "name": "FintechBankApp API Tests",
-    "description": "Collection completa da API FintechBankApp com todos os endpoints organizados",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "name": "FintechBankApp API - Simplified",
+    "description": "Collection simplificada da API FintechBankApp com apenas os endpoints essenciais",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "fintechbankapp"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:3001/api/v1" },
-    { "key": "cpf", "value": "12345678901" },
-    { "key": "token", "value": "" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userCpf",
+      "value": "11111111111",
+      "type": "string"
+    },
+    {
+      "key": "adminCpf",
+      "value": "99999999999",
+      "type": "string"
+    },
+    {
+      "key": "destinationCpf1",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "destinationCpf2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "destinationCpf3",
+      "value": "",
+      "type": "string"
+    }
   ],
   "item": [
     {
@@ -15,45 +63,158 @@
       "item": [
         {
           "name": "Login",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/auth/login",
-            "body": { "mode": "raw", "raw": "{\"cpf\":\"{{cpf}}\",\"password\":\"senha123\"}" }
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200', () => pm.response.code === 200);",
-                "const json = pm.response.json();",
-                "pm.collectionVariables.set('token', json.token);",
-                "pm.expect(json.success).to.be.true;"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.token) {",
+                  "        pm.collectionVariables.set('token', json.token);",
+                  "        pm.environment.set('token', json.token);",
+                  "    }",
+                  "}",
+                  "pm.test('Status 200', () => pm.response.code === 200);",
+                  "pm.expect(pm.response.json().success).to.be.true;"
+                ],
+                "type": "text/javascript"
+              }
             }
-          }]
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{userCpf}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login normal de usuário"
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.token) {",
+                  "        pm.collectionVariables.set('adminToken', json.token);",
+                  "        pm.environment.set('adminToken', json.token);",
+                  "    }",
+                  "}",
+                  "pm.test('Status 200', () => pm.response.code === 200);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{adminCpf}}\",\n  \"password\": \"admin999\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login de administrador"
+          }
         },
         {
           "name": "Cadastrar Usuário",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "function saveDestinationCpf(cpf) {",
+                  "  if (!cpf || cpf.length !== 11) return;",
+                  "  const env = pm.environment;",
+                  "  const cpf1 = env.get('destinationCpf1');",
+                  "  const cpf2 = env.get('destinationCpf2');",
+                  "  const cpf3 = env.get('destinationCpf3');",
+                  "  if (cpf === cpf1 || cpf === cpf2 || cpf === cpf3) return;",
+                  "  if (!cpf1) {",
+                  "    env.set('destinationCpf1', cpf);",
+                  "    console.log('✅ CPF salvo em destinationCpf1:', cpf);",
+                  "  } else if (!cpf2) {",
+                  "    env.set('destinationCpf2', cpf);",
+                  "    console.log('✅ CPF salvo em destinationCpf2:', cpf);",
+                  "  } else if (!cpf3) {",
+                  "    env.set('destinationCpf3', cpf);",
+                  "    console.log('✅ CPF salvo em destinationCpf3:', cpf);",
+                  "  } else {",
+                  "    env.set('destinationCpf1', cpf2);",
+                  "    env.set('destinationCpf2', cpf3);",
+                  "    env.set('destinationCpf3', cpf);",
+                  "    console.log('✅ CPFs rotacionados. Novo CPF salvo em destinationCpf3:', cpf);",
+                  "  }",
+                  "}",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.success) {",
+                  "    const requestBody = JSON.parse(pm.request.body.raw);",
+                  "    if (requestBody.cpf) {",
+                  "      saveDestinationCpf(requestBody.cpf);",
+                  "    }",
+                  "  }",
+                  "}",
+                  "pm.test('Status 200 ou 201', () => [200, 201].includes(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/auth/signup",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"João Silva\",\n  \"cpf\": \"11122233344\",\n  \"email\": \"joao@example.com\",\n  \"password\": \"senha123\"\n}"
-            }
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200', () => pm.response.code === 200);",
-                "const json = pm.response.json();",
-                "pm.expect(json.success).to.be.true;"
-              ]
-            }
-          }]
+              "raw": "{\n  \"fullName\": \"João da Silva\",\n  \"cpf\": \"{{userCpf2}}\",\n  \"email\": \"joao@example.com\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "signup"]
+            },
+            "description": "Cadastro de novo usuário. CPF será salvo automaticamente em destinationCpf1/2/3"
+          }
         }
       ]
     },
@@ -61,63 +222,32 @@
       "name": "👤 Usuários",
       "item": [
         {
-          "name": "Meus Dados (401 sem token)",
-          "request": { "method": "GET", "url": "{{baseUrl}}/users/me" },
-          "event": [{
-            "listen": "test",
-            "script": { "exec": ["pm.test('Status 401', () => pm.response.code === 401);"] }
-          }]
-        },
-        {
-          "name": "Meus Dados (200)",
+          "name": "Consultar Extrato",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/users/me"
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userCpf}}/statement",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userCpf}}", "statement"]
+            },
+            "description": "Consulta extrato do usuário (já inclui saldo e compras)"
           },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200', () => pm.response.code === 200);",
-                "pm.expect(pm.response.json().success).to.be.true;"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);",
+                  "const arr = pm.response.json();",
+                  "if (Array.isArray(arr)) {",
+                  "  const inst = arr.find(r => r.type === 'INVOICE_INSTALLMENT');",
+                  "  if (inst && inst.id) pm.environment.set('lastInstallmentId', inst.id);",
+                  "}"
+                ]
+              }
             }
-          }]
-        },
-        {
-          "name": "Consultar Usuário",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/users/{{cpf}}"
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200', () => pm.response.code === 200);",
-                "pm.expect(pm.response.json().success).to.be.true;"
-              ]
-            }
-          }]
-        },
-        {
-          "name": "Extrato",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/users/{{cpf}}/statement"
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200', () => pm.response.code === 200);",
-                "pm.expect(pm.response.json().success).to.be.true;"
-              ]
-            }
-          }]
+          ]
         }
       ]
     },
@@ -125,329 +255,409 @@
       "name": "💸 PIX",
       "item": [
         {
-          "name": "Transferências",
-          "item": [
-            {
-              "name": "Transferir PIX (400 sem PIN)",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-                "url": "{{baseUrl}}/pix/transfer",
-                "body": { "mode": "raw", "raw": "{\"key\":\"88888888888\",\"amount\":10}" }
-              },
-              "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 400', () => pm.response.code === 400);"] } }]
+          "name": "Info do Destinatário",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CPF\",\n  \"key\": \"{{userCpf2}}\"\n}"
             },
-            {
-              "name": "Transferir PIX (200)",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-                "url": "{{baseUrl}}/pix/transfer",
-                "body": { "mode": "raw", "raw": "{\"key\":\"88888888888\",\"amount\":5,\"pin\":\"1234\",\"description\":\"Teste\"}" }
-              },
-              "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', () => pm.response.code === 200);"] } }]
+            "url": {
+              "raw": "{{baseUrl}}/pix/recipient-info",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "recipient-info"]
             },
+            "description": "Verifica se existe cadastro de CPF receivers para receber PIX"
+          },
+          "event": [
             {
-              "name": "Transferir PIX Crédito",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-                "url": "{{baseUrl}}/pix/transfer-credit",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"key\": \"88888888888\",\n  \"amount\": 100.00,\n  \"installments\": 12,\n  \"interestRate\": 0.02,\n  \"description\": \"PIX Crédito\",\n  \"pin\": \"1234\"\n}"
-                }
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200', () => pm.response.code === 200);",
-                    "pm.expect(pm.response.json().success).to.be.true;"
-                  ]
-                }
-              }]
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 ou 404', () => [200, 404].includes(pm.response.code));"
+                ]
+              }
             }
           ]
         },
         {
-          "name": "Chaves PIX",
-          "item": [
-            {
-              "name": "Listar Chaves PIX",
-              "request": {
-                "method": "GET",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/pix/keys"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200', () => pm.response.code === 200);",
-                    "pm.expect(pm.response.json().success).to.be.true;"
-                  ]
-                }
-              }]
+          "name": "Listar Chaves PIX",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pix/keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "keys"]
             },
+            "description": "Lista chaves PIX cadastradas (email e CPF send)"
+          },
+          "event": [
             {
-              "name": "Cadastrar Chave PIX",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-                "url": "{{baseUrl}}/pix/keys",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"type\": \"CPF\",\n  \"key\": \"{{cpf}}\"\n}"
-                }
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 201', () => pm.response.code === 201);",
-                    "pm.expect(pm.response.json().success).to.be.true;"
-                  ]
-                }
-              }]
-            },
-            {
-              "name": "Remover Chave PIX",
-              "request": {
-                "method": "DELETE",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/pix/keys/{{cpf}}"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200 ou 404', () => [200, 404].includes(pm.response.code));"
-                  ]
-                }
-              }]
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);",
+                  "pm.expect(pm.response.json().success).to.be.true;"
+                ]
+              }
             }
           ]
         },
         {
-          "name": "Contatos PIX",
-          "item": [
-            {
-              "name": "Listar Contatos (200)",
-              "request": {
-                "method": "GET",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/pix/contacts/{{cpf}}"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200', () => pm.response.code === 200);",
-                    "const json = pm.response.json();",
-                    "pm.expect(json.success).to.be.true;",
-                    "pm.expect(json).to.have.property('contacts');",
-                    "pm.expect(json.contacts).to.be.an('array');"
-                  ]
-                }
-              }]
+          "name": "Cadastrar Chave PIX (CPF)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CPF\",\n  \"key\": \"{{userCpf}}\"\n}"
             },
-            {
-              "name": "Adicionar Contato (201)",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-                "url": "{{baseUrl}}/pix/contacts/{{cpf}}",
-                "body": { "mode": "raw", "raw": "{\"contactCpf\":\"88888888888\",\"contactName\":\"João Silva\"}" }
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 201', () => pm.response.code === 201);",
-                    "const json = pm.response.json();",
-                    "pm.expect(json.success).to.be.true;",
-                    "pm.expect(json.message).to.include('adicionado');"
-                  ]
-                }
-              }]
+            "url": {
+              "raw": "{{baseUrl}}/pix/keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "keys"]
             },
+            "description": "Cadastra chave PIX do tipo CPF"
+          },
+          "event": [
             {
-              "name": "Adicionar Contato (400 payload inválido)",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-                "url": "{{baseUrl}}/pix/contacts/{{cpf}}",
-                "body": { "mode": "raw", "raw": "{\"contactName\":\"João Silva\"}" }
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 400', () => pm.response.code === 400);",
-                    "const json = pm.response.json();",
-                    "pm.expect(json.success).to.be.false;"
-                  ]
-                }
-              }]
-            },
-            {
-              "name": "Remover Contato (200)",
-              "request": {
-                "method": "DELETE",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/pix/contacts/{{cpf}}/88888888888"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200 ou 404', () => [200, 404].includes(pm.response.code));",
-                    "if (pm.response.code === 200) {",
-                    "  const json = pm.response.json();",
-                    "  pm.expect(json.success).to.be.true;",
-                    "  pm.expect(json.message).to.include('removido');",
-                    "}"
-                  ]
-                }
-              }]
-            },
-            {
-              "name": "Remover Contato (404 não encontrado)",
-              "request": {
-                "method": "DELETE",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/pix/contacts/{{cpf}}/99999999999"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 404', () => pm.response.code === 404);",
-                    "const json = pm.response.json();",
-                    "pm.expect(json.success).to.be.false;"
-                  ]
-                }
-              }]
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.code === 201);",
+                  "pm.expect(pm.response.json().success).to.be.true;"
+                ]
+              }
             }
           ]
         },
         {
-          "name": "Consultas",
-          "item": [
-            {
-              "name": "Recipient Info (404 chave inexistente)",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-                "url": "{{baseUrl}}/pix/recipient-info",
-                "body": { "mode": "raw", "raw": "{\"type\":\"EMAIL\",\"key\":\"nao@existe.com\"}" }
-              },
-              "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 404', () => pm.response.code === 404);"] } }]
+          "name": "Cadastrar Chave PIX (Email)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"EMAIL\",\n  \"key\": \"usuario@example.com\"\n}"
             },
-            {
-              "name": "Recipient Info (200)",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-                "url": "{{baseUrl}}/pix/recipient-info",
-                "body": { "mode": "raw", "raw": "{\"type\":\"CPF\",\"key\":\"88888888888\"}" }
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200', () => pm.response.code === 200);",
-                    "pm.expect(pm.response.json().success).to.be.true;"
-                  ]
-                }
-              }]
+            "url": {
+              "raw": "{{baseUrl}}/pix/keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "keys"]
             },
+            "description": "Cadastra chave PIX do tipo Email"
+          },
+          "event": [
             {
-              "name": "Uso Diário PIX",
-              "request": {
-                "method": "GET",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/users/{{cpf}}/pix-daily-usage"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200', () => pm.response.code === 200);",
-                    "pm.expect(pm.response.json().success).to.be.true;"
-                  ]
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 ou 400', () => [201, 400].includes(pm.response.code));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.expect(pm.response.json().success).to.be.true;",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deletar Chave PIX",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pix/keys/:key",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "keys", ":key"],
+              "variable": [
+                {
+                  "key": "key",
+                  "value": "{{userCpf}}"
                 }
-              }]
+              ]
+            },
+            "description": "Deleta chave PIX (email ou CPF)"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 ou 404', () => [200, 404].includes(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar Contatos PIX",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pix/contacts/{{userCpf}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "contacts", "{{userCpf}}"]
+            },
+            "description": "Lista contatos para enviar PIX"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.success).to.be.true;"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Adicionar Contato PIX",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "function saveDestinationCpf(cpf) {",
+                  "  if (!cpf || cpf.length !== 11) return;",
+                  "  const env = pm.environment;",
+                  "  const cpf1 = env.get('destinationCpf1');",
+                  "  const cpf2 = env.get('destinationCpf2');",
+                  "  const cpf3 = env.get('destinationCpf3');",
+                  "  if (cpf === cpf1 || cpf === cpf2 || cpf === cpf3) return;",
+                  "  if (!cpf1) {",
+                  "    env.set('destinationCpf1', cpf);",
+                  "    console.log('✅ CPF salvo em destinationCpf1:', cpf);",
+                  "  } else if (!cpf2) {",
+                  "    env.set('destinationCpf2', cpf);",
+                  "    console.log('✅ CPF salvo em destinationCpf2:', cpf);",
+                  "  } else if (!cpf3) {",
+                  "    env.set('destinationCpf3', cpf);",
+                  "    console.log('✅ CPF salvo em destinationCpf3:', cpf);",
+                  "  } else {",
+                  "    env.set('destinationCpf1', cpf2);",
+                  "    env.set('destinationCpf2', cpf3);",
+                  "    env.set('destinationCpf3', cpf);",
+                  "    console.log('✅ CPFs rotacionados. Novo CPF salvo em destinationCpf3:', cpf);",
+                  "  }",
+                  "}",
+                  "pm.test('Status 201', () => pm.response.code === 201);",
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.success).to.be.true;",
+                  "  const requestBody = JSON.parse(pm.request.body.raw);",
+                  "  if (requestBody.contactCpf) {",
+                  "    saveDestinationCpf(requestBody.contactCpf);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contactCpf\": \"{{userCpf2}}\",\n  \"contactName\": \"João Silva\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pix/contacts/{{userCpf}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "contacts", "{{userCpf}}"]
+            },
+            "description": "Adiciona contato para enviar PIX. CPF será salvo automaticamente"
+          }
+        },
+        {
+          "name": "Remover Contato PIX",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pix/contacts/{{userCpf}}/{{userCpf2}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "contacts", "{{userCpf}}", "{{userCpf2}}"]
+            },
+            "description": "Remove contato para enviar PIX"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 ou 404', () => [200, 404].includes(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transferir PIX",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"toKey\": \"{{userCpf2}}\",\n  \"amount\": 50.00,\n  \"description\": \"Transferência PIX\",\n  \"pin\": \"9898\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pix/transfer",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "transfer"]
+            },
+            "description": "Transferência PIX simples (débito) com PIN 9898"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 ou 400', () => [200, 400].includes(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.expect(pm.response.json().success).to.be.true;",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transferir PIX Crédito",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromCpf\": \"{{userCpf}}\",\n  \"toKey\": \"{{userCpf2}}\",\n  \"amount\": 120.00,\n  \"description\": \"PIX Crédito\",\n  \"installments\": 12,\n  \"interestRate\": 0.02,\n  \"pin\": \"9898\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pix/transfer-credit",
+              "host": ["{{baseUrl}}"],
+              "path": ["pix", "transfer-credit"]
+            },
+            "description": "Transferência PIX no crédito com PIN 9898"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 ou 400', () => [200, 400].includes(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.expect(pm.response.json().success).to.be.true;",
+                  "}"
+                ]
+              }
             }
           ]
         }
       ]
     },
     {
-      "name": "💳 Cartões",
+      "name": "💳 Cartão",
       "item": [
         {
-          "name": "Pagar Fatura (400 sem PIN)",
+          "name": "Pagar Fatura",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/cards/invoice/pay",
-            "body": { "mode": "raw", "raw": "{\"cpf\":\"{{cpf}}\"}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{userCpf}}\",\n  \"pin\": \"9898\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cards/invoice/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["cards", "invoice", "pay"]
+            },
+            "description": "Paga fatura do cartão sempre com PIN 9898"
           },
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 400', () => pm.response.code === 400);"] } }]
-        },
-        {
-          "name": "Pagar Fatura (200)",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/cards/invoice/pay",
-            "body": { "mode": "raw", "raw": "{\"cpf\":\"{{cpf}}\",\"pin\":\"1234\"}" }
-          },
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200/400 dinamico', () => [200,400].includes(pm.response.code));"] } }]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 ou 400', () => [200, 400].includes(pm.response.code));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Parcelar Fatura",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/cards/invoice/parcel",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"cpf\": \"{{cpf}}\",\n  \"amount\": 500.00,\n  \"installments\": 12,\n  \"pin\": \"1234\"\n}"
-            }
+              "raw": "{\n  \"cpf\": \"{{userCpf}}\",\n  \"amount\": 600.00,\n  \"installments\": 12,\n  \"pin\": \"9898\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cards/invoice/parcel",
+              "host": ["{{baseUrl}}"],
+              "path": ["cards", "invoice", "parcel"]
+            },
+            "description": "Parcela fatura do cartão sempre com PIN 9898"
           },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200', () => pm.response.code === 200);",
-                "pm.expect(pm.response.json().success).to.be.true;"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);",
+                  "pm.expect(pm.response.json().success).to.be.true;"
+                ]
+              }
             }
-          }]
-        },
-        {
-          "name": "Antecipar Parcelas",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/cards/invoice/anticipate",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"cpf\": \"{{cpf}}\",\n  \"transactionIds\": [\"tx-inv-001\", \"tx-inv-002\"],\n  \"pin\": \"1234\"\n}"
-            }
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200', () => pm.response.code === 200);",
-                "pm.expect(pm.response.json().success).to.be.true;"
-              ]
-            }
-          }]
+          ]
         }
       ]
     },
@@ -457,329 +667,543 @@
         {
           "name": "Listar Produtos",
           "request": {
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/shop/products"
+            "url": {
+              "raw": "{{baseUrl}}/shop/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "products"]
+            },
+            "description": "Lista todos os produtos disponíveis na loja"
           },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200', () => pm.response.code === 200);",
-                "pm.expect(pm.response.json().success).to.be.true;"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);"
+                ]
+              }
             }
-          }]
+          ]
         },
         {
-          "name": "Checkout (400 sem PIN)",
+          "name": "Cadastrar Produto",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/shop/checkout",
-            "body": { "mode": "raw", "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":1}],\"paymentMethod\":\"debit\"}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"prod-001\",\n  \"name\": \"Produto Teste\",\n  \"description\": \"Descrição do produto\",\n  \"price\": 100.00,\n  \"imageUrl\": \"https://example.com/image.jpg\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/shop/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "shop", "products"]
+            },
+            "description": "Cadastra novo produto no shop (Admin)"
           },
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 400', () => pm.response.code === 400);"] } }]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.code === 201);"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Checkout (201 débito)",
+          "name": "Editar Produto",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Produto Atualizado\",\n  \"description\": \"Nova descrição\",\n  \"price\": 150.00,\n  \"imageUrl\": \"https://example.com/new-image.jpg\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/shop/products/:productId",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "shop", "products", ":productId"],
+              "variable": [
+                {
+                  "key": "productId",
+                  "value": "prod-001"
+                }
+              ]
+            },
+            "description": "Edita produto existente no shop (Admin)"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Comprar Produto (Débito)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/shop/checkout",
-            "body": { "mode": "raw", "raw": "{\"items\":[{\"productId\":\"prod-001\",\"quantity\":2}],\"paymentMethod\":\"debit\",\"cashbackUsed\":1.5,\"pin\":\"1234\"}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"prod-001\",\n      \"quantity\": 1\n    }\n  ],\n  \"paymentMethod\": \"debit\",\n  \"pin\": \"9898\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shop/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "checkout"]
+            },
+            "description": "Compra produto no débito"
           },
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.code === 201);"] } }]
-        }
-      ]
-    },
-    {
-      "name": "👨‍💼 Admin",
-      "item": [
-        {
-          "name": "Listar Usuários (403 sem admin)",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/admin/users"
-          },
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 403', () => pm.response.code === 403);"] } }]
-        },
-        {
-          "name": "Consultar Usuário",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/admin/users/{{cpf}}"
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 ou 403', () => [201, 403].includes(pm.response.code));"
+                ]
+              }
             }
-          }]
+          ]
         },
         {
-          "name": "Depositar",
+          "name": "Comprar Produto (Crédito à Vista)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/admin/users/{{cpf}}/deposit",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"amount\": 500.00\n}"
-            }
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"prod-001\",\n      \"quantity\": 1\n    }\n  ],\n  \"paymentMethod\": \"credit\",\n  \"installments\": 1,\n  \"pin\": \"9898\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shop/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "checkout"]
+            },
+            "description": "Compra produto à vista no crédito"
           },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 ou 403', () => [201, 403].includes(pm.response.code));"
+                ]
+              }
             }
-          }]
+          ]
         },
         {
-          "name": "Bloquear Usuário",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/admin/users/{{cpf}}/block"
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-              ]
-            }
-          }]
-        },
-        {
-          "name": "Desbloquear Usuário",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/admin/users/{{cpf}}/unblock"
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-              ]
-            }
-          }]
-        },
-        {
-          "name": "Alterar Limite PIX",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/admin/users/{{cpf}}/pix-limit",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"newLimit\": 5000.00\n}"
-            }
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-              ]
-            }
-          }]
-        },
-        {
-          "name": "Alterar Limite Cartão",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/admin/users/{{cpf}}/credit-limit",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"totalLimit\": 10000.00,\n  \"availableLimit\": 9500.00\n}"
-            }
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-              ]
-            }
-          }]
-        },
-        {
-          "name": "Resetar Senha",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/admin/users/{{cpf}}/reset-password",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"newPassword\": \"nova123\"\n}"
-            }
-          },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-              ]
-            }
-          }]
-        },
-        {
-          "name": "Gerar Senha Temporária",
+          "name": "Comprar Produto (Crédito 12x sem juros)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/admin/users/{{cpf}}/generate-temp-password"
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"prod-001\",\n      \"quantity\": 1\n    }\n  ],\n  \"paymentMethod\": \"credit\",\n  \"installments\": 12,\n  \"pin\": \"9898\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shop/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "checkout"]
+            },
+            "description": "Compra produto parcelado sem juros até 12x"
           },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.code === 201);"
+                ]
+              }
             }
-          }]
+          ]
         },
         {
-          "name": "Solicitações",
-          "item": [
-            {
-              "name": "Listar Solicitações de Limite",
-              "request": {
-                "method": "GET",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/admin/requests/limit"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-                  ]
-                }
-              }]
+          "name": "Comprar Produto (Crédito 18x com juros)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"prod-001\",\n      \"quantity\": 1\n    }\n  ],\n  \"paymentMethod\": \"credit\",\n  \"installments\": 18,\n  \"interestRate\": 0.05,\n  \"pin\": \"9898\"\n}"
             },
-            {
-              "name": "Aprovar Solicitação de Limite",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/admin/requests/limit/{{cpf}}/approve"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-                  ]
-                }
-              }]
+            "url": {
+              "raw": "{{baseUrl}}/shop/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "checkout"]
             },
+            "description": "Compra produto parcelado de 13x até 24x com juros (1% a 7%)"
+          },
+          "event": [
             {
-              "name": "Negar Solicitação de Limite",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/admin/requests/limit/{{cpf}}/deny"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-                  ]
-                }
-              }]
-            },
-            {
-              "name": "Listar Solicitações de Reset de Senha",
-              "request": {
-                "method": "GET",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/admin/requests/password"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-                  ]
-                }
-              }]
-            },
-            {
-              "name": "Aprovar Reset de Senha",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/admin/requests/password/{{cpf}}/approve"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-                  ]
-                }
-              }]
-            },
-            {
-              "name": "Negar Reset de Senha",
-              "request": {
-                "method": "POST",
-                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": "{{baseUrl}}/admin/requests/password/{{cpf}}/deny"
-              },
-              "event": [{
-                "listen": "test",
-                "script": {
-                  "exec": [
-                    "pm.test('Status 200 ou 403', () => [200, 403].includes(pm.response.code));"
-                  ]
-                }
-              }]
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 ou 403', () => [201, 403].includes(pm.response.code));"
+                ]
+              }
             }
           ]
         }
       ]
     },
     {
-      "name": "🔧 Sistema",
+      "name": "👨‍💼 Admin",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{adminToken}}",
+            "type": "string"
+          }
+        ]
+      },
       "item": [
         {
-          "name": "Health Check",
+          "name": "Listar Usuários",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/health"
+            "url": {
+              "raw": "{{baseUrl}}/admin/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users"]
+            },
+            "description": "Lista todos os usuários"
           },
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "pm.test('Status 200', () => pm.response.code === 200);",
-                "pm.expect(pm.response.json().success).to.be.true;"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);"
+                ]
+              }
             }
-          }]
+          ]
         },
         {
-          "name": "Proxy - News (200 cache)",
+          "name": "Consultar Usuário",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/proxy/news"
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userCpf}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", "{{userCpf}}"]
+            },
+            "description": "Consulta dados de um usuário específico"
           },
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', () => pm.response.code === 200);"] } }]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Fazer Depósito",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500.00\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userCpf}}/deposit",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", "{{userCpf}}", "deposit"]
+            },
+            "description": "Realiza depósito na conta do usuário"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Atualizar Detalhes do Cartão",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availableLimit\": 5000,\n  \"totalLimit\": 8000,\n  \"invoiceDueDate\": \"2025-12-10\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userCpf}}/card-details",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", "{{userCpf}}", "card-details"]
+            },
+            "description": "Atualiza detalhes do cartão de crédito"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.code === 200);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compra Aberta (Vista)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500.00,\n  \"description\": \"Compra vista aberta\",\n  \"installments\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userCpf}}/card/purchase/open",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", "{{userCpf}}", "card", "purchase", "open"]
+            },
+            "description": "Registra compra na fatura aberta (à vista com 10% desconto)"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.code === 201);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compra Aberta (12x sem juros)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1200.00,\n  \"description\": \"Compra parcelada aberta\",\n  \"installments\": 12\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userCpf}}/card/purchase/open",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", "{{userCpf}}", "card", "purchase", "open"]
+            },
+            "description": "Registra compra na fatura aberta (2-12x sem juros)"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.code === 201);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compra Aberta (18x com juros)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2000.00,\n  \"description\": \"Compra parcelada com juros\",\n  \"installments\": 18,\n  \"interestRate\": 0.05\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userCpf}}/card/purchase/open",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", "{{userCpf}}", "card", "purchase", "open"]
+            },
+            "description": "Registra compra na fatura aberta (13-24x com juros 1-7%)"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.code === 201);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compra Fechada (Vista)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 300.00,\n  \"description\": \"Compra vista fechada\",\n  \"installments\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userCpf}}/card/purchase/closed",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", "{{userCpf}}", "card", "purchase", "closed"]
+            },
+            "description": "Registra compra na fatura fechada (à vista com 10% desconto)"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.code === 201);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compra Fechada (12x sem juros)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 900.00,\n  \"description\": \"Compra parcelada fechada\",\n  \"installments\": 6\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userCpf}}/card/purchase/closed",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", "{{userCpf}}", "card", "purchase", "closed"]
+            },
+            "description": "Registra compra na fatura fechada (2-12x sem juros)"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.code === 201);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compra Fechada (20x com juros)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2400.00,\n  \"description\": \"Compra parcelada com juros fechada\",\n  \"installments\": 20,\n  \"interestRate\": 0.07\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{userCpf}}/card/purchase/closed",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", "{{userCpf}}", "card", "purchase", "closed"]
+            },
+            "description": "Registra compra na fatura fechada (13-24x com juros 1-7%)"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.code === 201);"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

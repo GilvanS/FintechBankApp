@@ -1,0 +1,35 @@
+meta {
+  name: Compra Aberta (Vista)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/admin/users/{{userCpf}}/card/purchase/open
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "amount": 500.00,
+    "description": "Compra vista aberta",
+    "installments": 1
+  }
+}
+
+script:post-response {
+  test('Status 201', () => res.getStatus() === 201);
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Registra compra na fatura aberta (à vista com 10% desconto)
+}

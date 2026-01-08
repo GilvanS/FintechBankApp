@@ -1,0 +1,25 @@
+meta {
+  name: Listar Contatos PIX
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/pix/contacts/{{userCpf}}
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  test('Status 200', () => res.getStatus() === 200);
+  const json = res.getBody();
+  expect(json.success).to.be.true;
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Lista contatos para enviar PIX
+}

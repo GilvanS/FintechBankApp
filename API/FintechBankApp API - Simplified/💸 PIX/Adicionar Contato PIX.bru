@@ -1,0 +1,64 @@
+meta {
+  name: Adicionar Contato PIX
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/pix/contacts/{{userCpf}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "contactCpf": "{{destinationCpf1}}",
+    "contactName": "João Silva"
+  }
+}
+
+script:post-response {
+  function saveDestinationCpf(cpf) {
+    if (!cpf || cpf.length !== 11) return;
+    const cpf1 = bru.getEnvVar('destinationCpf1');
+    const cpf2 = bru.getEnvVar('destinationCpf2');
+    const cpf3 = bru.getEnvVar('destinationCpf3');
+    if (cpf === cpf1 || cpf === cpf2 || cpf === cpf3) return;
+    if (!cpf1) {
+      bru.setEnvVar('destinationCpf1', cpf);
+      console.log('✅ CPF salvo em destinationCpf1:', cpf);
+    } else if (!cpf2) {
+      bru.setEnvVar('destinationCpf2', cpf);
+      console.log('✅ CPF salvo em destinationCpf2:', cpf);
+    } else if (!cpf3) {
+      bru.setEnvVar('destinationCpf3', cpf);
+      console.log('✅ CPF salvo em destinationCpf3:', cpf);
+    } else {
+      bru.setEnvVar('destinationCpf1', cpf2);
+      bru.setEnvVar('destinationCpf2', cpf3);
+      bru.setEnvVar('destinationCpf3', cpf);
+      console.log('✅ CPFs rotacionados. Novo CPF salvo em destinationCpf3:', cpf);
+    }
+  }
+  test('Status 201', () => res.getStatus() === 201);
+  if (res.getStatus() === 201) {
+    const json = res.getBody();
+    expect(json.success).to.be.true;
+    const requestBody = JSON.parse(req.getBody().raw);
+    if (requestBody.contactCpf) {
+      saveDestinationCpf(requestBody.contactCpf);
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Adiciona contato para enviar PIX. CPF será salvo automaticamente
+}

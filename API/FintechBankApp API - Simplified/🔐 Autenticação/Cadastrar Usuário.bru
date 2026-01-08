@@ -1,0 +1,67 @@
+meta {
+  name: Cadastrar Usuário
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/auth/signup
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "fullName": "João da Silva",
+    "cpf": "12345678901",
+    "email": "joao@example.com",
+    "password": "senha123"
+  }
+}
+
+script:post-response {
+  function saveDestinationCpf(cpf) {
+    if (!cpf || cpf.length !== 11) return;
+    const cpf1 = bru.getEnvVar('destinationCpf1');
+    const cpf2 = bru.getEnvVar('destinationCpf2');
+    const cpf3 = bru.getEnvVar('destinationCpf3');
+    if (cpf === cpf1 || cpf === cpf2 || cpf === cpf3) return;
+    if (!cpf1) {
+      bru.setEnvVar('destinationCpf1', cpf);
+      console.log('✅ CPF salvo em destinationCpf1:', cpf);
+    } else if (!cpf2) {
+      bru.setEnvVar('destinationCpf2', cpf);
+      console.log('✅ CPF salvo em destinationCpf2:', cpf);
+    } else if (!cpf3) {
+      bru.setEnvVar('destinationCpf3', cpf);
+      console.log('✅ CPF salvo em destinationCpf3:', cpf);
+    } else {
+      bru.setEnvVar('destinationCpf1', cpf2);
+      bru.setEnvVar('destinationCpf2', cpf3);
+      bru.setEnvVar('destinationCpf3', cpf);
+      console.log('✅ CPFs rotacionados. Novo CPF salvo em destinationCpf3:', cpf);
+    }
+  }
+  if (res.getStatus() === 200 || res.getStatus() === 201) {
+    const json = res.getBody();
+    if (json.success) {
+      const requestBody = JSON.parse(req.getBody().raw);
+      if (requestBody.cpf) {
+        saveDestinationCpf(requestBody.cpf);
+      }
+    }
+  }
+  test('Status 200 ou 201', () => [200, 201].includes(res.getStatus()));
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Cadastro de novo usuário. CPF será salvo automaticamente em destinationCpf1/2/3
+}
