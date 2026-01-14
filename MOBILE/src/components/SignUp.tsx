@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { signUp } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useToast, ToastContainer } from './Toast';
+import SignUpSuccessModal from './SignUpSuccessModal';
 
 interface SignUpProps {
     onSignUpSuccess: () => void;
@@ -17,6 +18,8 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [userData, setUserData] = useState({ fullName: '', email: '', cpf: '' });
     const { toast, showSuccess, showError, hide } = useToast();
 
     const handleSignUp = async (e: React.FormEvent) => {
@@ -62,10 +65,13 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
         setIsLoading(false);
         if (result.success) {
             setSuccess(result.message);
+            setUserData({
+                fullName,
+                email,
+                cpf: formatCPF(cpfDigits)
+            });
+            setShowSuccessModal(true);
             showSuccess('Conta criada com sucesso');
-            setTimeout(() => {
-                onSignUpSuccess();
-            }, 1500);
         } else {
             const msg = result.message || 'Falha ao criar conta.';
             setError(msg);
@@ -264,16 +270,6 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                             {error}
                         </div>
                     )}
-                    {success && (
-                        <div 
-                            className="text-sm text-primary" 
-                            data-testid="signup-success-message"
-                            role="status"
-                            aria-live="polite"
-                        >
-                            {success}
-                        </div>
-                    )}
 
                     <div 
                         className="pt-2 test-submit-container" 
@@ -299,6 +295,16 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
             </main>
             <style>{`.input-style { background-color: #1A2C1F; border: 2px solid #1A2C1F; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-top: 0.25rem; color: #E5E7EB; } .input-style:focus { outline: none; box-shadow: 0 0 0 2px #13ec5b; border-color: transparent; }`}</style>
             <ToastContainer toast={toast} onClose={hide} />
+            <SignUpSuccessModal 
+                isOpen={showSuccessModal}
+                onClose={() => {
+                    setShowSuccessModal(false);
+                    setTimeout(() => {
+                        onSignUpSuccess();
+                    }, 300);
+                }}
+                userData={userData}
+            />
         </div>
     );
 };

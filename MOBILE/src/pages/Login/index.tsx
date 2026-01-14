@@ -18,26 +18,73 @@ const StatusMessage: React.FC<StatusMessageProps> = ({ type, message, onClose })
 
   const bgClass = type === 'error' ? 'bg-red-500/10 border-red-500/50 text-red-200' : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-200';
   const icon = type === 'error' ? 'error' : 'check_circle';
+  const isError = type === 'error';
+  const elementId = isError ? 'login-error-message' : 'login-success-message';
+  const testId = isError ? 'login-error-message' : 'login-success-message';
 
   return (
     <div 
-      className={`flex items-center justify-between p-3 rounded-lg border ${bgClass} mb-4 animate-fade-in`}
-      data-testid={type === 'error' ? 'login-error-message' : 'login-success-message'}
-      id={type === 'error' ? 'login-error-message' : 'login-success-message'}
+      className={`flex items-center justify-between p-3 rounded-lg border ${bgClass} mb-4 animate-fade-in test-login-${type}-message login-status-message login-${type}-message`}
+      // ID para localização direta
+      id={elementId}
+      // Data attributes para múltiplas estratégias de teste
+      data-testid={testId}
+      data-cy={testId}
+      data-playwright={testId}
+      // Atributos de acessibilidade
       role="alert"
       aria-live="assertive"
+      aria-atomic="true"
+      aria-label={isError ? 'Mensagem de erro' : 'Mensagem de sucesso'}
+      // Atributos adicionais para localização
+      name={elementId}
     >
-      <div className="flex items-center gap-2">
-        <span className="material-symbols-outlined text-sm" aria-hidden="true">{icon}</span>
-        <span className="text-sm font-medium">{message}</span>
+      <div 
+        className="flex items-center gap-2"
+        data-testid={`${testId}-content`}
+        data-cy={`${testId}-content`}
+        id={`${elementId}-content`}
+      >
+        <span 
+          className="material-symbols-outlined text-sm" 
+          aria-hidden="true"
+          data-testid={`${testId}-icon`}
+          id={`${elementId}-icon`}
+        >
+          {icon}
+        </span>
+        <span 
+          className="text-sm font-medium"
+          data-testid={`${testId}-text`}
+          data-cy={`${testId}-text`}
+          id={`${elementId}-text`}
+          // Atributo com o texto para localização por conteúdo
+          data-message={message}
+          // Atributo para localização por tipo
+          data-message-type={type}
+        >
+          {message}
+        </span>
       </div>
       <button 
         onClick={onClose} 
         className="p-1 hover:bg-white/10 rounded-full transition-colors"
-        data-testid={`login-${type}-message-close`}
+        data-testid={`${testId}-close`}
+        data-cy={`${testId}-close`}
+        data-playwright={`${testId}-close`}
+        id={`${elementId}-close`}
+        name={`${elementId}-close`}
         aria-label="Fechar mensagem"
+        type="button"
+        role="button"
       >
-        <span className="material-symbols-outlined text-sm" aria-hidden="true">close</span>
+        <span 
+          className="material-symbols-outlined text-sm" 
+          aria-hidden="true"
+          data-testid={`${testId}-close-icon`}
+        >
+          close
+        </span>
       </button>
     </div>
   );
@@ -201,8 +248,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
           role="button"
         >
           <span className="material-symbols-outlined text-2xl" aria-hidden="true">arrow_back</span>
-        </button>
-      </header>
+            </button>
+        </header>
       
       <main 
         className="flex-grow flex flex-col items-center justify-center p-4"
@@ -215,7 +262,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
           className="text-2xl font-bold text-text-dark mb-2"
           title="Fintech - Título da aplicação"
         >
-          Fintech
+                Fintech
         </h1>
         <p 
           className="text-subtle-dark mb-10"
@@ -241,23 +288,23 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             >
               CPF
             </label>
-            <input
-              id="cpf"
+                  <input
+                    id="cpf"
               data-testid="cpf"
               name="cpf"
-              type="text"
-              value={formatCpf(cpf)}
-              onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
-              inputMode="numeric"
-              placeholder="999.999.999-99"
+                    type="text"
+                    value={formatCpf(cpf)}
+                    onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                    inputMode="numeric"
+                    placeholder="999.999.999-99"
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
               aria-label="cpf"
               aria-labelledby="login-cpf-label"
               aria-required="true"
               role="textbox"
               autoComplete="username"
-            />
-          </div>
+                  />
+                </div>
           
           <div data-testid="login-password" id="login-password">
             <div className="flex justify-between items-baseline mb-1">
@@ -281,15 +328,15 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
               >
                 Esqueci minha senha
               </button>
-            </div>
-            <input
-              id="password"
+                  </div>
+                  <input
+                    id="password"
               data-testid="password"
               name="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
               aria-label="password"
               aria-labelledby="login-password-label"
@@ -297,9 +344,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
               role="textbox"
               autoComplete="current-password"
             />
-          </div>
+              </div>
 
-          <StatusMessage type="error" message={error} onClose={() => setError('')} />
+              <StatusMessage type="error" message={error} onClose={() => setError('')} />
 
           <button 
             type="submit" 
@@ -311,8 +358,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             aria-label="entrar"
             role="button"
           >
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
+                  {loading ? 'Entrando...' : 'Entrar'}
+                </button>
 
           <p 
             className="text-center text-sm text-subtle-dark mt-6"
@@ -331,17 +378,17 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             >
               Cadastre-se
             </button>
-          </p>
-        </form>
-      </main>
+              </p>
+            </form>
+        </main>
 
       <footer 
         className="w-full bg-surface-dark p-3 safe-bottom-strong"
         data-testid="login-footer"
         id="login-footer"
       >
-        <div className="w-full max-w-sm mx-auto">
-          <InfoCarousel />
+          <div className="w-full max-w-sm mx-auto">
+            <InfoCarousel />
           <div 
             className="flex justify-start items-center text-xs mt-4"
             data-testid="login-server-status"
@@ -351,9 +398,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
               data-testid="login-server-status-indicator"
               aria-label={`Servidor ${serverStatus === 'online' ? 'online' : serverStatus === 'offline' ? 'offline' : 'verificando'}`}
             ></span>
+            </div>
           </div>
-        </div>
-      </footer>
+        </footer>
     </div>
   );
 };

@@ -7,6 +7,7 @@ import HomeView from './HomeView';
 import Profile from './Profile';
 import Pix from './Pix';
 import Statement from './Statement';
+import StatementPaginated from './StatementPaginated';
 import CardDashboard from './CardDashboard';
 import Shop from './Shop';
 import ShoppingCart from './ShoppingCart';
@@ -430,7 +431,7 @@ const Dashboard: React.FC = () => {
             case 'pix':
                 return <Pix onBack={() => handleNavigate('home')} />;
             case 'statement':
-                return <Statement user={user!} onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
+                return <StatementPaginated user={user!} onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
             case 'cards':
                 return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
             case 'shop':

@@ -447,8 +447,22 @@ export const getProfile = getUserMe;
 // ========== FUNÇÕES DE ADMIN ==========
 
 // Método: adminGetUserByCpf - Busca usuário por CPF (Admin)
-// Usa a mesma função getUserByCpf que já chama /admin/users/:cpf
-export const adminGetUserByCpf = getUserByCpf;
+// Método: adminGetUserByCpf - Busca usuário por CPF (Admin) - usa endpoint específico de admin
+export async function adminGetUserByCpf(cpf: string): Promise<{ success: boolean; user?: User; message?: string; }> {
+    try {
+        const res = await api.get(`/admin/users/${cpf}`, {
+            headers: getAuthHeaders('none'),
+        });
+        const data = res.data;
+        if (data?.success && data?.user) {
+            return { success: true, user: data.user };
+        }
+        return { success: false, message: data?.message || 'Usuário não encontrado.' };
+    } catch (error: any) {
+        const errorMessage = error?.response?.data?.message || 'Erro de conexão ao buscar usuário.';
+        return { success: false, message: errorMessage };
+    }
+}
 
 // Método: blockUser - Bloqueia conta de usuário (Admin)
 export async function blockUser(cpf: string): Promise<{ success: boolean; message: string; user?: User }> {
@@ -517,12 +531,19 @@ export async function adminUpdateCreditLimit(cpf: string, limits: { totalLimit?:
 // Método: adminUpdateCardDetails - Atualiza detalhes do cartão (Admin)
 export async function adminUpdateCardDetails(cpf: string, details: { dueDate?: string; invoiceDueDate?: string }): Promise<{ success: boolean; message: string; user?: User }> {
     try {
-        const res = await api.put(`/admin/users/${cpf}/card-details`, details, {
+        const res = await api.post(`/admin/users/${cpf}/card-details`, details, {
             headers: getAuthHeaders('json'),
         });
         const data = res.data;
         if (data?.success && data?.user) {
             return { success: true, message: data.message || 'Detalhes do cartão atualizados com sucesso.', user: data.user };
+        }
+        // Se não retornou user, buscar novamente
+        if (data?.success && !data?.user) {
+            const refreshed = await adminGetUserByCpf(cpf);
+            if (refreshed.success && refreshed.user) {
+                return { success: true, message: data.message || 'Detalhes do cartão atualizados com sucesso.', user: refreshed.user };
+            }
         }
         return { success: false, message: data?.message || 'Falha ao atualizar detalhes do cartão.' };
     } catch (error: any) {
@@ -630,6 +651,41 @@ export async function adminDenyLimitRequest(cpf: string, reason: string): Promis
     }
 }
 
+// Método: adminGetStats - Busca estatísticas do dashboard admin
+export async function adminGetStats(): Promise<{ 
+    success: boolean; 
+    stats?: { 
+        totalClients: number; 
+        transactionsToday: number; 
+        passwordRequests: number; 
+        limitRequests: number; 
+    }; 
+    message?: string; 
+}> {
+    try {
+        const res = await api.get('/admin/stats', {
+            headers: getAuthHeaders('none'),
+        });
+        const data = res.data;
+        if (data?.success && data?.stats) {
+            return { success: true, stats: data.stats };
+        }
+        return { success: false, message: data?.message || 'Falha ao buscar estatísticas.' };
+    } catch (error: any) {
+        console.error('Erro ao buscar estatísticas do admin:', error);
+        return { 
+            success: false, 
+            message: error?.response?.data?.message || 'Erro de conexão ao buscar estatísticas.',
+            stats: {
+                totalClients: 0,
+                transactionsToday: 0,
+                passwordRequests: 0,
+                limitRequests: 0
+            }
+        };
+    }
+}
+
 // Método: adminUpdatePixLimit - Atualiza limite PIX diário (Admin)
 export async function adminUpdatePixLimit(cpf: string, newLimit: number): Promise<{ success: boolean; message: string; user?: User }> {
     try {
@@ -666,6 +722,55 @@ export async function getUserStatement(cpf: string): Promise<{ success: boolean;
         const data = res.data;
         if (data?.success !== false) {
             return { success: true, transactions: data.transactions || data };
+        }
+        return { success: false, message: data?.message || 'Falha ao obter extrato.' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao obter extrato.' };
+    }
+}
+
+// Função para obter extrato paginado do usuário
+export async function getUserStatementPaginated(
+    cpf: string, 
+    page: number = 1, 
+    limit: number = 10, 
+    type?: 'purchases' | 'pix' | 'transfers' | 'payments'
+): Promise<{ 
+    success: boolean; 
+    message?: string; 
+    transactions?: any[];
+    pagination?: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+        hasNext: boolean;
+        hasPrev: boolean;
+    };
+}> {
+    try {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            return { success: false, message: 'Não autenticado.' };
+        }
+
+        const params: any = { page, limit };
+        if (type) {
+            params.type = type;
+        }
+
+        const res = await api.get(`/users/${cpf}/statement`, {
+            params,
+            headers: getAuthHeaders('none'),
+        });
+
+        const data = res.data;
+        if (data?.success !== false) {
+            return { 
+                success: true, 
+                transactions: data.transactions || [],
+                pagination: data.pagination
+            };
         }
         return { success: false, message: data?.message || 'Falha ao obter extrato.' };
     } catch (error: any) {
@@ -808,6 +913,23 @@ export async function confirmPasswordReset(cpf: string, token: string, newPasswo
         return { success: false, message: data?.message || 'Falha ao redefinir senha.' };
     } catch (error: any) {
         return { success: false, message: error?.response?.data?.message || 'Erro de conexão ao redefinir senha.' };
+    }
+}
+
+// Método: getProducts - Buscar produtos do shop
+export async function getProducts(): Promise<{ success: boolean; products?: any[]; message?: string }> {
+    try {
+        const res = await api.get('/shop/products', {
+            headers: { 'Content-Type': 'application/json' },
+        });
+        return { success: true, products: res.data || [] };
+    } catch (error: any) {
+        console.error('❌ [getProducts] Erro ao buscar produtos:', error);
+        return { 
+            success: false, 
+            message: error?.response?.data?.message || 'Erro ao buscar produtos',
+            products: []
+        };
     }
 }
 

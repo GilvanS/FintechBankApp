@@ -11,7 +11,8 @@ import {
     adminGetLimitRequests,
     adminApproveLimitRequest,
     adminDenyLimitRequest,
-    adminUpdateCardDetails
+    adminUpdateCardDetails,
+    adminGetStats
 } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
@@ -33,6 +34,18 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     const [passwordRequests, setPasswordRequests] = useState<PasswordResetRequest[]>([]);
     const [limitRequests, setLimitRequests] = useState<LimitIncreaseRequest[]>([]);
     const [isLoadingAction, setIsLoadingAction] = useState(false);
+    const [stats, setStats] = useState<{
+        totalClients: number;
+        transactionsToday: number;
+        passwordRequests: number;
+        limitRequests: number;
+    }>({
+        totalClients: 0,
+        transactionsToday: 0,
+        passwordRequests: 0,
+        limitRequests: 0
+    });
+    const [isLoadingStats, setIsLoadingStats] = useState(true);
     
     // State for Modals and Toasts
     const [modalState, setModalState] = useState<{
@@ -72,8 +85,23 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
         setLimitRequests(limReqs);
     };
 
+    const fetchStats = async () => {
+        setIsLoadingStats(true);
+        try {
+            const result = await adminGetStats();
+            if (result.success && result.stats) {
+                setStats(result.stats);
+            }
+        } catch (error) {
+            console.error('Erro ao buscar estatísticas:', error);
+        } finally {
+            setIsLoadingStats(false);
+        }
+    };
+
     useEffect(() => {
         fetchRequests();
+        fetchStats();
     }, []);
 
     const handleSearch = async (e?: React.FormEvent) => {
@@ -162,6 +190,7 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
         setIsLoadingAction(false);
         closeModal();
         fetchRequests(); // Refresh lists
+        fetchStats(); // Refresh stats
     };
 
     return (
@@ -227,10 +256,26 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                     data-testid="admin-stats"
                     data-cy="admin-stats"
                 >
-                    <StatCard title="Solicitações de Senha" value={passwordRequests.length} icon="lock_reset" />
-                    <StatCard title="Solicitações de Limite" value={limitRequests.length} icon="upgrade" />
-                    <StatCard title="Total de Clientes" value="-" icon="group" />
-                    <StatCard title="Transações Hoje" value="-" icon="monitoring" />
+                    <StatCard 
+                        title="Solicitações de Senha" 
+                        value={isLoadingStats ? '-' : stats.passwordRequests} 
+                        icon="lock_reset" 
+                    />
+                    <StatCard 
+                        title="Solicitações de Limite" 
+                        value={isLoadingStats ? '-' : stats.limitRequests} 
+                        icon="upgrade" 
+                    />
+                    <StatCard 
+                        title="Total de Clientes" 
+                        value={isLoadingStats ? '-' : stats.totalClients} 
+                        icon="group" 
+                    />
+                    <StatCard 
+                        title="Transações Hoje" 
+                        value={isLoadingStats ? '-' : stats.transactionsToday} 
+                        icon="monitoring" 
+                    />
                 </section>
 
                 {/* User Management */}

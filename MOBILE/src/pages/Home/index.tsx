@@ -9,6 +9,7 @@ import Profile from '../../components/Profile';
 import Admin from '../../components/Admin';
 import ShoppingCart from '../../components/ShoppingCart';
 import Statement from '../../components/Statement';
+import StatementPaginated from '../../components/StatementPaginated';
 import Shop from '../../components/Shop';
 import CurrentInvoiceView from '../../components/CurrentInvoiceView';
 import ClosedInvoiceView from '../../components/ClosedInvoiceView';
@@ -434,7 +435,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
         }
         case 'purchaseConfirmation': return confirmationDetails ? <PurchaseConfirmation details={confirmationDetails} onClose={() => handleNavigate('home')} /> : <HomeView user={user} onNavigate={handleNavigate} />;
         case 'transactionReceipt': return selectedTransaction ? <TransactionReceipt transaction={selectedTransaction} onBack={() => { setSelectedTransaction(null); handleNavigate('home'); }} /> : <HomeView user={user} onNavigate={handleNavigate} />;
-        case 'statement': return <Statement onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
+        case 'statement': return <StatementPaginated onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
         case 'currentInvoice': return <CurrentInvoiceView user={user} onBack={() => handleNavigate('cards')} />;
         case 'closedInvoice': return <ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
         case 'installmentOptions': return <InstallmentOptions user={user} onBack={() => handleNavigate('closedInvoice')} onSelectOption={handleSelectInstallmentOption} />;

@@ -4,6 +4,7 @@ import { getPixKeys, registerPixKey, deletePixKey } from '../services/api';
 import { PixKey } from '../types';
 import { useToast, ToastContainer } from './Toast';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import PixKeySuccessModal from './PixKeySuccessModal';
 
 interface PixKeyManagementProps {
     onBack: () => void;
@@ -15,7 +16,9 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [keyToDelete, setKeyToDelete] = useState<PixKey | null>(null);
+    const [registeredKeyData, setRegisteredKeyData] = useState<{ type: 'CPF' | 'EMAIL'; key: string } | null>(null);
     
     // State for the new key form
     const [newKeyType, setNewKeyType] = useState<'CPF' | 'EMAIL'>('EMAIL');
@@ -75,7 +78,12 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
             console.log('🔵 [PixKeyManagement] Resultado do cadastro:', result);
             
             if (result.success) {
-                showSuccess(result.message);
+                // Salvar dados da chave cadastrada para o modal
+                setRegisteredKeyData({
+                    type: newKeyType,
+                    key: newKeyValue
+                });
+                
                 await fetchKeys(); // Re-fetch the keys to update the list
 
                 // Refresh global user state
@@ -87,6 +95,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
 
                 setShowAddModal(false);
                 setNewKeyValue('');
+                setShowSuccessModal(true);
             } else {
                 showError(result.message);
                 setError(result.message);
@@ -294,6 +303,17 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                 message="Tem certeza que deseja remover esta chave PIX?"
                 itemName={keyToDelete ? `${keyToDelete.type}: ${keyToDelete.key}` : undefined}
             />
+
+            {registeredKeyData && (
+                <PixKeySuccessModal
+                    isOpen={showSuccessModal}
+                    onClose={() => {
+                        setShowSuccessModal(false);
+                        setRegisteredKeyData(null);
+                    }}
+                    keyData={registeredKeyData}
+                />
+            )}
 
             <ToastContainer toast={toast} onClose={hide} />
         </div>

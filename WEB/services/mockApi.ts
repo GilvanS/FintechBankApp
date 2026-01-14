@@ -721,6 +721,43 @@ export const resetPassword = async (cpf: string, token: string, newPassword: str
     return { success: true, message: 'Senha redefinida com sucesso!' };
 };
 
+export const adminGetStats = async (): Promise<{ 
+    success: boolean; 
+    stats?: { 
+        totalClients: number; 
+        transactionsToday: number; 
+        passwordRequests: number; 
+        limitRequests: number; 
+    }; 
+    message?: string; 
+}> => {
+    await delay(500);
+    const store = _getStore();
+    
+    // Total de Clientes (excluindo admin)
+    const totalClients = store.users.filter(u => u.role !== 'admin').length;
+    
+    // Transações Hoje (simulado - contar transações do dia atual)
+    const today = new Date().toISOString().split('T')[0];
+    const transactionsToday = 0; // Mock não tem histórico de transações por data
+    
+    // Solicitações de Senha Pendentes
+    const passwordRequests = store.passwordRequests.filter(r => r.status === 'pending').length;
+    
+    // Solicitações de Limite Pendentes
+    const limitRequests = store.limitRequests.filter(r => r.status === 'pending').length;
+    
+    return {
+        success: true,
+        stats: {
+            totalClients,
+            transactionsToday,
+            passwordRequests,
+            limitRequests
+        }
+    };
+};
+
 export const adminGetLimitRequests = async (): Promise<LimitIncreaseRequest[]> => {
     await delay(500);
     const store = _getStore();

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { PixKey } from '../types';
 import { getPixKeys, registerPixKey, deletePixKey } from '../services/api';
 import { useToast, ToastContainer } from './Toast';
+import PixKeySuccessModal from './PixKeySuccessModal';
 
 interface PixKeyManagementProps {
     onBack: () => void;
@@ -15,9 +16,11 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     const [keys, setKeys] = useState<PixKey[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [newKeyType, setNewKeyType] = useState<'CPF' | 'EMAIL'>('CPF');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [registeredKeyData, setRegisteredKeyData] = useState<{ type: 'CPF' | 'EMAIL'; key: string } | null>(null);
     const { toast, showSuccess, showError, hide } = useToast();
 
     const fetchKeys = async () => {
@@ -41,13 +44,15 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
         const key = newKeyType === 'CPF' ? user.cpf : user.email;
         const result = await registerPixKey(newKeyType, key);
         if (result.success) {
-            setSuccess(result.message);
-            showSuccess('Chave PIX cadastrada com sucesso');
+            // Salvar dados da chave cadastrada para o modal
+            setRegisteredKeyData({
+                type: newKeyType,
+                key: key
+            });
+            
             fetchKeys();
-            setTimeout(() => {
-                setShowAddModal(false);
-                setSuccess('');
-            }, 1500);
+            setShowAddModal(false);
+            setShowSuccessModal(true);
         } else {
             const msg = result.message || 'Falha ao cadastrar chave.';
             // Tratamento explicito de chave duplicada
@@ -135,6 +140,18 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                     </div>
                 </div>
             )}
+            
+            {registeredKeyData && (
+                <PixKeySuccessModal
+                    isOpen={showSuccessModal}
+                    onClose={() => {
+                        setShowSuccessModal(false);
+                        setRegisteredKeyData(null);
+                    }}
+                    keyData={registeredKeyData}
+                />
+            )}
+            
             <ToastContainer toast={toast} onClose={hide} />
         </div>
     );

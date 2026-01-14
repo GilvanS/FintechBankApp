@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { MOCK_PRODUCTS } from '../data/mockData';
 import { PurchasedItem } from '../types';
 import ProductPage from './ProductPage';
 import PromotionalPopup from './PromotionalPopup';
+import { getProducts } from '../services/api';
 
 // FIX: Updated ShopProps interface to include all necessary handlers from the parent component.
 interface ShopProps {
@@ -21,12 +21,37 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
     const [view, setView] = useState<ShopView>('main');
     const [selectedProduct, setSelectedProduct] = useState<PurchasedItem | null>(null);
     const [products, setProducts] = useState<PurchasedItem[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const [showPopup, setShowPopup] = useState(true);
 
     useEffect(() => {
-        // Shuffle products on mount to give a dynamic feel
-        setProducts([...MOCK_PRODUCTS].sort(() => Math.random() - 0.5));
+        const fetchProducts = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                console.log('🛒 [Shop] Buscando produtos da API...');
+                const result = await getProducts();
+                if (result.success && result.products) {
+                    console.log('✅ [Shop] Produtos carregados:', result.products.length);
+                    // Shuffle products to give a dynamic feel
+                    setProducts([...result.products].sort(() => Math.random() - 0.5));
+                } else {
+                    console.error('❌ [Shop] Erro ao buscar produtos:', result.message);
+                    setError(result.message || 'Erro ao carregar produtos');
+                    setProducts([]);
+                }
+            } catch (err: any) {
+                console.error('❌ [Shop] Erro ao buscar produtos:', err);
+                setError('Erro ao carregar produtos');
+                setProducts([]);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchProducts();
     }, []);
 
     const handleProductClick = (product: PurchasedItem) => {
@@ -109,16 +134,35 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
                 data-testid="shop-main"
                 data-cy="shop-main"
             >
-                <div 
-                    className="grid grid-cols-2 gap-4 test-products-grid"
-                    id="products-grid"
-                    data-testid="shop-products-grid"
-                    data-cy="shop-products-grid"
-                    data-playwright="shop-products-grid"
-                    role="grid"
-                    aria-label="Lista de produtos"
-                >
-                    {products.map(product => (
+                {isLoading ? (
+                    <div className="flex items-center justify-center h-64">
+                        <p className="text-gray-400">Carregando produtos...</p>
+                    </div>
+                ) : error ? (
+                    <div className="flex flex-col items-center justify-center h-64">
+                        <p className="text-red-400 mb-2">{error}</p>
+                        <button 
+                            onClick={() => window.location.reload()} 
+                            className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90"
+                        >
+                            Tentar novamente
+                        </button>
+                    </div>
+                ) : products.length === 0 ? (
+                    <div className="flex items-center justify-center h-64">
+                        <p className="text-gray-400">Nenhum produto disponível</p>
+                    </div>
+                ) : (
+                    <div 
+                        className="grid grid-cols-2 gap-4 test-products-grid"
+                        id="products-grid"
+                        data-testid="shop-products-grid"
+                        data-cy="shop-products-grid"
+                        data-playwright="shop-products-grid"
+                        role="grid"
+                        aria-label="Lista de produtos"
+                    >
+                        {products.map(product => (
                         <div 
                             key={product.id} 
                             onClick={() => handleProductClick(product)} 
@@ -157,8 +201,9 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
                                 </p>
                             </div>
                         </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )}
             </main>
         </div>
     );

@@ -126,7 +126,16 @@ const apiRouter = express.Router();
 const handleValidationErrors = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        return res.status(400).json({ success: false, message: 'Payload invalido.' });
+        console.log('❌ [VALIDATION] Erros de validação detectados:');
+        console.log('   Body recebido:', JSON.stringify(req.body));
+        console.log('   Erros:', JSON.stringify(errors.array(), null, 2));
+        
+        const errorMessages = errors.array().map(err => err.msg || err.msg).join(', ');
+        return res.status(400).json({ 
+            success: false, 
+            message: `Payload invalido: ${errorMessages}`,
+            errors: errors.array()
+        });
     }
     next();
 };
@@ -147,7 +156,23 @@ const signupValidationRules = [
 ];
 
 const loginValidationRules = [
-    body('cpf').isString().isLength({ min: 11, max: 11 }).withMessage('CPF deve ter 11 dígitos.').isNumeric().withMessage('CPF deve conter apenas números.'),
+    body('cpf')
+        .custom((value) => {
+            // Aceitar CPF formatado ou não formatado
+            const rawCpf = String(value).replace(/\D/g, '');
+            if (rawCpf.length !== 11) {
+                throw new Error('CPF deve ter 11 dígitos.');
+            }
+            // Verificar se contém apenas números após remover formatação
+            if (!/^\d{11}$/.test(rawCpf)) {
+                throw new Error('CPF deve conter apenas números.');
+            }
+            return true;
+        })
+        .customSanitizer((value) => {
+            // Normalizar CPF removendo formatação antes de processar
+            return String(value).replace(/\D/g, '');
+        }),
     body('password').isString().isLength({ min: 6, max: 12 }).withMessage('A senha deve ter entre 6 e 12 caracteres.')
 ];
 
@@ -354,9 +379,10 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
         return res.status(400).json({ success: false, message: 'CPF ou email ja cadastrado.' });
     }
     console.log(`✅ [SIGNUP] Usuário não existe. Criando conta para ${cpf}...`);
-    console.log('🔵 [SIGNUP] Gerando hash da senha...');
-    const hashedPassword = await bcrypt.hash(password, 10);
-    console.log('🔵 [SIGNUP] Hash gerado, tamanho:', hashedPassword.length);
+        console.log('🔵 [SIGNUP] Gerando hash da senha...');
+        const hashedPassword = await bcrypt.hash(password, 10);
+        console.log('🔵 [SIGNUP] Hash gerado, tamanho:', hashedPassword.length);
+        console.log('🔵 [SIGNUP] Hash gerado (primeiros 30 chars):', hashedPassword.substring(0, 30) + '...');
     
     // Valores padrão definidos no código (já que o Databricks não permite DEFAULT)
     const now = new Date().toISOString();
@@ -373,6 +399,7 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     
     try {
         // Escapar hash da senha também (pode conter caracteres especiais)
+        // IMPORTANTE: O hash do bcrypt pode conter $, /, ., etc. Precisamos escapar apenas aspas simples
         const escapedHash = hashedPassword.replace(/'/g, "''");
         const escapedCpf = escapeSQL(cpf);
         const escapedFullName = escapeSQL(fullName);
@@ -382,14 +409,24 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
             cpf: escapedCpf, 
             fullName: escapedFullName.substring(0, 30) + '...', 
             email: escapedEmail,
-            hashLength: escapedHash.length 
+            hashLength: escapedHash.length,
+            hashOriginalLength: hashedPassword.length,
+            hashEscapedCorrectly: escapedHash.length === hashedPassword.length || (escapedHash.length === hashedPassword.length + hashedPassword.split("'").length - 1)
         });
+        
+        // Verificar se o hash tem formato válido antes de inserir
+        if (!hashedPassword.startsWith('$2')) {
+            console.error('❌ [SIGNUP] Hash não tem formato bcrypt válido!');
+            return res.status(500).json({ success: false, message: 'Erro ao gerar hash da senha. Tente novamente.' });
+        }
         
         const userId = databricksService.generateUUID();
         const insertQuery = `
             INSERT INTO ${databricksService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, credit_card_total_limit, credit_card_available_limit, credit_card_is_blocked, credit_card_points_balance, created_at, updated_at)
             VALUES ('${userId}', '${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, ${defaultCreditCardTotalLimit}, ${defaultCreditCardAvailableLimit}, ${defaultCreditCardIsBlocked}, ${defaultCreditCardPointsBalance}, '${now}', '${now}')
         `;
+        
+        console.log('🔵 [SIGNUP] Query INSERT (hash truncado para log):', insertQuery.replace(/'(\$2[^']{50})[^']+'/, "'$1...'"));
         
         console.log('🔵 [SIGNUP] Executando INSERT...');
         console.log('🔵 [SIGNUP] Valores sendo inseridos:', {
@@ -404,19 +441,34 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
         // Verificar se o usuário foi criado com sucesso e verificar os valores inseridos
         console.log('🔵 [SIGNUP] Verificando se usuário foi criado...');
         const verifyUser = await databricksService.executeQuery(`
-            SELECT cpf, balance, pix_daily_limit, credit_card_total_limit, credit_card_available_limit 
+            SELECT cpf, balance, pix_daily_limit, credit_card_total_limit, credit_card_available_limit, password_hash
             FROM ${databricksService.fq('users')} 
             WHERE cpf = '${escapedCpf}'
         `);
         console.log('🔵 [SIGNUP] Resultado da verificação pós-INSERT:', verifyUser.length > 0 ? 'Usuário encontrado' : 'Usuário NÃO encontrado');
         if (verifyUser.length > 0) {
+            const storedHash = verifyUser[0].password_hash || '';
             console.log('🔵 [SIGNUP] Valores inseridos no banco:', {
                 cpf: verifyUser[0].cpf,
                 balance: verifyUser[0].balance,
                 pix_daily_limit: verifyUser[0].pix_daily_limit,
                 credit_card_total_limit: verifyUser[0].credit_card_total_limit,
-                credit_card_available_limit: verifyUser[0].credit_card_available_limit
+                credit_card_available_limit: verifyUser[0].credit_card_available_limit,
+                password_hash_length: storedHash.length,
+                password_hash_preview: storedHash.substring(0, 30) + '...'
             });
+            
+            // Verificar se o hash foi armazenado corretamente
+            if (storedHash.length !== hashedPassword.length) {
+                console.log(`⚠️ [SIGNUP] ATENÇÃO: Hash armazenado tem tamanho diferente! Original: ${hashedPassword.length}, Armazenado: ${storedHash.length}`);
+            }
+            if (storedHash !== hashedPassword) {
+                console.log(`⚠️ [SIGNUP] ATENÇÃO: Hash armazenado é diferente do hash gerado!`);
+                console.log(`   Hash original (primeiros 50): ${hashedPassword.substring(0, 50)}`);
+                console.log(`   Hash armazenado (primeiros 50): ${storedHash.substring(0, 50)}`);
+            } else {
+                console.log(`✅ [SIGNUP] Hash armazenado corretamente!`);
+            }
         }
         
         if (verifyUser.length === 0) {
@@ -440,11 +492,25 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
 apiRouter.post('/auth/login', loginValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
     console.log('🚀 [LOGIN] Endpoint /auth/login chamado!');
     console.log('🚀 [LOGIN] Body recebido:', JSON.stringify(req.body));
-    const { cpf, password } = req.body;
-    console.log(`🔍 Tentativa de login - CPF: ${cpf}, Password: ${password ? '***' : 'NÃO FORNECIDO'}`);
+    console.log('🚀 [LOGIN] Body tipo:', typeof req.body);
+    console.log('🚀 [LOGIN] Body keys:', Object.keys(req.body || {}));
+    console.log('🚀 [LOGIN] Content-Type:', req.get('Content-Type'));
+    
+    let { cpf, password } = req.body;
+    
+    // Normalizar CPF (remover formatação se houver) - já deve estar normalizado pelo sanitizer
+    if (cpf) {
+        cpf = String(cpf).replace(/\D/g, '');
+    }
+    
+    console.log(`🔍 Tentativa de login - CPF: ${cpf} (normalizado), Password: ${password ? '***' : 'NÃO FORNECIDO'}`);
+    console.log(`🔍 CPF tipo: ${typeof cpf}, length: ${cpf ? cpf.length : 0}`);
+    console.log(`🔍 Password tipo: ${typeof password}, length: ${password ? password.length : 0}`);
     
     try {
-        const query = `SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`;
+        // Escapar CPF para evitar SQL injection
+        const escapedCpf = cpf.replace(/'/g, "''");
+        const query = `SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${escapedCpf}'`;
         console.log(`🔍 Executando query: ${query}`);
         const users = await databricksService.executeQuery(query);
         console.log(`🔍 Query retornou ${users ? users.length : 0} resultado(s)`);
@@ -473,23 +539,39 @@ apiRouter.post('/auth/login', loginValidationRules, handleValidationErrors, asyn
         }
 
         console.log(`🔐 Verificando senha para usuario ${user.cpf}...`);
+        console.log(`🔐 Password recebido (length): ${password ? password.length : 0}`);
+        console.log(`🔐 Password hash no banco (length): ${user.password_hash ? user.password_hash.length : 0}`);
+        console.log(`🔐 Password hash no banco (primeiros 30 chars): ${user.password_hash ? user.password_hash.substring(0, 30) : 'NULL'}...`);
         const isMatch = await bcrypt.compare(password, user.password_hash);
         console.log(`🔐 Senha ${isMatch ? 'CORRETA' : 'INCORRETA'} para usuario ${user.cpf}`);
         
+        // Se a senha estiver incorreta, vamos tentar verificar se o hash foi corrompido
+        if (!isMatch) {
+            console.log(`🔍 [DEBUG] Verificando se o hash foi corrompido...`);
+            // Tentar verificar se o hash tem o formato correto do bcrypt (deve começar com $2b$ ou $2a$)
+            const hashStartsWith = user.password_hash ? user.password_hash.substring(0, 4) : 'NULL';
+            console.log(`🔍 [DEBUG] Hash começa com: ${hashStartsWith}`);
+            if (!hashStartsWith.startsWith('$2')) {
+                console.log(`⚠️ [DEBUG] ATENÇÃO: Hash não tem formato bcrypt válido! Pode ter sido corrompido durante o INSERT.`);
+            }
+        }
+        
         if (!isMatch) {
             console.log(`❌ Senha incorreta para usuario ${user.cpf}`);
+            const escapedCpfForUpdate = cpf.replace(/'/g, "''");
             await databricksService.executeQuery(`
                 UPDATE ${databricksService.fq('users')}
                 SET login_attempts = COALESCE(login_attempts, 0) + 1, updated_at = current_timestamp()
-                WHERE cpf = '${cpf}'
+                WHERE cpf = '${escapedCpfForUpdate}'
             `);
             return res.status(401).json({ success: false, code: 'AUTH_INVALID_CREDENTIALS', message: 'CPF ou senha invalida.' });
         }
         
+        const escapedCpfForUpdate = cpf.replace(/'/g, "''");
         await databricksService.executeQuery(`
             UPDATE ${databricksService.fq('users')}
             SET login_attempts = 0, updated_at = current_timestamp()
-            WHERE cpf = '${cpf}'
+            WHERE cpf = '${escapedCpfForUpdate}'
         `);
 
         const token = jwt.sign({ cpf: user.cpf, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
@@ -532,12 +614,47 @@ apiRouter.post('/auth/reset-password', resetPasswordValidationRules, handleValid
         return res.status(409).json({ success: false, message: 'Reset de senha nao solicitado.' });
     }
     const hash = await bcrypt.hash(newPassword, 10);
+    const escapedHash = hash.replace(/'/g, "''");
     await databricksService.executeQuery(`
         UPDATE ${databricksService.fq('users')}
-        SET password_hash = '${hash}', password_reset_requested = false, is_blocked = false, login_attempts = 0, updated_at = current_timestamp()
+        SET password_hash = '${escapedHash}', password_reset_requested = false, is_blocked = false, login_attempts = 0, updated_at = current_timestamp()
         WHERE cpf = '${cpf}'
     `);
     res.json({ success: true, message: 'Senha redefinida com sucesso.' });
+}));
+
+// Rota de emergência para corrigir senha de usuário (sem autenticação, apenas para desenvolvimento)
+// ⚠️ REMOVER EM PRODUÇÃO ou adicionar autenticação adequada
+apiRouter.post('/auth/fix-password', asyncHandler(async (req, res) => {
+    const { cpf, newPassword } = req.body;
+    
+    if (!cpf || !newPassword) {
+        return res.status(400).json({ success: false, message: 'CPF e nova senha sao obrigatorios.' });
+    }
+    
+    // Verificar se usuário existe
+    const users = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${cpf.replace(/'/g, "''")}'`);
+    if (!users.length) {
+        return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    }
+    
+    // Gerar novo hash
+    const hash = await bcrypt.hash(newPassword, 10);
+    const escapedHash = hash.replace(/'/g, "''");
+    const escapedCpf = cpf.replace(/'/g, "''");
+    
+    // Atualizar senha e resetar tentativas
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET password_hash = '${escapedHash}', 
+            login_attempts = 0, 
+            is_blocked = false,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE cpf = '${escapedCpf}'
+    `);
+    
+    console.log(`✅ [FIX-PASSWORD] Senha corrigida para usuario ${cpf}`);
+    res.json({ success: true, message: `Senha corrigida com sucesso para usuario ${cpf}. Nova senha: ${newPassword}` });
 }));
 
 
@@ -879,24 +996,89 @@ apiRouter.get('/users/:cpf/statement', bearerAuth(), asyncHandler(async (req, re
     try {
         const { esc } = require('./repositories/context');
         const cpf = req.params.cpf;
-        const allowedTypes = [
-            'PIX_SENT',
-            'PIX_RECEIVED',
-            'DEPOSIT',
-            'SHOP_DEBIT',
-            'CASHBACK_CREDIT',
-            'INVOICE_PAYMENT',
-            'PAYMENT'
-        ];
+        
+        // Parâmetros de paginação
+        const page = parseInt(req.query.page || '1', 10);
+        const limit = parseInt(req.query.limit || '10', 10);
+        const offset = (page - 1) * limit;
+        const typeFilter = req.query.type; // 'purchases' ou 'payments'
+        
+        // Definir tipos permitidos baseado no filtro
+        let allowedTypes = [];
+        if (typeFilter === 'purchases') {
+            // Tipos de compras
+            allowedTypes = [
+                'SHOP_DEBIT',
+                'SHOP_CREDIT',
+                'CREDIT',
+                'INVOICE_INSTALLMENT'
+            ];
+        } else if (typeFilter === 'pix') {
+            // Tipos de PIX
+            allowedTypes = [
+                'PIX_SENT',
+                'PIX_RECEIVED',
+                'PIX_CREDIT_SENT'
+            ];
+        } else if (typeFilter === 'transfers') {
+            // Tipos de transferências (PIX e outras transferências futuras)
+            allowedTypes = [
+                'PIX_SENT',
+                'PIX_RECEIVED',
+                'PIX_CREDIT_SENT'
+            ];
+        } else if (typeFilter === 'payments') {
+            // Tipos de pagamentos
+            allowedTypes = [
+                'DEPOSIT',
+                'INVOICE_PAYMENT',
+                'INVOICE_ANTICIPATION',
+                'PAYMENT',
+                'CASHBACK_CREDIT'
+            ];
+        } else {
+            // Todos os tipos (sem filtro)
+            allowedTypes = [
+                'PIX_SENT',
+                'PIX_RECEIVED',
+                'PIX_CREDIT_SENT',
+                'DEPOSIT',
+                'SHOP_DEBIT',
+                'SHOP_CREDIT',
+                'CREDIT',
+                'INVOICE_INSTALLMENT',
+                'CASHBACK_CREDIT',
+                'INVOICE_PAYMENT',
+                'INVOICE_ANTICIPATION',
+                'PAYMENT'
+            ];
+        }
+        
         const typesList = allowedTypes.map(t => esc(t)).join(',');
-        const query = `SELECT * FROM ${databricksService.fq('transactions')} WHERE cpf = ${esc(cpf)} AND type IN (${typesList}) ORDER BY date DESC LIMIT 50`;
+        
+        // Query para contar total de registros
+        const countQuery = `SELECT COUNT(*) as total FROM ${databricksService.fq('transactions')} WHERE cpf = ${esc(cpf)} AND type IN (${typesList})`;
+        const countResult = await databricksService.executeQuery(countQuery);
+        const total = parseInt(countResult[0]?.total || 0, 10);
+        const totalPages = Math.ceil(total / limit);
+        
+        // Query para buscar transações com paginação
+        const query = `SELECT * FROM ${databricksService.fq('transactions')} WHERE cpf = ${esc(cpf)} AND type IN (${typesList}) ORDER BY date DESC LIMIT ${limit} OFFSET ${offset}`;
   
         const transactions = await databricksService.executeQuery(query);
         const normalized = transactions.map(normalizeTransaction).filter(tx => tx !== null);
         
         res.json({ 
             success: true, 
-            transactions: normalized 
+            transactions: normalized,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+                hasNext: page < totalPages,
+                hasPrev: page > 1
+            }
         });
     } catch (error) {
         console.error(`❌ Erro ao buscar extrato para ${req.params.cpf}:`, error.message);
@@ -955,20 +1137,72 @@ apiRouter.get('/shop/products', asyncHandler(async (req, res) => {
 }));
 
 apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => {
+    console.log('🛒 [SHOP CHECKOUT] Iniciando checkout...');
+    console.log('🛒 [SHOP CHECKOUT] Body recebido:', JSON.stringify(req.body));
+    console.log('🛒 [SHOP CHECKOUT] User CPF:', req.user?.cpf);
+    
     const { items, paymentMethod, cashbackUsed = 0, installments = 1, pin, interestRate } = req.body || {};
+    
     if (!Array.isArray(items) || !items.length || !paymentMethod || !pin || pin.length !== 4) {
+        console.log('❌ [SHOP CHECKOUT] Validação falhou:', {
+            itemsIsArray: Array.isArray(items),
+            itemsLength: items?.length,
+            paymentMethod,
+            pin,
+            pinLength: pin?.length
+        });
         return res.status(400).json({ success: false, message: 'Payload invalido.' });
     }
+    
     const catalog = await shopRepo.listProducts();
+    console.log('📦 [SHOP CHECKOUT] Catálogo carregado:', catalog.length, 'produtos');
+    console.log('📦 [SHOP CHECKOUT] IDs disponíveis:', catalog.map(p => p.id));
+    
     const prices = new Map(catalog.map(p => [p.id, p.price]));
     const productById = new Map(catalog.map(p => [p.id, p]));
+    
     let total = 0;
     for (const it of items) {
-        if (!prices.has(it.productId) || !Number.isInteger(it.quantity) || it.quantity < 1) {
-            return res.status(400).json({ success: false, message: 'Item invalido.' });
+        console.log('🔍 [SHOP CHECKOUT] Validando item:', {
+            productId: it.productId,
+            productIdType: typeof it.productId,
+            quantity: it.quantity,
+            quantityType: typeof it.quantity,
+            existsInCatalog: prices.has(it.productId),
+            isInteger: Number.isInteger(it.quantity),
+            quantityValid: it.quantity >= 1
+        });
+        
+        if (!prices.has(it.productId)) {
+            console.log('❌ [SHOP CHECKOUT] Produto não encontrado no catálogo:', it.productId);
+            console.log('❌ [SHOP CHECKOUT] IDs disponíveis:', Array.from(prices.keys()));
+            return res.status(400).json({ 
+                success: false, 
+                message: `Item invalido: produto "${it.productId}" não encontrado no catálogo.` 
+            });
         }
-        total += prices.get(it.productId) * it.quantity;
+        
+        // Converter quantity para número se necessário
+        const quantity = typeof it.quantity === 'string' ? parseInt(it.quantity, 10) : Number(it.quantity);
+        
+        if (!Number.isInteger(quantity) || quantity < 1 || isNaN(quantity)) {
+            console.log('❌ [SHOP CHECKOUT] Quantidade inválida:', {
+                original: it.quantity,
+                converted: quantity,
+                type: typeof it.quantity
+            });
+            return res.status(400).json({ 
+                success: false, 
+                message: `Item invalido: quantidade "${it.quantity}" inválida. Deve ser um número inteiro maior que zero.` 
+            });
+        }
+        
+        // Atualizar o item com a quantidade convertida
+        it.quantity = quantity;
+        total += prices.get(it.productId) * quantity;
     }
+    
+    console.log('✅ [SHOP CHECKOUT] Todos os itens validados. Total:', total);
 
     // Taxa de pontos por metodo: debit=1%, credit=2%
     const pointsRate = paymentMethod === 'credit' ? 0.02 : 0.01;
@@ -977,6 +1211,9 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
     // Cashback simples permitido apenas em debito
     const cashback = paymentMethod === 'debit' ? Math.min(Math.max(cashbackUsed, 0), total * 0.05) : 0; // max 5%
     const netDebit = total - cashback;
+
+    // Variável para armazenar transactionId (usado no crédito)
+    let creditTransactionId = undefined;
 
     if (paymentMethod === 'debit') {
         const { esc } = require('./repositories/context');
@@ -1032,16 +1269,36 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'POINTS_EARNED', ${points}, 'Pontos ganhos no shop', current_timestamp())
         `);
         
-        // Retornar sucesso com a transação criada
+        // Preparar detalhes dos produtos comprados
+        const purchasedProducts = items.map(it => {
+            const p = productById.get(it.productId);
+            return {
+                id: p.id,
+                name: p.name,
+                price: parseFloat(p.price),
+                quantity: it.quantity,
+                subtotal: parseFloat(p.price) * it.quantity
+            };
+        });
+
+        // Retornar sucesso com a transação criada e detalhes dos produtos
         res.status(201).json({ 
             success: true, 
             message: 'Compra realizada com sucesso',
-            transaction: {
-                id: txId,
-                type: 'SHOP_DEBIT',
-                amount: -netDebit,
-                description: productDesc,
-                date: now
+            purchase: {
+                products: purchasedProducts,
+                productsDescription: productDesc,
+                totalAmount: netDebit,
+                paymentMethod: 'debit',
+                cashbackUsed: cashback,
+                pointsEarned: points,
+                transaction: {
+                    id: txId,
+                    type: 'SHOP_DEBIT',
+                    amount: -netDebit,
+                    description: productDesc,
+                    date: now
+                }
             }
         });
         return;
@@ -1150,6 +1407,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         const safeProductDesc = productDesc.replace(/'/g, "''");
 
         const txId = databricksService.generateUUID();
+        creditTransactionId = txId; // Armazenar para uso na resposta
         await databricksService.executeQuery(`
             INSERT INTO ${databricksService.fq('transactions')}
             (id, cpf, type, amount, description, from_user, to_user, to_key, date)
@@ -1208,13 +1466,48 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             const originalAmount = total; // Valor original sem juros
             const totalWithInterest = totalParcelado; // Valor total com juros (se houver) - igual ao total_amount
             
+            // Verificar se as colunas existem antes de inserir
+            try {
+                const columnCheck = await databricksService.executeQuery(`
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_schema = 'fintech' 
+                    AND table_name = 'installment_plans' 
+                    AND column_name IN ('original_amount', 'total_with_interest')
+                `);
+                const existingColumns = columnCheck.map(c => c.column_name);
+                console.log('🔍 [SHOP CHECKOUT] Colunas encontradas em installment_plans:', existingColumns);
+                
+                if (!existingColumns.includes('original_amount') || !existingColumns.includes('total_with_interest')) {
+                    console.log('⚠️ [SHOP CHECKOUT] Colunas faltando. Tentando adicionar...');
+                    // Tentar adicionar as colunas se não existirem
+                    if (!existingColumns.includes('original_amount')) {
+                        await databricksService.executeQuery(`
+                            ALTER TABLE ${databricksService.fq('installment_plans')}
+                            ADD COLUMN original_amount DECIMAL(15,2) DEFAULT 0.00
+                        `);
+                        console.log('✅ [SHOP CHECKOUT] Coluna original_amount adicionada.');
+                    }
+                    if (!existingColumns.includes('total_with_interest')) {
+                        await databricksService.executeQuery(`
+                            ALTER TABLE ${databricksService.fq('installment_plans')}
+                            ADD COLUMN total_with_interest DECIMAL(15,2) DEFAULT 0.00
+                        `);
+                        console.log('✅ [SHOP CHECKOUT] Coluna total_with_interest adicionada.');
+                    }
+                }
+            } catch (checkError) {
+                console.warn('⚠️ [SHOP CHECKOUT] Erro ao verificar colunas (continuando mesmo assim):', checkError.message);
+            }
+            
             // Inserir plano de parcelamento - sempre incluir total_with_interest (mesmo valor que total_amount)
-            // Se a coluna não existir, será criada automaticamente na inicialização
+            console.log('💾 [SHOP CHECKOUT] Inserindo plano de parcelamento...');
             await databricksService.executeQuery(`
                 INSERT INTO ${databricksService.fq('installment_plans')}
                 (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
                 VALUES (${esc(planId)}, ${esc(req.user.cpf)}, ${esc(txId)}, ${esc('Compra shop (credito)')}, ${originalAmount.toFixed(2)}, ${totalParcelado.toFixed(2)}, ${totalWithInterest.toFixed(2)}, ${qty}, ${parcela.toFixed(2)}, ${typeof rate === 'number' ? rate.toFixed(4) : '0.0000'}, ${remainingBalance}, ${qty - 1}, ${esc(nextDueDate.toISOString())}, ${esc('ACTIVE')}, ${esc(planNow)}, ${esc(planNow)})
             `);
+            console.log('✅ [SHOP CHECKOUT] Plano de parcelamento inserido com sucesso.');
         }
     } else {
         return res.status(400).json({ success: false, message: 'Metodo de pagamento invalido.' });
@@ -1237,7 +1530,52 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'POINTS_EARNED', ${points}, 'Pontos ganhos no shop', current_timestamp())
     `);
 
-    res.status(201).json({ success: true, message: 'Compra realizada com sucesso' });
+    // Preparar detalhes dos produtos comprados
+    const purchasedProducts = items.map(it => {
+        const p = productById.get(it.productId);
+        return {
+            id: p.id,
+            name: p.name,
+            price: parseFloat(p.price),
+            quantity: it.quantity,
+            subtotal: parseFloat(p.price) * it.quantity
+        };
+    });
+
+    // Criar descrição resumida dos produtos
+    let productsDescription;
+    if (purchasedProducts.length === 1) {
+        productsDescription = purchasedProducts[0].name;
+    } else {
+        productsDescription = `${purchasedProducts[0].name} + ${purchasedProducts.length - 1} outro(s) item(ns)`;
+    }
+
+    // Calcular valores finais - para crédito, usar variáveis do escopo correto
+    let finalAmountLabel;
+    if (paymentMethod === 'credit') {
+        // Para crédito, o valor final depende se é parcelado ou não
+        const qty = installments;
+        const rate = qty >= 13 ? (interestRate || 0) : 0;
+        const totalParcelado = qty >= 2 ? (qty >= 13 ? total * (1 + rate) : total) : 0;
+        const creditAmount = qty === 1 ? (total * 0.90) : total;
+        finalAmountLabel = qty === 1 ? creditAmount : totalParcelado;
+    } else {
+        finalAmountLabel = netDebit;
+    }
+
+    res.status(201).json({ 
+        success: true, 
+        message: 'Compra realizada com sucesso',
+        purchase: {
+            products: purchasedProducts,
+            productsDescription,
+            totalAmount: finalAmountLabel,
+            paymentMethod,
+            installments: paymentMethod === 'credit' ? installments : 1,
+            pointsEarned: points,
+            transactionId: creditTransactionId
+        }
+    });
 }));
 
 // --- Rotas PIX ---
@@ -1574,6 +1912,66 @@ apiRouter.get('/admin/users', bearerAuth(), authenticateAdmin, asyncHandler(asyn
     res.json({ success: true, users: users.map(normalizeUser) });
 }));
 
+// Endpoint para estatísticas do dashboard admin
+apiRouter.get('/admin/stats', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    try {
+        // Total de Clientes (excluindo admin)
+        const usersCountResult = await databricksService.executeQuery(`
+            SELECT COUNT(*) as total
+            FROM ${databricksService.fq('users')}
+            WHERE role != 'admin' OR role IS NULL
+        `);
+        const totalClients = parseInt(usersCountResult[0]?.total || 0, 10);
+
+        // Transações Hoje (do dia atual)
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const todayEnd = new Date(todayStart);
+        todayEnd.setDate(todayEnd.getDate() + 1);
+        
+        const transactionsTodayResult = await databricksService.executeQuery(`
+            SELECT COUNT(*) as total
+            FROM ${databricksService.fq('transactions')}
+            WHERE date >= '${todayStart.toISOString()}'
+              AND date < '${todayEnd.toISOString()}'
+        `);
+        const transactionsToday = parseInt(transactionsTodayResult[0]?.total || 0, 10);
+
+        // Solicitações de Senha Pendentes
+        const passwordRequestsResult = await databricksService.executeQuery(`
+            SELECT COUNT(*) as total
+            FROM ${databricksService.fq('users')}
+            WHERE password_reset_requested = true
+        `);
+        const passwordRequests = parseInt(passwordRequestsResult[0]?.total || 0, 10);
+
+        // Solicitações de Limite Pendentes
+        const limitRequestsResult = await databricksService.executeQuery(`
+            SELECT COUNT(*) as total
+            FROM ${databricksService.fq('limit_increase_requests')}
+            WHERE status = 'pending' OR status IS NULL
+        `);
+        const limitRequests = parseInt(limitRequestsResult[0]?.total || 0, 10);
+
+        res.json({
+            success: true,
+            stats: {
+                totalClients,
+                transactionsToday,
+                passwordRequests,
+                limitRequests
+            }
+        });
+    } catch (error) {
+        console.error('❌ Erro ao buscar estatísticas do admin:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao buscar estatísticas',
+            error: error.message
+        });
+    }
+}));
+
 apiRouter.get('/admin/users/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     const cpf = req.params.cpf;
     const userRow = await findByCpf(cpf);
@@ -1625,7 +2023,18 @@ apiRouter.post('/admin/users/:cpf/deposit', bearerAuth(), authenticateAdmin, asy
     if (typeof amount !== 'number' || amount <= 0) return res.status(400).json({ success: false, message: 'Payload invalido.' });
     await deposit(cpf, amount);
     auditLog(req, 'admin_deposit', 'info', { cpf, amount });
-    res.json({ success: true, message: 'Depósito realizado' });
+    
+    // Buscar usuário atualizado para retornar
+    const updatedUser = await usersRepo.findByCpf(cpf);
+    if (!updatedUser) {
+        return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    }
+    
+    res.json({ 
+        success: true, 
+        message: 'Depósito realizado com sucesso.',
+        user: normalizeUser(updatedUser)
+    });
 }));
 
 apiRouter.post('/admin/users/:cpf/block', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
@@ -1636,8 +2045,20 @@ apiRouter.post('/admin/users/:cpf/block', bearerAuth(), authenticateAdmin, async
 }));
 
 apiRouter.post('/admin/users/:cpf/unblock', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
-    await setBlocked(req.params.cpf, false);
-    res.json({ success: true, message: 'Usuário desbloqueado com sucesso' });
+    const { cpf } = req.params;
+    await setBlocked(cpf, false);
+    
+    // Buscar usuário atualizado para retornar
+    const updatedUser = await usersRepo.findByCpf(cpf);
+    if (!updatedUser) {
+        return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    }
+    
+    res.json({ 
+        success: true, 
+        message: 'Usuário desbloqueado com sucesso.',
+        user: normalizeUser(updatedUser)
+    });
 }));
 
 // --- Endpoints Administrativos Adicionais ---
@@ -2158,6 +2579,43 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
     res.json({ success: true, message: 'Fatura paga com sucesso.' });
 }));
 
+// Rota para obter fatura aberta do cartão de crédito
+apiRouter.get('/credit/invoices/open', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+    const user = await usersRepo.findByCpf(cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+    // Calcular fatura aberta
+    const invoiceDueDate = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : null;
+    
+    let openInvoiceAmount = 0;
+    if (invoiceDueDate) {
+        const openTransactions = await databricksService.executeQuery(`
+            SELECT amount
+            FROM ${databricksService.fq('transactions')}
+            WHERE cpf = '${cpf}'
+              AND type IN ('SHOP_CREDIT', 'CREDIT', 'INVOICE_INSTALLMENT')
+              AND date <= '${invoiceDueDate.toISOString()}'
+        `);
+        openInvoiceAmount = openTransactions.reduce((sum, tx) => sum + Math.abs(parseFloat(tx.amount || 0)), 0);
+    }
+
+    const availableLimit = parseFloat(user.credit_card_available_limit || 0);
+    const totalLimit = parseFloat(user.credit_card_total_limit || 0);
+    const usedLimit = totalLimit - availableLimit;
+
+    res.json({
+        success: true,
+        invoice: {
+            amount: openInvoiceAmount,
+            dueDate: invoiceDueDate ? invoiceDueDate.toISOString() : null,
+            availableLimit,
+            totalLimit,
+            usedLimit
+        }
+    });
+}));
+
 apiRouter.post('/cards/invoice/anticipate', bearerAuth(), asyncHandler(async (req, res) => {
     const { cpf, transactionIds, pin } = req.body || {};
     if (!cpf || cpf.length !== 11 || !Array.isArray(transactionIds) || !transactionIds.length || !pin || pin.length !== 4) {
@@ -2371,45 +2829,59 @@ async function initializeDatabase() {
             }
         }
         
-        // Verificar e corrigir estrutura da tabela installment_plans - adicionar total_with_interest se necessário
-        try {
-            const installmentColumnCheck = await databricksService.executeQuery(`
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_schema = 'fintech' 
-                AND table_name = 'installment_plans' 
-                AND column_name = 'total_with_interest'
-            `);
-            
-            if (!installmentColumnCheck || installmentColumnCheck.length === 0) {
-                console.log('⚠️  Coluna total_with_interest não encontrada. Adicionando...');
-                try {
-                    // Adicionar a coluna com DEFAULT primeiro
-                    await databricksService.executeQuery(`
-                        ALTER TABLE ${databricksService.fq('installment_plans')}
-                        ADD COLUMN total_with_interest DECIMAL(15,2) DEFAULT 0.00
-                    `);
-                    // Atualizar valores existentes para igualar total_amount
-                    await databricksService.executeQuery(`
-                        UPDATE ${databricksService.fq('installment_plans')}
-                        SET total_with_interest = COALESCE(total_amount, 0)
-                        WHERE total_with_interest IS NULL OR total_with_interest = 0
-                    `);
-                    // Tornar NOT NULL após atualizar valores
-                    await databricksService.executeQuery(`
-                        ALTER TABLE ${databricksService.fq('installment_plans')}
-                        ALTER COLUMN total_with_interest SET NOT NULL
-                    `);
-                    console.log('✅ Coluna total_with_interest adicionada com sucesso.');
-                } catch (alterError) {
-                    console.error('❌ Erro ao adicionar coluna total_with_interest:', alterError.message);
-                    console.log('💡 Execute o script fix_installment_plans.sql manualmente.');
+        // Verificar e corrigir estrutura da tabela installment_plans - adicionar colunas necessárias
+        const requiredColumns = ['original_amount', 'total_with_interest'];
+        
+        for (const columnName of requiredColumns) {
+            try {
+                const columnCheck = await databricksService.executeQuery(`
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_schema = 'fintech' 
+                    AND table_name = 'installment_plans' 
+                    AND column_name = '${columnName}'
+                `);
+                
+                if (!columnCheck || columnCheck.length === 0) {
+                    console.log(`⚠️  Coluna ${columnName} não encontrada. Adicionando...`);
+                    try {
+                        // Adicionar a coluna com DEFAULT primeiro
+                        await databricksService.executeQuery(`
+                            ALTER TABLE ${databricksService.fq('installment_plans')}
+                            ADD COLUMN ${columnName} DECIMAL(15,2) DEFAULT 0.00
+                        `);
+                        
+                        // Atualizar valores existentes
+                        if (columnName === 'total_with_interest') {
+                            await databricksService.executeQuery(`
+                                UPDATE ${databricksService.fq('installment_plans')}
+                                SET total_with_interest = COALESCE(total_amount, 0)
+                                WHERE total_with_interest IS NULL OR total_with_interest = 0
+                            `);
+                        } else if (columnName === 'original_amount') {
+                            await databricksService.executeQuery(`
+                                UPDATE ${databricksService.fq('installment_plans')}
+                                SET original_amount = COALESCE(total_amount, 0)
+                                WHERE original_amount IS NULL OR original_amount = 0
+                            `);
+                        }
+                        
+                        // Tornar NOT NULL após atualizar valores
+                        await databricksService.executeQuery(`
+                            ALTER TABLE ${databricksService.fq('installment_plans')}
+                            ALTER COLUMN ${columnName} SET NOT NULL
+                        `);
+                        console.log(`✅ Coluna ${columnName} adicionada com sucesso.`);
+                    } catch (alterError) {
+                        console.error(`❌ Erro ao adicionar coluna ${columnName}:`, alterError.message);
+                        console.log('💡 Execute o script fix_installment_plans.sql manualmente.');
+                    }
+                } else {
+                    console.log(`✅ Coluna ${columnName} já existe na tabela installment_plans.`);
                 }
-            } else {
-                console.log('✅ Coluna total_with_interest já existe na tabela installment_plans.');
+            } catch (error) {
+                console.warn(`⚠️  Erro ao verificar coluna ${columnName}:`, error.message);
             }
-        } catch (error) {
-            console.warn('⚠️  Erro ao verificar coluna total_with_interest:', error.message);
         }
         
         console.log('💡 Certifique-se de ter executado schema_pg.sql no seu banco Postgres.');
@@ -2815,6 +3287,8 @@ app.get('/api-docs/swagger.json', (req, res) => {
     res.send(JSON.stringify(swaggerDocument, null, 2));
 });
 
+// Middleware 404 será adicionado após o bootstrap para garantir que todas as rotas estejam registradas
+
 app.get('/api-docs/swagger.yaml', (req, res) => {
     res.setHeader('Content-Type', 'text/yaml');
     const fs = require('fs');
@@ -2826,6 +3300,22 @@ app.get('/api-docs/swagger.yaml', (req, res) => {
 bootstrap().then(() => {
     app.get('/api/health', (req, res) => {
         res.status(200).json({ status: 'ok' });
+    });
+
+    // Middleware para tratar rotas não encontradas (404) - DEVE vir DEPOIS de todas as rotas
+    // Este middleware só será executado se nenhuma rota anterior corresponder
+    app.use((req, res, next) => {
+        // Se a requisição é para uma rota da API e nenhuma rota correspondeu, retornar JSON
+        if (req.path.startsWith('/api')) {
+            return res.status(404).json({
+                success: false,
+                message: `Rota não encontrada: ${req.method} ${req.path}`,
+                path: req.path,
+                method: req.method
+            });
+        }
+        // Para outras rotas, passar para o próximo middleware (pode ser o Swagger UI, etc)
+        next();
     });
 
     app.listen(PORT, '0.0.0.0', () => {
