@@ -17,6 +17,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     const [showAddModal, setShowAddModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [successMode, setSuccessMode] = useState<'REGISTER' | 'DELETE'>('REGISTER');
     const [keyToDelete, setKeyToDelete] = useState<PixKey | null>(null);
     const [registeredKeyData, setRegisteredKeyData] = useState<{ type: 'CPF' | 'EMAIL'; key: string } | null>(null);
     
@@ -24,6 +25,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     const [newKeyType, setNewKeyType] = useState<'CPF' | 'EMAIL'>('EMAIL');
     const [newKeyValue, setNewKeyValue] = useState('');
     const [error, setError] = useState('');
+    const [showKeyTypeDropdown, setShowKeyTypeDropdown] = useState(false);
     const { toast, showSuccess, showError, hide } = useToast();
 
     const fetchKeys = async () => {
@@ -51,7 +53,75 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     useEffect(() => {
         fetchKeys();
     }, [user]);
-    
+
+    // Fechar dropdown ao clicar fora
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (showKeyTypeDropdown && !target.closest('[data-testid="pix-key-type-selector"]') && !target.closest('[data-testid="pix-key-type-dropdown"]')) {
+                setShowKeyTypeDropdown(false);
+            }
+        };
+
+        if (showKeyTypeDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [showKeyTypeDropdown]);
+
+    // Garantir que elementos dinâmicos tenham atributos de acessibilidade
+    useEffect(() => {
+        if (showKeyTypeDropdown) {
+            // Aguardar renderização e processar elementos
+            setTimeout(() => {
+                const emailButton = document.getElementById('pix-key-type-email');
+                const cpfButton = document.getElementById('pix-key-type-cpf');
+
+                if (emailButton) {
+                    // Garantir que aria-label seja mapeado para content-desc
+                    if (!emailButton.getAttribute('aria-label') || emailButton.getAttribute('aria-label') !== 'pix-key-type-email') {
+                        emailButton.setAttribute('aria-label', 'pix-key-type-email');
+                    }
+                    if (!emailButton.getAttribute('name') || emailButton.getAttribute('name') !== 'pix-key-type-email') {
+                        emailButton.setAttribute('name', 'pix-key-type-email');
+                    }
+                    // Forçar contentDescription para Appium
+                    try {
+                        (emailButton as any).contentDescription = 'pix-key-type-email';
+                    } catch (e) { }
+                }
+
+                if (cpfButton) {
+                    // Garantir que aria-label seja mapeado para content-desc (exatamente igual ao Email)
+                    cpfButton.setAttribute('aria-label', 'pix-key-type-cpf');
+                    cpfButton.setAttribute('name', 'pix-key-type-cpf');
+                    // Forçar contentDescription para Appium (igual ao Email)
+                    try {
+                        (cpfButton as any).contentDescription = 'pix-key-type-cpf';
+                    } catch (e) { }
+
+                    // Processar texto interno (igual ao Email)
+                    const cpfText = document.getElementById('pix-key-type-cpf-text');
+                    if (cpfText) {
+                        cpfText.setAttribute('aria-label', 'pix-key-type-cpf-text');
+                        try {
+                            (cpfText as any).contentDescription = 'pix-key-type-cpf-text';
+                        } catch (e) { }
+                    }
+                }
+
+                // Processar texto interno do Email também (para garantir consistência)
+                const emailText = document.getElementById('pix-key-type-email-text');
+                if (emailText) {
+                    emailText.setAttribute('aria-label', 'pix-key-type-email-text');
+                    try {
+                        (emailText as any).contentDescription = 'pix-key-type-email-text';
+                    } catch (e) { }
+                }
+            }, 100);
+        }
+    }, [showKeyTypeDropdown]);
+
     const handleRegisterKey = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user || !newKeyValue) {
@@ -95,6 +165,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
 
                 setShowAddModal(false);
                 setNewKeyValue('');
+                setSuccessMode('REGISTER');
                 setShowSuccessModal(true);
             } else {
                 showError(result.message);
@@ -123,7 +194,14 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
             console.log('🔵 [PixKeyManagement] Removendo chave PIX:', keyToDelete.key);
             const result = await deletePixKey(keyToDelete.key);
             if (result.success) {
-                showSuccess(result.message);
+                // showSuccess(result.message); // Usar modal em vez de toast
+                setRegisteredKeyData({
+                    type: keyToDelete.type as 'CPF' | 'EMAIL',
+                    key: keyToDelete.key
+                });
+                setSuccessMode('DELETE');
+                setShowSuccessModal(true);
+
                 await fetchKeys();
                 const { getUserMe } = await import('../services/api');
                 const refreshed = await getUserMe();
@@ -216,6 +294,8 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                             className="font-semibold text-white capitalize"
                                             data-testid={`pix-key-type-${index}`}
                                             id={`pix-key-type-${index}`}
+                                            aria-label={`Tipo da chave: ${k.type.toLowerCase()}`}
+                                            title={`Tipo da chave: ${k.type.toLowerCase()}`}
                                         >
                                             {k.type.toLowerCase()}
                                         </p>
@@ -223,6 +303,8 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                             className="text-sm text-gray-400 font-mono"
                                             data-testid={`pix-key-value-${index}`}
                                             id={`pix-key-value-${index}`}
+                                            aria-label={`Valor da chave: ${k.key}`}
+                                            title={`Valor da chave: ${k.key}`}
                                         >
                                             {k.key}
                                         </p>
@@ -253,39 +335,244 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
             </main>
 
             {showAddModal && user && (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-                    <div className="bg-surface-dark p-8 rounded-lg shadow-xl w-full max-w-md">
-                        <h2 className="text-2xl font-bold mb-6">Cadastrar Nova Chave PIX</h2>
+                <div
+                    className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50"
+                    data-testid="pix-add-key-modal-overlay"
+                    id="pix-add-key-modal-overlay"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="pix-add-key-modal-title"
+                    onClick={() => setShowAddModal(false)}
+                >
+                    <div
+                        className="bg-surface-dark rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl"
+                        data-testid="pix-add-key-modal"
+                        id="pix-add-key-modal"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h2
+                            className="text-2xl font-bold mb-6 text-white"
+                            id="pix-add-key-modal-title"
+                            data-testid="pix-add-key-modal-title"
+                            role="heading"
+                            aria-level={2}
+                        >
+                            Cadastrar Nova Chave PIX
+                        </h2>
                         <form onSubmit={handleRegisterKey}>
-                           <div className="space-y-4">
-                                <div>
-                                    <label htmlFor="keyType" className="text-sm font-medium text-subtle-dark mb-1 block">Tipo de Chave</label>
-                                    <select 
-                                        id="keyType"
-                                        value={newKeyType} 
-                                        onChange={(e) => setNewKeyType(e.target.value as any)}
-                                        className="w-full px-4 py-3 bg-background-dark border border-subtle-dark/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                            <div className="space-y-6">
+                                <div className="relative">
+                                    <label
+                                        htmlFor="keyType"
+                                        className="text-sm font-medium text-subtle-dark mb-2 block"
+                                        data-testid="pix-key-type-label"
                                     >
-                                        <option value="EMAIL">E-mail</option>
-                                        <option value="CPF">CPF</option>
-                                    </select>
+                                        Tipo de Chave
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowKeyTypeDropdown(!showKeyTypeDropdown)}
+                                        className={`w-full px-4 py-3 bg-background-dark border-2 rounded-lg flex items-center justify-between transition-all ${showKeyTypeDropdown
+                                            ? 'border-primary'
+                                            : 'border-subtle-dark/50 hover:border-subtle-dark'
+                                            }`}
+                                        data-testid="pix-key-type-selector"
+                                        id="pix-key-type-selector"
+                                        name="pix-key-type-selector"
+                                        aria-label={`Tipo de chave selecionado: ${newKeyType === 'EMAIL' ? 'E-mail' : 'CPF'}. Clique para alterar`}
+                                        aria-expanded={showKeyTypeDropdown}
+                                        aria-haspopup="listbox"
+                                        aria-controls="pix-key-type-dropdown"
+                                    >
+                                        <span
+                                            className="text-white font-medium"
+                                            data-testid="pix-key-type-selector-text"
+                                            id="pix-key-type-selector-text"
+                                        >
+                                            {newKeyType === 'EMAIL' ? 'E-mail' : 'CPF'}
+                                        </span>
+                                        <span
+                                            className={`material-symbols-outlined text-subtle-dark transition-transform ${showKeyTypeDropdown ? 'rotate-180' : ''
+                                                }`}
+                                            aria-hidden="true"
+                                            data-testid="pix-key-type-selector-arrow"
+                                        >
+                                            expand_more
+                                        </span>
+                                    </button>
+
+                                    {showKeyTypeDropdown && (
+                                        <div
+                                            className="absolute z-10 w-full mt-2 bg-surface-dark border border-subtle-dark/50 rounded-lg shadow-2xl overflow-hidden"
+                                            data-testid="pix-key-type-dropdown"
+                                            id="pix-key-type-dropdown"
+                                            name="pix-key-type-dropdown"
+                                            role="listbox"
+                                            aria-labelledby="pix-key-type-label"
+                                            aria-label="Lista de tipos de chave PIX"
+                                            title="Lista de tipos de chave"
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setNewKeyType('EMAIL');
+                                                    setNewKeyValue('');
+                                                    setShowKeyTypeDropdown(false);
+                                                }}
+                                                className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${newKeyType === 'EMAIL'
+                                                    ? 'bg-primary/20 text-primary'
+                                                    : 'text-white hover:bg-white/5'
+                                                    }`}
+                                                data-testid="pix-key-type-email"
+                                                id="pix-key-type-email"
+                                                name="pix-key-type-email"
+                                                aria-label="E-mail"
+                                                role="option"
+                                                aria-selected={newKeyType === 'EMAIL'}
+                                                title="E-mail"
+                                                data-appium-id="pix-key-type-email"
+                                            >
+                                                <span
+                                                    className="font-medium"
+                                                    data-testid="pix-key-type-email-text"
+                                                    id="pix-key-type-email-text"
+                                                    aria-label="E-mail"
+                                                >
+                                                    E-mail
+                                                </span>
+                                                {newKeyType === 'EMAIL' && (
+                                                    <span
+                                                        className="material-symbols-outlined text-primary"
+                                                        aria-hidden="true"
+                                                        data-testid="pix-key-type-email-check"
+                                                        id="pix-key-type-email-check"
+                                                    >
+                                                        check
+                                                    </span>
+                                                )}
+                                            </button>
+
+                                            <div
+                                                className="h-px bg-subtle-dark/50"
+                                                role="separator"
+                                                aria-hidden="true"
+                                                id="pix-key-type-separator"
+                                                data-testid="pix-key-type-separator"
+                                            ></div>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setNewKeyType('CPF');
+                                                    setNewKeyValue('');
+                                                    setShowKeyTypeDropdown(false);
+                                                }}
+                                                className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${newKeyType === 'CPF'
+                                                    ? 'bg-primary/20 text-primary'
+                                                    : 'text-white hover:bg-white/5'
+                                                    }`}
+                                                data-testid="pix-key-type-cpf"
+                                                id="pix-key-type-cpf"
+                                                name="pix-key-type-cpf"
+                                                aria-label="CPF"
+                                                role="option"
+                                                aria-selected={newKeyType === 'CPF'}
+                                                title="CPF"
+                                                data-appium-id="pix-key-type-cpf"
+                                            >
+                                                <span
+                                                    className="font-medium"
+                                                    data-testid="pix-key-type-cpf-text"
+                                                    id="pix-key-type-cpf-text"
+                                                    aria-label="CPF"
+                                                >
+                                                    CPF
+                                                </span>
+                                                {newKeyType === 'CPF' && (
+                                                    <span
+                                                        className="material-symbols-outlined text-primary"
+                                                        aria-hidden="true"
+                                                        data-testid="pix-key-type-cpf-check"
+                                                        id="pix-key-type-cpf-check"
+                                                    >
+                                                        check
+                                                    </span>
+                                                )}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
+
                                 <div>
-                                    <label htmlFor="keyValue" className="text-sm font-medium text-subtle-dark mb-1 block">Chave</label>
+                                    <label
+                                        htmlFor="keyValue"
+                                        className="text-sm font-medium text-subtle-dark mb-2 block"
+                                        data-testid="pix-key-value-label"
+                                    >
+                                        Chave
+                                    </label>
                                     <input 
                                         id="keyValue"
-                                        type="text" 
+                                        type={newKeyType === 'CPF' ? 'tel' : 'text'}
                                         value={newKeyValue} 
-                                        onChange={(e) => setNewKeyValue(e.target.value)} 
-                                        placeholder={getExampleKey(newKeyType)}
-                                        className="w-full px-4 py-3 bg-background-dark border border-subtle-dark/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (newKeyType === 'CPF') {
+                                                // Permitir apenas números
+                                                const numericValue = val.replace(/\D/g, '');
+                                                // Limitar a 11 dígitos
+                                                if (numericValue.length <= 11) {
+                                                    // Aplicar máscara visual se desejar, ou manter raw.
+                                                    // O usuário reclamou de "ultrapassar", então maxLength é crucial.
+                                                    setNewKeyValue(numericValue);
+                                                }
+                                            } else {
+                                                setNewKeyValue(val);
+                                            }
+                                        }}
+                                        placeholder={newKeyType === 'EMAIL' ? 'Digite seu e-mail' : 'Digite apenas números (11 dígitos)'}
+                                        className="w-full px-4 py-3 bg-background-dark border border-subtle-dark/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-white placeholder-gray-500"
+                                        data-testid="pix-key-value-input"
+                                        maxLength={newKeyType === 'CPF' ? 11 : 100}
                                     />
                                 </div>
                             </div>
-                            {error && <p className="text-sm text-red-400 mt-4">{error}</p>}
-                            <div className="flex justify-end space-x-4 mt-6">
-                                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-gray-200 bg-white/10 rounded-md hover:bg-white/20">Cancelar</button>
-                                <button type="submit" className="px-4 py-2 text-background-dark bg-primary font-semibold rounded-md hover:opacity-90">Cadastrar</button>
+                            {error && (
+                                <div
+                                    className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg"
+                                    data-testid="pix-key-error-message"
+                                    role="alert"
+                                    aria-live="assertive"
+                                >
+                                    <p className="text-sm text-red-400">{error}</p>
+                                </div>
+                            )}
+                            <div className="flex gap-3 mt-6">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowAddModal(false);
+                                        setError('');
+                                        setNewKeyValue('');
+                                        setShowKeyTypeDropdown(false);
+                                    }}
+                                    className="flex-1 px-4 py-3 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium"
+                                    data-testid="pix-add-key-cancel-button"
+                                    id="pix-add-key-cancel-button"
+                                    aria-label="Cancelar cadastro de chave PIX"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 px-4 py-3 text-background-dark bg-primary font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                                    data-testid="pix-add-key-submit-button"
+                                    id="pix-add-key-submit-button"
+                                    aria-label="Cadastrar chave PIX"
+                                    disabled={isLoading}
+                                >
+                                    {isLoading ? 'Cadastrando...' : 'Cadastrar'}
+                                </button>
                             </div>
                         </form>
                     </div>
@@ -312,6 +599,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                         setRegisteredKeyData(null);
                     }}
                     keyData={registeredKeyData}
+                    mode={successMode}
                 />
             )}
 

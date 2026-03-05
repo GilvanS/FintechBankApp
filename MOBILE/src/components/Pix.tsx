@@ -388,6 +388,7 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             data-testid="pix-page"
             data-cy="pix-page"
             data-playwright="pix-page"
+            aria-label="PIX"
         >
             <header 
                 className="flex-shrink-0 flex items-center justify-between p-4 border-b border-subtle-dark/50 pt-[calc(1rem+env(safe-area-inset-top))] shadow-md test-pix-header"

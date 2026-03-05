@@ -14,7 +14,7 @@ const Cards: React.FC<CardsProps> = ({ balance, onNavigate }) => {
     }).format(balance);
 
     return (
-        <div className="relative rounded-2xl shadow-2xl p-6 my-4 text-white overflow-hidden bg-orange-600">
+        <div className="relative rounded-2xl shadow-2xl p-6 my-4 text-white overflow-hidden bg-orange-600" id="cards-view" data-testid="cards-view" aria-label="Cartões">
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full"></div>
             <div className="absolute -bottom-12 -left-6 w-28 h-28 bg-white/10 rounded-full"></div>
             
@@ -35,7 +35,7 @@ const Cards: React.FC<CardsProps> = ({ balance, onNavigate }) => {
 
                 <div className="flex justify-between items-end">
                     <div>
-                         <button onClick={onNavigate} className="px-4 py-2 text-sm font-semibold bg-white/20 rounded-lg hover:bg-white/30 transition-colors">
+                         <button onClick={onNavigate} className="px-4 py-2 text-sm font-semibold bg-white/20 rounded-lg hover:bg-white/30 transition-colors" id="cards-ver-fatura" data-testid="cards-ver-fatura" aria-label="Ver Fatura">
                             Ver Fatura
                         </button>
                     </div>

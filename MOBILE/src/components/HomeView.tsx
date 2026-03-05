@@ -14,40 +14,47 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
     const [isBalanceVisible, setIsBalanceVisible] = useState(true);
     const [showWelcomePopup, setShowWelcomePopup] = useState(false);
 
-    // Lógica para mostrar popup de boas-vindas "de vez em quando"
+    // Popup de boas-vindas: mostrar uma vez por login quando a opção estiver ligada
+    // sessionStorage é limpo no login (App.tsx), então a cada login o popup pode aparecer
     useEffect(() => {
-        const welcomeKey = `welcome_popup_${user.cpf}`;
-        const lastShown = localStorage.getItem(welcomeKey);
-        const now = Date.now();
-        const oneWeek = 7 * 24 * 60 * 60 * 1000; // 7 dias em milissegundos
-        
-        let shouldShow = false;
-        
-        // Sempre mostrar na primeira vez (nunca foi mostrado)
-        if (!lastShown) {
-            shouldShow = true;
-        } 
-        // Após uma semana, mostrar com 20% de chance aleatória
-        else {
-            const timeSinceLastShown = now - parseInt(lastShown);
-            if (timeSinceLastShown > oneWeek) {
-                shouldShow = Math.random() < 0.2; // 20% de chance
-            }
-        }
-        
-        if (shouldShow) {
-            // Delay para melhor UX (1.5 segundos após carregar a tela)
-            const timer = setTimeout(() => {
+        const checkWelcomePopup = () => {
+            try {
+                const welcomePopupEnabledKey = `welcome_popup_enabled_${user.cpf}`;
+                const isPopupEnabled = localStorage.getItem(welcomePopupEnabledKey);
+                if (isPopupEnabled === 'false') return;
+
+                const sessionKey = `welcome_popup_shown_${user.cpf}`;
+                const alreadyShownThisSession = sessionStorage.getItem(sessionKey);
+                if (alreadyShownThisSession) return;
+
                 setShowWelcomePopup(true);
-            }, 1500);
-            return () => clearTimeout(timer);
+            } catch (error) {
+                console.warn('Erro ao verificar popup de boas-vindas:', error);
+            }
+        };
+
+        if ('requestIdleCallback' in window) {
+            (window as any).requestIdleCallback(checkWelcomePopup, { timeout: 1000 });
+        } else {
+            setTimeout(checkWelcomePopup, 300);
         }
     }, [user.cpf]);
 
     const handleCloseWelcomePopup = () => {
         setShowWelcomePopup(false);
-        const welcomeKey = `welcome_popup_${user.cpf}`;
-        localStorage.setItem(welcomeKey, Date.now().toString());
+        const sessionKey = `welcome_popup_shown_${user.cpf}`;
+        const markShown = () => {
+            try {
+                sessionStorage.setItem(sessionKey, '1');
+            } catch (error) {
+                console.warn('Erro ao marcar popup como mostrado:', error);
+            }
+        };
+        if ('requestIdleCallback' in window) {
+            (window as any).requestIdleCallback(markShown, { timeout: 500 });
+        } else {
+            setTimeout(markShown, 0);
+        }
     };
 
     return (
@@ -64,6 +71,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
                 data-cy="home-view"
                 data-playwright="home-view"
                 role="main"
+                aria-label="Início"
             >
             {/* Balance Section */}
             <section 

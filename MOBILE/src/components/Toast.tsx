@@ -22,7 +22,7 @@ export function useToast() {
 export const ToastContainer: React.FC<{ toast: ToastMessage | null; onClose: () => void }> = ({ toast, onClose }) => {
     if (!toast) return null;
     const bg =
-        toast.type === 'success' ? 'bg-green-600' :
+        toast.type === 'success' ? 'bg-primary' :
         toast.type === 'error' ? 'bg-red-600' :
         'bg-blue-600';
 

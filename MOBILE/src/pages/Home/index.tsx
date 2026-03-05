@@ -1,30 +1,38 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import HomeView from '../../components/HomeView';
 import BottomNavBar from '../../components/BottomNavBar';
 import { useAuth } from '../../context/AuthContext';
-import Pix from '../../components/Pix';
-import CardDashboard from '../../components/CardDashboard';
-import Products from '../../components/Products';
-import Profile from '../../components/Profile';
-import Admin from '../../components/Admin';
-import ShoppingCart from '../../components/ShoppingCart';
-import Statement from '../../components/Statement';
-import StatementPaginated from '../../components/StatementPaginated';
-import Shop from '../../components/Shop';
-import CurrentInvoiceView from '../../components/CurrentInvoiceView';
-import ClosedInvoiceView from '../../components/ClosedInvoiceView';
-import PaymentMethods from '../../components/PaymentMethods';
-import InstallmentModal from '../../components/InstallmentModal';
 import PasswordModal from '../../components/PasswordModal';
-import PurchaseConfirmation from '../../components/PurchaseConfirmation';
 import BlockedCardModal from '../../components/BlockedCardModal';
-import InstallmentOptions from '../../components/InstallmentOptions';
-import InstallmentReviewInvoice from '../../components/InstallmentReviewInvoice';
-import InvoicePaymentReceipt from '../../components/InvoicePaymentReceipt';
-import TransactionReceipt from '../../components/TransactionReceipt';
-import { Article } from '../../components/NewsSection';
 import { PurchasedItem, View, User, Transaction } from '../../types';
 import { purchaseWithDebit, purchaseWithCard, getUserMe, getUserByCpf, getUserStatement, payCreditCardInvoice, parcelCreditCardInvoice } from '../../services/api';
+
+// OTIMIZADO: Lazy loading de componentes pesados para melhorar performance inicial
+const Pix = lazy(() => import('../../components/Pix'));
+const CardDashboard = lazy(() => import('../../components/CardDashboard'));
+const Products = lazy(() => import('../../components/Products'));
+const Profile = lazy(() => import('../../components/Profile'));
+const Admin = lazy(() => import('../../components/Admin'));
+const ShoppingCart = lazy(() => import('../../components/ShoppingCart'));
+const Statement = lazy(() => import('../../components/Statement'));
+const StatementPaginated = lazy(() => import('../../components/StatementPaginated'));
+const Shop = lazy(() => import('../../components/Shop'));
+const CurrentInvoiceView = lazy(() => import('../../components/CurrentInvoiceView'));
+const ClosedInvoiceView = lazy(() => import('../../components/ClosedInvoiceView'));
+const PaymentMethods = lazy(() => import('../../components/PaymentMethods'));
+const InstallmentModal = lazy(() => import('../../components/InstallmentModal'));
+const PurchaseConfirmation = lazy(() => import('../../components/PurchaseConfirmation'));
+const InstallmentOptions = lazy(() => import('../../components/InstallmentOptions'));
+const InstallmentReviewInvoice = lazy(() => import('../../components/InstallmentReviewInvoice'));
+const InvoicePaymentReceipt = lazy(() => import('../../components/InvoicePaymentReceipt'));
+const TransactionReceipt = lazy(() => import('../../components/TransactionReceipt'));
+
+// Componente de loading simples
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center h-full min-h-[200px]">
+    <div className="text-white/70">Carregando...</div>
+  </div>
+);
 
 interface HomeProps {
   user: User;
@@ -36,7 +44,6 @@ interface HomeProps {
 const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigateApp }) => {
   const [currentView, setCurrentView] = useState<View>('home');
   const { logout, updateUser } = useAuth(); 
-  const [news, setNews] = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [cart, setCart] = useState<PurchasedItem[]>([]);
   const [currentItem, setCurrentItem] = useState<PurchasedItem | null>(null);
@@ -53,23 +60,10 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
     const [invoicePaymentDetails, setInvoicePaymentDetails] = useState<{ amountPaid: number; date: string; cardLast4: string; transactionId: string; title?: string; amountLabel?: string } | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
+  // OTIMIZADO: Fetch de notícias removido da Home (já é feito no NewsSection)
+  // Isso evita requisições duplicadas e melhora o tempo de carregamento inicial
   useEffect(() => {
-    const fetchNews = async () => {
-        try {
-            const response = await fetch('/api/news');
-            if (!response.ok) {
-                throw new Error('Failed to fetch news from proxy');
-            }
-            const data = await response.json();
-            setNews(data);
-        } catch (error) {
-            console.error("Error fetching news:", error);
-            setNews([]);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-    fetchNews();
+    setIsLoading(false);
   }, []);
 
   // Log para debug da navegação
@@ -415,13 +409,18 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
       return <div className="flex items-center justify-center h-full"><p className="text-white">Authentication error.</p></div>;
     }
     
+    // OTIMIZADO: Componentes pesados são carregados sob demanda com Suspense
     switch (currentView) {
         case 'home': 
             return <HomeView user={user} onNavigate={handleNavigate} />;
-        case 'pix': return <Pix onBack={() => handleNavigate('home')} />;
-        case 'cards': return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
-        case 'shop': return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((s, i) => s + (i.quantity || 0), 0)} onNavigate={handleNavigate} />;
-        case 'shoppingCart': return <ShoppingCart onBack={() => handleNavigate('shop')} cart={cart} onCheckout={handleCheckout} onUpdateQuantity={handleUpdateCartQuantity} />;
+        case 'pix': 
+            return <Suspense fallback={<LoadingFallback />}><Pix onBack={() => handleNavigate('home')} /></Suspense>;
+        case 'cards': 
+            return <Suspense fallback={<LoadingFallback />}><CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} /></Suspense>;
+        case 'shop': 
+            return <Suspense fallback={<LoadingFallback />}><Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.reduce((s, i) => s + (i.quantity || 0), 0)} onNavigate={handleNavigate} /></Suspense>;
+        case 'shoppingCart': 
+            return <Suspense fallback={<LoadingFallback />}><ShoppingCart onBack={() => handleNavigate('shop')} cart={cart} onCheckout={handleCheckout} onUpdateQuantity={handleUpdateCartQuantity} /></Suspense>;
         case 'paymentMethods': {
             // Se temos carrinho, criar item agregado com total
             const paymentItem = cart.length > 0 ? {
@@ -431,37 +430,48 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
                 description: cart.map(i => i.name).join(', '),
                 imageUrl: cart[0]?.imageUrl || ''
             } : currentItem;
-            return <PaymentMethods user={user} item={paymentItem} onBack={() => handleNavigate('shoppingCart')} onSelectMethod={handleSelectPaymentMethod} />;
+            return <Suspense fallback={<LoadingFallback />}><PaymentMethods user={user} item={paymentItem} onBack={() => handleNavigate('shoppingCart')} onSelectMethod={handleSelectPaymentMethod} /></Suspense>;
         }
-        case 'purchaseConfirmation': return confirmationDetails ? <PurchaseConfirmation details={confirmationDetails} onClose={() => handleNavigate('home')} /> : <HomeView user={user} onNavigate={handleNavigate} />;
-        case 'transactionReceipt': return selectedTransaction ? <TransactionReceipt transaction={selectedTransaction} onBack={() => { setSelectedTransaction(null); handleNavigate('home'); }} /> : <HomeView user={user} onNavigate={handleNavigate} />;
-        case 'statement': return <StatementPaginated onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
-        case 'currentInvoice': return <CurrentInvoiceView user={user} onBack={() => handleNavigate('cards')} />;
-        case 'closedInvoice': return <ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
-        case 'installmentOptions': return <InstallmentOptions user={user} onBack={() => handleNavigate('closedInvoice')} onSelectOption={handleSelectInstallmentOption} />;
-        case 'installmentReviewInvoice': return parcelDetails ? <InstallmentReviewInvoice user={user} details={parcelDetails} onConfirm={handleConfirmParcelInvoice} onBack={() => handleNavigate('installmentOptions')} /> : <ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
-        case 'invoicePaymentReceipt': return invoicePaymentDetails ? <InvoicePaymentReceipt details={invoicePaymentDetails} onClose={() => handleNavigate('home')} /> : <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
-        case 'products': return <Products onNavigate={handleNavigate} />;
-        case 'profile': return <Profile onNavigate={handleNavigate} />;
+        case 'purchaseConfirmation': 
+            return confirmationDetails ? <Suspense fallback={<LoadingFallback />}><PurchaseConfirmation details={confirmationDetails} onClose={() => handleNavigate('home')} /></Suspense> : <HomeView user={user} onNavigate={handleNavigate} />;
+        case 'transactionReceipt': 
+            return selectedTransaction ? <Suspense fallback={<LoadingFallback />}><TransactionReceipt transaction={selectedTransaction} onBack={() => { setSelectedTransaction(null); handleNavigate('home'); }} /></Suspense> : <HomeView user={user} onNavigate={handleNavigate} />;
+        case 'statement': 
+            return <Suspense fallback={<LoadingFallback />}><StatementPaginated onNavigate={handleNavigate} onBack={() => handleNavigate('home')} /></Suspense>;
+        case 'currentInvoice': 
+            return <Suspense fallback={<LoadingFallback />}><CurrentInvoiceView user={user} onBack={() => handleNavigate('cards')} /></Suspense>;
+        case 'closedInvoice': 
+            return <Suspense fallback={<LoadingFallback />}><ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} /></Suspense>;
+        case 'installmentOptions': 
+            return <Suspense fallback={<LoadingFallback />}><InstallmentOptions user={user} onBack={() => handleNavigate('closedInvoice')} onSelectOption={handleSelectInstallmentOption} /></Suspense>;
+        case 'installmentReviewInvoice': 
+            return parcelDetails ? <Suspense fallback={<LoadingFallback />}><InstallmentReviewInvoice user={user} details={parcelDetails} onConfirm={handleConfirmParcelInvoice} onBack={() => handleNavigate('installmentOptions')} /></Suspense> : <Suspense fallback={<LoadingFallback />}><ClosedInvoiceView user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} /></Suspense>;
+        case 'invoicePaymentReceipt': 
+            return invoicePaymentDetails ? <Suspense fallback={<LoadingFallback />}><InvoicePaymentReceipt details={invoicePaymentDetails} onClose={() => handleNavigate('home')} /></Suspense> : <Suspense fallback={<LoadingFallback />}><CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} /></Suspense>;
+        case 'products': 
+            return <Suspense fallback={<LoadingFallback />}><Products onNavigate={handleNavigate} /></Suspense>;
+        case 'profile': 
+            return <Suspense fallback={<LoadingFallback />}><Profile onNavigate={handleNavigate} /></Suspense>;
         case 'admin': {
             console.log('🔵 [Home] Renderizando view admin');
             console.log('🔵 [Home] User role:', user?.role);
             if (user?.role === 'admin') {
                 console.log('✅ [Home] Renderizando componente Admin');
-                return <Admin onBack={() => handleNavigate('profile')} />;
+                return <Suspense fallback={<LoadingFallback />}><Admin onBack={() => handleNavigate('profile')} /></Suspense>;
             } else {
                 console.log('❌ [Home] Usuário não é admin, redirecionando para profile');
-                return <Profile onNavigate={handleNavigate} />;
+                return <Suspense fallback={<LoadingFallback />}><Profile onNavigate={handleNavigate} /></Suspense>;
             }
         }
-        default: return <HomeView user={user} onNavigate={handleNavigate} />;
+        default: 
+            return <HomeView user={user} onNavigate={handleNavigate} />;
     }
   };
 
   const showBottomNav = ['home', 'cards', 'shop', 'products', 'profile'].includes(currentView);
 
   return (
-    <div className="h-full w-full flex flex-col bg-background-dark" style={{ position: 'relative', overflow: 'visible' }}>
+    <div className="h-full w-full flex flex-col bg-background-dark" style={{ position: 'relative', overflow: 'visible' }} id="app-home" data-testid="app-home" aria-label="App principal">
         <div className={`flex-grow overflow-y-auto no-scrollbar ${showBottomNav ? 'pb-16' : ''}`} style={{ position: 'relative', zIndex: 1 }}>
             {renderContent()}
         </div>
@@ -469,13 +479,15 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
             <BottomNavBar currentView={currentView} onNavigate={handleNavigate} />
         )}
         {isInstallmentModalOpen && currentItem && (
-            <InstallmentModal
-                isOpen={isInstallmentModalOpen}
-                onClose={() => setIsInstallmentModalOpen(false)}
-                item={currentItem}
-                user={user}
-                onConfirm={handleConfirmPurchaseWithInstallments}
-            />
+            <Suspense fallback={null}>
+                <InstallmentModal
+                    isOpen={isInstallmentModalOpen}
+                    onClose={() => setIsInstallmentModalOpen(false)}
+                    item={currentItem}
+                    user={user}
+                    onConfirm={handleConfirmPurchaseWithInstallments}
+                />
+            </Suspense>
         )}
         <PasswordModal
             isOpen={isPasswordModalOpen}

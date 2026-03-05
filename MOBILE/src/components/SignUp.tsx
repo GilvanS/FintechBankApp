@@ -87,6 +87,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
             data-cy="signup-page"
             data-playwright="signup-page"
             role="main"
+            aria-label="Cadastro"
         >
             <header className="mb-8 test-signup-header" id="signup-header" data-testid="signup-header" data-cy="signup-header">
                  <button 

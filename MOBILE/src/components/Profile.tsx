@@ -32,16 +32,19 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
     };
 
     const MainView = () => {
+        const settingId = (label: string) => 'profile-' + label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
         const SettingButton: React.FC<{label: string, icon: React.ReactNode, onClick: () => void, notification?: boolean }> = ({ label, icon, onClick, notification }) => (
             <button 
                 onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log('🔵 [Profile] SettingButton clicado:', label);
                     onClick();
                 }} 
                 className="w-full text-left p-4 bg-surface-dark rounded-lg font-medium text-white hover:bg-white/10 active:bg-white/20 flex justify-between items-center relative z-10 cursor-pointer"
                 style={{ pointerEvents: 'auto' }}
+                id={settingId(label)}
+                data-testid={settingId(label)}
+                aria-label={label}
             >
                 <div className="flex items-center space-x-4">
                     <div className="text-primary">{icon}</div>
@@ -57,7 +60,7 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
         const iconClasses = "w-6 h-6";
 
         return (
-             <div className="bg-background-dark min-h-screen" style={{ position: 'relative', zIndex: 1 }}>
+             <div className="bg-background-dark min-h-screen" style={{ position: 'relative', zIndex: 1 }} id="profile-view" data-testid="profile-view" aria-label="Meu Perfil">
                 {/* Version Popup */}
                 {showVersionPopup && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowVersionPopup(false)}>
@@ -83,11 +86,11 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
                     </div>
                 )}
 
-                <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-subtle-dark/50 pt-[calc(1rem+env(safe-area-inset-top))] shadow-md">
-                    <button onClick={() => onNavigate('home')} className="p-2 -ml-2 rounded-full hover:bg-white/10">
+                <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-subtle-dark/50 pt-[calc(1rem+env(safe-area-inset-top))] shadow-md" id="profile-header" data-testid="profile-header" aria-label="Cabeçalho do perfil">
+                    <button onClick={() => onNavigate('home')} className="p-2 -ml-2 rounded-full hover:bg-white/10" id="profile-back" data-testid="profile-back" aria-label="Voltar ao início">
                         <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
                     </button>
-                    <h1 className="text-xl font-bold text-white">Meu Perfil</h1>
+                    <h1 className="text-xl font-bold text-white" id="profile-title" data-testid="profile-title" aria-label="Meu Perfil">Meu Perfil</h1>
                     <div className="w-6"></div>
                 </header>
 

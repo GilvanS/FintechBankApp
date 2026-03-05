@@ -55,6 +55,27 @@ export const enhanceAccessibility = () => {
       return;
     }
 
+    // OTIMIZADO: Não processar elementos Material Symbols (evita texto "arrow_back" aparecer)
+    // Verifica se o elemento é um span com classe material-symbols-outlined ou contém um
+    if (element.classList.contains('material-symbols-outlined') || 
+        (element.tagName === 'SPAN' && element.classList.contains('material-symbols-outlined')) ||
+        element.querySelector('.material-symbols-outlined')) {
+      // Garantir que Material Symbols não exiba texto quando fonte não carregar
+      if (element.classList.contains('material-symbols-outlined')) {
+        element.style.fontFamily = "'Material Symbols Outlined', sans-serif";
+        element.style.textIndent = '0';
+        element.style.overflow = 'hidden';
+      }
+      return; // Não processar ícones Material Symbols
+    }
+
+    // Skip elementos que contêm texto de ícones Material Symbols
+    const textContent = element.textContent?.trim() || '';
+    const iconTexts = ['arrow_back', 'now_back', 'swap_horiz', 'close', 'menu', 'home', 'person', 'settings'];
+    if (iconTexts.some(icon => textContent === icon && element.tagName === 'SPAN')) {
+      return; // Não processar spans que são ícones Material Symbols
+    }
+
     // Priority 1: Use data-testid if available
     const testId = element.getAttribute('data-testid');
     if (testId) {
@@ -63,9 +84,9 @@ export const enhanceAccessibility = () => {
       return;
     }
 
-    // Priority 2: Use id if available (skip React internal IDs)
+    // Priority 2: Use id if available (skip React internal IDs e ícones)
     const id = element.id;
-    if (id && !id.startsWith('react-') && !id.includes('__')) {
+    if (id && !id.startsWith('react-') && !id.includes('__') && !id.includes('arrow_back') && !id.includes('now_back')) {
       setContentDescription(element, id);
       element.setAttribute('data-accessibility-enhanced', 'true');
       return;
@@ -99,24 +120,13 @@ export const enhanceAccessibility = () => {
     });
   };
 
-  // Run immediately if DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', processElements);
-  } else {
-    processElements();
-  }
-
-  // Use MutationObserver to catch dynamically added elements
+  // MutationObserver para novas telas (elementos adicionados dinamicamente)
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {
         if (node.nodeType === Node.ELEMENT_NODE) {
           const element = node as HTMLElement;
-          
-          // Process the new element
           processElement(element);
-          
-          // Process children
           element.querySelectorAll('[id], [data-testid], input, textarea, button, [role="button"]').forEach((child) => {
             processElement(child as HTMLElement);
           });
@@ -125,20 +135,21 @@ export const enhanceAccessibility = () => {
     });
   });
 
-  // Start observing
-  observer.observe(document.body || document.documentElement, {
-    childList: true,
-    subtree: true
-  });
+  const runNow = () => {
+    processElements();
+    if (document.body) {
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+  };
 
-  // Also run after delays to catch any missed elements
-  setTimeout(processElements, 100);
-  setTimeout(processElements, 500);
-  setTimeout(processElements, 1000);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', runNow);
+  } else {
+    runNow();
+  }
 };
 
-// Auto-enhance on module load
-if (typeof window !== 'undefined') {
-  enhanceAccessibility();
-}
+// CRÍTICO: NÃO auto-executar no carregamento do módulo
+// O módulo será importado dinamicamente apenas após primeira interação do usuário
+// Isso evita processar milhares de elementos durante a inicialização
 

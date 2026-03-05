@@ -7,9 +7,10 @@ interface PixKeySuccessModalProps {
         type: 'CPF' | 'EMAIL';
         key: string;
     };
+    mode?: 'REGISTER' | 'DELETE';
 }
 
-const PixKeySuccessModal: React.FC<PixKeySuccessModalProps> = ({ isOpen, onClose, keyData }) => {
+const PixKeySuccessModal: React.FC<PixKeySuccessModalProps> = ({ isOpen, onClose, keyData, mode = 'REGISTER' }) => {
     if (!isOpen) return null;
 
     const formatKey = (type: 'CPF' | 'EMAIL', key: string) => {
@@ -19,6 +20,12 @@ const PixKeySuccessModal: React.FC<PixKeySuccessModalProps> = ({ isOpen, onClose
         }
         return key;
     };
+
+    const isDelete = mode === 'DELETE';
+    const title = isDelete ? 'Chave removida com sucesso!' : 'Chave cadastrada com sucesso!';
+    const message = isDelete
+        ? 'A chave PIX foi removida e não está mais vinculada à sua conta.'
+        : 'Sua chave PIX foi cadastrada com sucesso e já está disponível para uso.';
 
     return (
         <div 
@@ -63,7 +70,7 @@ const PixKeySuccessModal: React.FC<PixKeySuccessModalProps> = ({ isOpen, onClose
                         role="heading"
                         aria-level={2}
                     >
-                        Chave cadastrada com sucesso!
+                        {title}
                     </h2>
                     <div 
                         className={`alert block mt-4 p-3 border rounded-lg text-sm flex items-center gap-2 bg-green-500/10 border-green-500/20 text-green-400 test-pix-key-success-message`}
@@ -82,7 +89,7 @@ const PixKeySuccessModal: React.FC<PixKeySuccessModalProps> = ({ isOpen, onClose
                         >
                             check_circle
                         </span>
-                        <span data-testid="pix-key-success-message-text">Sua chave PIX foi cadastrada com sucesso e ja esta disponivel para uso.</span>
+                        <span data-testid="pix-key-success-message-text">{message}</span>
                     </div>
                 </div>
 

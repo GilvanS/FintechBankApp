@@ -127,8 +127,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
       await setApiBaseUrl(url);
       console.log('✅ BaseURL configurada:', api.defaults.baseURL);
       
+      // Timeout reduzido de 10s para 3s para melhor performance
       const response = await api.get('/health', { 
-        timeout: 10000, // Aumentado para 10 segundos
+        timeout: 3000,
         validateStatus: (status) => status < 500
       });
       
@@ -164,22 +165,22 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
     }
   }, []);
 
-  useIonViewWillEnter(() => {
-    // Aguardar um pouco para garantir que initializeApi() terminou
-    // e então verificar status do servidor
-    setTimeout(() => {
-      checkServerStatus();
-    }, 500);
-  });
-  
-  // Também verificar quando o componente monta
+  // CRÍTICO PARA PERFORMANCE APK: Health check adiado para após renderização completa
+  // Executar health check imediatamente bloqueia a renderização inicial e causa ANR
   React.useEffect(() => {
-    // Aguardar inicialização da API
-    const timer = setTimeout(() => {
+    // Usar requestIdleCallback para executar após renderização completa
+    // Se não disponível, usar setTimeout com delay mínimo
+    const runHealthCheck = () => {
       checkServerStatus();
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, []);
+    };
+
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(runHealthCheck, { timeout: 2000 });
+    } else {
+      // Delay mínimo para não bloquear renderização inicial
+      setTimeout(runHealthCheck, 500);
+    }
+  }, [checkServerStatus]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,8 +199,27 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
       const response = await api.post('/auth/login', { cpf, password });
       console.log('Login response:', response.data);
       const { token, user } = response.data;
-      await Preferences.set({ key: 'token', value: token });
-      localStorage.setItem('authToken', token);
+      
+      // CRÍTICO PARA PERFORMANCE APK: Salvar tokens em background para não bloquear login
+      const saveTokens = () => {
+        try {
+          localStorage.setItem('authToken', token);
+        } catch (error) {
+          console.warn('Erro ao salvar authToken:', error);
+        }
+      };
+      
+      // Salvar localStorage em background
+      if ('requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(saveTokens, { timeout: 500 });
+      } else {
+        setTimeout(saveTokens, 0);
+      }
+      
+      // Salvar Preferences em background (não aguardar)
+      Preferences.set({ key: 'token', value: token }).catch((error) => {
+        console.warn('Erro ao salvar token em Preferences:', error);
+      });
 
       if (user) {
         login(user);
@@ -233,6 +253,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
       className="font-display bg-background-dark text-text-dark antialiased min-h-screen flex flex-col"
       data-testid="login-screen"
       id="login-screen"
+      aria-label="Tela de login"
     >
       <header 
         className="w-full p-4 safe-top"
@@ -241,14 +262,26 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
       >
         <button 
           onClick={onNavigateToPreLogin} 
-          className="text-subtle-dark hover:text-primary"
+          className="text-subtle-dark hover:text-primary transition-colors p-2 -ml-2 rounded-full hover:bg-white/10 flex items-center justify-center"
           data-testid="login-back-button"
           id="btn-login-back"
-          aria-label="login-back-button"
+          aria-label="Voltar"
           role="button"
+          type="button"
         >
-          <span className="material-symbols-outlined text-2xl" aria-hidden="true">arrow_back</span>
-            </button>
+          <span 
+            className="material-symbols-outlined text-2xl" 
+            aria-hidden="true" 
+            style={{ 
+              fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
+              fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24",
+              display: 'inline-block',
+              lineHeight: '1'
+            }}
+          >
+            arrow_back
+          </span>
+        </button>
         </header>
       
       <main 
@@ -290,19 +323,25 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             </label>
                   <input
                     id="cpf"
-              data-testid="cpf"
-              name="cpf"
+                    data-testid="cpf"
+                    name="cpf"
                     type="text"
                     value={formatCpf(cpf)}
                     onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
                     inputMode="numeric"
                     placeholder="999.999.999-99"
-              className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
-              aria-label="cpf"
-              aria-labelledby="login-cpf-label"
-              aria-required="true"
-              role="textbox"
-              autoComplete="username"
+                    className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4 text-text-dark"
+                    style={{
+                      backgroundColor: '#161D2B',
+                      borderRadius: '0.5rem',
+                      border: '1px solid transparent',
+                      color: '#E5E7EB'
+                    }}
+                    aria-label="cpf"
+                    aria-labelledby="login-cpf-label"
+                    aria-required="true"
+                    role="textbox"
+                    autoComplete="username"
                   />
                 </div>
           
@@ -331,19 +370,25 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
                   </div>
                   <input
                     id="password"
-              data-testid="password"
-              name="password"
+                    data-testid="password"
+                    name="password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-              className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
-              aria-label="password"
-              aria-labelledby="login-password-label"
-              aria-required="true"
-              role="textbox"
-              autoComplete="current-password"
-            />
+                    className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4 text-text-dark"
+                    style={{
+                      backgroundColor: '#161D2B',
+                      borderRadius: '0.5rem',
+                      border: '1px solid transparent',
+                      color: '#E5E7EB'
+                    }}
+                    aria-label="password"
+                    aria-labelledby="login-password-label"
+                    aria-required="true"
+                    role="textbox"
+                    autoComplete="current-password"
+                  />
               </div>
 
               <StatusMessage type="error" message={error} onClose={() => setError('')} />
@@ -351,15 +396,20 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
           <button 
             type="submit" 
             disabled={loading} 
-            className="w-full px-8 py-4 font-semibold text-white transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50 disabled:bg-primary/70 disabled:scale-100 mt-8"
+            className="w-full px-8 py-4 font-semibold text-white transition-all duration-300 rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50 disabled:bg-primary/70 disabled:scale-100 disabled:opacity-70 mt-8"
+            style={{
+              backgroundColor: loading ? '#22C55E70' : '#22C55E',
+              borderRadius: '0.5rem',
+              boxShadow: '0 10px 15px -3px rgba(34, 197, 94, 0.1), 0 4px 6px -2px rgba(34, 197, 94, 0.05)'
+            }}
             data-testid="login-submit-button"
             id="btn-entrar"
             name="entrar"
             aria-label="entrar"
             role="button"
           >
-                  {loading ? 'Entrando...' : 'Entrar'}
-                </button>
+            {loading ? 'Entrando...' : 'Entrar'}
+          </button>
 
           <p 
             className="text-center text-sm text-subtle-dark mt-6"

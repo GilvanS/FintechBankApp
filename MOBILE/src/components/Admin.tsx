@@ -108,8 +108,17 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     };
 
     useEffect(() => {
-        fetchRequests();
-        fetchStats();
+        // CRÍTICO PARA PERFORMANCE APK: Adiar fetches até componente estar totalmente renderizado
+        const runFetches = () => {
+            fetchRequests();
+            fetchStats();
+        };
+
+        if ('requestIdleCallback' in window) {
+            (window as any).requestIdleCallback(runFetches, { timeout: 1000 });
+        } else {
+            setTimeout(runFetches, 300);
+        }
     }, []);
 
     const handleSearch = async (e?: React.FormEvent) => {
@@ -260,6 +269,7 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             data-testid="admin-page"
             data-cy="admin-page"
             data-playwright="admin-page"
+            aria-label="Painel do Admin"
         >
             <header 
                 className="flex items-center justify-between mb-6 shrink-0 test-admin-header"

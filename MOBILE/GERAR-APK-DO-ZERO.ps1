@@ -16,15 +16,59 @@ if (-not (Test-Path "package.json")) {
     exit 1
 }
 
-# Verificar versao ANTES de começar
-Write-Host "Verificando versao atual..." -ForegroundColor Yellow
-$appVersion = Get-Content "src\utils\AppVersion.ts" | Select-String "_version ="
-$packageVersion = (Get-Content "package.json" | ConvertFrom-Json).version
-$buildGradle = Get-Content "android\app\build.gradle" | Select-String "versionName"
+# Gerar versao automatica com data e hora atual (ex: 4.0.4-20250128-1430)
+$baseVersion = "4.0.4"
+$dateStr = Get-Date -Format "yyyyMMdd"
+$timeStr = Get-Date -Format "HHmm"
+$versionName = "$baseVersion-$dateStr-$timeStr"
+$buildStr = "$dateStr-$timeStr"
+# versionCode Android: inteiro 32-bit (max 2147483647). Formato: yyyyMMdd*100+HH para caber
+$versionCode = [int](Get-Date -Format "yyyyMMdd") * 100 + [int](Get-Date -Format "HH")
 
-Write-Host "   AppVersion.ts: $appVersion" -ForegroundColor Cyan
-Write-Host "   package.json: $packageVersion" -ForegroundColor Cyan
-Write-Host "   build.gradle: $buildGradle" -ForegroundColor Cyan
+Write-Host "Atualizando versao para data/hora da geracao..." -ForegroundColor Yellow
+Write-Host "   Versao: $versionName" -ForegroundColor Cyan
+Write-Host "   versionCode (Android): $versionCode" -ForegroundColor Cyan
+Write-Host ""
+
+# Escrever arquivo em UTF-8 SEM BOM (evita erro "Unexpected token ''" no Vite/JSON)
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+function Write-Utf8NoBom { param($Path, $Value) [System.IO.File]::WriteAllText((Join-Path (Get-Location) $Path), $Value, $utf8NoBom) }
+
+# Atualizar AppVersion.ts
+$appVersionPath = "src\utils\AppVersion.ts"
+if (Test-Path $appVersionPath) {
+    $content = Get-Content $appVersionPath -Raw
+    $content = $content -replace 'private static readonly _version = "[^"]*";', "private static readonly _version = `"$versionName`";"
+    $content = $content -replace 'private static readonly _build = "[^"]*";', "private static readonly _build = `"$buildStr`";"
+    Write-Utf8NoBom -Path $appVersionPath -Value $content.TrimEnd()
+    Write-Host "   OK: AppVersion.ts atualizado (_version, _build)" -ForegroundColor Green
+} else {
+    Write-Host "   AVISO: AppVersion.ts nao encontrado" -ForegroundColor Yellow
+}
+
+# Atualizar android\app\build.gradle (versionCode e versionName)
+$buildGradlePath = "android\app\build.gradle"
+if (Test-Path $buildGradlePath) {
+    $content = Get-Content $buildGradlePath -Raw
+    $content = $content -replace 'versionCode \d+', "versionCode $versionCode"
+    $content = $content -replace 'versionName "[^"]*"', "versionName `"$versionName`""
+    Write-Utf8NoBom -Path $buildGradlePath -Value $content.TrimEnd()
+    Write-Host "   OK: build.gradle atualizado (versionCode, versionName)" -ForegroundColor Green
+} else {
+    Write-Host "   AVISO: build.gradle nao encontrado" -ForegroundColor Yellow
+}
+
+# Atualizar package.json (version) - UTF-8 sem BOM para Vite/PostCSS nao falharem
+$packagePath = "package.json"
+if (Test-Path $packagePath) {
+    $content = Get-Content $packagePath -Raw
+    $content = $content -replace '("version"\s*:\s*)"[^"]*"', "`${1}`"$versionName`""
+    Write-Utf8NoBom -Path $packagePath -Value $content.TrimEnd()
+    Write-Host "   OK: package.json atualizado (version)" -ForegroundColor Green
+} else {
+    Write-Host "   AVISO: package.json nao encontrado" -ForegroundColor Yellow
+}
+
 Write-Host ""
 
 # Passo 1: Limpeza TOTAL
@@ -50,10 +94,19 @@ if (Test-Path "android") {
     Write-Host "   [1.3] Limpando Android completamente..." -ForegroundColor Yellow
     Set-Location "android"
     
-    # Gradle clean
+    # Gradle clean (falha nao interrompe: pastas build serao removidas manualmente em seguida)
     if (Test-Path "gradlew.bat") {
         Write-Host "      Executando gradlew clean..." -ForegroundColor Yellow
-        & .\gradlew.bat clean 2>&1 | Out-Null
+        $gradleOut = $null
+        try {
+            $gradleOut = & .\gradlew.bat clean 2>&1
+        } catch {
+            Write-Host "      AVISO: gradlew clean gerou erro do PowerShell (continuando...)" -ForegroundColor Yellow
+        }
+        if ($LASTEXITCODE -ne 0 -and $gradleOut) {
+            Write-Host "      Saida do Gradle (codigo $LASTEXITCODE):" -ForegroundColor Yellow
+            $gradleOut | ForEach-Object { Write-Host "        $_" -ForegroundColor Gray }
+        }
     }
     
     # Remover pasta build do app
@@ -120,7 +173,13 @@ Write-Host ""
 
 # Passo 4: Build do projeto web
 Write-Host "Passo 4: Build do projeto web (Vite)..." -ForegroundColor Yellow
-npm run build
+# Usar build:mobile se set-ip.js existir (configura API para dispositivo); senao build normal
+if (Test-Path "set-ip.js") {
+    Write-Host "   Usando npm run build:mobile (set-ip.js encontrado)..." -ForegroundColor Cyan
+    npm run build:mobile
+} else {
+    npm run build
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Host "   ERRO: Erro no build do Vite" -ForegroundColor Red
     exit 1
@@ -142,11 +201,13 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Verificar se os arquivos foram copiados
+# Verificar se os arquivos foram copiados (Capacitor coloca webDir em assets/public)
 if (Test-Path "android\app\src\main\assets\public") {
     Write-Host "   OK: Arquivos sincronizados para Android" -ForegroundColor Green
+} elseif (Test-Path "android\app\src\main\assets") {
+    Write-Host "   OK: Assets sincronizados (estrutura Capacitor)" -ForegroundColor Green
 } else {
-    Write-Host "   AVISO: Pasta assets/public nao encontrada" -ForegroundColor Yellow
+    Write-Host "   AVISO: Pasta assets nao encontrada apos sync" -ForegroundColor Yellow
 }
 Write-Host ""
 
@@ -161,13 +222,16 @@ if (Test-Path "gradlew.bat") {
     if ($LASTEXITCODE -eq 0) {
         Write-Host "   OK: APK gerado com sucesso!" -ForegroundColor Green
         
+        # APK assinado (debug) deve ser app-debug.apk; unsigned nao instala
         $apkPath = "app\build\outputs\apk\debug\app-debug.apk"
         if (Test-Path $apkPath) {
             $apkSize = (Get-Item $apkPath).Length / 1MB
             $apkDate = (Get-Item $apkPath).LastWriteTime
-            Write-Host "   APK: $apkPath" -ForegroundColor Cyan
+            Write-Host "   APK (assinado): $apkPath" -ForegroundColor Cyan
             Write-Host "   Tamanho: $([math]::Round($apkSize, 2)) MB" -ForegroundColor Cyan
             Write-Host "   Data: $apkDate" -ForegroundColor Cyan
+        } else {
+            Write-Host "   AVISO: app-debug.apk nao encontrado (verifique build.gradle - APK deve ser assinado)" -ForegroundColor Yellow
         }
     } else {
         Write-Host "   ERRO: Erro ao gerar APK" -ForegroundColor Red
@@ -188,7 +252,8 @@ Write-Host "Passo 7: Instalando APK no dispositivo..." -ForegroundColor Yellow
 
 $adbCheck = Get-Command adb -ErrorAction SilentlyContinue
 if ($adbCheck) {
-    $devices = adb devices | Select-String "device$"
+    # So instalar se dispositivo estiver "device" (nao "offline")
+    $devices = adb devices | Select-String "\s+device\s*$"
     if ($devices) {
         Write-Host "   Dispositivo detectado" -ForegroundColor Green
         

@@ -25,6 +25,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
           className="text-2xl font-semibold text-text-dark"
           data-testid="prelogin-title"
           id="prelogin-title"
+          aria-label="Olá!"
         >
           Olá!
         </h1>
@@ -42,27 +43,62 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
           <div 
             className="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-dark/50 opacity-50"
             data-testid="prelogin-feature-pix"
+            id="prelogin-feature-pix"
+            aria-label="PIX e transferir"
           >
-            <span className="material-symbols-outlined text-3xl text-primary mb-2" aria-hidden="true">swap_horiz</span>
+            <span 
+                className="material-symbols-outlined text-3xl text-primary mb-2" 
+                aria-hidden="true"
+                style={{ 
+                    fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
+                    fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+                }}
+            >
+                swap_horiz
+            </span>
             <span className="text-xs sm:text-sm font-medium text-text-dark">PIX e transferir</span>
           </div>
           <div 
             className="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-dark/50 opacity-50"
             data-testid="prelogin-feature-pay"
+            id="prelogin-feature-pay"
+            aria-label="Pagar"
           >
-            <span className="material-symbols-outlined text-3xl text-primary mb-2" aria-hidden="true">barcode_scanner</span>
+            <span 
+                className="material-symbols-outlined text-3xl text-primary mb-2" 
+                aria-hidden="true"
+                style={{ 
+                    fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
+                    fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+                }}
+            >
+                barcode_scanner
+            </span>
             <span className="text-xs sm:text-sm font-medium text-text-dark">Pagar</span>
           </div>
           <div 
             className="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-dark/50 opacity-50"
             data-testid="prelogin-feature-statement"
+            id="prelogin-feature-statement"
+            aria-label="Extrato"
           >
-            <span className="material-symbols-outlined text-3xl text-primary mb-2" aria-hidden="true">receipt_long</span>
+            <span 
+                className="material-symbols-outlined text-3xl text-primary mb-2" 
+                aria-hidden="true"
+                style={{ 
+                    fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
+                    fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+                }}
+            >
+                receipt_long
+            </span>
             <span className="text-xs sm:text-sm font-medium text-text-dark">Extrato</span>
           </div>
           <div 
             className="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-dark/50 opacity-50 col-span-2"
             data-testid="prelogin-feature-cards"
+            id="prelogin-feature-cards"
+            aria-label="Cartões"
           >
             <span className="material-symbols-outlined text-3xl text-primary mb-2" aria-hidden="true">credit_card</span>
             <span className="text-xs sm:text-sm font-medium text-text-dark">Cartões</span>
@@ -70,6 +106,8 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
           <div 
             className="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-dark/50 opacity-50"
             data-testid="prelogin-feature-marketplace"
+            id="prelogin-feature-marketplace"
+            aria-label="Marketplace"
           >
             <span className="material-symbols-outlined text-3xl text-primary mb-2" aria-hidden="true">storefront</span>
             <span className="text-xs sm:text-sm font-medium text-text-dark">Marketplace</span>

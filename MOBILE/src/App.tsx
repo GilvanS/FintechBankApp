@@ -11,7 +11,7 @@ import ResetPassword from './components/ResetPassword';
 import Admin from './components/Admin';
 import { initializeApi, getUserMe as getProfile } from './services/api';
 
-/* Core CSS & Theme */
+/* Core CSS & Theme - OTIMIZADO: Imports agrupados para melhor performance no APK */
 import '@ionic/react/css/core.css';
 import '@ionic/react/css/normalize.css';
 import '@ionic/react/css/structure.css';
@@ -24,6 +24,8 @@ import '@ionic/react/css/flex-utils.css';
 import '@ionic/react/css/display.css';
 import './theme/variables.css';
 
+// OTIMIZADO PARA APK: setupIonicReact deve ser chamado antes de qualquer renderização
+// Mas não bloqueia - é uma configuração síncrona rápida
 setupIonicReact();
 
 // Função de normalizacao do usuario vindo do backend (from WEB)
@@ -98,22 +100,42 @@ const App: React.FC = () => {
   const [view, setView] = useState('prelogin'); // prelogin, login, home, signup, resetPassword
 
   useEffect(() => {
-    const initApp = async () => {
-      await initializeApi();
-      setView('prelogin');
-    };
-    initApp();
+    // OTIMIZADO: Inicialização não-bloqueante - apenas configura view e API em background
+    setView('prelogin');
+    
+    // Inicializar API em background sem bloquear a renderização (sem delay)
+    initializeApi().catch((error) => {
+      console.error('Erro ao inicializar API (não crítico):', error);
+    });
   }, []);
 
   const handleLogin = (loggedInUser: Omit<User, 'password'>) => {
     const normalized = normalizeUserShape(loggedInUser as Partial<User>);
+    // Permitir que o popup de boas-vindas apareça nesta sessão (uma vez por login)
+    try {
+      sessionStorage.removeItem(`welcome_popup_shown_${normalized.cpf}`);
+    } catch (_) { /* ignora falha de storage */ }
     setUser(normalized);
     setView('home');
   };
 
   const handleLogout = async () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('authToken');
+    // CRÍTICO: localStorage pode bloquear - fazer em background
+    const clearStorage = () => {
+      try {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+      } catch (error) {
+        console.warn('Erro ao limpar localStorage:', error);
+      }
+    };
+    
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(clearStorage, { timeout: 500 });
+    } else {
+      setTimeout(clearStorage, 0);
+    }
+    
     await Preferences.remove({ key: 'token' });
     setUser(null);
     setView('prelogin');

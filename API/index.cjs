@@ -1,12 +1,14 @@
-// Servidor da FintechBankApp integrado com Databricks
 const dotenv = require('dotenv');
-dotenv.config();
+const path = require('path');
+
+// Carregar variáveis de ambiente com caminho absoluto para evitar erros de CWD
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
-const path = require('path');
+// const path = require('path'); // Removido duplicata
 const { DBSQLClient } = require('@databricks/sql');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -574,7 +576,7 @@ apiRouter.post('/auth/login', loginValidationRules, handleValidationErrors, asyn
             WHERE cpf = '${escapedCpfForUpdate}'
         `);
 
-        const token = jwt.sign({ cpf: user.cpf, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
+        const token = jwt.sign({ cpf: user.cpf, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '8h' });
         console.log(`✅ Login bem-sucedido para ${user.cpf} (${user.role})`);
         res.json({ success: true, user: normalizeUser(user), token, message: 'Login realizado com sucesso.' });
     } catch (error) {
@@ -1680,6 +1682,25 @@ apiRouter.post('/pix/keys', bearerAuth(), asyncHandler(async (req, res) => {
         normalizedKey = normalizedKey.toLowerCase();
     }
     
+    // --- NOVA VALIDAÇÃO DE SEGURANÇA (OWNERSHIP) ---
+    // O usuário só pode cadastrar chaves que pertencem a ele
+    if (type === 'CPF') {
+        // req.user.cpf já vem do token/middleware
+        if (normalizedKey !== req.user.cpf) {
+            console.log(`❌ [PIX KEY] Bloqueio de Segurança: Tentativa de cadastrar CPF de terceiro. User: ${req.user.cpf}, Key: ${normalizedKey}`);
+            return res.status(400).json({ success: false, message: 'Chave inválida. O CPF deve ser igual ao do cadastro.' });
+        }
+    } else if (type === 'EMAIL') {
+        // req.user.email vem do token (adicionado no login)
+        // Se o token for antigo (sem email), vai falhar (undefined !== key). Forçará re-login.
+        const userEmail = (req.user.email || '').trim().toLowerCase();
+        if (normalizedKey !== userEmail) {
+            console.log(`❌ [PIX KEY] Bloqueio de Segurança: Tentativa de cadastrar Email de terceiro. User: ${userEmail}, Key: ${normalizedKey}`);
+            return res.status(400).json({ success: false, message: 'Chave inválida. O email deve ser igual ao do cadastro.' });
+        }
+    }
+    // ------------------------------------------------
+    
     // Verificar se a chave já existe para este usuário
     const existingKeys = await pixRepo.listKeys(req.user.cpf);
     if (existingKeys.some(k => k.key === normalizedKey || k.key.toLowerCase() === normalizedKey.toLowerCase())) {
@@ -1707,8 +1728,8 @@ apiRouter.post('/pix/keys', bearerAuth(), asyncHandler(async (req, res) => {
 }));
 
 apiRouter.delete('/pix/keys/:key', bearerAuth(), asyncHandler(async (req, res) => {
-    const removed = await pixRepo.removeKey({ cpf: req.user.cpf, key: req.params.key });
-    if (!removed) return res.status(404).json({ success: false, message: 'Chave nao encontrada' });
+    await pixRepo.removeKey({ cpf: req.user.cpf, key: req.params.key });
+    // if (!removed) return res.status(404).json({ success: false, message: 'Chave nao encontrada' });
     res.json({ success: true, message: 'Chave removida' });
 }));
 

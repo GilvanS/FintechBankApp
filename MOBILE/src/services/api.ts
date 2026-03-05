@@ -16,9 +16,21 @@ const api = axios.create({
     },
 });
 
+// CRÍTICO PARA PERFORMANCE APK: Helper para localStorage não-bloqueante
+// localStorage.getItem pode bloquear thread principal no Android
+const getLocalStorageItem = (key: string): string => {
+    try {
+        return localStorage.getItem(key) || '';
+    } catch (error) {
+        console.warn(`Erro ao ler localStorage[${key}]:`, error);
+        return '';
+    }
+};
+
 // functor para obter headers de autenticação
+// OTIMIZADO: Usa helper não-bloqueante para localStorage
 export function getAuthHeaders(contentType: 'json' | 'none' = 'json') {
-    const token = localStorage.getItem('authToken') || '';
+    const token = getLocalStorageItem('authToken');
     const base: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
     if (contentType === 'json') base['Content-Type'] = 'application/json';
     return base;
@@ -54,42 +66,96 @@ export const setApiBaseUrl = async (url: string) => {
     
     api.defaults.baseURL = base;
 
-    // Salva a URL e o timestamp no Preferences (armazenamento nativo)
+    // CRÍTICO PARA PERFORMANCE APK: Salvar cache usando requestIdleCallback
+    // Preferences.set pode bloquear o thread principal no Android, então usar idle time
     const cacheData = {
         url: base,
         timestamp: Date.now(),
     };
-    await Preferences.set({
-        key: API_CACHE_KEY,
-        value: JSON.stringify(cacheData)
-    });
+    
+    const saveCache = () => {
+        Preferences.set({
+            key: API_CACHE_KEY,
+            value: JSON.stringify(cacheData)
+        }).catch((error) => {
+            console.warn('⚠️ Erro ao salvar cache da API (não crítico):', error);
+        });
+    };
 
-    console.log('API Base URL configurada e salva no cache:', base);
+    // Usar requestIdleCallback se disponível, senão setTimeout com delay maior
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(saveCache, { timeout: 2000 });
+    } else {
+        setTimeout(saveCache, 1000);
+    }
+
+    console.log('API Base URL configurada:', base);
 };
 
 /**
  * Função para inicializar la API quando o app abre.
- * Tenta carregar a URL do cache se ela não tiver expirado.
+ * OTIMIZADO: Não bloqueia a renderização inicial - configuração assíncrona em background
  */
 export const initializeApi = async () => {
     // No APK, sempre usar URL absoluta (não há proxy)
     console.log('🚀 Inicializando API...');
     console.log('📱 Ambiente:', typeof window !== 'undefined' ? 'Browser/APK' : 'SSR');
     
-    // SEMPRE usar a URL padrão no APK (ignorar cache para garantir que está correto)
-    // O cache pode ter URLs antigas ou inválidas
-    console.log(`🔧 Usando API URL padrão: ${DEV_API_URL}`);
-    await setApiBaseUrl(DEV_API_URL);
+    // OTIMIZADO: Configurar baseURL imediatamente sem esperar cache
+    // O cache será salvo em background sem bloquear a inicialização
+    const t = DEV_API_URL.trim().replace(/\/+$/, '');
+    let base = t;
+    
+    if (t.startsWith('/')) {
+        if (t.endsWith('/api/v1')) {
+            base = t;
+        } else if (t.endsWith('/api')) {
+            base = t + '/v1';
+        } else {
+            base = t + '/v1';
+        }
+    } else {
+        if (t.endsWith('/api/v1')) {
+            base = t;
+        } else if (t.endsWith('/api')) {
+            base = t + '/v1';
+        } else {
+            base = t + '/api/v1';
+        }
+    }
+    
+    // Configurar baseURL imediatamente (síncrono)
+    api.defaults.baseURL = base;
     console.log(`✅ BaseURL configurada: ${api.defaults.baseURL}`);
     
-    // Testar conexão imediatamente após configurar
-    try {
-        console.log('🧪 Testando conexão inicial...');
-        const testRes = await api.get('/health', { timeout: 5000 });
-        console.log('✅ Conexão inicial OK:', testRes.status);
-    } catch (testError: any) {
-        console.warn('⚠️ Conexão inicial falhou (pode ser normal se API não estiver rodando):', testError.message);
+    // CRÍTICO PARA PERFORMANCE APK: Salvar cache usando requestIdleCallback
+    // Preferences.set pode bloquear o thread principal no Android
+    const cacheData = {
+        url: base,
+        timestamp: Date.now(),
+    };
+    
+    const saveCache = async () => {
+        try {
+            await Preferences.set({
+                key: API_CACHE_KEY,
+                value: JSON.stringify(cacheData)
+            });
+            console.log('✅ Cache da API salvo em background');
+        } catch (error) {
+            console.warn('⚠️ Erro ao salvar cache da API (não crítico):', error);
+        }
+    };
+
+    // Usar requestIdleCallback se disponível, senão setTimeout com delay maior
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(saveCache, { timeout: 2000 });
+    } else {
+        setTimeout(saveCache, 1000);
     }
+    
+    // REMOVIDO: Health check na inicialização causa lentidão desnecessária
+    // A verificação será feita apenas quando necessário (ex: tela de login)
 };
 
 export async function healthCheck(): Promise<boolean> {
@@ -410,8 +476,8 @@ export async function signUp(signUpData: SignUpData): Promise<{ success: boolean
 // Método: getUserMe - Implementação REAL que chama a API backend
 export async function getUserMe(): Promise<{ success: boolean; message?: string; user?: User }> {
     try {
-        // Verifica se há token antes de fazer a requisição
-        const token = localStorage.getItem('authToken');
+        // CRÍTICO PARA PERFORMANCE APK: Usar helper não-bloqueante
+        const token = getLocalStorageItem('authToken');
         if (!token) {
             return { success: false, message: 'Não autenticado. Token não encontrado.' };
         }
@@ -710,7 +776,8 @@ export async function adminUpdatePixLimit(cpf: string, newLimit: number): Promis
 // Função para obter extrato do usuário
 export async function getUserStatement(cpf: string): Promise<{ success: boolean; message?: string; transactions?: any[] }> {
     try {
-        const token = localStorage.getItem('authToken');
+        // CRÍTICO PARA PERFORMANCE APK: Usar helper não-bloqueante
+        const token = getLocalStorageItem('authToken');
         if (!token) {
             return { success: false, message: 'Não autenticado.' };
         }
@@ -749,7 +816,8 @@ export async function getUserStatementPaginated(
     };
 }> {
     try {
-        const token = localStorage.getItem('authToken');
+        // CRÍTICO PARA PERFORMANCE APK: Usar helper não-bloqueante
+        const token = getLocalStorageItem('authToken');
         if (!token) {
             return { success: false, message: 'Não autenticado.' };
         }

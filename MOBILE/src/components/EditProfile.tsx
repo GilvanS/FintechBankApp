@@ -45,12 +45,12 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
     };
 
     return (
-        <div className="bg-background-dark text-white p-4 min-h-full flex flex-col">
-            <header className="flex items-center mb-6">
-                <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-white/10">
+        <div className="bg-background-dark text-white p-4 min-h-full flex flex-col" id="edit-profile-view" data-testid="edit-profile-view" aria-label="Editar perfil">
+            <header className="flex items-center mb-6" id="edit-profile-header" data-testid="edit-profile-header" aria-label="Cabeçalho editar perfil">
+                <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-white/10" id="edit-profile-back" data-testid="edit-profile-back" aria-label="Voltar">
                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
-                <h2 className="text-2xl font-bold text-white">Editar Perfil</h2>
+                <h2 className="text-2xl font-bold text-white" id="edit-profile-title" data-testid="edit-profile-title" aria-label="Editar Perfil">Editar Perfil</h2>
             </header>
 
             <form onSubmit={handleSave} className="flex-grow flex flex-col space-y-6">

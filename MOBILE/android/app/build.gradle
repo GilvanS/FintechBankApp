@@ -16,8 +16,8 @@ android {
         applicationId "com.fintechbank.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 20250128
-        versionName "4.0.2-20250127"
+        versionCode 2026020320
+        versionName "4.0.4-20260203-2047"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -37,15 +37,24 @@ android {
         }
     }
     buildTypes {
+        // Debug: usa assinatura de debug padrÃƒÂ£o do Android (NUNCA signingConfig null)
+        // Sem assinatura = INSTALL_PARSE_FAILED_NO_CERTIFICATES
+        debug {
+            minifyEnabled false
+        }
         release {
-            signingConfig signingConfigs.release // Set the signing config for the release build
+            // Release: usa keystore se existir; senÃƒÂ£o usa assinatura de debug para testes
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            // Add App Distribution configuration
             firebaseAppDistribution {
                 artifactType = "APK"
-                releaseNotes = "Release inicial para homologação"
-                testers = "seu_email_de_teste@exemplo.com" // Substitua pelo email do testador
+                releaseNotes = "Release inicial para homologaÃƒÂ§ÃƒÂ£o"
+                testers = "seu_email_de_teste@exemplo.com"
             }
         }
     }
@@ -68,7 +77,7 @@ dependencies {
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
     
-    // Resolver conflito de versões do Kotlin
+    // Resolver conflito de versÃƒÂµes do Kotlin
     configurations.all {
         resolutionStrategy {
             force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'

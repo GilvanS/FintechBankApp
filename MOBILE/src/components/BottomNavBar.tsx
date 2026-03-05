@@ -11,11 +11,15 @@ const NavButton: React.FC<{
     isActive: boolean;
     onClick: () => void;
     showIndicator?: boolean;
-}> = ({ label, icon, isActive, onClick, showIndicator = false }) => (
+    view: string;
+}> = ({ label, icon, isActive, onClick, showIndicator = false, view }) => (
     <button 
         onClick={onClick} 
         className={`relative flex flex-col items-center justify-center gap-1 flex-1 py-2 transition-all ${isActive ? 'text-primary' : 'text-white/70'}`}
         type="button"
+        id={`nav-${view}`}
+        data-testid={`nav-${view}`}
+        aria-label={label}
     >
         {isActive && (
             <div className="absolute inset-0 bg-white/20 rounded-full -mx-3 -my-1.5" style={{ zIndex: 0 }} />
@@ -59,12 +63,16 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) 
                 backgroundColor: '#161D2B',
                 minHeight: '64px'
             }}
+            id="bottom-nav"
+            data-testid="bottom-nav"
+            aria-label="Navegação principal"
         >
            {navItems.map(item => (
                 <NavButton 
                     key={item.view}
                     label={item.label}
                     icon={item.icon}
+                    view={item.view}
                     isActive={currentView === item.view}
                     showIndicator={item.showIndicator}
                     onClick={() => onNavigate(item.view as 'home' | 'cards' | 'shop' | 'profile')}

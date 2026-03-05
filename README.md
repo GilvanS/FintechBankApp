@@ -6,6 +6,16 @@
 
 ---
 
+## 🛠️ Ferramenta Principal
+
+Para configurar, executar e gerenciar todos os módulos do projeto (**API, WEB e Mobile**) de forma simplificada, utilize o **AG-Kit**:
+
+```bash
+npx @vudovn/ag-kit init
+```
+
+---
+
 ## 📋 Sobre o Projeto
 
 FintechBankApp é um projeto didático desenvolvido para treinamento de desenvolvimento Web e APIs com foco em boas práticas aplicáveis ao ecossistema Java + frameworks (conceitos, padrões e arquitetura). A implementação de referência desta branch usa Node.js (Express) no backend e Vite + React + TypeScript no frontend para acelerar a prática e a validação dos fluxos.

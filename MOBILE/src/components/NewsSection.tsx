@@ -39,7 +39,20 @@ const NewsSection: React.FC = () => {
             const url = 'https://servicodados.ibge.gov.br/api/v3/noticias/?qtd=3&busca=economia';
             
             try {
-                const response = await fetch(url);
+                // OTIMIZADO: Timeout de 5 segundos para evitar bloqueio prolongado
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
+                const response = await fetch(url, { 
+                    signal: controller.signal,
+                    // Adicionar headers para melhor performance
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+                
+                clearTimeout(timeoutId);
+                
                 if (!response.ok) {
                     throw new Error('API request to IBGE failed');
                 }
@@ -66,15 +79,35 @@ const NewsSection: React.FC = () => {
                 }).filter((article: Article) => article.urlToImage); // Only keep articles with an image
 
                 setArticles(formattedArticles.length > 0 ? formattedArticles : fallbackNews);
-            } catch (error) {
-                console.error("Failed to fetch news, using fallback data.", error);
+            } catch (error: any) {
+                // Se foi abortado por timeout ou outro erro, usar fallback imediatamente
+                if (error.name === 'AbortError') {
+                    console.warn("Timeout ao buscar notícias, usando dados de fallback.");
+                } else {
+                    console.error("Failed to fetch news, using fallback data.", error);
+                }
                 setArticles(fallbackNews);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchNews();
+        // CRÍTICO PARA PERFORMANCE APK: Delay aumentado para não bloquear renderização inicial
+        // A seção de notícias pode carregar após o conteúdo principal estar totalmente visível
+        // Usar requestIdleCallback se disponível para melhor performance
+        let timer: NodeJS.Timeout | number;
+        
+        if ('requestIdleCallback' in window) {
+          (window as any).requestIdleCallback(() => {
+            fetchNews();
+          }, { timeout: 2000 });
+        } else {
+          timer = setTimeout(() => {
+            fetchNews();
+          }, 1000); // Delay aumentado de 300ms para 1000ms
+        }
+
+        return () => clearTimeout(timer);
     }, []);
     
     if (loading) {

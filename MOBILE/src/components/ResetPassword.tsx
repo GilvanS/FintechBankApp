@@ -52,9 +52,9 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onResetSuccess, onNavigat
     };
 
     return (
-        <div className="bg-background-dark text-text-dark h-full flex flex-col p-6 sm:p-8">
-            <header className="mb-8">
-                 <button onClick={onNavigateToLogin} className="flex items-center space-x-2 text-subtle-dark hover:text-text-dark mb-4">
+        <div className="bg-background-dark text-text-dark h-full flex flex-col p-6 sm:p-8" id="reset-password-page" data-testid="reset-password-page" aria-label="Redefinir senha">
+            <header className="mb-8" id="reset-password-header" data-testid="reset-password-header" aria-label="Cabeçalho redefinir senha">
+                 <button onClick={onNavigateToLogin} className="flex items-center space-x-2 text-subtle-dark hover:text-text-dark mb-4" id="reset-password-back" data-testid="reset-password-back" aria-label="Voltar ao login">
                     <span className="material-symbols-outlined">arrow_back</span>
                  </button>
                 <h1 className="text-3xl font-bold text-white">Redefinir Senha</h1>

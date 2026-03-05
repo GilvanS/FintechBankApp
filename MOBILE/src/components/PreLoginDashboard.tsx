@@ -22,7 +22,16 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
                 role="button"
                 type="button"
             >
-                <span className="material-symbols-outlined text-3xl text-primary mb-2" aria-hidden="true">{icon}</span>
+                <span 
+                    className="material-symbols-outlined text-3xl text-primary mb-2" 
+                    aria-hidden="true"
+                    style={{ 
+                        fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
+                        fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+                    }}
+                >
+                    {icon}
+                </span>
                 <span className="text-xs sm:text-sm font-medium text-subtle-dark text-center">{label}</span>
             </button>
         );

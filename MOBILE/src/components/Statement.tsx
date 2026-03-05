@@ -175,9 +175,9 @@ function Statement({ onNavigate, onBack }: StatementProps) {
     }
 
     return (
-        <div className="bg-background-dark text-white min-h-screen flex flex-col">
-            <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-subtle-dark/50 pt-[calc(1rem+env(safe-area-inset-top))] shadow-md">
-                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
+        <div className="bg-background-dark text-white min-h-screen flex flex-col" id="statement-page" data-testid="statement-page" aria-label="Extrato">
+            <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-subtle-dark/50 pt-[calc(1rem+env(safe-area-inset-top))] shadow-md" id="statement-header" data-testid="statement-header" aria-label="Cabeçalho do extrato">
+                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10" id="statement-back" data-testid="statement-back" aria-label="Voltar">
                     <span className="material-symbols-outlined">arrow_back</span>
                 </button>
                 <h1 className="text-xl font-bold text-white">Extrato da Conta</h1>

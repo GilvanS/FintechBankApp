@@ -11,6 +11,71 @@ import PasswordModal from './PasswordModal';
 import PixConfirmation from './PixConfirmation';
 import PixSuccessModal from './PixSuccessModal';
 import { useToast, ToastContainer } from './Toast';
+import { createPortal } from 'react-dom';
+
+const ShadowWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const hostRef = React.useRef<HTMLDivElement>(null);
+    const [shadowRoot, setShadowRoot] = useState<ShadowRoot | null>(null);
+    const [styles, setStyles] = useState<string>('');
+
+    useEffect(() => {
+        if (hostRef.current && !hostRef.current.shadowRoot) {
+            const root = hostRef.current.attachShadow({ mode: 'open' });
+            setShadowRoot(root);
+        }
+    }, []);
+
+    useEffect(() => {
+        const updateStyles = () => {
+            const styleTags = Array.from(document.querySelectorAll('style'));
+            setStyles(styleTags.map(s => s.innerHTML).join('\n'));
+        };
+
+        updateStyles();
+
+        const observer = new MutationObserver(updateStyles);
+        observer.observe(document.head, { childList: true, subtree: true, characterData: true });
+
+        return () => observer.disconnect();
+    }, []);
+
+    // Helper classes string to ensure Tailwind CDN generates CSS for all classes used in the Shadow DOM
+    const tailwindClassesToGenerate = "test-pix-key-field block text-sm font-medium text-white/80 mb-2 relative w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all test-input-pix-key absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full text-white/60 hover:bg-white/10 hover:text-primary transition-colors test-contacts-button material-symbols-outlined test-pix-amount-field test-input-pix-amount test-pix-description-field test-input-pix-description border-t border-subtle-dark/50 pt-6 test-pix-credit-section flex items-center justify-between font-medium test-pix-credit-title text-sm test-pix-credit-description cursor-pointer test-pix-credit-toggle-label sr-only peer w-11 h-6 bg-subtle-dark rounded-full peer-checked:after:translate-x-full after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary test-pix-credit-toggle-switch text-white/50 text-xs mt-2 test-pix-credit-warning text-sm text-red-400 p-2 bg-red-900/50 rounded-md sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-background-dark font-bold px-8 disabled:opacity-50 test-pix-submit-button space-y-6 flex-col items-center justify-center";
+
+    return (
+        <div className="w-full">
+            <div style={{ display: 'none' }} className={tailwindClassesToGenerate} aria-hidden="true" />
+            <div ref={hostRef} id="pix-shadow-host" className="w-full">
+                {shadowRoot && createPortal(
+                    <div className="space-y-6 w-full">
+                        <style>{styles}</style>
+                        <style>{`
+                            @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0');
+                            .material-symbols-outlined {
+                                font-family: 'Material Symbols Outlined';
+                                font-weight: normal;
+                                font-style: normal;
+                                font-size: 24px;
+                                line-height: 1;
+                                letter-spacing: normal;
+                                text-transform: none;
+                                display: inline-block;
+                                white-space: nowrap;
+                                word-wrap: normal;
+                                direction: ltr;
+                                -webkit-font-feature-settings: 'liga';
+                                -webkit-font-smoothing: antialiased;
+                            }
+                        `}</style>
+                        <link rel="stylesheet" href="/src/index.css" />
+                        {children}
+                    </div>,
+                    shadowRoot
+                )}
+            </div>
+        </div>
+    );
+};
 
 type PixSubView = 'transfer' | 'keyManagement' | 'contacts' | 'confirmation';
 
@@ -101,127 +166,129 @@ const TransferView: React.FC<TransferViewProps> = ({ user, contacts, onInitiateT
                     data-playwright="pix-transfer-form"
                     aria-label="Formulário de transferência PIX"
                 >
-                    <div className="test-pix-key-field" id="pix-key-field" data-testid="pix-key-field" data-cy="pix-key-field">
-                        <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-key">Chave PIX</label>
-                        <div className="relative">
-                            <input 
-                                value={pixKey} 
-                                onChange={e => setPixKey(e.target.value)} 
-                                className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all test-input-pix-key" 
-                                id="pix-key"
-                                name="pix-key"
-                                placeholder="Digite CPF/CNPJ, celular, e-mail ou chave aleatória" 
+                    <ShadowWrapper>
+                        <div className="test-pix-key-field" id="pix-key-field" data-testid="pix-key-field" data-cy="pix-key-field">
+                            <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-key">Chave PIX</label>
+                            <div className="relative">
+                                <input
+                                    value={pixKey}
+                                    onChange={e => setPixKey(e.target.value)}
+                                    className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all test-input-pix-key"
+                                    id="pix-key"
+                                    name="pix-key"
+                                    placeholder="Digite CPF/CNPJ, celular, e-mail ou chave aleatória"
+                                    type="text"
+                                    data-testid="pix-input-key"
+                                    data-cy="pix-input-key"
+                                    data-playwright="pix-input-key"
+                                    aria-label="Chave PIX"
+                                    aria-required="true"
+                                />
+                                {contacts.length > 0 && (
+                                    <button
+                                        type="button"
+                                        title="Usar contato salvo"
+                                        onClick={() => onNavigate('contacts')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full text-white/60 hover:bg-white/10 hover:text-primary transition-colors test-contacts-button"
+                                        id="btn-pix-contacts"
+                                        name="pix-contacts-button"
+                                        data-testid="pix-contacts-button"
+                                        data-cy="pix-contacts-button"
+                                        data-playwright="pix-contacts-button"
+                                        aria-label="Usar contato salvo"
+                                    >
+                                        <span className="material-symbols-outlined" aria-hidden="true">contact_page</span>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <div className="test-pix-amount-field" id="pix-amount-field" data-testid="pix-amount-field" data-cy="pix-amount-field">
+                            <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-amount">Valor</label>
+                            <input
+                                value={amount}
+                                onChange={handleAmountChange}
+                                className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all test-input-pix-amount"
+                                id="pix-amount"
+                                name="pix-amount"
+                                placeholder="R$ 0,00"
                                 type="text"
-                                data-testid="pix-input-key"
-                                data-cy="pix-input-key"
-                                data-playwright="pix-input-key"
-                                aria-label="Chave PIX"
+                                inputMode="numeric"
+                                data-testid="pix-input-amount"
+                                data-cy="pix-input-amount"
+                                data-playwright="pix-input-amount"
+                                aria-label="Valor"
                                 aria-required="true"
                             />
-                            {contacts.length > 0 && (
-                                <button 
-                                    type="button" 
-                                    title="Usar contato salvo" 
-                                    onClick={() => onNavigate('contacts')} 
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full text-white/60 hover:bg-white/10 hover:text-primary transition-colors test-contacts-button"
-                                    id="btn-pix-contacts"
-                                    name="pix-contacts-button"
-                                    data-testid="pix-contacts-button"
-                                    data-cy="pix-contacts-button"
-                                    data-playwright="pix-contacts-button"
-                                    aria-label="Usar contato salvo"
-                                >
-                                    <span className="material-symbols-outlined" aria-hidden="true">contact_page</span>
-                                </button>
-                            )}
                         </div>
-                    </div>
-                    <div className="test-pix-amount-field" id="pix-amount-field" data-testid="pix-amount-field" data-cy="pix-amount-field">
-                        <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-amount">Valor</label>
-                        <input 
-                            value={amount} 
-                            onChange={handleAmountChange}
-                            className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all test-input-pix-amount" 
-                            id="pix-amount"
-                            name="pix-amount"
-                            placeholder="R$ 0,00" 
-                            type="text"
-                            inputMode="numeric"
-                            data-testid="pix-input-amount"
-                            data-cy="pix-input-amount"
-                            data-playwright="pix-input-amount"
-                            aria-label="Valor"
-                            aria-required="true"
-                        />
-                    </div>
-                    <div className="test-pix-description-field" id="pix-description-field" data-testid="pix-description-field" data-cy="pix-description-field">
-                        <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-description">Descrição (Opcional)</label>
-                         <input 
-                            value={description} 
-                            onChange={e => setDescription(e.target.value)} 
-                            className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all test-input-pix-description" 
-                            id="pix-description"
-                            name="pix-description"
-                            placeholder="Ex: Pagamento do aluguel" 
-                            type="text"
-                            data-testid="pix-input-description"
-                            data-cy="pix-input-description"
-                            data-playwright="pix-input-description"
-                            aria-label="Descrição (Opcional)"
-                        />
-                    </div>
-                    <div className="border-t border-subtle-dark/50 pt-6 test-pix-credit-section" id="pix-credit-section" data-testid="pix-credit-section" data-cy="pix-credit-section">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h3 className="text-white font-medium test-pix-credit-title" data-testid="pix-credit-title">PIX no Crédito</h3>
-                                <p className="text-white/60 text-sm test-pix-credit-description" data-testid="pix-credit-description">Use seu limite de crédito para fazer o PIX.</p>
-                            </div>
-                            <label className="flex items-center cursor-pointer test-pix-credit-toggle-label" htmlFor="pix-credit-toggle" data-testid="pix-credit-toggle-label">
-                                <div className="relative">
-                                    <input 
-                                        checked={useCredit} 
-                                        onChange={(e) => setUseCredit(e.target.checked)} 
-                                        className="sr-only peer" 
-                                        id="pix-credit-toggle"
-                                        name="pix-credit-toggle"
-                                        type="checkbox"
-                                        data-testid="pix-credit-toggle"
-                                        data-cy="pix-credit-toggle"
-                                        data-playwright="pix-credit-toggle"
-                                        aria-label="Usar PIX no crédito"
-                                    />
-                                    <div className="w-11 h-6 bg-subtle-dark rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary test-pix-credit-toggle-switch"></div>
+                        <div className="test-pix-description-field" id="pix-description-field" data-testid="pix-description-field" data-cy="pix-description-field">
+                            <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="pix-description">Descrição (Opcional)</label>
+                            <input
+                                value={description}
+                                onChange={e => setDescription(e.target.value)}
+                                className="w-full bg-background-dark border border-subtle-dark rounded-lg py-3 px-4 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all test-input-pix-description"
+                                id="pix-description"
+                                name="pix-description"
+                                placeholder="Ex: Pagamento do aluguel"
+                                type="text"
+                                data-testid="pix-input-description"
+                                data-cy="pix-input-description"
+                                data-playwright="pix-input-description"
+                                aria-label="Descrição (Opcional)"
+                            />
+                        </div>
+                        <div className="border-t border-subtle-dark/50 pt-6 test-pix-credit-section" id="pix-credit-section" data-testid="pix-credit-section" data-cy="pix-credit-section">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-white font-medium test-pix-credit-title" data-testid="pix-credit-title">PIX no Crédito</h3>
+                                    <p className="text-white/60 text-sm test-pix-credit-description" data-testid="pix-credit-description">Use seu limite de crédito para fazer o PIX.</p>
                                 </div>
-                            </label>
+                                <label className="flex items-center cursor-pointer test-pix-credit-toggle-label" htmlFor="pix-credit-toggle" data-testid="pix-credit-toggle-label">
+                                    <div className="relative">
+                                        <input
+                                            checked={useCredit}
+                                            onChange={(e) => setUseCredit(e.target.checked)}
+                                            className="sr-only peer"
+                                            id="pix-credit-toggle"
+                                            name="pix-credit-toggle"
+                                            type="checkbox"
+                                            data-testid="pix-credit-toggle"
+                                            data-cy="pix-credit-toggle"
+                                            data-playwright="pix-credit-toggle"
+                                            aria-label="Usar PIX no crédito"
+                                        />
+                                        <div className="w-11 h-6 bg-subtle-dark rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary test-pix-credit-toggle-switch"></div>
+                                    </div>
+                                </label>
+                            </div>
+                            <p className="text-white/50 text-xs mt-2 test-pix-credit-warning" data-testid="pix-credit-warning">Sujeito a taxas. O valor será adicionado à sua próxima fatura.</p>
                         </div>
-                        <p className="text-white/50 text-xs mt-2 test-pix-credit-warning" data-testid="pix-credit-warning">Sujeito a taxas. O valor será adicionado à sua próxima fatura.</p>
-                    </div>
-                    {(error || localError) && (
-                        <p 
-                            className="text-sm text-red-400 p-2 bg-red-900/50 rounded-md test-pix-error-message"
-                            id="pix-error-message"
-                            data-testid="pix-error-message"
-                            data-cy="pix-error-message"
-                            role="alert"
-                            aria-live="assertive"
+                        {(error || localError) && (
+                            <p
+                                className="text-sm text-red-400 p-2 bg-red-900/50 rounded-md test-pix-error-message"
+                                id="pix-error-message"
+                                data-testid="pix-error-message"
+                                data-cy="pix-error-message"
+                                role="alert"
+                                aria-live="assertive"
+                            >
+                                {error || localError}
+                            </p>
+                        )}
+                        <button
+                            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-background-dark font-bold py-3 px-8 rounded-lg transition-colors disabled:opacity-50 test-pix-submit-button"
+                            type="submit"
+                            disabled={isProcessing}
+                            id="btn-pix-submit"
+                            name="pix-submit"
+                            data-testid="pix-submit-button"
+                            data-cy="pix-submit-button"
+                            data-playwright="pix-submit-button"
+                            aria-label={isProcessing ? 'Verificando...' : 'Continuar'}
                         >
-                            {error || localError}
-                        </p>
-                    )}
-                    <button 
-                        className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-background-dark font-bold py-3 px-8 rounded-lg transition-colors disabled:opacity-50 test-pix-submit-button" 
-                        type="submit" 
-                        disabled={isProcessing}
-                        id="btn-pix-submit"
-                        name="pix-submit"
-                        data-testid="pix-submit-button"
-                        data-cy="pix-submit-button"
-                        data-playwright="pix-submit-button"
-                        aria-label={isProcessing ? 'Verificando...' : 'Continuar'}
-                    >
-                        {isProcessing ? 'Verificando...' : 'Continuar'}
-                        <span className="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
-                    </button>
+                            {isProcessing ? 'Verificando...' : 'Continuar'}
+                            <span className="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+                        </button>
+                    </ShadowWrapper>
                 </form>
             </div>
         </div>

@@ -49,7 +49,12 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
             }
         };
 
-        fetchProducts();
+        // CRÍTICO PARA PERFORMANCE APK: Adiar fetch até componente estar totalmente renderizado
+        if ('requestIdleCallback' in window) {
+            (window as any).requestIdleCallback(fetchProducts, { timeout: 1000 });
+        } else {
+            setTimeout(fetchProducts, 300);
+        }
     }, []);
 
     const handleProductClick = (product: PurchasedItem) => {
@@ -69,6 +74,7 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
             data-testid="shop-page"
             data-cy="shop-page"
             data-playwright="shop-page"
+            aria-label="Shop"
         >
             <PromotionalPopup isOpen={showPopup} onClose={() => setShowPopup(false)} />
             <header 
@@ -76,6 +82,7 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
                 id="shop-header"
                 data-testid="shop-header"
                 data-cy="shop-header"
+                aria-label="Cabeçalho do Shop"
             >
                 <button 
                     onClick={onBack} 
