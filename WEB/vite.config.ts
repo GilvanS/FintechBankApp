@@ -37,13 +37,21 @@ export default defineConfig(() => {
       test: {
         globals: true,
         environment: 'jsdom',
+        pool: 'vmThreads',
         setupFiles: './tests/setup.ts',
-        include: ['tests/**/*.test.tsx'],
+        include: ['tests/**/*.test.{ts,tsx}'],
         exclude: [
-            'node_modules', 
+            'node_modules',
             'server',
             'tests/api.integration.test.ts'
-        ]
+        ],
+        coverage: {
+            provider: 'v8',
+            reporter: ['text', 'lcov'],
+            include: ['components/**/*.tsx', 'services/**/*.ts', 'context/**/*.tsx'],
+            exclude: ['**/*.test.*', 'components/Icons.tsx'],
+            thresholds: { statements: 5, branches: 4, functions: 4, lines: 5 },
+        },
       }
     };
 });
