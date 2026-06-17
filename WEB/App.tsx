@@ -1,10 +1,9 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { User } from './types';
 import Login from './components/Login';
 import SignUp from './components/SignUp';
-import Dashboard from './components/Dashboard';
 import PreLoginDashboard from './components/PreLoginDashboard';
 import ResetPassword from './components/ResetPassword';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -12,11 +11,8 @@ import { AuthContext } from './context/AuthContext';
 import DemoBanner from './components/DemoBanner';
 import { initializeMockUsers } from './services/api';
 
-console.log('📱 App.tsx loaded');
+const Dashboard = lazy(() => import('./components/Dashboard'));
 
-// Função de normalizacao do usuario vindo do backend
-
-// Função de normalizacao do usuario vindo do backend
 function normalizeUserShape(input: Partial<User>): User {
     const nowIso = new Date().toISOString();
     const defaultCard = {
@@ -165,7 +161,11 @@ function App() {
                         />
                     } />
                     <Route path="/dashboard" element={
-                        <ProtectedRoute><Dashboard /></ProtectedRoute>
+                        <ProtectedRoute>
+                            <Suspense fallback={<div className="h-screen bg-background-dark flex items-center justify-center"><span className="text-primary text-xl">Carregando...</span></div>}>
+                                <Dashboard />
+                            </Suspense>
+                        </ProtectedRoute>
                     } />
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

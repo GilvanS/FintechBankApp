@@ -28,7 +28,7 @@ export * from './mockApi';
 // Override with real API implementations
 export const login = async (cpf: string, password: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; token?: string }> => {
   try {
-    const result = await apiCall<{ success: boolean; message: string; user?: any; token?: string }>('/auth/login', {
+    const result = await apiCall<{ success: boolean; message: string; user?: Omit<User, 'password'>; token?: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ cpf, password }),
     });
@@ -38,7 +38,17 @@ export const login = async (cpf: string, password: string): Promise<{ success: b
   }
 };
 
-export const signUp = async (data: any): Promise<{ success: boolean; message: string }> => {
+export interface SignUpData {
+  cpf: string;
+  fullName: string;
+  email: string;
+  password: string;
+  username?: string;
+  profileDescription?: string;
+  showStoriesPopup?: boolean;
+}
+
+export const signUp = async (data: SignUpData): Promise<{ success: boolean; message: string }> => {
   try {
     const result = await apiCall<{ success: boolean; message: string }>('/auth/signup', {
       method: 'POST',
@@ -50,9 +60,9 @@ export const signUp = async (data: any): Promise<{ success: boolean; message: st
   }
 };
 
-export const getUserByCpf = async (cpf: string): Promise<{ success: boolean; message?: string; user?: any }> => {
+export const getUserByCpf = async (cpf: string): Promise<{ success: boolean; message?: string; user?: Omit<User, 'password'> }> => {
   try {
-    const result = await apiCall<{ success: boolean; user?: any }>(`/users/${cpf}`, {
+    const result = await apiCall<{ success: boolean; user?: Omit<User, 'password'> }>(`/users/${cpf}`, {
       method: 'GET',
     });
     return result;
@@ -61,14 +71,14 @@ export const getUserByCpf = async (cpf: string): Promise<{ success: boolean; mes
   }
 };
 
-export const getUserMe = async (): Promise<{ success: boolean; message?: string; user?: any }> => {
+export const getUserMe = async (): Promise<{ success: boolean; message?: string; user?: Omit<User, 'password'> }> => {
   try {
     const token = localStorage.getItem('authToken');
     if (!token) {
       return { success: false, message: 'Não autenticado.' };
     }
 
-    const result = await apiCall<{ success: boolean; user?: any }>('/users/me', {
+    const result = await apiCall<{ success: boolean; user?: Omit<User, 'password'> }>('/users/me', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -80,14 +90,14 @@ export const getUserMe = async (): Promise<{ success: boolean; message?: string;
   }
 };
 
-export const getUserStatement = async (cpf: string): Promise<{ success: boolean; message?: string; transactions?: any[] }> => {
+export const getUserStatement = async (cpf: string): Promise<{ success: boolean; message?: string; transactions?: Transaction[] }> => {
   try {
     const token = localStorage.getItem('authToken');
     if (!token) {
       return { success: false, message: 'Não autenticado.' };
     }
 
-    const result = await apiCall<{ success: boolean; transactions?: any[] }>(`/users/${cpf}/statement`, {
+    const result = await apiCall<{ success: boolean; transactions?: Transaction[] }>(`/users/${cpf}/statement`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -107,7 +117,7 @@ export const getUserStatementPaginated = async (
 ): Promise<{ 
   success: boolean; 
   message?: string; 
-  transactions?: any[];
+  transactions?: Transaction[];
   pagination?: {
     page: number;
     limit: number;
@@ -130,9 +140,9 @@ export const getUserStatementPaginated = async (
       params.append('type', type);
     }
 
-    const result = await apiCall<{ 
-      success: boolean; 
-      transactions?: any[];
+    const result = await apiCall<{
+      success: boolean;
+      transactions?: Transaction[];
       pagination?: {
         page: number;
         limit: number;
