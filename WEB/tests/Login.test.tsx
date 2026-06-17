@@ -96,7 +96,8 @@ describe('Login — fluxo de autenticação', () => {
         fireEvent.click(screen.getByTestId('login-submit-button'));
 
         await waitFor(() => expect(mockAuthLogin).toHaveBeenCalledWith(mockUser));
-        expect(localStorage.getItem('authToken')).toBe('jwt-abc');
+        // Token não é mais armazenado em localStorage — autenticação via cookie httpOnly (issue #24 T8)
+        expect(localStorage.getItem('authToken')).toBeNull();
     });
 
     it('exibe mensagem de erro quando credenciais são inválidas', async () => {

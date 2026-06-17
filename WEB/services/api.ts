@@ -73,16 +73,8 @@ export const getUserByCpf = async (cpf: string): Promise<{ success: boolean; mes
 
 export const getUserMe = async (): Promise<{ success: boolean; message?: string; user?: Omit<User, 'password'> }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      return { success: false, message: 'Não autenticado.' };
-    }
-
     const result = await apiCall<{ success: boolean; user?: Omit<User, 'password'> }>('/users/me', {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
     });
     return result;
   } catch (error: any) {
@@ -92,16 +84,8 @@ export const getUserMe = async (): Promise<{ success: boolean; message?: string;
 
 export const getUserStatement = async (cpf: string): Promise<{ success: boolean; message?: string; transactions?: Transaction[] }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      return { success: false, message: 'Não autenticado.' };
-    }
-
     const result = await apiCall<{ success: boolean; transactions?: Transaction[] }>(`/users/${cpf}/statement`, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
     });
     return result;
   } catch (error: any) {
@@ -128,11 +112,6 @@ export const getUserStatementPaginated = async (
   };
 }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      return { success: false, message: 'Não autenticado.' };
-    }
-
     const params = new URLSearchParams();
     params.append('page', page.toString());
     params.append('limit', limit.toString());
@@ -153,9 +132,6 @@ export const getUserStatementPaginated = async (
       };
     }>(`/users/${cpf}/statement?${params.toString()}`, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
     });
     return result;
   } catch (error: any) {
@@ -177,16 +153,8 @@ export const requestNewPassword = async (cpf: string): Promise<{ success: boolea
 
 export const performPix = async (cpf: string, key: string, amount: number, description: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      return { success: false, message: 'Não autenticado.' };
-    }
-
     const result = await apiCall<{ success: boolean; message: string; user?: any; transaction?: Transaction }>('/pix/transfer', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
       body: JSON.stringify({ cpf, key, amount, description }),
     });
     return result;
@@ -197,16 +165,8 @@ export const performPix = async (cpf: string, key: string, amount: number, descr
 
 export const getPixContacts = async (cpf: string): Promise<PixContact[]> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      return [];
-    }
-
       const result = await apiCall<{ contacts: PixContact[] }>(`/pix/contacts/${cpf}`, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
       });
       return result.contacts || [];
     } catch (error) {
@@ -216,10 +176,8 @@ export const getPixContacts = async (cpf: string): Promise<PixContact[]> => {
 
 export const getPixRecipientInfo = async (key: string, senderCpf: string): Promise<{ success: boolean; message?: string; name?: string; cpf?: string }> => {
   try {
-    const token = localStorage.getItem('authToken');
     const result = await apiCall<{ success: boolean; name?: string; cpf?: string }>(`/pix/recipient-info?key=${encodeURIComponent(key)}&senderCpf=${senderCpf}`, {
       method: 'GET',
-      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
     });
     return result;
   } catch (error: any) {
@@ -241,16 +199,8 @@ export const performPixCreditInstallment = async (cpf: string, amount: number, i
 
 export const addPixContact = async (cpf: string, contact: { name: string; key: string }): Promise<{ success: boolean; message: string }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      return { success: false, message: 'Não autenticado.' };
-    }
-
     const result = await apiCall<{ success: boolean; message: string }>(`/pix/contacts/${cpf}`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
       body: JSON.stringify({ contactCpf: contact.key, contactName: contact.name }),
     });
     return result;
@@ -261,16 +211,8 @@ export const addPixContact = async (cpf: string, contact: { name: string; key: s
 
 export const deletePixContact = async (cpf: string, key: string): Promise<{ success: boolean; message: string }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      return { success: false, message: 'Não autenticado.' };
-    }
-
     const result = await apiCall<{ success: boolean; message: string }>(`/pix/contacts/${cpf}/${key}`, {
       method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
     });
     return result;
   } catch (error: any) {
@@ -280,13 +222,10 @@ export const deletePixContact = async (cpf: string, key: string): Promise<{ succ
 
 export const purchaseWithCard = async (cpf: string, items: PurchasedItem[], cashbackUsed: number, installments: number, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
     if (!pin || pin.length !== 4) return { success: false, message: 'PIN inválido. Deve ter 4 dígitos.' };
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/shop/checkout', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
         items: items.map(item => ({
           productId: item.id,
@@ -306,13 +245,10 @@ export const purchaseWithCard = async (cpf: string, items: PurchasedItem[], cash
 
 export const purchaseWithDebit = async (cpf: string, items: PurchasedItem[], cashbackUsed: number, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
     if (!pin || pin.length !== 4) return { success: false, message: 'PIN inválido. Deve ter 4 dígitos.' };
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/shop/checkout', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
         items: items.map(item => ({
           productId: item.id,
@@ -331,12 +267,8 @@ export const purchaseWithDebit = async (cpf: string, items: PurchasedItem[], cas
 
 export const payCreditCardInvoice = async (cpf: string, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/cards/invoice/pay', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ cpf, pin })
     });
     return result;
@@ -347,12 +279,8 @@ export const payCreditCardInvoice = async (cpf: string, pin: string): Promise<{ 
 
 export const parcelCreditCardInvoice = async (cpf: string, details: { amount: number, installments: number }, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/cards/invoice/parcel', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ cpf, ...details, pin })
     });
     return result;
@@ -363,9 +291,6 @@ export const parcelCreditCardInvoice = async (cpf: string, details: { amount: nu
 
 export const adminGetUserByCpf = async (cpf: string): Promise<{ success: boolean; message?: string; user?: User }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     // Garantir que o CPF tem 11 dígitos
     const cleanCpf = cpf.replace(/\D/g, '');
     if (cleanCpf.length !== 11) {
@@ -375,7 +300,6 @@ export const adminGetUserByCpf = async (cpf: string): Promise<{ success: boolean
     console.log('🔵 [WEB adminGetUserByCpf] Buscando usuário:', cleanCpf);
     const result = await apiCall<{ success: boolean; user?: any; message?: string }>(`/admin/users/${cleanCpf}`, {
       method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` },
     });
     console.log('✅ [WEB adminGetUserByCpf] Resultado:', result);
     return result;
@@ -388,9 +312,6 @@ export const adminGetUserByCpf = async (cpf: string): Promise<{ success: boolean
 
 export const blockUser = async (cpf: string): Promise<{ success: boolean; message: string; user?: User }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const cleanCpf = cpf.replace(/\D/g, '');
     if (cleanCpf.length !== 11) {
       return { success: false, message: 'CPF deve ter 11 dígitos.' };
@@ -398,7 +319,6 @@ export const blockUser = async (cpf: string): Promise<{ success: boolean; messag
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/admin/users/${cleanCpf}/block`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
     });
     
     if (result.success && result.user) {
@@ -412,9 +332,6 @@ export const blockUser = async (cpf: string): Promise<{ success: boolean; messag
 
 export const unblockUser = async (cpf: string): Promise<{ success: boolean; message: string; user?: User }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const cleanCpf = cpf.replace(/\D/g, '');
     if (cleanCpf.length !== 11) {
       return { success: false, message: 'CPF deve ter 11 dígitos.' };
@@ -422,7 +339,6 @@ export const unblockUser = async (cpf: string): Promise<{ success: boolean; mess
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/admin/users/${cleanCpf}/unblock`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
     });
     
     if (result.success && result.user) {
@@ -443,9 +359,6 @@ export const unblockUser = async (cpf: string): Promise<{ success: boolean; mess
 
 export const adminDeposit = async (cpf: string, amount: number): Promise<{ success: boolean; message: string; user?: User }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const cleanCpf = cpf.replace(/\D/g, '');
     if (cleanCpf.length !== 11) {
       return { success: false, message: 'CPF deve ter 11 dígitos.' };
@@ -458,7 +371,6 @@ export const adminDeposit = async (cpf: string, amount: number): Promise<{ succe
     console.log('🔵 [WEB adminDeposit] Realizando depósito:', { cpf: cleanCpf, amount });
     const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/admin/users/${cleanCpf}/deposit`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ amount }),
     });
     console.log('✅ [WEB adminDeposit] Resultado:', result);
@@ -484,12 +396,8 @@ export const adminDeposit = async (cpf: string, amount: number): Promise<{ succe
 
 export const adminGetPasswordRequests = async (): Promise<PasswordResetRequest[]> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return [];
-
-    const result = await apiCall<{ success: boolean; requests?: any[] }>('/admin/requests/password', {
+const result = await apiCall<{ success: boolean; requests?: any[] }>('/admin/requests/password', {
       method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` },
     });
     
     if (Array.isArray(result)) {
@@ -505,13 +413,9 @@ export const adminGetPasswordRequests = async (): Promise<PasswordResetRequest[]
 
 export const adminApprovePasswordRequest = async (cpf: string): Promise<{ success: boolean; message: string }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const cleanCpf = cpf.replace(/\D/g, '');
     const result = await apiCall<{ success: boolean; message: string }>(`/admin/requests/password/${cleanCpf}/approve`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
     });
     return result;
   } catch (error: any) {
@@ -521,13 +425,9 @@ export const adminApprovePasswordRequest = async (cpf: string): Promise<{ succes
 
 export const adminDenyPasswordRequest = async (cpf: string, reason: string): Promise<{ success: boolean; message: string }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const cleanCpf = cpf.replace(/\D/g, '');
     const result = await apiCall<{ success: boolean; message: string }>(`/admin/requests/password/${cleanCpf}/deny`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ reason }),
     });
     return result;
@@ -538,12 +438,8 @@ export const adminDenyPasswordRequest = async (cpf: string, reason: string): Pro
 
 export const adminGetLimitRequests = async (): Promise<LimitIncreaseRequest[]> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return [];
-
-    const result = await apiCall<{ success: boolean; requests?: any[] } | any[]>('/admin/requests/limit', {
+const result = await apiCall<{ success: boolean; requests?: any[] } | any[]>('/admin/requests/limit', {
       method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` },
     });
     
     if (Array.isArray(result)) {
@@ -559,13 +455,9 @@ export const adminGetLimitRequests = async (): Promise<LimitIncreaseRequest[]> =
 
 export const adminApproveLimitRequest = async (cpf: string): Promise<{ success: boolean; message: string }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const cleanCpf = cpf.replace(/\D/g, '');
     const result = await apiCall<{ success: boolean; message: string }>(`/admin/requests/limit/${cleanCpf}/approve`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
     });
     return result;
   } catch (error: any) {
@@ -575,13 +467,9 @@ export const adminApproveLimitRequest = async (cpf: string): Promise<{ success: 
 
 export const adminDenyLimitRequest = async (cpf: string, reason: string): Promise<{ success: boolean; message: string }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const cleanCpf = cpf.replace(/\D/g, '');
     const result = await apiCall<{ success: boolean; message: string }>(`/admin/requests/limit/${cleanCpf}/deny`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ reason }),
     });
     return result;
@@ -592,9 +480,6 @@ export const adminDenyLimitRequest = async (cpf: string, reason: string): Promis
 
 export const adminUpdateCardDetails = async (cpf: string, details: { dueDate?: string; invoiceDueDate?: string }): Promise<{ success: boolean; message: string; user?: User }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const cleanCpf = cpf.replace(/\D/g, '');
     if (cleanCpf.length !== 11) {
       return { success: false, message: 'CPF deve ter 11 dígitos.' };
@@ -602,7 +487,6 @@ export const adminUpdateCardDetails = async (cpf: string, details: { dueDate?: s
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/admin/users/${cleanCpf}/card-details`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify(details),
     });
     
@@ -634,12 +518,8 @@ export const adminGetStats = async (): Promise<{
     message?: string; 
 }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const result = await apiCall<{ success: boolean; stats?: any; message?: string }>('/admin/stats', {
       method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` },
     });
     return result;
   } catch (error: any) {
@@ -658,12 +538,8 @@ export const adminGetStats = async (): Promise<{
 
 export const anticipateCreditCardInstallments = async (cpf: string, transactionIds: string[], pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
-    const token = localStorage.getItem('authToken');
-    if (!token) return { success: false, message: 'Não autenticado.' };
-
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/cards/invoice/anticipate', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ cpf, transactionIds, pin })
     });
     return result;

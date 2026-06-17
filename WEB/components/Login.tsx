@@ -68,9 +68,6 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
         setIsLoading(false);
 
         if (result.success && result.user) {
-            if (result.token) {
-                localStorage.setItem('authToken', result.token);
-            }
             auth.login(result.user);
             showSuccess('Login efetuado com sucesso');
 
