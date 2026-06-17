@@ -1692,7 +1692,7 @@ apiRouter.delete('/pix/contacts/:cpf/:contactKey', bearerAuth(), asyncHandler(as
 }));
 
 // --- PIX Recipient Info ---
-apiRouter.get('/pix/recipient-info', asyncHandler(async (req, res) => {
+apiRouter.get('/pix/recipient-info', bearerAuth(), asyncHandler(async (req, res) => {
     const { key, senderCpf } = req.query;
     console.log('🔵 [PIX RECIPIENT INFO] Requisição recebida:', { key, senderCpf });
     

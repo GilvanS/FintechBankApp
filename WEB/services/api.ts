@@ -216,8 +216,10 @@ export const getPixContacts = async (cpf: string): Promise<PixContact[]> => {
 
 export const getPixRecipientInfo = async (key: string, senderCpf: string): Promise<{ success: boolean; message?: string; name?: string; cpf?: string }> => {
   try {
+    const token = localStorage.getItem('authToken');
     const result = await apiCall<{ success: boolean; name?: string; cpf?: string }>(`/pix/recipient-info?key=${encodeURIComponent(key)}&senderCpf=${senderCpf}`, {
       method: 'GET',
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
     });
     return result;
   } catch (error: any) {
