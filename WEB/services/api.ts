@@ -669,3 +669,6 @@ export const getProducts = async (): Promise<{ success: boolean; products?: Purc
     return { success: false, message: error.message || 'Erro ao buscar produtos', products: [] };
   }
 };
+
+// No-op in real API mode; overridden by mockApi.ts alias in demo mode
+export const initializeMockUsers = async (): Promise<void> => {};

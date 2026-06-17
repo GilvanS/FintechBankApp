@@ -8,6 +8,7 @@ import PreLoginDashboard from './components/PreLoginDashboard';
 import ResetPassword from './components/ResetPassword';
 import { AuthContext } from './context/AuthContext';
 import DemoBanner from './components/DemoBanner';
+import { initializeMockUsers } from './services/api';
 
 console.log('📱 App.tsx loaded');
 
@@ -85,7 +86,7 @@ function App() {
     const [view, setView] = useState('prelogin'); // prelogin, login, signup, dashboard, resetPassword
 
     useEffect(() => {
-        // Removido initializeMockUsers para evitar dependencia de mockApi
+        initializeMockUsers();
     }, []);
 
     const handleLogin = (loggedInUser: Omit<User, 'password'>) => {
