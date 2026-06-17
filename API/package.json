@@ -13,7 +13,10 @@
     "test:signup": "jest tests/signup.test.js",
     "test:newman": "node run-newman-tests.js",
     "test:api": "node run-newman-tests.js",
-    "migrate:signup": "node run-migration-signup-defaults.js"
+    "migrate:signup": "node run-migration-signup-defaults.js",
+    "migrate": "knex migrate:latest",
+    "migrate:rollback": "knex migrate:rollback",
+    "migrate:status": "knex migrate:list"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +29,7 @@
     "express": "^4.21.2",
     "express-validator": "^7.3.0",
     "jsonwebtoken": "^9.0.2",
+    "knex": "^3.2.10",
     "mysql2": "^3.9.7",
     "newman-reporter-html": "^1.0.5",
     "pg": "^8.16.3",
