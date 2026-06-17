@@ -59,13 +59,31 @@ const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onClose, it
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-end sm:items-center justify-center z-50 animate-fade-in">
+        <div
+            className="fixed inset-0 bg-black bg-opacity-75 flex items-end sm:items-center justify-center z-50 animate-fade-in test-installment-modal"
+            id="installment-modal"
+            data-testid="installment-modal"
+            data-cy="installment-modal"
+            data-playwright="installment-modal"
+            role="dialog"
+            aria-modal="true"
+        >
             <div className="bg-gray-900 w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 flex flex-col max-h-[90vh]">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-white">
                         {step === 1 ? 'Usar Cashback?' : 'Em quantas vezes?'}
                     </h2>
-                    <button onClick={handleClose} className="text-gray-500 hover:text-white">&times;</button>
+                    <button
+                        onClick={handleClose}
+                        className="text-gray-500 hover:text-white test-close-installment"
+                        id="btn-close-installment"
+                        name="close-installment"
+                        data-testid="close-installment"
+                        data-cy="close-installment"
+                        data-playwright="close-installment"
+                        aria-label="Fechar"
+                        type="button"
+                    >&times;</button>
                 </div>
 
                 {step === 1 && (
@@ -92,13 +110,33 @@ const InstallmentModal: React.FC<InstallmentModalProps> = ({ isOpen, onClose, it
                         </div>
                         <div className="flex-grow overflow-y-auto no-scrollbar -mx-2 px-2 space-y-2">
                             {installmentOptions.map(opt => (
-                                <button key={opt.count} onClick={() => setSelectedInstallments(opt.count)} className={`w-full text-left p-3 rounded-lg border-2 transition-colors ${selectedInstallments === opt.count ? 'bg-green-900/50 border-green-500' : 'bg-gray-800 border-transparent hover:border-gray-700'}`}>
+                                <button
+                                    key={opt.count}
+                                    onClick={() => setSelectedInstallments(opt.count)}
+                                    className={`w-full text-left p-3 rounded-lg border-2 transition-colors test-installment-option ${selectedInstallments === opt.count ? 'bg-green-900/50 border-green-500' : 'bg-gray-800 border-transparent hover:border-gray-700'}`}
+                                    data-testid="installment-option"
+                                    data-cy="installment-option"
+                                    data-playwright="installment-option"
+                                    data-installments={opt.count}
+                                    aria-pressed={selectedInstallments === opt.count}
+                                    type="button"
+                                >
                                     <p className="font-bold text-white">{opt.count}x de {opt.value.toLocaleString('pt-BR', {style:'currency', currency: 'BRL'})}</p>
                                     <p className="text-xs text-gray-400">Total: {opt.total.toLocaleString('pt-BR', {style:'currency', currency: 'BRL'})}</p>
                                 </button>
                             ))}
                         </div>
-                        <button onClick={handleConfirm} className="w-full mt-4 py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500">
+                        <button
+                            onClick={handleConfirm}
+                            className="w-full mt-4 py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500 test-confirm-installment"
+                            id="btn-confirm-installment"
+                            name="confirm-installment"
+                            data-testid="confirm-installment"
+                            data-cy="confirm-installment"
+                            data-playwright="confirm-installment"
+                            aria-label="Continuar"
+                            type="button"
+                        >
                             Continuar
                         </button>
                     </>

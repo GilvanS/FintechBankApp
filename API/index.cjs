@@ -380,6 +380,63 @@ apiRouter.delete('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandl
     }
 }));
 
+// --- Reset de ambiente de teste (apenas fora de producao) — Issue #23 ---
+// Valores canonicos dos usuarios de teste (espelham scripts/seed-test-users.js)
+const TEST_RESET_USERS = {
+    '11111111111': { balance: 10000,   creditCardBlocked: false },
+    '22222222222': { balance: 2580.50, creditCardBlocked: false },
+    '33333333333': { balance: 1500.00, creditCardBlocked: false },
+    '44444444444': { balance: 800.75,  creditCardBlocked: true  }, // permanece bloqueado (cenario)
+};
+
+apiRouter.post('/test/reset', asyncHandler(async (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ success: false, message: 'Não disponível em produção' });
+    }
+
+    const requestedCpf = req.body && typeof req.body.cpf === 'string' ? req.body.cpf.replace(/\D/g, '') : null;
+
+    let targets;
+    if (requestedCpf) {
+        if (!TEST_RESET_USERS[requestedCpf]) {
+            return res.status(404).json({ success: false, message: 'CPF não é um usuário de teste conhecido.' });
+        }
+        targets = [requestedCpf];
+    } else {
+        targets = Object.keys(TEST_RESET_USERS);
+    }
+
+    try {
+        const reset = [];
+        for (const cpf of targets) {
+            const { balance, creditCardBlocked } = TEST_RESET_USERS[cpf];
+
+            await databricksService.executeQuery(`
+                UPDATE ${databricksService.fq('users')}
+                SET balance = ${balance},
+                    is_blocked = false,
+                    login_attempts = 0,
+                    pix_daily_limit = 2000.00,
+                    password_reset_requested = false,
+                    credit_card_available_limit = 5000.00,
+                    credit_card_total_limit = 5000.00,
+                    credit_card_is_blocked = ${creditCardBlocked},
+                    updated_at = current_timestamp()
+                WHERE cpf = '${cpf}'
+            `);
+
+            await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('transactions')} WHERE cpf = '${cpf}'`);
+
+            reset.push(cpf);
+        }
+
+        return res.json({ success: true, reset });
+    } catch (error) {
+        console.error('❌ [TEST RESET] Erro ao resetar usuários de teste:', error.message);
+        return res.status(500).json({ success: false, message: 'Erro interno ao resetar ambiente de teste.' });
+    }
+}));
+
 // --- Rotas de Autenticação ---
 apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
     console.log('🔵 [SIGNUP] Endpoint chamado');

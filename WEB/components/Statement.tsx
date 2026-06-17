@@ -98,10 +98,33 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
     }
 
     return (
-        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-8">
+        <main
+            className="flex-1 p-4 md:p-6 lg:p-8 space-y-8 test-statement"
+            id="statement"
+            data-testid="statement"
+            data-cy="statement"
+            data-playwright="statement"
+            role="main"
+        >
             <header className="flex items-center">
-                <button onClick={onBack} className="mr-4 text-white"><span className="material-symbols-outlined">arrow_back</span></button>
-                <h1 className="text-white text-4xl font-black leading-tight tracking-[-0.033em]">Extrato da Conta</h1>
+                <button
+                    onClick={onBack}
+                    className="mr-4 text-white test-statement-back-button"
+                    id="btn-statement-back"
+                    name="statement-back"
+                    data-testid="statement-back-button"
+                    data-cy="statement-back-button"
+                    data-playwright="statement-back-button"
+                    aria-label="Voltar"
+                    type="button"
+                >
+                    <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                </button>
+                <h1
+                    className="text-white text-4xl font-black leading-tight tracking-[-0.033em] test-statement-title"
+                    id="statement-title"
+                    data-testid="statement-title"
+                >Extrato da Conta</h1>
             </header>
             <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl p-6">
                 <div className="flex items-center justify-between">
@@ -110,7 +133,13 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
                         <span className="material-symbols-outlined">visibility</span>
                     </button>
                 </div>
-                <p className="text-white text-4xl font-bold mt-2">{user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                <p
+                    className="text-white text-4xl font-bold mt-2 test-statement-balance"
+                    id="statement-balance"
+                    data-testid="statement-balance"
+                    data-cy="statement-balance"
+                    data-playwright="statement-balance"
+                >{user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
             </div>
             <div className="space-y-4">
                 <h2 className="text-white/90 text-lg font-semibold px-4">Transações</h2>
@@ -122,34 +151,95 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
                                     <span className="material-symbols-outlined">search</span>
                                 </div>
                                 <input
-                                    className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-lg text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border-none bg-primary/10 h-full placeholder:text-primary/70 px-4 pl-2 text-base font-normal leading-normal"
+                                    className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-lg text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border-none bg-primary/10 h-full placeholder:text-primary/70 px-4 pl-2 text-base font-normal leading-normal test-statement-search-input"
                                     placeholder="Buscar por nome ou valor..."
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
+                                    id="statement-search-input"
+                                    name="statement-search"
+                                    data-testid="statement-search-input"
+                                    data-cy="statement-search-input"
+                                    data-playwright="statement-search-input"
+                                    aria-label="Buscar transações"
                                 />
                             </div>
                         </label>
                     </div>
-                    <div className="flex gap-2 p-3 overflow-x-auto md:justify-end">
-                        <button onClick={() => setFilterPeriod('all')} className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 ${filterPeriod === 'all' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}>
+                    <div
+                        className="flex gap-2 p-3 overflow-x-auto md:justify-end test-statement-filters"
+                        id="statement-filters"
+                        data-testid="statement-filters"
+                        role="group"
+                        aria-label="Filtros de período"
+                    >
+                        <button
+                            onClick={() => setFilterPeriod('all')}
+                            className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 test-statement-filter-all ${filterPeriod === 'all' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}
+                            id="btn-statement-filter-all"
+                            data-testid="statement-filter-all"
+                            data-cy="statement-filter-all"
+                            data-playwright="statement-filter-all"
+                            aria-pressed={filterPeriod === 'all'}
+                            aria-label="Filtrar tudo"
+                            type="button"
+                        >
                             <p className="text-white text-sm font-medium leading-normal">Tudo</p>
                         </button>
-                        <button onClick={() => setFilterPeriod('7d')} className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 ${filterPeriod === '7d' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}>
+                        <button
+                            onClick={() => setFilterPeriod('7d')}
+                            className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 test-statement-filter-7d ${filterPeriod === '7d' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}
+                            id="btn-statement-filter-7d"
+                            data-testid="statement-filter-7d"
+                            data-cy="statement-filter-7d"
+                            data-playwright="statement-filter-7d"
+                            aria-pressed={filterPeriod === '7d'}
+                            aria-label="Filtrar últimos 7 dias"
+                            type="button"
+                        >
                             <p className="text-white text-sm font-medium leading-normal">Últimos 7 dias</p>
                         </button>
-                        <button onClick={() => setFilterPeriod('30d')} className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 ${filterPeriod === '30d' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}>
+                        <button
+                            onClick={() => setFilterPeriod('30d')}
+                            className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 test-statement-filter-30d ${filterPeriod === '30d' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}
+                            id="btn-statement-filter-30d"
+                            data-testid="statement-filter-30d"
+                            data-cy="statement-filter-30d"
+                            data-playwright="statement-filter-30d"
+                            aria-pressed={filterPeriod === '30d'}
+                            aria-label="Filtrar este mês"
+                            type="button"
+                        >
                             <p className="text-white text-sm font-medium leading-normal">Este mês</p>
                         </button>
                     </div>
                 </div>
             </div>
-            <div className="flex flex-col gap-2">
+            <div
+                className="flex flex-col gap-2 test-statement-list"
+                id="statement-list"
+                data-testid="statement-list"
+                data-cy="statement-list"
+                data-playwright="statement-list"
+                role="list"
+            >
                 {isLoading ? (
-                    <div className="flex items-center justify-center p-8">
+                    <div
+                        className="flex items-center justify-center p-8 test-statement-loading"
+                        id="statement-loading"
+                        data-testid="statement-loading"
+                        role="status"
+                        aria-live="polite"
+                    >
                         <p className="text-white/60">Carregando transações...</p>
                     </div>
                 ) : filteredTransactions.length === 0 ? (
-                    <div className="flex items-center justify-center p-8">
+                    <div
+                        className="flex items-center justify-center p-8 test-statement-empty"
+                        id="statement-empty"
+                        data-testid="statement-empty"
+                        role="status"
+                        aria-live="polite"
+                    >
                         <p className="text-white/60">Nenhuma transação encontrada</p>
                     </div>
                 ) : (
@@ -157,17 +247,28 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
                     <button
                         key={tx.id}
                         onClick={() => setSelectedTransaction(tx)}
-                        className="w-full flex items-center gap-4 hover:bg-white/5 rounded-lg p-4 transition-colors duration-200 text-left cursor-pointer"
+                        className="w-full flex items-center gap-4 hover:bg-white/5 rounded-lg p-4 transition-colors duration-200 text-left cursor-pointer test-statement-item"
+                        data-testid="statement-item"
+                        data-cy="statement-item"
+                        data-playwright="statement-item"
+                        data-transaction-id={tx.id}
+                        data-transaction-type={tx.type}
+                        aria-label={`Transação: ${tx.description}`}
+                        type="button"
+                        role="listitem"
                     >
                         <div className="text-white flex items-center justify-center rounded-full bg-primary/10 shrink-0 size-10">
-                            <span className="material-symbols-outlined text-primary">{getIconForType(tx.type, (tx as any).category)}</span>
+                            <span className="material-symbols-outlined text-primary" aria-hidden="true">{getIconForType(tx.type, (tx as any).category)}</span>
                         </div>
                         <div className="flex-1">
-                            <p className="text-white text-base font-medium leading-normal">{tx.description}</p>
-                            <p className="text-white/60 text-sm">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
+                            <p className="text-white text-base font-medium leading-normal test-statement-item-description" data-testid="statement-item-description">{tx.description}</p>
+                            <p className="text-white/60 text-sm test-statement-item-date" data-testid="statement-item-date">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
                         </div>
                         <div className="text-right">
-                            <p className={`text-base font-semibold ${tx.amount < 0 ? 'text-orange-400' : 'text-primary'}`}>{tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                            <p
+                                className={`text-base font-semibold test-statement-item-amount ${tx.amount < 0 ? 'text-orange-400' : 'text-primary'}`}
+                                data-testid="statement-item-amount"
+                            >{tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                         </div>
                     </button>
                     ))

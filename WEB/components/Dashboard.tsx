@@ -475,8 +475,20 @@ const Dashboard: React.FC = () => {
     }
 
     return (
-        <div className="h-full w-full flex flex-col bg-background-dark overflow-hidden">
-            <div className="flex-grow overflow-y-auto no-scrollbar">
+        <div
+            id="dashboard"
+            data-testid="dashboard"
+            data-cy="dashboard"
+            data-playwright="dashboard"
+            data-current-view={currentView}
+            className="h-full w-full flex flex-col bg-background-dark overflow-hidden"
+        >
+            <div
+                id="dashboard-content"
+                data-testid="dashboard-content"
+                data-cy="dashboard-content"
+                className="flex-grow overflow-y-auto no-scrollbar"
+            >
                 {renderContent()}
             </div>
             {['home', 'cards', 'shop', 'products', 'profile', 'pix'].includes(currentView) && (

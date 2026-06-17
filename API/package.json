@@ -17,6 +17,7 @@
     "migrate": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
     "migrate:status": "knex migrate:list",
+    "seed:test": "node scripts/seed-test-users.js",
     "swagger": "node swagger-generate.js"
   },
   "keywords": [],
