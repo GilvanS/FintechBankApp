@@ -12,3 +12,19 @@ node_modules/
 # Pasta do React Native a ser ignorada
 mobileAppRN/
 gradle-home-clean/
+
+# API — gerados / runtime / binários
+API/api.log
+API/token.txt
+API/*.sqlite
+API/newman-report.html
+API/newman-report.json
+API/swagger.yaml.bak
+
+# Análise temporária
+ANALISE-E-PLANO.md
+
+# Ferramentas locais e cobertura de testes
+.claude/
+.claude-flow/
+WEB/coverage/
