@@ -1801,9 +1801,9 @@ apiRouter.post('/pix/recipient-info', bearerAuth(), asyncHandler(async (req, res
 // --- PIX Transfer ---
 apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
     console.log('🔵 [PIX TRANSFER] Requisição recebida:', JSON.stringify(req.body, null, 2));
-    const { cpf: fromCpf, key, amount, description } = req.body || {};
+    const { key, amount, description } = req.body || {};
     const numericAmount = parseFloat(amount);
-    
+
     if (!key) {
         console.log('❌ [PIX TRANSFER] Chave não fornecida');
         return res.status(400).json({ success: false, message: 'Chave PIX não fornecida.' });
@@ -1814,8 +1814,8 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
     if (!req.user || !req.user.cpf) {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
-    
-    const senderCpf = fromCpf || req.user.cpf;
+
+    const senderCpf = req.user.cpf;
     
     // Determine key type
     const keyType = key.includes('@') ? 'EMAIL' : 'CPF';
