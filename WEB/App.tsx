@@ -7,6 +7,7 @@ import Dashboard from './components/Dashboard';
 import PreLoginDashboard from './components/PreLoginDashboard';
 import ResetPassword from './components/ResetPassword';
 import { AuthContext } from './context/AuthContext';
+import DemoBanner from './components/DemoBanner';
 
 console.log('📱 App.tsx loaded');
 
@@ -141,6 +142,7 @@ function App() {
     
     return (
         <AuthContext.Provider value={authContextValue}>
+            <DemoBanner />
             <div className="h-screen w-screen bg-background-dark font-sans overflow-hidden">
                 {renderView()}
             </div>

@@ -3,7 +3,9 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(() => {
+    const isDemo = process.env.VITE_USE_MOCK_API === 'true';
     return {
+      base: '/FintechBankApp/',
       server: {
         port: 3000,
         host: '0.0.0.0',
@@ -24,9 +26,13 @@ export default defineConfig(() => {
         }
       },
       resolve: {
-        alias: {
-          '@': path.resolve(__dirname, '.'),
-        }
+        alias: [
+          { find: '@', replacement: path.resolve(__dirname, '.') },
+          ...(isDemo ? [{
+            find: /.*\/services\/api$/,
+            replacement: path.resolve(__dirname, 'services/mockApi.ts'),
+          }] : []),
+        ]
       },
       test: {
         globals: true,

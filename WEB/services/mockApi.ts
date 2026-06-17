@@ -910,3 +910,57 @@ export const deletePixKey = async (cpf: string, key: string): Promise<{ success:
     _saveStore(store);
     return { success: true, message: 'Chave PIX removida.' };
 };
+
+export const getUserByCpf = async (cpf: string): Promise<{ success: boolean; message?: string; user?: User }> => {
+    await delay(300);
+    const user = _findUser(cpf);
+    if (!user) return { success: false, message: 'Usuário não encontrado.' };
+    const { password, ...userWithoutPassword } = user;
+    return { success: true, user: userWithoutPassword as User };
+};
+
+export const getUserMe = async (): Promise<{ success: boolean; message?: string; user?: User }> => {
+    await delay(300);
+    const token = localStorage.getItem('authToken');
+    if (!token) return { success: false, message: 'Não autenticado.' };
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (!payload.cpf) return { success: false, message: 'Token inválido.' };
+        return getUserByCpf(payload.cpf);
+    } catch {
+        return { success: false, message: 'Token inválido.' };
+    }
+};
+
+export const getUserStatement = async (cpf: string): Promise<{ success: boolean; message?: string; transactions?: Transaction[] }> => {
+    await delay(300);
+    const user = _findUser(cpf);
+    if (!user) return { success: false, message: 'Usuário não encontrado.' };
+    return { success: true, transactions: (user as any).transactions || [] };
+};
+
+export const getUserStatementPaginated = async (
+    cpf: string,
+    page: number = 1,
+    limit: number = 10,
+    type?: string
+): Promise<{ success: boolean; message?: string; transactions?: Transaction[]; pagination?: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean; }; }> => {
+    await delay(300);
+    const user = _findUser(cpf);
+    if (!user) return { success: false, message: 'Usuário não encontrado.' };
+    let transactions: Transaction[] = (user as any).transactions || [];
+    if (type) transactions = transactions.filter((t: any) => t.type === type);
+    const total = transactions.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const start = (page - 1) * limit;
+    return {
+        success: true,
+        transactions: transactions.slice(start, start + limit),
+        pagination: { page, limit, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
+    };
+};
+
+export const getProducts = async (): Promise<{ success: boolean; products?: PurchasedItem[]; message?: string }> => {
+    await delay(300);
+    return { success: true, products: [] };
+};
