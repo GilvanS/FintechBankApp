@@ -18,13 +18,15 @@ describe('API Integracao - Reset de Senha e Login', () => {
       expect(['CPF ou email ja cadastrado.', 'Falha ao criar conta.']).toContain(data.message);
     }
 
-    // Solicitar reset
+    // Solicitar reset — retorna devToken em NODE_ENV !== 'production'
     ({ res, data } = await post('/auth/request-password-reset', { cpf }));
     expect(res.ok).toBe(true);
     expect(data.success).toBe(true);
+    const devToken = data.devToken;
+    expect(devToken).toBeDefined();
 
-    // Resetar com token (ultimos 4 do CPF) e nova senha
-    ({ res, data } = await post('/auth/reset-password', { cpf, token: cpf.slice(-4), newPassword: 'nova123' }));
+    // Resetar com OTP criptografico retornado pelo servidor
+    ({ res, data } = await post('/auth/reset-password', { cpf, token: devToken, newPassword: 'nova123' }));
     expect(res.ok).toBe(true);
     expect(data.success).toBe(true);
 

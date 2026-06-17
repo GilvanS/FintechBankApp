@@ -103,6 +103,16 @@ const asyncHandler = fn => (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
 };
 
+// Escapa aspas simples para uso seguro em queries SQL parametrizadas manualmente
+const escapeSQL = (str) => {
+    if (!str) return '';
+    return str.replace(/'/g, "''").trim();
+};
+
+// Store em memória para OTP de reset de senha (TTL 15 min, one-time use)
+const crypto = require('crypto');
+const resetTokenStore = new Map();
+
 const app = express();
 
 // Injetar contexto para repositories
@@ -679,11 +689,17 @@ apiRouter.post('/auth/logout', (req, res) => {
 
 apiRouter.post('/auth/request-password-reset', asyncHandler(async (req, res) => {
     const { cpf } = req.body;
-    // Em um app real, aqui você enviaria um e-mail. Vamos apenas simular.
-    const users = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
+    const safeCpf = escapeSQL(String(cpf || '').replace(/\D/g, ''));
+    const users = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${safeCpf}'`);
     if (users.length > 0) {
-        await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET password_reset_requested = true, updated_at = current_timestamp() WHERE cpf = '${cpf}'`);
-        res.json({ success: true, message: 'Instruções para nova senha enviadas ao seu e-mail.' });
+        const otp = crypto.randomInt(100000, 999999).toString();
+        resetTokenStore.set(safeCpf, { token: otp, expiresAt: Date.now() + 15 * 60 * 1000 });
+        await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET password_reset_requested = true, updated_at = current_timestamp() WHERE cpf = '${safeCpf}'`);
+        res.json({
+            success: true,
+            message: 'Instruções para nova senha enviadas ao seu e-mail.',
+            devToken: process.env.NODE_ENV !== 'production' ? otp : undefined,
+        });
     } else {
         res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     }
@@ -691,18 +707,20 @@ apiRouter.post('/auth/request-password-reset', asyncHandler(async (req, res) => 
 
 apiRouter.post('/auth/reset-password', resetPasswordValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
     const { cpf, token, newPassword } = req.body;
+    const safeCpf = escapeSQL(String(cpf || '').replace(/\D/g, ''));
 
     const rows = await databricksService.executeQuery(`
-        SELECT cpf, password_reset_requested FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'
+        SELECT cpf, password_reset_requested FROM ${databricksService.fq('users')} WHERE cpf = '${safeCpf}'
     `);
     if (!rows.length) {
         return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     }
     const user = rows[0];
-    const expectedToken = String(cpf).slice(-4);
-    if (String(token) !== expectedToken) {
-        return res.status(400).json({ success: false, message: 'Token invalido.' });
+    const stored = resetTokenStore.get(safeCpf);
+    if (!stored || Date.now() > stored.expiresAt || String(token) !== stored.token) {
+        return res.status(400).json({ success: false, message: 'Token invalido ou expirado.' });
     }
+    resetTokenStore.delete(safeCpf);
     if (!user.password_reset_requested) {
         return res.status(409).json({ success: false, message: 'Reset de senha nao solicitado.' });
     }
@@ -711,7 +729,7 @@ apiRouter.post('/auth/reset-password', resetPasswordValidationRules, handleValid
     await databricksService.executeQuery(`
         UPDATE ${databricksService.fq('users')}
         SET password_hash = '${escapedHash}', password_reset_requested = false, is_blocked = false, login_attempts = 0, updated_at = current_timestamp()
-        WHERE cpf = '${cpf}'
+        WHERE cpf = '${safeCpf}'
     `);
     res.json({ success: true, message: 'Senha redefinida com sucesso.' });
 }));
