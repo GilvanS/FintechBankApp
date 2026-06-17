@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { User } from './types';
 import Login from './components/Login';
 import SignUp from './components/SignUp';
 import Dashboard from './components/Dashboard';
 import PreLoginDashboard from './components/PreLoginDashboard';
 import ResetPassword from './components/ResetPassword';
+import ProtectedRoute from './components/ProtectedRoute';
 import { AuthContext } from './context/AuthContext';
 import DemoBanner from './components/DemoBanner';
 import { initializeMockUsers } from './services/api';
@@ -83,7 +85,9 @@ function normalizeUserShape(input: Partial<User>): User {
 
 function App() {
     const [user, setUser] = useState<User | null>(null);
-    const [view, setView] = useState('prelogin'); // prelogin, login, signup, dashboard, resetPassword
+    // 'view' kept only for Dashboard's internal admin sub-view check (topLevelView === 'admin')
+    const [view, setView] = useState('');
+    const navigate = useNavigate();
 
     useEffect(() => {
         initializeMockUsers();
@@ -92,15 +96,15 @@ function App() {
     const handleLogin = (loggedInUser: Omit<User, 'password'>) => {
         const normalized = normalizeUserShape(loggedInUser as Partial<User>);
         setUser(normalized as User);
-        setView('dashboard');
+        navigate('/dashboard');
     };
 
     const handleLogout = () => {
         localStorage.removeItem('authToken');
         setUser(null);
-        setView('prelogin');
+        navigate('/');
     };
-    
+
     const handleUpdateUser = useCallback((updatedUserData: Partial<Omit<User, 'password'>>) => {
         setUser(prevUser => {
             if (!prevUser) return null;
@@ -109,43 +113,62 @@ function App() {
         });
     }, []);
 
-    const navigateTo = (newView: string) => {
+    const navigateTo = useCallback((newView: string) => {
         setView(newView);
-    };
+        const routes: Record<string, string> = {
+            login: '/login',
+            signup: '/signup',
+            dashboard: '/dashboard',
+            prelogin: '/',
+            resetPassword: '/reset-password',
+        };
+        if (routes[newView]) navigate(routes[newView]);
+    }, [navigate]);
 
     const authContextValue = {
         user,
         login: handleLogin,
         logout: handleLogout,
         updateUser: handleUpdateUser,
-        // FIX: Added view and navigateTo to the context value.
         view,
         navigateTo,
     };
 
-    const renderView = () => {
-        switch (view) {
-            case 'login':
-                return <Login onNavigateToSignUp={() => setView('signup')} onNavigateToPreLogin={() => setView('prelogin')} onNavigateToResetPassword={() => setView('resetPassword')} />;
-            case 'signup':
-                return <SignUp onSignUpSuccess={() => setView('login')} onNavigateToLogin={() => setView('login')} />;
-            case 'resetPassword':
-                return <ResetPassword onResetSuccess={() => setView('login')} onNavigateToLogin={() => setView('login')} />;
-            case 'dashboard':
-            // FIX: Added 'admin' view to render the Dashboard component, which internally handles routing to the Admin panel.
-            case 'admin':
-                return <Dashboard />;
-            case 'prelogin':
-            default:
-                return <PreLoginDashboard onNavigateToLogin={() => setView('login')} onNavigateToSignUp={() => setView('signup')} />;
-        }
-    };
-    
     return (
         <AuthContext.Provider value={authContextValue}>
             <DemoBanner />
             <div className="h-screen w-screen bg-background-dark font-sans overflow-hidden">
-                {renderView()}
+                <Routes>
+                    <Route path="/" element={
+                        <PreLoginDashboard
+                            onNavigateToLogin={() => navigate('/login')}
+                            onNavigateToSignUp={() => navigate('/signup')}
+                        />
+                    } />
+                    <Route path="/login" element={
+                        <Login
+                            onNavigateToSignUp={() => navigate('/signup')}
+                            onNavigateToPreLogin={() => navigate('/')}
+                            onNavigateToResetPassword={() => navigate('/reset-password')}
+                        />
+                    } />
+                    <Route path="/signup" element={
+                        <SignUp
+                            onSignUpSuccess={() => navigate('/login')}
+                            onNavigateToLogin={() => navigate('/login')}
+                        />
+                    } />
+                    <Route path="/reset-password" element={
+                        <ResetPassword
+                            onResetSuccess={() => navigate('/login')}
+                            onNavigateToLogin={() => navigate('/login')}
+                        />
+                    } />
+                    <Route path="/dashboard" element={
+                        <ProtectedRoute><Dashboard /></ProtectedRoute>
+                    } />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
             </div>
         </AuthContext.Provider>
     );
