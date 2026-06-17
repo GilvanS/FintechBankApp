@@ -10,8 +10,10 @@ function mapScopesFromRole(role) {
   return ['customer'];
 }
 
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('[auth] JWT_SECRET não definido no .env — a API não pode iniciar.');
+
 function bearerAuth() {
-  const JWT_SECRET = process.env.JWT_SECRET || 'fintech-super-secret-key-change-me';
   return (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
