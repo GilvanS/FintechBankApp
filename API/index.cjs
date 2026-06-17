@@ -29,10 +29,13 @@ const cardRepo = require('./repositories/cardRepo');
 const invoiceRepo = require('./repositories/invoiceRepo');
 const invoiceLifecycleRepo = require('./repositories/invoiceLifecycleRepo');
 const { bearerAuth, requireScope, pinGuard, withReqId, auditLog } = require('./middlewares/auth');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 
 // --- Configurações ---
 const PORT = process.env.PORT || 3001;
-const JWT_SECRET = process.env.JWT_SECRET || 'fintech-super-secret-key-change-me';
+const JWT_SECRET = process.env.JWT_SECRET; // auth.js lança erro no startup se não definido
 
 // --- Serviço de Banco de Dados ---
 // Inicializado via Factory com base em DB_PROVIDER
@@ -106,8 +109,17 @@ const app = express();
 repoContext.setDb(databricksService);
 
 // --- Middlewares ---
+const ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://GilvanJSSousa.github.io',
+];
+
 const corsOptions = {
-  origin: '*',
+  origin: (origin, cb) => {
+    if (!origin || ALLOWED_ORIGINS.some(o => origin.startsWith(o))) cb(null, true);
+    else cb(new Error('Origem nao permitida pelo CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
@@ -115,12 +127,14 @@ const corsOptions = {
     'Idempotency-Key',
     'x-request-id'
   ],
-  credentials: false
+  credentials: true,
 };
 
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
 app.use(withReqId);
 
 const apiRouter = express.Router();
@@ -147,6 +161,15 @@ const authenticateAdmin = asyncHandler(async (req, res, next) => {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
     next();
+});
+
+const loginLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Muitas tentativas de login. Tente novamente em 1 minuto.' },
+    skip: () => process.env.NODE_ENV === 'test',
 });
 
 // --- Regras de Validação ---
@@ -491,7 +514,7 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     }
 }));
 
-apiRouter.post('/auth/login', loginValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
+apiRouter.post('/auth/login', loginLimiter, loginValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
     console.log('🚀 [LOGIN] Endpoint /auth/login chamado!');
     console.log('🚀 [LOGIN] Body recebido:', JSON.stringify(req.body));
     console.log('🚀 [LOGIN] Body tipo:', typeof req.body);
@@ -578,6 +601,12 @@ apiRouter.post('/auth/login', loginValidationRules, handleValidationErrors, asyn
 
         const token = jwt.sign({ cpf: user.cpf, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '8h' });
         console.log(`✅ Login bem-sucedido para ${user.cpf} (${user.role})`);
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 8 * 60 * 60 * 1000,
+        });
         res.json({ success: true, user: normalizeUser(user), token, message: 'Login realizado com sucesso.' });
     } catch (error) {
         console.error(`❌ Erro no login para CPF ${cpf}:`, error.message);
@@ -585,6 +614,11 @@ apiRouter.post('/auth/login', loginValidationRules, handleValidationErrors, asyn
         return res.status(500).json({ success: false, message: 'Erro interno ao processar login. Tente novamente.' });
     }
 }));
+
+apiRouter.post('/auth/logout', (req, res) => {
+    res.clearCookie('token', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' });
+    res.json({ success: true, message: 'Logout realizado com sucesso.' });
+});
 
 apiRouter.post('/auth/request-password-reset', asyncHandler(async (req, res) => {
     const { cpf } = req.body;
@@ -2693,7 +2727,7 @@ apiRouter.get('/proxy/news', bearerAuth(), asyncHandler(async (req, res) => {
     res.json({ success: true, news: data, cached: false });
 }));
 
-const swaggerDocument = YAML.load(path.join(__dirname, 'swagger.yaml'));
+const swaggerDocument = require('./swagger.json');
 
 app.use((err, req, res, next) => {
     console.error('==================== ERRO NÃO TRATADO ====================');

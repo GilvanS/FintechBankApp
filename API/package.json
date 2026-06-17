@@ -16,7 +16,8 @@
     "migrate:signup": "node run-migration-signup-defaults.js",
     "migrate": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
-    "migrate:status": "knex migrate:list"
+    "migrate:status": "knex migrate:list",
+    "swagger": "node swagger-generate.js"
   },
   "keywords": [],
   "author": "",
@@ -24,10 +25,13 @@
   "dependencies": {
     "@databricks/sql": "^1.12.0",
     "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.5.2",
     "express-validator": "^7.3.0",
+    "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.2",
     "knex": "^3.2.10",
     "mysql2": "^3.9.7",

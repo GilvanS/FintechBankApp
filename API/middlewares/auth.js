@@ -16,7 +16,8 @@ if (!JWT_SECRET) throw new Error('[auth] JWT_SECRET não definido no .env — a 
 function bearerAuth() {
   return (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.token) token = req.cookies.token;
     if (!token) return res.status(401).json({ success: false, message: 'Token de acesso requerido.' });
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
