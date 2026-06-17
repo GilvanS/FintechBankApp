@@ -716,41 +716,6 @@ apiRouter.post('/auth/reset-password', resetPasswordValidationRules, handleValid
     res.json({ success: true, message: 'Senha redefinida com sucesso.' });
 }));
 
-// Rota de emergência para corrigir senha de usuário (sem autenticação, apenas para desenvolvimento)
-// ⚠️ REMOVER EM PRODUÇÃO ou adicionar autenticação adequada
-apiRouter.post('/auth/fix-password', asyncHandler(async (req, res) => {
-    const { cpf, newPassword } = req.body;
-    
-    if (!cpf || !newPassword) {
-        return res.status(400).json({ success: false, message: 'CPF e nova senha sao obrigatorios.' });
-    }
-    
-    // Verificar se usuário existe
-    const users = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${cpf.replace(/'/g, "''")}'`);
-    if (!users.length) {
-        return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
-    }
-    
-    // Gerar novo hash
-    const hash = await bcrypt.hash(newPassword, 10);
-    const escapedHash = hash.replace(/'/g, "''");
-    const escapedCpf = cpf.replace(/'/g, "''");
-    
-    // Atualizar senha e resetar tentativas
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
-        SET password_hash = '${escapedHash}', 
-            login_attempts = 0, 
-            is_blocked = false,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE cpf = '${escapedCpf}'
-    `);
-    
-    console.log(`✅ [FIX-PASSWORD] Senha corrigida para usuario ${cpf}`);
-    res.json({ success: true, message: `Senha corrigida com sucesso para usuario ${cpf}. Nova senha: ${newPassword}` });
-}));
-
-
 // --- Rotas de Usuário ---
 apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
     const user = await usersRepo.findByCpf(req.user.cpf);
