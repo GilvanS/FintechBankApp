@@ -227,6 +227,292 @@ data-playwright="password-modal-confirm-button"
 className="test-confirm-button"
 ```
 
+---
+
+### Dashboard (container do app logado)
+
+```javascript
+// Verificar que está logado e qual tela está ativa
+data-testid="dashboard"           // container raiz
+data-testid="dashboard-content"   // área de conteúdo
+data-current-view="{view}"        // atributo dinâmico: 'home'|'cards'|'shop'|'profile'|'pix'|'statement'|...
+
+// Playwright
+await expect(page.getByTestId('dashboard')).toHaveAttribute('data-current-view', 'home')
+
+// Cypress
+cy.get('[data-testid="dashboard"]').should('have.attr', 'data-current-view', 'home')
+```
+
+---
+
+### BottomNavBar (navegação principal)
+
+```javascript
+// Barra de navegação
+id="bottom-nav"
+data-testid="bottom-nav"
+
+// Botões de navegação
+id="btn-nav-home"     data-testid="nav-home"     name="nav-home"
+id="btn-nav-cards"    data-testid="nav-cards"    name="nav-cards"
+id="btn-nav-shop"     data-testid="nav-shop"     name="nav-shop"
+id="btn-nav-profile"  data-testid="nav-profile"  name="nav-profile"
+
+// Playwright
+await page.getByTestId('nav-cards').click()
+await expect(page.getByTestId('dashboard')).toHaveAttribute('data-current-view', 'cards')
+
+// Selenium
+driver.findElement(By.id("btn-nav-shop")).click()
+
+// Cypress
+cy.get('[data-testid="nav-profile"]').click()
+```
+
+---
+
+### TransferForm (envio PIX)
+
+```javascript
+// Formulário
+id="pix-transfer-form"       data-testid="pix-transfer-form"
+
+// Campos
+id="pix-key-input"           data-testid="pix-key-input"      name="pix-key"
+id="pix-amount-input"        data-testid="pix-amount-input"   name="pix-amount"
+id="pix-description-input"   data-testid="pix-description-input" name="pix-description"
+
+// Botões
+id="btn-pix-submit"          data-testid="pix-submit-button"
+id="btn-pix-credit"          data-testid="pix-credit-button"
+
+// Mensagens
+data-testid="pix-transfer-success"   role="status"
+data-testid="pix-transfer-error"     role="alert"
+
+// Playwright
+await page.getByTestId('pix-key-input').fill('beatriz@example.com')
+await page.getByTestId('pix-amount-input').fill('50')
+await page.getByTestId('pix-submit-button').click()
+```
+
+---
+
+### Statement (extrato)
+
+```javascript
+// Container
+data-testid="statement"
+data-testid="statement-back-button"
+data-testid="statement-search-input"   name="statement-search"
+
+// Filtros de período
+data-testid="statement-filter-all"     // todos
+data-testid="statement-filter-7d"      // últimos 7 dias
+data-testid="statement-filter-30d"     // últimos 30 dias
+
+// Lista de transações
+data-testid="statement-list"
+data-testid="statement-item"           data-transaction-id="{id}"   data-transaction-type="{type}"
+data-testid="statement-item-amount"
+data-testid="statement-item-description"
+data-testid="statement-item-date"
+
+// Estados
+data-testid="statement-loading"        role="status"
+data-testid="statement-empty"          role="status"
+
+// Playwright — verificar item específico por tipo
+await page.locator('[data-testid="statement-item"][data-transaction-type="PIX_SENT"]').first().toBeVisible()
+
+// Playwright — verificar transação por ID
+await page.locator('[data-transaction-id="tx-123"]').toBeVisible()
+```
+
+---
+
+### StatementPaginated (extrato com abas e paginação)
+
+```javascript
+// Container
+data-testid="statement-paginated"
+
+// Abas
+data-testid="tab-purchases"    // Compras
+data-testid="tab-pix"          // PIX
+data-testid="tab-transfers"    // Transferências
+data-testid="tab-payments"     // Pagamentos
+
+// Lista paginada
+data-testid="statement-paginated-list"
+data-testid="statement-paginated-item"  data-transaction-id="{id}"  data-transaction-type="{type}"
+
+// Paginação
+id="btn-prev-page"    data-testid="btn-prev-page"
+id="btn-next-page"    data-testid="btn-next-page"
+data-testid="statement-pagination-info"
+  data-current-page="{n}"
+  data-total-pages="{n}"
+  data-total-items="{n}"
+
+// Playwright
+await page.getByTestId('tab-pix').click()
+await expect(page.getByTestId('statement-pagination-info')).toHaveAttribute('data-current-page', '1')
+```
+
+---
+
+### ShoppingCart (carrinho)
+
+```javascript
+// Container
+data-testid="shopping-cart"
+data-testid="close-cart"
+
+// Itens
+data-testid="cart-item"      data-item-id="{id}"    // para cada produto
+data-testid="cart-item-name"
+data-testid="cart-item-price"
+data-testid="remove-item"    data-item-id="{id}"    // botão remover por item
+
+// Total e checkout
+data-testid="cart-total"
+id="btn-checkout"   data-testid="checkout-button"
+
+// Playwright — remover item específico
+await page.locator('[data-testid="remove-item"][data-item-id="prod-1"]').click()
+await expect(page.getByTestId('cart-total')).toBeVisible()
+```
+
+---
+
+### PaymentMethods (métodos de pagamento)
+
+```javascript
+// Container
+id="payment-methods"    data-testid="payment-methods"
+
+// Métodos
+id="btn-payment-debit"    name="payment-debit"    data-testid="payment-debit"
+id="btn-payment-credit"   name="payment-credit"   data-testid="payment-credit"
+
+// Valor
+data-testid="payment-total-amount"
+
+// Playwright
+await page.getByTestId('payment-debit').click()
+```
+
+---
+
+### InstallmentModal (parcelamento)
+
+```javascript
+// Modal
+id="installment-modal"    data-testid="installment-modal"
+id="btn-close-installment"  data-testid="close-installment"
+
+// Opções de parcela (dinâmicas)
+data-testid="installment-option"    data-installments="{n}"    // ex: data-installments="3"
+
+// Botão confirmar
+id="btn-confirm-installment"    data-testid="confirm-installment"
+
+// Playwright — selecionar parcela 3x
+await page.locator('[data-testid="installment-option"][data-installments="3"]').click()
+await page.getByTestId('confirm-installment').click()
+```
+
+---
+
+### PurchaseConfirmation (recibo de compra)
+
+```javascript
+// Container
+id="purchase-confirmation"    data-testid="purchase-confirmation"
+
+// Dados do recibo
+data-testid="purchase-confirmation-amount"
+data-testid="purchase-confirmation-product"
+
+// Fechar
+id="btn-close-confirmation"    data-testid="close-confirmation"
+```
+
+---
+
+### Profile (perfil do usuário)
+
+```javascript
+// Container
+id="profile"    data-testid="profile"
+
+// Dados exibidos
+data-testid="profile-name"
+data-testid="profile-email"
+data-testid="profile-cpf"
+data-testid="profile-balance"
+
+// Ações
+id="btn-edit-profile"    data-testid="edit-profile-button"
+id="btn-logout"          data-testid="logout-button"
+```
+
+---
+
+### EditProfile (edição de perfil)
+
+```javascript
+// Container e formulário
+id="edit-profile"       data-testid="edit-profile"
+id="edit-profile-form"  data-testid="edit-profile-form"
+
+// Campos
+id="edit-fullname"      name="fullname"     data-testid="edit-input-fullname"
+id="edit-email"         name="email"        data-testid="edit-input-email"
+id="edit-description"   name="description"  data-testid="edit-input-description"
+
+// Botões
+id="btn-save-profile"    data-testid="save-profile-button"
+id="btn-cancel-edit"     data-testid="cancel-edit-button"
+
+// Mensagens
+data-testid="edit-profile-success"   role="status"
+data-testid="edit-profile-error"     role="alert"
+
+// Playwright
+await page.getByTestId('edit-input-email').fill('novo@email.com')
+await page.getByTestId('save-profile-button').click()
+await expect(page.getByTestId('edit-profile-success')).toBeVisible()
+```
+
+---
+
+### Usuários de Teste (Localhost + Demo)
+
+| CPF | Senha | Perfil | Cenários de teste |
+|-----|-------|--------|-------------------|
+| `11111111111` | `1234` | Admin | Login admin, acesso ao painel admin |
+| `22222222222` | `123` | Beatriz | Login normal, fatura ativa, contatos PIX |
+| `33333333333` | `123` | Daniel | Fatura vencida (cartão não bloqueado) |
+| `44444444444` | `123` | Fernanda | Cartão bloqueado — testar mensagem de bloqueio |
+
+**Reset de estado (localhost apenas):**
+```javascript
+// beforeEach nos testes E2E — reseta saldo, transações e cartão
+await fetch('http://localhost:3001/api/test/reset', { method: 'POST' })
+
+// Resetar usuário específico
+await fetch('http://localhost:3001/api/test/reset', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ cpf: '22222222222' })
+})
+```
+
+---
+
 ## 📱 Appium (Mobile)
 
 Para Appium, os locators são os mesmos do web, mas também podemos usar:
