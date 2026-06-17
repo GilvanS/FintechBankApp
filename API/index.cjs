@@ -1892,14 +1892,14 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
 
 apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
     console.log('🔵 [PIX TRANSFER CREDIT] Requisição recebida:', JSON.stringify(req.body, null, 2));
-    const { fromCpf: fromCpfBody, toKey, key, amount, description, installments, interestRate } = req.body || {};
+    const { toKey, key, amount, description, installments, interestRate } = req.body || {};
     const numericAmount = parseFloat(amount);
     const nInstallments = Number.isInteger(installments) ? installments : 12;
     const rate = typeof interestRate === 'number' ? interestRate : 0.02;
 
     // Usar key ou toKey (compatibilidade)
     const recipientKey = key || toKey;
-    
+
     // Validar campos obrigatórios
     if (!recipientKey) {
         return res.status(400).json({ success: false, message: 'Chave PIX de destino não fornecida.' });
@@ -1910,9 +1910,8 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
     if (!req.user || !req.user.cpf) {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
-    
-    // Obter CPF do remetente do token se não fornecido
-    const senderCpf = fromCpfBody || req.user.cpf;
+
+    const senderCpf = req.user.cpf;
     
     // Validar parcelas
     if (nInstallments < 2 || nInstallments > 24) {
