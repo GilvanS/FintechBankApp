@@ -13,7 +13,7 @@ export const MOCK_USERS: User[] = [
         username: 'admin',
         profileDescription: 'Fintech administrator account.',
         email: 'admin@fintech.com',
-        password: 'admin',
+        password: '1234',
         balance: 10000,
         transactions: [],
         isBlocked: false,
