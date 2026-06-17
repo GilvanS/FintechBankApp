@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start API",
+            "type": "shell",
+            "command": "npm run dev",
+            "options": {
+                "cwd": "${workspaceFolder}/API"
+            },
+            "presentation": {
+                "group": "dev",
+                "panel": "new",
+                "clear": true
+            }
+        },
+        {
+            "label": "Start WEB",
+            "type": "shell",
+            "command": "npm run dev",
+            "options": {
+                "cwd": "${workspaceFolder}/WEB"
+            },
+            "presentation": {
+                "group": "dev",
+                "panel": "new",
+                "clear": true
+            }
+        },
+        {
+            "label": "🚀 Iniciar Ambiente (API + WEB)",
+            "dependsOn": ["Start API", "Start WEB"],
+            "dependsOrder": "parallel",
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

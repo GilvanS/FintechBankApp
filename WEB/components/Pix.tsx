@@ -16,7 +16,7 @@ import { createPortal } from 'react-dom';
 const ShadowWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const hostRef = React.useRef<HTMLDivElement>(null);
     const [shadowRoot, setShadowRoot] = useState<ShadowRoot | null>(null);
-    const [styles, setStyles] = useState<string>('');
+    const [headNodes, setHeadNodes] = useState<React.ReactNode[]>([]);
 
     useEffect(() => {
         if (hostRef.current && !hostRef.current.shadowRoot) {
@@ -26,17 +26,35 @@ const ShadowWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }, []);
 
     useEffect(() => {
-        const updateStyles = () => {
-            const styleTags = Array.from(document.querySelectorAll('style'));
-            setStyles(styleTags.map(s => s.innerHTML).join('\n'));
+        const updateNodes = () => {
+            const nodes: React.ReactNode[] = [];
+            // CSS Reset (Preflight) specific to Shadow DOM boundary
+            nodes.push(<style key="preflight">{`*, ::before, ::after { box-sizing: border-box; border-width: 0; border-style: solid; border-color: #e5e7eb; }`}</style>);
+
+            // Clone all embedded <style> tags (Tailwind CDN / Vite Dev)
+            document.querySelectorAll('style').forEach((el, idx) => {
+                nodes.push(<style key={`style-${idx}`} dangerouslySetInnerHTML={{ __html: el.innerHTML }} />);
+            });
+
+            // Clone all external <link rel="stylesheet"> tags (Vite Prod Build / Google Fonts)
+            document.querySelectorAll('link[rel="stylesheet"]').forEach((el, idx) => {
+                nodes.push(<link key={`link-${idx}`} rel="stylesheet" href={(el as HTMLLinkElement).href} />);
+            });
+
+            setHeadNodes(nodes);
         };
 
-        updateStyles();
+        updateNodes();
 
-        const observer = new MutationObserver(updateStyles);
-        observer.observe(document.head, { childList: true, subtree: true, characterData: true });
+        const observer = new MutationObserver(updateNodes);
+        observer.observe(document.head, { childList: true, subtree: true, characterData: true, attributes: true });
 
-        return () => observer.disconnect();
+        const intervalId = setInterval(updateNodes, 1000);
+
+        return () => {
+            observer.disconnect();
+            clearInterval(intervalId);
+        };
     }, []);
 
     // Helper classes string to ensure Tailwind CDN generates CSS for all classes used in the Shadow DOM
@@ -48,7 +66,7 @@ const ShadowWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <div ref={hostRef} id="pix-shadow-host" className="w-full">
                 {shadowRoot && createPortal(
                     <div className="space-y-6 w-full">
-                        <style>{styles}</style>
+                        {headNodes}
                         <style>{`
                             @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0');
                             .material-symbols-outlined {
