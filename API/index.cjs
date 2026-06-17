@@ -1018,6 +1018,9 @@ apiRouter.get('/user/me/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
 }));
 
 apiRouter.put('/user/limits/pix-daily/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
+    if (req.user.cpf !== req.params.cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
     const { newLimit } = req.body;
     const now = new Date().toISOString();
     await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET pix_daily_limit = ${newLimit}, updated_at = '${now}' WHERE cpf = '${req.params.cpf}'`);
