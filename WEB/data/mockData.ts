@@ -250,7 +250,7 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         name: 'Jetset Carry-On Luggage',
         description: 'Viaje com estilo e praticidade. Leve, resistente e com compartimentos inteligentes.',
         price: 150.00,
-        imageUrl: 'https://images.pexels.com/photos/2082414/pexels-photo-2082414.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        imageUrl: 'https://images.pexels.com/photos/5945559/pexels-photo-5945559.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     },
     {
         id: 'prod-11',

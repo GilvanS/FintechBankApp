@@ -175,11 +175,12 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
                             aria-label={`Produto ${product.name}`}
                             tabIndex={0}
                         >
-                            <img 
-                                src={product.imageUrl} 
-                                alt={product.name} 
+                            <img
+                                src={product.imageUrl}
+                                alt={product.name}
                                 className="w-full h-32 object-cover group-hover:opacity-80 transition-opacity test-product-image"
                                 data-testid={`shop-product-image-${product.id}`}
+                                onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/400x200/1a1a2e/6366f1?text=Produto'; }}
                             />
                             <div className="p-3 test-product-info">
                                 <h3 

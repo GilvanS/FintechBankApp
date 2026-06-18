@@ -3305,14 +3305,18 @@ async function seedDatabase() {
     const SEED_NON_ADMIN_USERS = false; // manter apenas admin
     
     // Seed de produtos permanece
-    const existingProducts = await databricksService.executeQuery(`SELECT id FROM ${databricksService.fq('products')}`);
-    const existingIds = new Set(existingProducts.map(p => p.id));
+    const existingProducts = await databricksService.executeQuery(`SELECT id, image_url FROM ${databricksService.fq('products')}`);
+    const existingMap = new Map(existingProducts.map(p => [p.id, p.image_url]));
     for (const p of products) {
-        if (!existingIds.has(p.id)) {
+        if (!existingMap.has(p.id)) {
             await databricksService.executeQuery(`
                 INSERT INTO ${databricksService.fq('products')}
                 (id, name, description, price, image_url)
                 VALUES ('${p.id}', '${p.name.replace(/'/g,"''")}', '${p.description.replace(/'/g,"''")}', ${p.price}, '${p.imageUrl}')
+            `);
+        } else if (existingMap.get(p.id) !== p.imageUrl) {
+            await databricksService.executeQuery(`
+                UPDATE ${databricksService.fq('products')} SET image_url='${p.imageUrl}' WHERE id='${p.id}'
             `);
         }
     }
