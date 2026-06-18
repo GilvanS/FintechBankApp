@@ -81,7 +81,7 @@ const InstallmentReview: React.FC<InstallmentReviewProps> = ({ type, user, detai
 
                 <div className="pt-4 pb-4">
                     <label className="flex items-start space-x-3 cursor-pointer">
-                        <input type="checkbox" checked={termsAccepted} onChange={() => setTermsAccepted(!termsAccepted)} className="mt-1 h-5 w-5 text-orange-500 bg-gray-700 border-gray-600 rounded focus:ring-orange-600" />
+                        <input type="checkbox" checked={termsAccepted} onChange={() => setTermsAccepted(!termsAccepted)} className="mt-1 h-5 w-5 text-primary bg-gray-700 border-gray-600 rounded focus:ring-primary" />
                         <span className="text-sm text-gray-400">
                             Autorizo o débito do valor total ou parcial da(s) parcela(s) na(s) conta(s) corrente(s) indicada(s), na data de vencimento ou após o vencimento, podendo ser utilizado o limite do cheque especial.
                         </span>
@@ -89,7 +89,7 @@ const InstallmentReview: React.FC<InstallmentReviewProps> = ({ type, user, detai
                 </div>
             </main>
             <footer className="flex-shrink-0 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4">
-                <button onClick={onConfirm} disabled={!termsAccepted} className="w-full py-4 font-semibold text-black bg-orange-500 rounded-lg hover:bg-orange-600 disabled:bg-gray-600 disabled:cursor-not-allowed">
+                <button onClick={onConfirm} disabled={!termsAccepted} className="w-full py-4 font-semibold text-background-dark bg-primary rounded-lg hover:bg-primary/90 disabled:bg-gray-600 disabled:cursor-not-allowed">
                     Continuar
                 </button>
             </footer>

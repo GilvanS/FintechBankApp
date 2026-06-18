@@ -145,12 +145,12 @@ const TransferForm: React.FC<TransferFormProps> = ({ user, dailyUsage, onTransfe
                     </button>
                 </div>
             </form>
-            <div className="mt-4 p-4 bg-orange-900/50 border border-orange-400/30 rounded-lg flex items-center justify-between">
+            <div className="mt-4 p-4 bg-primary/10 border border-primary/30 rounded-lg flex items-center justify-between">
                 <div>
-                    <p className="font-bold text-orange-400">Sem saldo? Use o limite do cartão!</p>
-                    <p className="text-xs text-orange-200">Faça um PIX e parcele em até 12x.</p>
+                    <p className="font-bold text-primary">Sem saldo? Use o limite do cartão!</p>
+                    <p className="text-xs text-white/60">Faça um PIX e parcele em até 12x.</p>
                 </div>
-                <button onClick={handleProposePixCredit} className="px-3 py-1.5 text-sm font-bold bg-orange-400 text-black rounded-lg hover:bg-orange-500">
+                <button onClick={handleProposePixCredit} className="px-3 py-1.5 text-sm font-bold bg-primary text-background-dark rounded-lg hover:bg-primary/90">
                    Simular
                 </button>
             </div>

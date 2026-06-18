@@ -83,10 +83,10 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }) {
         
         {/* FIX: The "Pagar" button is now disabled if the user's balance is insufficient, guiding them to the parceling option. */}
         <div className="flex flex-col gap-3">
-             <button onClick={handleParcel} disabled={creditCard.closedInvoice <= 0} className="w-full py-3 font-semibold text-orange-400 bg-transparent border border-orange-400 rounded-lg hover:bg-orange-400/10 disabled:border-gray-600 disabled:text-gray-600 disabled:cursor-not-allowed">
+             <button onClick={handleParcel} disabled={creditCard.closedInvoice <= 0} className="w-full py-3 font-semibold text-primary bg-transparent border border-primary rounded-lg hover:bg-primary/10 disabled:border-gray-600 disabled:text-gray-600 disabled:cursor-not-allowed">
                 Parcelar Fatura
             </button>
-             <button onClick={handlePay} disabled={isLoading || creditCard.closedInvoice <= 0 || !canAfford} className={`w-full py-3 font-semibold text-background-dark rounded-lg disabled:bg-gray-600 disabled:cursor-not-allowed ${isOverdue ? 'bg-orange-500 hover:bg-orange-600' : 'bg-orange-400 hover:bg-orange-500'}`}>
+             <button onClick={handlePay} disabled={isLoading || creditCard.closedInvoice <= 0 || !canAfford} className="w-full py-3 font-semibold text-background-dark bg-primary rounded-lg hover:bg-primary/90 disabled:bg-gray-600 disabled:cursor-not-allowed">
                 {isLoading ? 'Pagando...' : 'Pagar valor total'}
             </button>
             {!canAfford && creditCard.closedInvoice > 0 && <p className="text-xs text-red-400 text-center">Saldo em conta insuficiente para o pagamento total. Tente parcelar.</p>}

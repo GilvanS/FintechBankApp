@@ -199,7 +199,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     aria-label="Ver pontos Fintech Cashback"
                     type="button"
                 >
-                    <span className="material-symbols-outlined text-2xl text-orange-400" aria-hidden="true">workspace_premium</span>
+                    <span className="material-symbols-outlined text-2xl text-primary" aria-hidden="true">workspace_premium</span>
                     <div className="flex-grow">
                         <p className="font-bold text-white test-points-title" data-testid="card-points-title">Fintech Cashback</p>
                         <p className="text-sm text-gray-400 test-points-value" id="points-value" data-testid="card-points-value" data-cy="card-points-value">{creditCard.pointsBalance.toLocaleString('pt-BR')} pontos</p>
