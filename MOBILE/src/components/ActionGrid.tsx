@@ -9,8 +9,8 @@ const ActionButton: React.FC<{
     icon: React.ReactNode;
     onClick: () => void;
 }> = ({ label, icon, onClick }) => (
-    <button onClick={onClick} className="flex flex-col items-start justify-between p-3 bg-orange-500/10 rounded-xl h-24 group hover:bg-orange-500/20 transition-colors">
-        <div className="text-orange-600">{icon}</div>
+    <button onClick={onClick} className="flex flex-col items-start justify-between p-3 bg-primary/10 rounded-xl h-24 group hover:bg-primary/20 transition-colors">
+        <div className="text-primary">{icon}</div>
         <span className="text-sm font-semibold text-gray-800">{label}</span>
     </button>
 );

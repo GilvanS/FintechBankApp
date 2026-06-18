@@ -18,7 +18,7 @@ const PixPreRegistrationConfirmation: React.FC<PixPreRegistrationConfirmationPro
             <div className="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md text-center">
                 <h2 className="text-2xl font-bold mb-4 text-white">Confirmação de Pré-Cadastro PIX</h2>
                 <p className="text-gray-300 mb-6">Funcionalidade em desenvolvimento.</p>
-                <button onClick={handleClose} className="px-4 py-2 text-white bg-orange-600 rounded-md hover:bg-orange-700">Fechar</button>
+                <button onClick={handleClose} className="px-4 py-2 text-background-dark bg-primary rounded-md hover:bg-primary/90">Fechar</button>
             </div>
             <ToastContainer toast={toast} onClose={hide} />
         </div>

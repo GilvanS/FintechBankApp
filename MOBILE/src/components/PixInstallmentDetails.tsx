@@ -65,16 +65,16 @@ const PixInstallmentDetails: React.FC<PixInstallmentDetailsProps> = ({ details, 
                 </div>
 
                 <div className="relative">
-                    <input type="text" placeholder="Mensagem: digite sua mensagem (opcional)" className="w-full bg-gray-900 text-white rounded-lg py-3 pl-4 pr-12 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
+                    <input type="text" placeholder="Mensagem: digite sua mensagem (opcional)" className="w-full bg-gray-900 text-white rounded-lg py-3 pl-4 pr-12 focus:outline-none focus:ring-2 focus:ring-primary"/>
                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
                     </div>
                 </div>
 
-                 <a href="#" className="text-sm text-orange-400 hover:underline">Como funciona o parcelamento?</a>
+                 <a href="#" className="text-sm text-primary hover:underline">Como funciona o parcelamento?</a>
             </main>
             <footer className="mt-auto pt-4">
-                <button onClick={onConfirm} className="w-full py-4 font-semibold text-black bg-orange-500 rounded-lg hover:bg-orange-600">
+                <button onClick={onConfirm} className="w-full py-4 font-semibold text-background-dark bg-primary rounded-lg hover:bg-primary/90">
                     Continuar
                 </button>
             </footer>
