@@ -3,6 +3,8 @@ import { Transaction, User } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { getUserStatement } from '../services/api';
 import TransactionReceipt from './TransactionReceipt';
+import LoadingSpinner from './LoadingSpinner';
+import ErrorState from './ErrorState';
 
 interface StatementProps {
     onNavigate: (view: string) => void;
@@ -16,26 +18,27 @@ function Statement({ onNavigate, onBack }: StatementProps) {
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [transactions, setTransactions] = useState<Transaction[]>(user?.transactions || []);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     // Função para buscar extrato
     const fetchStatement = async (showLoading = true) => {
         if (!user?.cpf) return;
-        if (showLoading) setIsLoading(true);
+        if (showLoading) { setIsLoading(true); setError(null); }
         try {
             const result = await getUserStatement(user.cpf);
             if (result.success && result.transactions) {
                 setTransactions(result.transactions);
             } else {
-                if (user.transactions && user.transactions.length > 0) {
-                    setTransactions(user.transactions);
-                }
+                const fallback = user.transactions ?? [];
+                if (fallback.length > 0) setTransactions(fallback);
+                else setError(result.message || 'Não foi possível carregar o extrato.');
             }
-        } catch (error) {
-            if (user.transactions && user.transactions.length > 0) {
-                setTransactions(user.transactions);
-            }
+        } catch {
+            const fallback = user.transactions ?? [];
+            if (fallback.length > 0) setTransactions(fallback);
+            else setError('Erro de conexão. Verifique sua internet e tente novamente.');
         } finally {
             if (showLoading) setIsLoading(false);
         }
@@ -276,9 +279,9 @@ function Statement({ onNavigate, onBack }: StatementProps) {
                 {/* Lista de transações agrupadas por data */}
                 <div className="flex flex-col gap-6">
                     {isLoading ? (
-                        <div className="flex items-center justify-center p-8">
-                            <p className="text-white/60">Carregando transações...</p>
-                        </div>
+                        <LoadingSpinner message="Carregando transações..." />
+                    ) : error ? (
+                        <ErrorState message={error} onRetry={() => fetchStatement()} />
                     ) : sortedDateKeys.length === 0 ? (
                         <div className="flex items-center justify-center p-8">
                             <p className="text-white/60">Nenhuma transação encontrada</p>

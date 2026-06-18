@@ -3,6 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { getNotifications, markNotificationAsRead } from '../services/mockApi';
 import { useToast, ToastContainer } from './Toast';
 import { AppNotification } from '../types';
+import LoadingSpinner from './LoadingSpinner';
+import ErrorState from './ErrorState';
 
 interface NotificationsProps {
     onBack: () => void;
@@ -12,6 +14,7 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
     const { user } = useAuth();
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const { toast, showSuccess, showError, hide } = useToast();
     
     // CRÍTICO PARA PERFORMANCE APK: Estado inicial sem localStorage bloqueante
@@ -21,6 +24,8 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
     const fetchNotifications = async () => {
         if (user) {
             setIsLoading(true);
+            setError(null);
+            try {
             const result = await getNotifications(user.cpf);
             // getNotifications returns AppNotification[] directly in mockApi.ts based on previous view, 
             // BUT looking at the code I saw in view_file for mockApi.ts lines 811-815:
@@ -40,7 +45,11 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
 
             // So I will fix the usage in Notifications.tsx as well.
             setNotifications(result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
-            setIsLoading(false);
+            } catch {
+                setError('Não foi possível carregar as notificações.');
+            } finally {
+                setIsLoading(false);
+            }
         }
     };
 
@@ -155,7 +164,9 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
 
                 {/* Lista de Notificações */}
                 {isLoading ? (
-                    <p className="text-center text-subtle-light">Carregando...</p>
+                    <LoadingSpinner message="Carregando notificações..." />
+                ) : error ? (
+                    <ErrorState message={error} onRetry={fetchNotifications} />
                 ) : (
                     notifications.length > 0 ? (
                         <ul className="space-y-3">

@@ -3,6 +3,8 @@ import { Transaction, User } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { getUserStatementPaginated } from '../services/api';
 import TransactionReceipt from './TransactionReceipt';
+import LoadingSpinner from './LoadingSpinner';
+import ErrorState from './ErrorState';
 
 interface StatementPaginatedProps {
     onNavigate: (view: string) => void;
@@ -16,6 +18,7 @@ function StatementPaginated({ onNavigate, onBack }: StatementPaginatedProps) {
     const [activeTab, setActiveTab] = useState<TabType>('purchases');
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
     const [pagination, setPagination] = useState({
@@ -33,19 +36,19 @@ function StatementPaginated({ onNavigate, onBack }: StatementPaginatedProps) {
     const fetchStatement = React.useCallback(async (page: number, type?: TabType) => {
         if (!user?.cpf) return;
         setIsLoading(true);
+        setError(null);
         try {
             const result = await getUserStatementPaginated(user.cpf, page, limit, type);
             if (result.success && result.transactions) {
                 setTransactions(result.transactions);
-                if (result.pagination) {
-                    setPagination(result.pagination);
-                }
+                if (result.pagination) setPagination(result.pagination);
             } else {
                 setTransactions([]);
+                setError(result.message || 'Não foi possível carregar o extrato.');
             }
-        } catch (error) {
-            console.error('Erro ao buscar extrato:', error);
+        } catch {
             setTransactions([]);
+            setError('Erro de conexão. Verifique sua internet e tente novamente.');
         } finally {
             setIsLoading(false);
         }
@@ -190,9 +193,9 @@ function StatementPaginated({ onNavigate, onBack }: StatementPaginatedProps) {
                 {/* Lista de transações */}
                 <div className="flex flex-col gap-2">
                     {isLoading ? (
-                        <div className="flex items-center justify-center p-8">
-                            <p className="text-white/60">Carregando transações...</p>
-                        </div>
+                        <LoadingSpinner message="Carregando transações..." />
+                    ) : error ? (
+                        <ErrorState message={error} onRetry={() => fetchStatement(currentPage, activeTab)} />
                     ) : transactions.length === 0 ? (
                         <div className="flex items-center justify-center p-8">
                             <p className="text-white/60">Nenhuma transação encontrada</p>

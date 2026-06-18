@@ -3,6 +3,8 @@ import { PurchasedItem } from '../types';
 import ProductPage from './ProductPage';
 import PromotionalPopup from './PromotionalPopup';
 import { getProducts } from '../services/api';
+import LoadingSpinner from './LoadingSpinner';
+import ErrorState from './ErrorState';
 
 // FIX: Updated ShopProps interface to include all necessary handlers from the parent component.
 interface ShopProps {
@@ -139,19 +141,9 @@ const Shop: React.FC<ShopProps> = ({ onBack, onAddToCart, onInitiatePurchase, ca
                 data-cy="shop-main"
             >
                 {isLoading ? (
-                    <div className="flex items-center justify-center h-64">
-                        <p className="text-gray-400">Carregando produtos...</p>
-                    </div>
+                    <LoadingSpinner message="Carregando produtos..." className="h-64" />
                 ) : error ? (
-                    <div className="flex flex-col items-center justify-center h-64">
-                        <p className="text-red-400 mb-2">{error}</p>
-                        <button 
-                            onClick={() => window.location.reload()} 
-                            className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90"
-                        >
-                            Tentar novamente
-                        </button>
-                    </div>
+                    <ErrorState message={error} onRetry={() => window.location.reload()} className="h-64" />
                 ) : products.length === 0 ? (
                     <div className="flex items-center justify-center h-64">
                         <p className="text-gray-400">Nenhum produto disponível</p>
