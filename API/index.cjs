@@ -76,12 +76,16 @@ const normalizeUser = (dbUser) => {
     };
 };
 
-// Banco retorna timestamps sem 'Z' (ex: "2026-06-18 00:23:23.754").
+// Banco retorna timestamps como string sem 'Z' ou como objeto Date.
 // Esta função garante que o frontend sempre receba ISO 8601 com fuso explícito.
 const toISO = (s) => {
     if (!s) return s;
-    if (/Z$|[+-]\d{2}:\d{2}$/.test(String(s))) return String(s);
-    return String(s).replace(' ', 'T') + 'Z';
+    if (s instanceof Date) return s.toISOString();
+    const str = String(s).trim();
+    if (/Z$|[+-]\d{2}:\d{2}$/.test(str)) return str;
+    if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(str)) return str.replace(' ', 'T') + 'Z';
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? str : d.toISOString();
 };
 
 const normalizeTransaction = (dbTx) => {
