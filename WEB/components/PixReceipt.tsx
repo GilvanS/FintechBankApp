@@ -3,6 +3,7 @@
 import React from 'react';
 // FIX: Corrected import path for Transaction type from parent directory.
 import { Transaction } from '../types';
+import { formatDateBR, formatTimeBR } from '../utils/formatters';
 import { useToast, ToastContainer } from './Toast';
 
 interface PixReceiptProps {
@@ -22,8 +23,8 @@ const PixReceipt: React.FC<PixReceiptProps> = ({ transaction, onBack }) => {
 
     const isReceived = transaction.type === 'PIX_RECEIVED';
     const amount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(transaction.amount));
-    const date = new Date(transaction.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
-    const time = new Date(transaction.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const date = formatDateBR(transaction.date);
+    const time = formatTimeBR(transaction.date);
 
     async function handleShare() {
         const text =

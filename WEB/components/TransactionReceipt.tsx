@@ -1,6 +1,7 @@
 import React from 'react';
 import { Transaction } from '../types';
 import { useToast, ToastContainer } from './Toast';
+import { formatDateBR, formatTimeBR } from '../utils/formatters';
 
 interface TransactionReceiptProps {
     transaction: Transaction;
@@ -19,14 +20,9 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
 
     const amount = Math.abs(transaction.amount);
     const formattedAmount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
-    const date = new Date(transaction.date).toLocaleDateString('pt-BR', { 
-        weekday: 'long',
-        day: '2-digit', 
-        month: 'long', 
-        year: 'numeric' 
-    });
-    const time = new Date(transaction.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const formattedDate = new Date(transaction.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+    const date = formatDateBR(transaction.date);
+    const time = formatTimeBR(transaction.date);
+    const formattedDate = formatDateBR(transaction.date);
 
     const getTransactionTypeLabel = (type: Transaction['type']): string => {
         switch (type) {

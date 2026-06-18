@@ -76,6 +76,14 @@ const normalizeUser = (dbUser) => {
     };
 };
 
+// Banco retorna timestamps sem 'Z' (ex: "2026-06-18 00:23:23.754").
+// Esta função garante que o frontend sempre receba ISO 8601 com fuso explícito.
+const toISO = (s) => {
+    if (!s) return s;
+    if (/Z$|[+-]\d{2}:\d{2}$/.test(String(s))) return String(s);
+    return String(s).replace(' ', 'T') + 'Z';
+};
+
 const normalizeTransaction = (dbTx) => {
     if (!dbTx) return null;
     return {
@@ -86,7 +94,7 @@ const normalizeTransaction = (dbTx) => {
         from: dbTx.from_user,
         to: dbTx.to_user,
         toKey: dbTx.to_key,
-        date: dbTx.date
+        date: toISO(dbTx.date)
     };
 };
 
@@ -767,7 +775,7 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
     const cardTransactions = cardRows.map(r => {
         const base = {
             id: r.id,
-            date: r.date,
+            date: toISO(r.date),
             amount: Math.abs(parseFloat(r.amount || 0)),
         };
         const desc = r.description || '';
@@ -910,7 +918,7 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
     const cardTransactions = cardRows.map(r => {
         const base = {
             id: r.id,
-            date: r.date,
+            date: toISO(r.date),
             amount: Math.abs(parseFloat(r.amount || 0)),
         };
         const desc = r.description || '';
