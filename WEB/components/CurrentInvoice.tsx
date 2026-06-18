@@ -1,5 +1,6 @@
 import React from 'react';
 import { User } from '../types';
+import { formatDateBR } from '../utils/formatters';
 
 interface CurrentInvoiceProps {
   user: User;
@@ -67,7 +68,7 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
                         </div>
                         <div className="flex-grow text-left">
                             <p className="font-semibold text-white">{tx.merchant} {tx.installments && <span className="text-xs text-gray-400">{tx.installments}</span>}</p>
-                            <p className="text-sm text-gray-400">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
+                            <p className="text-sm text-gray-400">{formatDateBR(tx.date)}</p>
                         </div>
                         <div className="text-right">
                            <p className={`font-semibold ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-white'}`}>{tx.type === 'PAYMENT' ? '+' : ''} {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>

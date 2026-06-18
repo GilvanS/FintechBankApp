@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Transaction, User } from '../types';
 import { getUserStatementPaginated } from '../services/api';
 import TransactionReceipt from './TransactionReceipt';
+import { formatDateBR, formatTimeBR } from '../utils/formatters';
 
 interface StatementPaginatedProps {
     user: User;
@@ -282,8 +283,8 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                         </div>
                     ) : (
                         transactions.map((tx) => {
-                            const time = new Date(tx.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                            const date = new Date(tx.date).toLocaleDateString('pt-BR');
+                            const time = formatTimeBR(tx.date);
+                            const date = formatDateBR(tx.date);
                             const typeLabel = getTypeLabel(tx.type);
                             return (
                                 <button

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { formatDateBR } from '../utils/formatters';
 
 interface CardDashboardProps {
     onBack: () => void;
@@ -323,7 +324,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                                             {tx.merchant} {tx.installments && <span className="text-xs text-gray-400 test-transaction-installments" data-testid={`card-transaction-installments-${tx.id}`}>{tx.installments}</span>}
                                         </p>
                                         <p className="text-sm text-gray-400 test-transaction-date" data-testid={`card-transaction-date-${tx.id}`}>
-                                            {new Date(tx.date).toLocaleDateString('pt-BR')}
+                                            {formatDateBR(tx.date)}
                                         </p>
                                     </div>
                                     <div className="text-right test-transaction-amount">

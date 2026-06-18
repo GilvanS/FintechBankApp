@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 // FIX: Corrected import path for User type from parent directory.
 import { User } from '../types';
+import { formatDateBR } from '../utils/formatters';
 
 interface PointsDashboardProps {
   user: User;
@@ -96,7 +97,7 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
                                     <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-md flex-shrink-0" />
                                     <div className="flex-grow overflow-hidden">
                                         <p className="font-semibold text-white text-sm truncate">{item.name}</p>
-                                        <p className="text-xs text-gray-400">{item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString('pt-BR') : ''}</p>
+                                        <p className="text-xs text-gray-400">{item.purchaseDate ? formatDateBR(item.purchaseDate) : ''}</p>
                                     </div>
                                     <div className="text-right flex-shrink-0">
                                         <p className={`font-bold text-sm ${item.pointsEarned && item.pointsEarned > 0 ? 'text-orange-400' : 'text-gray-500'}`}>

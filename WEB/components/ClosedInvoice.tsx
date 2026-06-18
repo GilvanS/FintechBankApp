@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 // FIX: Corrected import path for types from parent directory.
 import { User, CardTransaction } from '../types';
+import { formatDateBR } from '../utils/formatters';
 
 interface ClosedInvoiceProps {
   user: User;
@@ -126,7 +127,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }) {
                     <div key={tx.id} className="w-full p-3 rounded-lg flex items-center bg-surface-dark">
                         <div className="flex-grow text-left">
                             <p className="font-semibold text-white">{tx.merchant}</p>
-                            <p className="text-sm text-gray-400">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
+                            <p className="text-sm text-gray-400">{formatDateBR(tx.date)}</p>
                         </div>
                         <div className="text-right">
                         <p className="font-semibold text-white">- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}</p>

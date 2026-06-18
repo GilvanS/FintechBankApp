@@ -135,8 +135,8 @@ const TransferView: React.FC<TransferViewProps> = ({ user, contacts, onInitiateT
         setAmount(formatted);
     };
     
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = (e?: React.FormEvent | React.MouseEvent) => {
+        if (e) e.preventDefault();
         setLocalError('');
         const numericAmount = parseCurrency(amount);
         if (isNaN(numericAmount) || numericAmount <= 0) {
@@ -294,7 +294,8 @@ const TransferView: React.FC<TransferViewProps> = ({ user, contacts, onInitiateT
                         )}
                         <button
                             className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-background-dark font-bold py-3 px-8 rounded-lg transition-colors disabled:opacity-50 test-pix-submit-button"
-                            type="submit"
+                            type="button"
+                            onClick={handleSubmit}
                             disabled={isProcessing}
                             id="btn-pix-submit"
                             name="pix-submit"

@@ -49,6 +49,33 @@ export const parseCurrency = (formattedValue: string): number => {
   return parseFloat(cleaned) || 0;
 };
 
+const BR_TZ = 'America/Sao_Paulo';
+
+export const formatDateTimeBR = (date: string | Date): string =>
+    new Date(date).toLocaleString('pt-BR', {
+        timeZone: BR_TZ,
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+
+export const formatDateBR = (date: string | Date): string =>
+    new Date(date).toLocaleDateString('pt-BR', {
+        timeZone: BR_TZ,
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+    });
+
+export const formatTimeBR = (date: string | Date): string =>
+    new Date(date).toLocaleTimeString('pt-BR', {
+        timeZone: BR_TZ,
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+
 export const isValidCPF = (cpf: string): boolean => {
   const clean = cpf.replace(/\D/g, '');
   if (clean.length !== 11) return false;

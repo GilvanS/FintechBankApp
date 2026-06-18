@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { AppNotification } from '../types';
 import { getNotifications, markNotificationAsRead } from '../services/api';
 import { useToast, ToastContainer } from './Toast';
+import { formatDateTimeBR } from '../utils/formatters';
 
 interface NotificationsProps {
     onBack: () => void;
@@ -63,7 +64,7 @@ function Notifications({ onBack }: NotificationsProps) {
                                 <li key={n.id} className={`p-4 rounded-lg border ${n.is_read ? 'bg-white border-gray-200' : 'bg-orange-50 border-orange-200'}`}>
                                     <p className={`text-gray-800 ${!n.is_read && 'font-semibold'}`}>{n.message}</p>
                                     <div className="flex justify-between items-center mt-2">
-                                        <p className="text-xs text-gray-500">{new Date(n.created_at).toLocaleString('pt-BR')}</p>
+                                        <p className="text-xs text-gray-500">{formatDateTimeBR(n.created_at)}</p>
                                         {!n.is_read && <button onClick={() => handleMarkAsRead(n.id)} className="text-xs text-orange-600 font-semibold hover:underline">Marcar como lida</button>}
                                     </div>
                                 </li>

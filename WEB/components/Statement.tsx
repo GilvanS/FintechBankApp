@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Transaction, User } from '../types';
 import { getUserStatement } from '../services/api';
 import TransactionReceipt from './TransactionReceipt';
+import { formatDateBR } from '../utils/formatters';
 
 interface StatementProps {
     user: User;
@@ -262,7 +263,7 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
                         </div>
                         <div className="flex-1">
                             <p className="text-white text-base font-medium leading-normal test-statement-item-description" data-testid="statement-item-description">{tx.description}</p>
-                            <p className="text-white/60 text-sm test-statement-item-date" data-testid="statement-item-date">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
+                            <p className="text-white/60 text-sm test-statement-item-date" data-testid="statement-item-date">{formatDateBR(tx.date)}</p>
                         </div>
                         <div className="text-right">
                             <p
