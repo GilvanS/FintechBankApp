@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getNotifications, markNotificationAsRead } from '../services/mockApi';
+import { getNotifications, markNotificationAsRead } from '../services/api';
 import { useToast, ToastContainer } from './Toast';
 import { AppNotification } from '../types';
 import LoadingSpinner from './LoadingSpinner';

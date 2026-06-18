@@ -1001,9 +1001,52 @@ export async function getProducts(): Promise<{ success: boolean; products?: any[
     }
 }
 
-// ========== FUNÇÕES AINDA USANDO MOCK (TEMPORÁRIO) ==========
-export {
-    updateUserProfile
-} from './mockApi';
+export async function getNotifications(cpf: string): Promise<import('../types').AppNotification[]> {
+    try {
+        const res = await api.get(`/users/${cpf}/notifications`, { headers: getAuthHeaders('none') });
+        return res.data?.notifications ?? [];
+    } catch {
+        return [];
+    }
+}
+
+export async function markNotificationAsRead(cpf: string, id: number): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post(`/users/${cpf}/notifications/${id}/read`, {}, { headers: getAuthHeaders('none') });
+        return { success: true, message: res.data?.message || 'Notificação marcada como lida' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao marcar notificação' };
+    }
+}
+
+export async function updateUserPixDailyLimit(cpf: string, limit: number): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.put(`/user/limits/pix-daily/${cpf}`, { newLimit: limit }, { headers: getAuthHeaders() });
+        return { success: true, message: res.data?.message || 'Limite atualizado com sucesso!' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao atualizar limite' };
+    }
+}
+
+export async function requestLimitIncrease(cpf: string, amount: number): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post('/pix/limit/request', { cpf, amount }, { headers: getAuthHeaders() });
+        return { success: true, message: res.data?.message || 'Solicitação enviada com sucesso!' };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao solicitar aumento de limite' };
+    }
+}
+
+export async function updateUserProfile(
+    cpf: string,
+    data: { fullName?: string; username?: string; profileDescription?: string; showStoriesPopup?: boolean }
+): Promise<{ success: boolean; message: string; user?: import('../types').User }> {
+    try {
+        const res = await api.put(`/users/${cpf}/profile`, data, { headers: getAuthHeaders() });
+        return { success: true, message: 'Perfil atualizado!', user: res.data?.user };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao atualizar perfil' };
+    }
+}
 
 export default api;

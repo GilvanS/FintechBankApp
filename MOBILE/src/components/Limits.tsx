@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getUserByCpf } from '../services/api';
-import { requestLimitIncrease, updateUserPixDailyLimit } from '../services/mockApi';
+import { requestLimitIncrease, updateUserPixDailyLimit } from '../services/api';
 import { useToast, ToastContainer } from './Toast';
 
 interface LimitsProps {

@@ -60,10 +60,9 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
     const [invoicePaymentDetails, setInvoicePaymentDetails] = useState<{ amountPaid: number; date: string; cardLast4: string; transactionId: string; title?: string; amountLabel?: string } | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
-  // OTIMIZADO: Fetch de notícias removido da Home (já é feito no NewsSection)
-  // Isso evita requisições duplicadas e melhora o tempo de carregamento inicial
+  // Refresh de dados do usuário ao montar (garante dados frescos após login via token)
   useEffect(() => {
-    setIsLoading(false);
+    refreshUserData().finally(() => setIsLoading(false));
   }, []);
 
   // Log para debug da navegação
