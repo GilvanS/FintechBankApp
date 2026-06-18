@@ -26,6 +26,9 @@ const InstallmentOptions = lazy(() => import('../../components/InstallmentOption
 const InstallmentReviewInvoice = lazy(() => import('../../components/InstallmentReviewInvoice'));
 const InvoicePaymentReceipt = lazy(() => import('../../components/InvoicePaymentReceipt'));
 const TransactionReceipt = lazy(() => import('../../components/TransactionReceipt'));
+const Loans = lazy(() => import('../../components/Loans'));
+const Insurance = lazy(() => import('../../components/Insurance'));
+const Marketplace = lazy(() => import('../../components/Marketplace'));
 
 // Componente de loading simples
 const LoadingFallback = () => (
@@ -462,7 +465,13 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
                 return <Suspense fallback={<LoadingFallback />}><Profile onNavigate={handleNavigate} /></Suspense>;
             }
         }
-        default: 
+        case 'loans':
+            return <Suspense fallback={<LoadingFallback />}><Loans onBack={() => handleNavigate('home')} /></Suspense>;
+        case 'insurance':
+            return <Suspense fallback={<LoadingFallback />}><Insurance onBack={() => handleNavigate('home')} /></Suspense>;
+        case 'marketplace':
+            return <Suspense fallback={<LoadingFallback />}><Marketplace onBack={() => handleNavigate('home')} /></Suspense>;
+        default:
             return <HomeView user={user} onNavigate={handleNavigate} />;
     }
   };
