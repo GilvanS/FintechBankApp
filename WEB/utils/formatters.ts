@@ -51,8 +51,19 @@ export const parseCurrency = (formattedValue: string): number => {
 
 const BR_TZ = 'America/Sao_Paulo';
 
+// Banco retorna timestamps sem marcador de fuso (ex: "2026-06-18 00:23:23.754").
+// new Date() interpreta strings sem fuso como hora LOCAL, não UTC.
+// Esta função força a interpretação como UTC antes de converter.
+function asUTC(date: string | Date): Date {
+    if (date instanceof Date) return date;
+    // Se já tem indicador de fuso (Z ou +HH:MM), usa direto
+    if (/Z$|[+-]\d{2}:\d{2}$/.test(date)) return new Date(date);
+    // Sem fuso: troca espaço por T e anexa Z para forçar UTC
+    return new Date(date.replace(' ', 'T') + 'Z');
+}
+
 export const formatDateTimeBR = (date: string | Date): string =>
-    new Date(date).toLocaleString('pt-BR', {
+    asUTC(date).toLocaleString('pt-BR', {
         timeZone: BR_TZ,
         day: '2-digit',
         month: '2-digit',
@@ -62,7 +73,7 @@ export const formatDateTimeBR = (date: string | Date): string =>
     });
 
 export const formatDateBR = (date: string | Date): string =>
-    new Date(date).toLocaleDateString('pt-BR', {
+    asUTC(date).toLocaleDateString('pt-BR', {
         timeZone: BR_TZ,
         day: '2-digit',
         month: '2-digit',
@@ -70,7 +81,7 @@ export const formatDateBR = (date: string | Date): string =>
     });
 
 export const formatTimeBR = (date: string | Date): string =>
-    new Date(date).toLocaleTimeString('pt-BR', {
+    asUTC(date).toLocaleTimeString('pt-BR', {
         timeZone: BR_TZ,
         hour: '2-digit',
         minute: '2-digit',
