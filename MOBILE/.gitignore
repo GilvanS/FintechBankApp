@@ -5,10 +5,17 @@
 /dist
 /www
 
-# Capacitor build files for native platforms
+# Capacitor — arquivos de build nativos
 /android/app/build
-/android/.gradle
 /android/build
+/android/.gradle
+/android/.gradle_user_home
+
+# Gradle — caches e sujeira gerada ao compilar o APK
+**/.gradle/
+**/.gradle_user_home/
+android/app/.cxx/
+android/.cxx/
 
 # IDE & editor files
 .idea
@@ -21,7 +28,16 @@
 
 # Log files
 *.log
+r.status
 
 # Keystore files (important for security)
 *.jks
 *.keystore
+
+# Pasta de imagens de exemplo para inspiracao (nao versionar)
+.exemplos/
+exemplos/
+
+# Arquivos temporarios gerados pelo script de build
+0
+{,

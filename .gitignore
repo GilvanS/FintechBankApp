@@ -28,3 +28,7 @@ ANALISE-E-PLANO.md
 .claude/
 .claude-flow/
 WEB/coverage/
+
+# Pasta de imagens de exemplo para inspiracao (nao versionar)
+.exemplos/
+exemplos/

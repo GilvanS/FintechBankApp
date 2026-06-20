@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useIonViewWillEnter } from '@ionic/react';
 import { Preferences } from '@capacitor/preferences';
 import { User } from '../../types';
@@ -6,6 +6,7 @@ import api, { setApiBaseUrl, getUserByCpf } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import InfoCarousel from '../../components/InfoCarousel';
 import { API_BASE_URL } from '../../apiConfig';
+import HiddenMenu from '../Settings/HiddenMenu';
 
 interface StatusMessageProps {
   type: 'error' | 'success';
@@ -97,14 +98,36 @@ interface LoginProps {
   onNavigateToResetPassword: () => void;
 }
 
+// Numero de toques necessarios para abrir o menu oculto
+const HIDDEN_MENU_TAP_COUNT = 5;
+const HIDDEN_MENU_TAP_WINDOW_MS = 3000;
+
 const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onNavigateToSignUp, onNavigateToResetPassword }) => {
   const [cpf, setCpf] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  // Estado do Menu Oculto de Ajustes
+  const [showHiddenMenu, setShowHiddenMenu] = useState(false);
+  const tapCountRef = useRef(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { login } = useAuth();
+
+  // Gatilho secreto: 5 toques rapidos no titulo abre o menu de ajustes
+  const handleTitleTap = () => {
+    tapCountRef.current += 1;
+    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+    if (tapCountRef.current >= HIDDEN_MENU_TAP_COUNT) {
+      tapCountRef.current = 0;
+      setShowHiddenMenu(true);
+      return;
+    }
+    tapTimerRef.current = setTimeout(() => {
+      tapCountRef.current = 0;
+    }, HIDDEN_MENU_TAP_WINDOW_MS);
+  };
 
   const formatCpf = (v: string) => {
     const d = v.replace(/\D/g, '').slice(0, 11);
@@ -127,9 +150,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
       await setApiBaseUrl(url);
       console.log('✅ BaseURL configurada:', api.defaults.baseURL);
       
-      // Timeout reduzido de 10s para 3s para melhor performance
+      // Aumentado o timeout para 15s para evitar falhas de conexao lenta/ARP no Wi-Fi do celular
       const response = await api.get('/health', { 
-        timeout: 3000,
+        timeout: 15000,
         validateStatus: (status) => status < 500
       });
       
@@ -199,24 +222,17 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
       const response = await api.post('/auth/login', { cpf, password });
       console.log('Login response:', response.data);
       const { token, user } = response.data;
-      
-      // CRÍTICO PARA PERFORMANCE APK: Salvar tokens em background para não bloquear login
-      const saveTokens = () => {
-        try {
-          localStorage.setItem('authToken', token);
-        } catch (error) {
-          console.warn('Erro ao salvar authToken:', error);
-        }
-      };
-      
-      // Salvar localStorage em background
-      if ('requestIdleCallback' in window) {
-        (window as any).requestIdleCallback(saveTokens, { timeout: 500 });
-      } else {
-        setTimeout(saveTokens, 0);
+
+      // CRÍTICO: salvar authToken de forma síncrona ANTES de navegar para Home.
+      // getUserMe() lê localStorage imediatamente ao montar o Home — se o token
+      // não estiver lá, retorna { success: false } e handleUpdateUser chama logout.
+      try {
+        localStorage.setItem('authToken', token);
+      } catch (error) {
+        console.warn('Erro ao salvar authToken:', error);
       }
-      
-      // Salvar Preferences em background (não aguardar)
+
+      // Salvar Preferences em background (não aguardar — não é lido no fluxo crítico)
       Preferences.set({ key: 'token', value: token }).catch((error) => {
         console.warn('Erro ao salvar token em Preferences:', error);
       });
@@ -255,6 +271,14 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
       id="login-screen"
       aria-label="Tela de login"
     >
+      {/* Menu Oculto de Ajustes — ativado por 5 toques rapidos no titulo */}
+      {showHiddenMenu && (
+        <HiddenMenu onClose={() => {
+          setShowHiddenMenu(false);
+          // Apos fechar o menu, refaz o health check com a nova URL
+          checkServerStatus();
+        }} />
+      )}
       <header 
         className="w-full p-4 safe-top"
         data-testid="login-header"
@@ -292,16 +316,18 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
         <h1 
           data-testid="login-title"
           id="login-title"
-          className="text-2xl font-bold text-text-dark mb-2"
-          title="Fintech - Título da aplicação"
+          className="text-2xl font-bold text-text-dark mb-2 select-none cursor-pointer"
+          title="Fintech - Titulo da aplicacao"
+          onClick={handleTitleTap}
+          aria-label="Fintech — toque 5 vezes para acessar ajustes"
         >
-                Fintech
+          Fintech
         </h1>
         <p 
           className="text-subtle-dark mb-10"
           data-testid="login-subtitle"
           id="login-subtitle"
-          title="Acesse sua conta - Subtítulo da tela de login"
+          title="Acesse sua conta - Subtitulo da tela de login"
         >
           Acesse sua conta
         </p>

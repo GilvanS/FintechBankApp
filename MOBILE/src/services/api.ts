@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
 import { User, PixContact, SignUpData, PasswordResetRequest, LimitIncreaseRequest } from '../types';
-import { API_BASE_URL } from '../apiConfig';
+import { API_BASE_URL, PROBE_SUBNETS, API_PORT } from '../apiConfig';
 
 // URL da API para APK - sempre usar URL absoluta
 // No APK (Capacitor), não há proxy, então sempre usa URL absoluta
@@ -129,17 +129,19 @@ async function saveProbedApiUrl(url: string): Promise<void> {
 
 // ─── Subnet probe ───────────────────────────────────────────────────────────
 
-async function probeSubnetForServer(subnetPrefix: string, port: number): Promise<string | null> {
-    // Varre .90 a .119 — faixa DHCP típica em redes domésticas/escritório
-    const candidates = Array.from({ length: 30 }, (_, i) => `http://${subnetPrefix}.${90 + i}:${port}`);
-
+/**
+ * Varre uma sub-rede completa (.1–.254) em paralelo buscando o servidor.
+ * Timeout curto (700ms) é suficiente para LAN; Promise.any retorna na primeira resposta.
+ */
+async function probeSubnet(subnetPrefix: string, port: number): Promise<string | null> {
     const tryOne = (host: string): Promise<string> =>
-        axios.get(`${host}/api/v1/health`, { timeout: 1500, validateStatus: s => s < 500 })
+        axios.get(`${host}/api/v1/health`, { timeout: 700, validateStatus: s => s < 500 })
             .then(res => {
                 if (res.data?.success === true || res.data?.status === 'ok') return host;
                 throw new Error('not ok');
             });
 
+    const candidates = Array.from({ length: 254 }, (_, i) => `http://${subnetPrefix}.${i + 1}:${port}`);
     try {
         return await Promise.any(candidates.map(c => tryOne(c)));
     } catch {
@@ -147,24 +149,39 @@ async function probeSubnetForServer(subnetPrefix: string, port: number): Promise
     }
 }
 
+/**
+ * Tenta encontrar o servidor varrendo múltiplas sub-redes candidatas em paralelo.
+ * Garante que mudanças de sub-rede (DHCP em rede diferente) também sejam descobertas.
+ */
 async function runBackgroundProbe(): Promise<void> {
+    // Determinar sub-redes a provar: começa pela sub-rede do baseURL atual, depois as candidatas fixas
     const currentBase = api.defaults.baseURL || '';
-    // Extrai http://IP:porta do baseURL (ex: "http://192.168.0.106:3001/api/v1" → host="192.168.0.106", port=3001)
     const m = currentBase.match(/^https?:\/\/([\d.]+):(\d+)/);
-    if (!m) return; // URL relativa ou hostname — não provar
-    const [, ip, portStr] = m;
-    const subnet = ip.match(/^(\d+\.\d+\.\d+)\.\d+$/)?.[1];
-    if (!subnet) return;
+    const port = m ? parseInt(m[2], 10) : API_PORT;
+    const currentSubnet = m ? m[1].match(/^(\d+\.\d+\.\d+)\.\d+$/)?.[1] : null;
 
-    console.log(`🔍 [Probe] Varrendo ${subnet}.90–119 na porta ${portStr}...`);
-    const found = await probeSubnetForServer(subnet, parseInt(portStr, 10));
+    const subnetsToProbe = currentSubnet
+        ? [currentSubnet, ...PROBE_SUBNETS.filter(s => s !== currentSubnet)]
+        : PROBE_SUBNETS;
+
+    console.log(`🔍 [Probe] Varrendo sub-redes: ${subnetsToProbe.join(', ')} na porta ${port}...`);
+
+    // Prova todas as sub-redes em paralelo — retorna na primeira que responder
+    const results = await Promise.allSettled(subnetsToProbe.map(s => probeSubnet(s, port)));
+    let found: string | undefined;
+    for (const r of results) {
+        if (r.status === 'fulfilled' && r.value) { found = r.value; break; }
+    }
+
     if (found) {
         const newBase = buildBaseUrl(found);
         api.defaults.baseURL = newBase;
         console.log(`✅ [Probe] Servidor encontrado: ${newBase}`);
         await saveProbedApiUrl(found);
     } else {
-        console.warn(`❌ [Probe] Nenhum servidor respondeu no subnet ${subnet}.0/24`);
+        console.warn(`❌ [Probe] Nenhum servidor respondeu. Verifique se a API está rodando.`);
+        // Limpar cache de probe inválido para forçar nova busca no próximo startup
+        try { await Preferences.remove({ key: IP_PROBE_CACHE_KEY }); } catch { /* */ }
     }
 }
 
@@ -217,7 +234,9 @@ export const initializeApi = async () => {
         } catch {
             // falhou — vai para probe
         }
-        console.warn(`⚠️ [BG] Health check falhou — iniciando subnet probe...`);
+        console.warn(`⚠️ [BG] Health check falhou — limpando cache e iniciando probe...`);
+        // Limpar cache para não reutilizar URL inválida na próxima abertura
+        try { await Preferences.remove({ key: IP_PROBE_CACHE_KEY }); } catch { /* */ }
         await runBackgroundProbe();
     }, 2000);
 };

@@ -26,6 +26,7 @@ const usersRepo = require('./repositories/usersRepo');
 const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword } = require('./repositories/usersRepo');
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const { computeCurrentCycle, calcCharges } = require('./utils/billing');
+const { seedBillingMockData, applyScenario, saveAsMockBaseline, clearMockBaseline } = require('./utils/billingMockSeeder');
 const cardRepo = require('./repositories/cardRepo');
 const invoiceRepo = require('./repositories/invoiceRepo');
 const invoiceLifecycleRepo = require('./repositories/invoiceLifecycleRepo');
@@ -2722,6 +2723,46 @@ apiRouter.get(['/admin/billing/accounts-status', '/admin/billing/status'], beare
     });
 }));
 
+// POST /admin/billing/seed-test-scenarios
+// Aplica um cenário de billing a um CPF de teste (para automação de testes).
+// Body: { cpf: "11111111111", scenario: "adimplente"|"vencida"|"inadimplente"|"reset", daysOverdue?, invoiceAmount? }
+// Se omitir cpf, aplica a todos os CPFs de teste (11111111111, 22222222222, 33333333333, 44444444444).
+apiRouter.post('/admin/billing/seed-test-scenarios', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf, scenario, daysOverdue, invoiceAmount } = req.body;
+    if (!scenario) return res.status(400).json({ success: false, message: 'Campo "scenario" obrigatório.' });
+
+    const testCpfs = ['11111111111', '22222222222', '33333333333', '44444444444'];
+    const targets  = cpf ? [String(cpf)] : testCpfs;
+    const results  = [];
+
+    for (const target of targets) {
+        const result = await applyScenario(databricksService, target, scenario, { daysOverdue, invoiceAmount });
+        results.push(result);
+    }
+    res.json({ success: true, applied: results });
+}));
+
+// POST /admin/billing/save-as-mock
+// Persiste o estado de billing atual de um CPF como baseline — o reset restaura esse estado.
+// Também converte transações [TEST] desse CPF em [MOCK] (sobrevivem ao reset).
+// Body: { cpf: "11111111111" }
+apiRouter.post('/admin/billing/save-as-mock', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.body;
+    if (!cpf) return res.status(400).json({ success: false, message: 'Campo "cpf" obrigatório.' });
+    const result = await saveAsMockBaseline(databricksService, String(cpf));
+    res.json({ success: true, ...result });
+}));
+
+// POST /admin/billing/clear-mock-baseline
+// Remove o baseline salvo de um CPF, voltando ao cenário padrão hardcoded no próximo reset.
+// Body: { cpf: "11111111111" }
+apiRouter.post('/admin/billing/clear-mock-baseline', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.body;
+    if (!cpf) return res.status(400).json({ success: false, message: 'Campo "cpf" obrigatório.' });
+    const result = await clearMockBaseline(databricksService, String(cpf));
+    res.json({ success: true, ...result });
+}));
+
 // POST /admin/billing/validate-all  (alias: /admin/billing/run-cycle)
 apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
@@ -3726,6 +3767,7 @@ async function bootstrap() {
             await initializeDatabase();
             await ensureAdminUser();
             await seedDatabase();
+            await seedBillingMockData(databricksService);
             console.log("🎯 Servidor pronto para uso com Databricks!");
             console.log("📋 Swagger disponível em: http://localhost:3001/api-docs");
         }
