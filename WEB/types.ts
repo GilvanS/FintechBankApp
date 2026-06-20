@@ -93,6 +93,14 @@ export interface FixedIncomeProduct {
     liquidity: string;
 }
 
+export interface BillingCycle {
+    status: 'aberta' | 'fechada' | 'vencida' | 'inadimplente';
+    invoiceRef: string;
+    closeDate: string;
+    dueDate: string;
+    overdueDeadline: string;
+}
+
 export interface User {
     cpf: string;
     fullName: string;
@@ -111,4 +119,8 @@ export interface User {
     showStoriesPopup: boolean;
     purchasedItems: PurchasedItem[];
     creditCard: CreditCard;
+    accountStatus?: 'adimplente' | 'inadimplente' | 'suspenso';
+    daysOverdue?: number;
+    pendingCharges?: number;
+    billingCycle?: BillingCycle;
 }

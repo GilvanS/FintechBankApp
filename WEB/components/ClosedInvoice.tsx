@@ -64,7 +64,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }) {
 
       <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-6">
         {creditCard.isBlocked ? (
-            <div 
+            <div
                 className="bg-red-800 border border-red-600 text-red-200 p-4 rounded-lg text-center mb-4 animate-fade-in"
                 data-testid="alert-card-blocked"
                 role="alert"
@@ -79,8 +79,29 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }) {
                     Sua fatura está em atraso. Pague agora para desbloquear seu cartão e evitar mais juros.
                 </p>
             </div>
+        ) : user.accountStatus === 'inadimplente' ? (
+            <div
+                className="bg-red-900/40 border border-red-500/40 text-red-300 p-4 rounded-xl mb-4 animate-fade-in"
+                data-testid="alert-invoice-inadimplente"
+                role="alert"
+                aria-live="assertive"
+                aria-atomic="true"
+            >
+                <h3 className="font-bold text-base flex items-center gap-2" data-testid="alert-invoice-inadimplente-title">
+                    <span className="material-symbols-outlined text-red-400" aria-hidden="true">warning</span>
+                    Conta inadimplente
+                </h3>
+                <p className="text-sm mt-1 text-red-300/80" data-testid="alert-invoice-inadimplente-message">
+                    {user.daysOverdue
+                        ? `${user.daysOverdue} dia${user.daysOverdue !== 1 ? 's' : ''} em atraso`
+                        : 'Fatura em atraso'}
+                    {user.pendingCharges && user.pendingCharges > 0
+                        ? ` • Encargos acumulados: ${user.pendingCharges.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                        : ''}
+                </p>
+            </div>
         ) : isOverdue && (
-            <div 
+            <div
                 className="bg-orange-800 border border-orange-600 text-orange-200 p-4 rounded-lg text-center mb-4"
                 data-testid="alert-invoice-overdue"
                 role="alert"

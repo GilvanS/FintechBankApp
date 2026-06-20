@@ -90,6 +90,66 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
                 </div>
             </section>
 
+            {/* Billing Status Banner */}
+            {user.accountStatus && user.accountStatus !== 'adimplente' ? (
+                <div
+                    className="rounded-xl p-4 flex items-start gap-3"
+                    style={{
+                        background: user.accountStatus === 'inadimplente' ? 'rgba(239,68,68,0.15)' : 'rgba(234,179,8,0.15)',
+                        border: `1px solid ${user.accountStatus === 'inadimplente' ? 'rgba(239,68,68,0.35)' : 'rgba(234,179,8,0.35)'}`,
+                    }}
+                    aria-label={`Status da conta: ${user.accountStatus}`}
+                    data-testid="home-account-status-banner"
+                    role="alert"
+                >
+                    <span
+                        className="material-symbols-outlined"
+                        style={{ color: user.accountStatus === 'inadimplente' ? '#ef4444' : '#eab308' }}
+                        aria-hidden="true"
+                    >
+                        {user.accountStatus === 'inadimplente' ? 'warning' : 'info'}
+                    </span>
+                    <div className="flex-1">
+                        <p className="font-semibold text-sm" style={{ color: user.accountStatus === 'inadimplente' ? '#ef4444' : '#eab308' }}>
+                            {user.accountStatus === 'inadimplente' ? 'Conta inadimplente' : 'Conta suspensa'}
+                        </p>
+                        {user.accountStatus === 'inadimplente' && (
+                            <p className="text-xs text-white/70 mt-0.5">
+                                {user.daysOverdue
+                                    ? `${user.daysOverdue} dia${user.daysOverdue !== 1 ? 's' : ''} em atraso`
+                                    : 'Fatura em atraso'}
+                                {user.pendingCharges && user.pendingCharges > 0
+                                    ? ` • Encargos: ${user.pendingCharges.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                                    : ''}
+                            </p>
+                        )}
+                    </div>
+                </div>
+            ) : user.billingCycle && (user.billingCycle.status === 'fechada' || user.billingCycle.status === 'vencida') ? (
+                <div
+                    className="rounded-xl p-4 flex items-start gap-3"
+                    style={{
+                        background: user.billingCycle.status === 'vencida' ? 'rgba(234,179,8,0.10)' : 'rgba(34,197,94,0.08)',
+                        border: `1px solid ${user.billingCycle.status === 'vencida' ? 'rgba(234,179,8,0.30)' : 'rgba(34,197,94,0.20)'}`,
+                    }}
+                    data-testid="home-billing-cycle-banner"
+                    role="status"
+                >
+                    <span
+                        className="material-symbols-outlined text-sm"
+                        style={{ color: user.billingCycle.status === 'vencida' ? '#eab308' : '#22c55e' }}
+                        aria-hidden="true"
+                    >
+                        {user.billingCycle.status === 'vencida' ? 'schedule' : 'receipt_long'}
+                    </span>
+                    <p className="text-xs text-white/70 flex-1">
+                        {user.billingCycle.status === 'vencida'
+                            ? 'Fatura no prazo de carência — pague antes de ser marcado inadimplente.'
+                            : `Fatura fechada. Vence em ${new Date(user.billingCycle.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}.`}
+                    </p>
+                </div>
+            ) : null}
+
             {/* Quick Access Section */}
             <section 
                 className="test-quick-access-section"
