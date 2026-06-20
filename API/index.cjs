@@ -25,6 +25,7 @@ const { addContact } = require('./repositories/pixRepo');
 const usersRepo = require('./repositories/usersRepo');
 const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword } = require('./repositories/usersRepo');
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
+const { computeCurrentCycle, calcCharges } = require('./utils/billing');
 const cardRepo = require('./repositories/cardRepo');
 const invoiceRepo = require('./repositories/invoiceRepo');
 const invoiceLifecycleRepo = require('./repositories/invoiceLifecycleRepo');
@@ -139,7 +140,7 @@ const ALLOWED_ORIGINS = [
 
 const corsOptions = {
   origin: (origin, cb) => {
-    if (!origin || ALLOWED_ORIGINS.some(o => origin.startsWith(o))) cb(null, true);
+    if (!origin || origin.startsWith('http://localhost') || origin.startsWith('capacitor://localhost') || ALLOWED_ORIGINS.some(o => origin.startsWith(o)) || origin.startsWith('http://192.168.') || origin.startsWith('http://10.0.2.2')) cb(null, true);
     else cb(new Error('Origem nao permitida pelo CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -2624,6 +2625,248 @@ apiRouter.post('/admin/reset/users', bearerAuth(), authenticateAdmin, asyncHandl
     res.json({ success: true, message: 'Base resetada. Apenas admin mantido.' });
 }));
 
+// ─── Billing helpers ────────────────────────────────────────────────────────
+
+// ─── Billing endpoints ───────────────────────────────────────────────────────
+
+// GET /admin/billing/config — retorna parâmetros de faturamento
+apiRouter.get('/admin/billing/config', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const rows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Configuração de faturamento não encontrada.' });
+    res.json({ success: true, config: rows[0] });
+}));
+
+// PUT /admin/billing/config — atualiza parâmetros de faturamento
+apiRouter.put('/admin/billing/config', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { close_day, due_day, grace_period_days, is_active } = req.body || {};
+    const errors = [];
+    if (close_day !== undefined && (!Number.isInteger(close_day) || close_day < 1 || close_day > 28)) errors.push('close_day deve ser inteiro entre 1 e 28');
+    if (due_day !== undefined && (!Number.isInteger(due_day) || due_day < 1 || due_day > 28)) errors.push('due_day deve ser inteiro entre 1 e 28');
+    if (grace_period_days !== undefined && (!Number.isInteger(grace_period_days) || grace_period_days < 0 || grace_period_days > 30)) errors.push('grace_period_days deve ser inteiro entre 0 e 30');
+    if (is_active !== undefined && typeof is_active !== 'boolean') errors.push('is_active deve ser boolean');
+    if (errors.length) return res.status(400).json({ success: false, message: errors.join('; ') });
+
+    const adminCpf = req.user.cpf;
+    const sets = [];
+    if (close_day !== undefined) sets.push(`close_day = ${close_day}`);
+    if (due_day !== undefined) sets.push(`due_day = ${due_day}`);
+    if (grace_period_days !== undefined) sets.push(`grace_period_days = ${grace_period_days}`);
+    if (is_active !== undefined) sets.push(`is_active = ${is_active}`);
+    sets.push(`updated_at = CURRENT_TIMESTAMP`);
+    sets.push(`updated_by = '${adminCpf}'`);
+
+    await databricksService.executeQuery(`UPDATE ${databricksService.fq('billing_config')} SET ${sets.join(', ')} WHERE id = 1`);
+    const updated = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+    res.json({ success: true, message: 'Configuração de faturamento atualizada.', config: updated[0] });
+}));
+
+// GET /admin/billing/accounts-status  (alias: /admin/billing/status)
+apiRouter.get(['/admin/billing/accounts-status', '/admin/billing/status'], bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const users = await databricksService.executeQuery(`
+        SELECT cpf, full_name, email,
+               COALESCE(account_status, 'adimplente') AS account_status,
+               COALESCE(days_overdue, 0) AS days_overdue,
+               credit_card_invoice_due_date,
+               credit_card_available_limit,
+               credit_card_total_limit,
+               invoice_last_closed_date
+        FROM ${databricksService.fq('users')}
+        WHERE role = 'customer'
+        ORDER BY account_status DESC, days_overdue DESC
+    `);
+    const total = users.length;
+    const inadimplentes = users.filter(u => u.account_status === 'inadimplente').length;
+    res.json({
+        success: true,
+        summary: { total, adimplentes: total - inadimplentes, inadimplentes },
+        accounts: users
+    });
+}));
+
+// POST /admin/billing/validate-all  (alias: /admin/billing/run-cycle)
+apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+    if (!configRows.length) return res.status(500).json({ success: false, message: 'Configuração de faturamento não encontrada.' });
+    const cfg = configRows[0];
+    if (!cfg.is_active) return res.json({ success: true, message: 'Ciclo de faturamento inativo. Nenhuma validação executada.' });
+
+    const cycle = computeCurrentCycle(cfg);
+    const today = new Date();
+
+    const users = await databricksService.executeQuery(`
+        SELECT cpf, credit_card_invoice_due_date,
+               COALESCE(account_status,'adimplente') AS account_status,
+               COALESCE(days_overdue, 0) AS days_overdue,
+               COALESCE(credit_card_available_limit, 0) AS credit_card_available_limit,
+               COALESCE(credit_card_total_limit, 5000) AS credit_card_total_limit
+        FROM ${databricksService.fq('users')} WHERE role = 'customer'
+    `);
+
+    let markedInadimplente = 0;
+    let markedAdimplente = 0;
+    let chargesGenerated = 0;
+    const chargesDetail = [];
+
+    for (const u of users) {
+        if (!u.credit_card_invoice_due_date) continue;
+
+        const dueDate    = new Date(u.credit_card_invoice_due_date);
+        const diffMs     = today - dueDate;
+        const daysOverdue = diffMs > 0 ? Math.floor(diffMs / 86400000) : 0;
+        const newStatus  = daysOverdue > Number(cfg.grace_period_days) ? 'inadimplente' : 'adimplente';
+
+        // Gerar encargos só na transição → inadimplente (evita duplicatas por ciclo)
+        if (newStatus === 'inadimplente' && u.account_status !== 'inadimplente') {
+            const invoiceAmount = Math.max(0,
+                parseFloat(u.credit_card_total_limit) - parseFloat(u.credit_card_available_limit)
+            );
+            if (invoiceAmount > 0) {
+                const existing = await databricksService.executeQuery(`
+                    SELECT id FROM ${databricksService.fq('billing_charges')}
+                    WHERE cpf = '${u.cpf}' AND invoice_reference = '${cycle.invoiceRef}' AND status = 'pending'
+                `);
+                if (!existing.length) {
+                    const { multa, juros } = calcCharges(invoiceAmount, daysOverdue);
+                    const idBase = `${u.cpf}_${cycle.invoiceRef}`;
+
+                    await databricksService.executeQuery(`
+                        INSERT INTO ${databricksService.fq('billing_charges')}
+                        (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
+                        VALUES
+                        ('${idBase}_multa', '${u.cpf}', '${cycle.invoiceRef}', 'multa', ${multa}, ${daysOverdue}, ${invoiceAmount}),
+                        ('${idBase}_juros', '${u.cpf}', '${cycle.invoiceRef}', 'juros_mora', ${juros}, ${daysOverdue}, ${invoiceAmount})
+                    `);
+                    chargesGenerated += 2;
+                    chargesDetail.push({
+                        cpf: u.cpf, invoiceRef: cycle.invoiceRef,
+                        invoiceAmount, multa, juros,
+                        total: Math.round((multa + juros) * 100) / 100
+                    });
+                }
+            }
+        }
+
+        if (newStatus !== u.account_status || daysOverdue !== parseInt(u.days_overdue)) {
+            await databricksService.executeQuery(`
+                UPDATE ${databricksService.fq('users')}
+                SET account_status = '${newStatus}', days_overdue = ${daysOverdue}, updated_at = CURRENT_TIMESTAMP
+                WHERE cpf = '${u.cpf}'
+            `);
+            if (newStatus === 'inadimplente') markedInadimplente++;
+            else markedAdimplente++;
+        }
+    }
+
+    res.json({
+        success: true,
+        message: `Validação concluída. ${markedInadimplente} inadimplentes, ${markedAdimplente} adimplentes, ${chargesGenerated} encargos gerados.`,
+        cycle: {
+            ref: cycle.invoiceRef, status: cycle.cycleStatus,
+            closeDate: cycle.closeDate, dueDate: cycle.dueDate,
+            overdueDeadline: cycle.overdueDeadline
+        },
+        updated: { inadimplente: markedInadimplente, adimplente: markedAdimplente },
+        charges: { generated: chargesGenerated, detail: chargesDetail }
+    });
+}));
+
+// GET /admin/billing/account/:cpf/status — status detalhado de uma conta
+apiRouter.get('/admin/billing/account/:cpf/status', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    if (!cpf || cpf.length !== 11) return res.status(400).json({ success: false, message: 'CPF inválido.' });
+
+    const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+    if (!configRows.length) return res.status(500).json({ success: false, message: 'Configuração de faturamento não encontrada.' });
+    const cfg = configRows[0];
+
+    const userRows = await databricksService.executeQuery(`
+        SELECT cpf, full_name, email,
+               COALESCE(account_status,'adimplente') AS account_status,
+               COALESCE(days_overdue, 0) AS days_overdue,
+               credit_card_invoice_due_date, credit_card_available_limit, credit_card_total_limit,
+               invoice_last_closed_date
+        FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}' AND role = 'customer'
+    `);
+    if (!userRows.length) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
+    const u = userRows[0];
+
+    const cycle = computeCurrentCycle(cfg);
+    const invoiceAmount = Math.max(0,
+        parseFloat(u.credit_card_total_limit || 5000) - parseFloat(u.credit_card_available_limit || 0)
+    );
+
+    const charges = await databricksService.executeQuery(`
+        SELECT * FROM ${databricksService.fq('billing_charges')}
+        WHERE cpf = '${cpf}' ORDER BY created_at DESC LIMIT 20
+    `);
+
+    const pendingTotal = charges
+        .filter(c => c.status === 'pending')
+        .reduce((sum, c) => sum + parseFloat(c.amount), 0);
+
+    res.json({
+        success: true,
+        account: {
+            cpf: u.cpf, fullName: u.full_name, email: u.email,
+            accountStatus: u.account_status, daysOverdue: u.days_overdue,
+            invoiceDueDate: u.credit_card_invoice_due_date,
+            invoiceAmount: Math.round(invoiceAmount * 100) / 100,
+            pendingCharges: Math.round(pendingTotal * 100) / 100,
+            totalOwed: Math.round((invoiceAmount + pendingTotal) * 100) / 100
+        },
+        cycle: {
+            ref: cycle.invoiceRef, status: cycle.cycleStatus,
+            closeDate: cycle.closeDate, dueDate: cycle.dueDate,
+            config: { close_day: cfg.close_day, due_day: cfg.due_day, grace_period_days: cfg.grace_period_days }
+        },
+        charges
+    });
+}));
+
+// GET /billing/invoice-status — status da fatura do usuário logado (mobile)
+apiRouter.get('/billing/invoice-status', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+
+    const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+    const cfg = configRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3, is_active: true };
+
+    const userRows = await databricksService.executeQuery(`
+        SELECT credit_card_invoice_due_date, credit_card_available_limit, credit_card_total_limit,
+               COALESCE(account_status,'adimplente') AS account_status,
+               COALESCE(days_overdue, 0) AS days_overdue
+        FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'
+    `);
+    if (!userRows.length) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
+    const u = userRows[0];
+
+    const cycle = computeCurrentCycle(cfg);
+    const invoiceAmount = Math.max(0,
+        parseFloat(u.credit_card_total_limit || 5000) - parseFloat(u.credit_card_available_limit || 0)
+    );
+
+    const pendingCharges = await databricksService.executeQuery(`
+        SELECT charge_type, amount FROM ${databricksService.fq('billing_charges')}
+        WHERE cpf = '${cpf}' AND invoice_reference = '${cycle.invoiceRef}' AND status = 'pending'
+    `);
+    const pendingTotal = pendingCharges.reduce((s, c) => s + parseFloat(c.amount), 0);
+
+    res.json({
+        success: true,
+        invoice: {
+            ref: cycle.invoiceRef,
+            status: cycle.cycleStatus,           // aberta | fechada | vencida | inadimplente
+            accountStatus: u.account_status,
+            daysOverdue: u.days_overdue,
+            closeDate: cycle.closeDate,
+            dueDate: u.credit_card_invoice_due_date || cycle.dueDate,
+            invoiceAmount: Math.round(invoiceAmount * 100) / 100,
+            pendingCharges: Math.round(pendingTotal * 100) / 100,
+            charges: pendingCharges,
+            isActive: cfg.is_active
+        }
+    });
+}));
+
 // --- Cartões (via repositório) ---
 apiRouter.post('/cards/invoice/parcel', bearerAuth(), asyncHandler(async (req, res) => {
     const { cpf, amount, installments, pin } = req.body || {};
@@ -3268,6 +3511,69 @@ async function initializeDatabase() {
             ) USING DELTA
         `);
         console.log('✅ Tabela stories verificada/criada com sucesso.');
+
+        // =====================================================
+        // billing_config — parâmetros globais de faturamento
+        // =====================================================
+        if (provider === 'postgres') {
+            await databricksService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${databricksService.fq('billing_config')} (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    close_day INTEGER NOT NULL DEFAULT 20,
+                    due_day INTEGER NOT NULL DEFAULT 10,
+                    grace_period_days INTEGER NOT NULL DEFAULT 3,
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_by VARCHAR(11)
+                )
+            `);
+            await databricksService.executeQuery(`
+                INSERT INTO ${databricksService.fq('billing_config')} (id, close_day, due_day, grace_period_days, is_active)
+                VALUES (1, 20, 10, 3, TRUE)
+                ON CONFLICT (id) DO NOTHING
+            `);
+            console.log('✅ Tabela billing_config verificada/criada com sucesso.');
+
+            // Garantir colunas de status na tabela users
+            const billingCols = await databricksService.executeQuery(`
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = 'fintech' AND table_name = 'users'
+                AND column_name IN ('account_status','days_overdue','credit_card_due_day','invoice_last_closed_date')
+            `);
+            const hasCols = billingCols.map(c => c.column_name);
+            if (!hasCols.includes('account_status')) {
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('users')} ADD COLUMN account_status VARCHAR(20) DEFAULT 'adimplente'`);
+                console.log('✅ Coluna account_status adicionada em users.');
+            }
+            if (!hasCols.includes('days_overdue')) {
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('users')} ADD COLUMN days_overdue INTEGER DEFAULT 0`);
+                console.log('✅ Coluna days_overdue adicionada em users.');
+            }
+            if (!hasCols.includes('credit_card_due_day')) {
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('users')} ADD COLUMN credit_card_due_day INTEGER DEFAULT 15`);
+                console.log('✅ Coluna credit_card_due_day adicionada em users.');
+            }
+            if (!hasCols.includes('invoice_last_closed_date')) {
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('users')} ADD COLUMN invoice_last_closed_date TIMESTAMP`);
+                console.log('✅ Coluna invoice_last_closed_date adicionada em users.');
+            }
+
+            // billing_charges — encargos por inadimplência
+            await databricksService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${databricksService.fq('billing_charges')} (
+                    id VARCHAR(255) PRIMARY KEY,
+                    cpf VARCHAR(11) NOT NULL,
+                    invoice_reference VARCHAR(7) NOT NULL,
+                    charge_type VARCHAR(20) NOT NULL,
+                    amount DECIMAL(15,2) NOT NULL,
+                    days_overdue INTEGER NOT NULL DEFAULT 0,
+                    invoice_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending'
+                )
+            `);
+            console.log('✅ Tabela billing_charges verificada/criada com sucesso.');
+        }
 
         console.log('🎉 Estrutura do banco de dados inicializada com sucesso!');
     } catch (error) {

@@ -28,7 +28,11 @@ CREATE TABLE IF NOT EXISTS users (
     credit_card_points_balance INTEGER DEFAULT 0,
     credit_card_is_blocked BOOLEAN DEFAULT FALSE,
     password_reset_requested BOOLEAN DEFAULT FALSE,
-    
+    account_status VARCHAR(20) DEFAULT 'adimplente',   -- adimplente | inadimplente | suspenso
+    days_overdue INTEGER DEFAULT 0,
+    credit_card_due_day INTEGER DEFAULT 15,
+    invoice_last_closed_date TIMESTAMP,
+
     PRIMARY KEY (id)
 );
 
@@ -138,6 +142,35 @@ CREATE TABLE IF NOT EXISTS installment_plans (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
+);
+
+-- Configuração global de faturamento (linha única, id=1)
+CREATE TABLE IF NOT EXISTS billing_config (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    close_day INTEGER NOT NULL DEFAULT 20,          -- dia do mês em que a fatura fecha
+    due_day INTEGER NOT NULL DEFAULT 10,             -- dia do mês seguinte em que a fatura vence
+    grace_period_days INTEGER NOT NULL DEFAULT 3,    -- dias após vencimento antes de marcar inadimplente
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,         -- ciclo de faturamento ativo
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(11)
+);
+
+-- Seed: garante que sempre existe exatamente uma linha de configuração
+INSERT INTO billing_config (id, close_day, due_day, grace_period_days, is_active)
+VALUES (1, 20, 10, 3, TRUE)
+ON CONFLICT (id) DO NOTHING;
+
+-- Encargos gerados por inadimplência (multa + juros de mora)
+CREATE TABLE IF NOT EXISTS billing_charges (
+    id VARCHAR(255) PRIMARY KEY,
+    cpf VARCHAR(11) NOT NULL,
+    invoice_reference VARCHAR(7) NOT NULL,        -- 'YYYY-MM' do mês de referência
+    charge_type VARCHAR(20) NOT NULL,              -- 'multa' | 'juros_mora'
+    amount DECIMAL(15,2) NOT NULL,
+    days_overdue INTEGER NOT NULL DEFAULT 0,
+    invoice_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' -- pending | applied | cancelled
 );
 
 -- Inserir usuário administrador padrão
