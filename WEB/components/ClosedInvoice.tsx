@@ -1,172 +1,244 @@
 import React, { useState } from 'react';
-// FIX: Corrected import path for types from parent directory.
 import { User, CardTransaction } from '../types';
-import { formatDateBR } from '../utils/formatters';
 
 interface ClosedInvoiceProps {
   user: User;
   onBack: () => void;
   onPayInvoice: () => void;
-  // FIX: Updated onParcel prop to not require a payload, simplifying the initiation of the installment flow.
   onParcel: () => void;
 }
 
-const InfoRow: React.FC<{ label: string; value: string; valueColor?: string; hasAction?: boolean }> = ({ label, value, valueColor = 'text-white', hasAction = false }) => (
-    <div className="flex justify-between items-center py-4">
-        <span className="text-sm text-gray-400">{label}</span>
-        <div className="flex items-center space-x-2">
-            <span className={`text-sm font-semibold ${valueColor}`}>{value}</span>
-            {hasAction && <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>}
-        </div>
-    </div>
-);
+const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+function categoryIcon(tx: CardTransaction): string {
+    const m = tx.merchant?.toLowerCase() ?? '';
+    if (m.includes('mercado') || m.includes('supermercado')) return 'shopping_cart';
+    if (m.includes('restaurante') || m.includes('lanchonete')) return 'restaurant';
+    if (m.includes('loja')) return 'storefront';
+    if (m.includes('pix')) return 'currency_exchange';
+    if (tx.type === 'PAYMENT' || tx.type === 'INVOICE_INSTALLMENT') return 'check_circle';
+    return 'receipt_long';
+}
 
-function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }) {
+const statusConfig = {
+    fechada:      { label: 'A fatura está fechada',        icon: 'check_circle', color: 'text-green-400',  bg: 'bg-green-400/10 border border-green-400/20' },
+    vencida:      { label: 'Fatura vencida — pague agora', icon: 'schedule',     color: 'text-yellow-400', bg: 'bg-yellow-400/10 border border-yellow-400/20' },
+    inadimplente: { label: 'Conta inadimplente',           icon: 'warning',      color: 'text-red-400',    bg: 'bg-red-400/10 border border-red-400/20' },
+};
+
+function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoiceProps) {
   const { creditCard, balance } = user;
   const [isLoading, setIsLoading] = useState(false);
-  // Uma fatura só está atrasada DEPOIS do fim do dia de vencimento
-  // Se hoje for o dia de vencimento ou anterior, não está atrasada
-  const isOverdue = creditCard.closedInvoice > 0 && creditCard.closedInvoiceDueDate && (() => {
-    const dueDate = new Date(creditCard.closedInvoiceDueDate);
-    // Definir fim do dia de vencimento (23:59:59.999)
-    dueDate.setUTCHours(23, 59, 59, 999);
-    const now = new Date();
-    // Só está atrasada se a data atual for depois do fim do dia de vencimento
-    return now > dueDate;
-  })();
-  // FIX: Added a check to see if the user can afford the full invoice payment.
-  const canAfford = balance >= creditCard.closedInvoice;
+  const [hideValue, setHideValue] = useState(false);
 
+  const invoiceAmount = creditCard.closedInvoice ?? 0;
+  const isCredit = invoiceAmount < 0;
+  const canAfford = balance >= invoiceAmount;
+
+  const isOverdue = invoiceAmount > 0 && !!creditCard.closedInvoiceDueDate && (() => {
+    const due = new Date(creditCard.closedInvoiceDueDate!);
+    due.setUTCHours(23, 59, 59, 999);
+    return new Date() > due;
+  })();
+
+  const statusKey: keyof typeof statusConfig =
+    user.accountStatus === 'inadimplente' ? 'inadimplente'
+    : isOverdue ? 'vencida'
+    : 'fechada';
+  const status = statusConfig[statusKey];
+
+  const dueDate = creditCard.closedInvoiceDueDate
+    ? new Date(creditCard.closedInvoiceDueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    : '--/--';
+
+  const minPayment = invoiceAmount > 0 ? Math.max(invoiceAmount * 0.15, 10) : 0;
+
+  const closedTxs = creditCard.closedTransactions ?? [];
+  const grouped: Record<string, CardTransaction[]> = {};
+  for (const tx of closedTxs) {
+    const key = new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(tx);
+  }
+  const total = closedTxs.reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
 
   const handlePay = async () => {
     setIsLoading(true);
-    try {
-        await onPayInvoice();
-    } finally {
-        setIsLoading(false);
-    }
-  };
-
-  const handleParcel = () => {
-      // FIX: The onParcel call is now simplified to just trigger the navigation to the installment options screen.
-      onParcel();
+    try { await onPayInvoice(); } finally { setIsLoading(false); }
   };
 
   return (
     <div className="bg-background-dark text-white min-h-full flex flex-col">
-      <header className="flex items-center p-4">
-          <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
-          </button>
-        <h2 className="text-xl font-bold text-white">Fatura Fechada</h2>
+
+      <header className="flex items-center p-4 bg-primary sticky top-0 z-20">
+        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
+          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <h2 className="text-xl font-bold text-white flex-1 text-center pr-8">Fatura Fechada</h2>
       </header>
 
-      <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-6">
-        {creditCard.isBlocked ? (
-            <div
-                className="bg-red-800 border border-red-600 text-red-200 p-4 rounded-lg text-center mb-4 animate-fade-in"
-                data-testid="alert-card-blocked"
-                role="alert"
-                aria-live="assertive"
-                aria-atomic="true"
-            >
-                <h3 className="font-bold text-lg flex items-center justify-center gap-2" data-testid="alert-card-blocked-title">
-                    <span className="material-symbols-outlined" aria-hidden="true">lock</span>
-                    Cartão Bloqueado
-                </h3>
-                <p className="text-sm mt-1" data-testid="alert-card-blocked-message">
-                    Sua fatura está em atraso. Pague agora para desbloquear seu cartão e evitar mais juros.
-                </p>
+      <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-5 pb-8">
+
+        {/* ── Card de resumo (spec §2) ── */}
+        <div className="bg-surface-dark rounded-2xl p-5 shadow-lg space-y-4">
+
+          {/* Status tag */}
+          {isCredit ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/15 text-primary">
+              <span className="material-symbols-outlined text-sm" aria-hidden="true">info</span>
+              Não há fatura para pagar neste mês
+            </span>
+          ) : (
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${status.bg} ${status.color}`}>
+              <span className="material-symbols-outlined text-sm" aria-hidden="true">{status.icon}</span>
+              {status.label}
+            </span>
+          )}
+
+          {/* Valor principal + eye toggle */}
+          <div>
+            <p className="text-xs text-white/50 mb-1">Valor total</p>
+            <div className="flex items-center justify-between gap-3">
+              <p
+                className={`text-3xl font-bold ${isCredit ? 'text-primary' : 'text-white'}`}
+                data-testid="closed-invoice-amount"
+              >
+                {hideValue ? '• • • • • •' : fmt(Math.abs(invoiceAmount))}
+              </p>
+              <button
+                onClick={() => setHideValue(h => !h)}
+                className="p-1 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                aria-label={hideValue ? 'Mostrar valor' : 'Ocultar valor'}
+              >
+                <span className="material-symbols-outlined text-xl">
+                  {hideValue ? 'visibility_off' : 'visibility'}
+                </span>
+              </button>
             </div>
-        ) : user.accountStatus === 'inadimplente' ? (
-            <div
-                className="bg-red-900/40 border border-red-500/40 text-red-300 p-4 rounded-xl mb-4 animate-fade-in"
-                data-testid="alert-invoice-inadimplente"
-                role="alert"
-                aria-live="assertive"
-                aria-atomic="true"
-            >
-                <h3 className="font-bold text-base flex items-center gap-2" data-testid="alert-invoice-inadimplente-title">
-                    <span className="material-symbols-outlined text-red-400" aria-hidden="true">warning</span>
-                    Conta inadimplente
-                </h3>
-                <p className="text-sm mt-1 text-red-300/80" data-testid="alert-invoice-inadimplente-message">
-                    {user.daysOverdue
-                        ? `${user.daysOverdue} dia${user.daysOverdue !== 1 ? 's' : ''} em atraso`
-                        : 'Fatura em atraso'}
-                    {user.pendingCharges && user.pendingCharges > 0
-                        ? ` • Encargos acumulados: ${user.pendingCharges.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
-                        : ''}
-                </p>
+          </div>
+
+          {/* Grid vencimento | pagamento mínimo */}
+          {!isCredit && invoiceAmount > 0 && (
+            <div className="grid grid-cols-2 gap-4 pt-1 border-t border-white/10">
+              <div>
+                <p className="text-xs text-gray-400">Vence em</p>
+                <p className="text-sm font-semibold text-white">{dueDate}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Pagamento mínimo</p>
+                <p className="text-sm font-semibold text-white">{fmt(minPayment)}</p>
+              </div>
             </div>
-        ) : isOverdue && (
+          )}
+
+          {/* Encargos se inadimplente */}
+          {user.accountStatus === 'inadimplente' && !!user.pendingCharges && user.pendingCharges > 0 && (
             <div
-                className="bg-orange-800 border border-orange-600 text-orange-200 p-4 rounded-lg text-center mb-4"
-                data-testid="alert-invoice-overdue"
-                role="alert"
-                aria-live="polite"
-                aria-atomic="true"
+              className="flex items-center gap-2 pt-1 border-t border-red-400/20"
+              data-testid="alert-invoice-inadimplente"
             >
-                <h3 className="font-bold text-lg flex items-center justify-center gap-2" data-testid="alert-invoice-overdue-title">
-                    <span className="material-symbols-outlined" aria-hidden="true">warning</span>
-                    Fatura Atrasada
-                </h3>
-                <p className="text-sm mt-1" data-testid="alert-invoice-overdue-message">
-                    Pague agora para evitar juros e o bloqueio do seu cartão.
-                </p>
+              <span className="material-symbols-outlined text-red-400 text-sm" aria-hidden="true">warning</span>
+              <p className="text-xs text-red-400">
+                {user.daysOverdue
+                  ? `${user.daysOverdue} dia${user.daysOverdue !== 1 ? 's' : ''} em atraso • `
+                  : ''}
+                Encargos: {fmt(user.pendingCharges)}
+              </p>
             </div>
-        )}
-        <div className="bg-surface-dark rounded-lg divide-y divide-subtle-dark/50 px-4">
-            <InfoRow label="Fatura fechada" value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCard.closedInvoice)} valueColor="text-orange-400" hasAction />
-            <InfoRow label="Débito automático" value="Desativado" valueColor="text-red-400" hasAction />
-            <InfoRow label="Vencimento" value={new Date(creditCard.closedInvoiceDueDate || creditCard.invoiceDueDate).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})} />
-            <InfoRow label="Limite disponível" value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCard.availableLimit)} />
-            <InfoRow label="Limite total" value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCard.totalLimit)} />
-        </div>
-        
-        {/* FIX: The "Pagar" button is now disabled if the user's balance is insufficient, guiding them to the parceling option. */}
-        <div className="flex flex-col gap-3">
-             <button onClick={handleParcel} disabled={creditCard.closedInvoice <= 0} className="w-full py-3 font-semibold text-orange-400 bg-transparent border border-orange-400 rounded-lg hover:bg-orange-400/10 disabled:border-gray-600 disabled:text-gray-600 disabled:cursor-not-allowed">
-                Parcelar Fatura
-            </button>
-             <button onClick={handlePay} disabled={isLoading || creditCard.closedInvoice <= 0 || !canAfford} className={`w-full py-3 font-semibold text-background-dark rounded-lg disabled:bg-gray-600 disabled:cursor-not-allowed ${isOverdue ? 'bg-orange-500 hover:bg-orange-600' : 'bg-orange-400 hover:bg-orange-500'}`}>
-                {isLoading ? 'Pagando...' : 'Pagar valor total'}
-            </button>
-            {!canAfford && creditCard.closedInvoice > 0 && <p className="text-xs text-red-400 text-center">Saldo em conta insuficiente para o pagamento total. Tente parcelar.</p>}
-        </div>
-        
-        <div className="text-center text-xs text-gray-500">
-            <p>O que achou dessa versão do resumo de fatura?</p>
+          )}
+
+          {/* CTAs */}
+          {!isCredit && invoiceAmount > 0 && (
+            <div className="space-y-2 pt-1">
+              <button
+                onClick={handlePay}
+                disabled={isLoading || !canAfford}
+                className="w-full py-3 font-bold text-white bg-primary rounded-lg hover:opacity-90 disabled:bg-gray-600 disabled:cursor-not-allowed transition-opacity"
+              >
+                {isLoading ? 'Pagando...' : 'Pagar fatura'}
+              </button>
+              <button
+                onClick={onParcel}
+                className="w-full py-3 font-semibold text-primary bg-transparent border border-primary/50 rounded-lg hover:bg-primary/10 transition-colors"
+              >
+                Parcelar fatura
+              </button>
+              {!canAfford && (
+                <p className="text-xs text-red-400 text-center">
+                  Saldo insuficiente para pagamento total. Tente parcelar.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
+        {/* ── Lista de lançamentos (spec §4) ── */}
         <div>
-            <h3 className="font-bold text-white mb-3 text-lg">Lançamentos da Fatura Fechada</h3>
-            {creditCard.closedTransactions.length > 0 ? (
-                <div className="space-y-1">
-                {creditCard.closedTransactions.map(tx => (
-                    <div key={tx.id} className="w-full p-3 rounded-lg flex items-center bg-surface-dark">
-                        <div className="flex-grow text-left">
-                            <p className="font-semibold text-white">{tx.merchant}</p>
-                            <p className="text-sm text-gray-400">{formatDateBR(tx.date)}</p>
+          <p className="text-xs text-gray-400 mb-3">
+            Confira aqui os detalhes da fatura e os lançamentos do mês.
+          </p>
+
+          {closedTxs.length > 0 ? (
+            <div className="space-y-4">
+              {Object.entries(grouped).map(([date, txs]) => (
+                <div key={date}>
+                  <p className="text-xs text-gray-400 font-medium mb-2 px-1">{date}</p>
+                  <div className="space-y-1">
+                    {txs.map(tx => {
+                      const isRefund = tx.amount < 0;
+                      const installLabel = tx.installments
+                        ?? (tx.currentInstallment && tx.totalInstallments
+                          ? `${tx.currentInstallment}/${tx.totalInstallments}`
+                          : null);
+
+                      return (
+                        <div key={tx.id} className="flex items-center gap-3 p-3 rounded-xl bg-surface-dark">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <span className={`material-symbols-outlined text-lg ${isRefund ? 'text-green-400' : 'text-primary'}`}>
+                              {categoryIcon(tx)}
+                            </span>
+                          </div>
+                          <div className="flex-grow min-w-0">
+                            <p className="font-semibold text-white text-sm truncate">{tx.merchant}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <p className="text-xs text-gray-400">
+                                {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                              </p>
+                              {installLabel && (
+                                <span className="text-xs text-gray-400 bg-white/5 px-1.5 py-0.5 rounded-full">
+                                  {installLabel}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <p className={`font-semibold text-sm flex-shrink-0 ${isRefund ? 'text-primary' : 'text-white'}`}>
+                            {isRefund ? '+' : ''}{fmt(Math.abs(tx.amount))}
+                          </p>
                         </div>
-                        <div className="text-right">
-                        <p className="font-semibold text-white">- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}</p>
-                        </div>
-                    </div>
-                ))}
+                      );
+                    })}
+                  </div>
                 </div>
-            ) : (
-                <p className="text-center text-gray-500 py-4">Nenhum lançamento nesta fatura.</p>
-            )}
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-500 py-8">Nenhum lançamento nesta fatura.</p>
+          )}
         </div>
+
+        {/* ── Footer totalizador (spec §6) ── */}
+        {closedTxs.length > 0 && (
+          <div className="border-t-2 border-white/20 pt-4 flex justify-between items-center">
+            <p className="font-semibold text-white">Total do Titular</p>
+            <p className="font-bold text-white text-lg">{fmt(total)}</p>
+          </div>
+        )}
+
       </main>
-      <style>{`
-        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-        .animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
-      `}</style>
     </div>
   );
-};
+}
 
 export default ClosedInvoice;

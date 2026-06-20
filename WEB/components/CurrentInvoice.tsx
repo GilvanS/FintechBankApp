@@ -1,6 +1,5 @@
-import React from 'react';
-import { User } from '../types';
-import { formatDateBR } from '../utils/formatters';
+import React, { useState } from 'react';
+import { User, CardTransaction } from '../types';
 
 const statusConfig = {
     aberta: { label: 'Fatura em aberto', icon: 'pending', color: 'text-blue-400', bg: 'bg-blue-400/10 border border-blue-400/20' },
@@ -14,12 +13,7 @@ interface CurrentInvoiceProps {
   onBack: () => void;
 }
 
-const InfoRow: React.FC<{ label: string; value: string; valueColor?: string; }> = ({ label, value, valueColor = 'text-white' }) => (
-    <div className="flex justify-between items-center py-4">
-        <span className="text-sm text-gray-400">{label}</span>
-        <span className={`text-sm font-semibold ${valueColor}`}>{value}</span>
-    </div>
-);
+const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const getIconForTx = (merchant: string) => {
     const lowerMerchant = merchant.toLowerCase();
@@ -33,6 +27,7 @@ const getIconForTx = (merchant: string) => {
 
 const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
   const { creditCard } = user;
+  const [hideValue, setHideValue] = useState(false);
   const cycleStatus = user.billingCycle?.status ?? 'aberta';
   const status = statusConfig[cycleStatus] ?? statusConfig.aberta;
 
@@ -46,10 +41,19 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
     : creditCard.transactions;
 
   const vencimentoLabel = hasInvoiceDueDate
-    ? new Date(creditCard.invoiceDueDate).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})
+    ? new Date(creditCard.invoiceDueDate).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'})
     : '--';
 
   const isCredit = creditCard.currentInvoice < 0;
+  const minPayment = creditCard.currentInvoice > 0 ? Math.max(creditCard.currentInvoice * 0.15, 10) : 0;
+
+  const grouped: Record<string, CardTransaction[]> = {};
+  for (const tx of currentTransactions) {
+    const key = new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(tx);
+  }
+  const total = currentTransactions.reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
 
   return (
     <div className="bg-background-dark text-white min-h-full flex flex-col">
@@ -69,23 +73,34 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
             {isCredit ? 'Não há fatura para pagar neste mês' : status.label}
           </div>
 
-          {/* Valor principal */}
+          {/* Valor principal + eye toggle */}
           <div>
             <p className="text-xs text-white/50 mb-1">Valor total</p>
-            <p className={`text-3xl font-bold ${isCredit ? 'text-primary' : 'text-white'}`}>
-              {creditCard.currentInvoice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className={`text-3xl font-bold ${isCredit ? 'text-primary' : 'text-white'}`}>
+                {hideValue ? '• • • • • •' : fmt(Math.abs(creditCard.currentInvoice))}
+              </p>
+              <button
+                onClick={() => setHideValue(h => !h)}
+                className="p-1 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                aria-label={hideValue ? 'Mostrar valor' : 'Ocultar valor'}
+              >
+                <span className="material-symbols-outlined text-xl">
+                  {hideValue ? 'visibility_off' : 'visibility'}
+                </span>
+              </button>
+            </div>
           </div>
 
-          {/* Grid: vencimento + limite disponível */}
+          {/* Grid: vencimento | pagamento mínimo */}
           <div className="grid grid-cols-2 gap-4 pt-2 border-t border-white/10">
             <div>
               <p className="text-xs text-white/50">Vence em</p>
               <p className="text-sm font-semibold text-white">{vencimentoLabel}</p>
             </div>
             <div>
-              <p className="text-xs text-white/50">Limite disponível</p>
-              <p className="text-sm font-semibold text-white">{creditCard.availableLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+              <p className="text-xs text-white/50">Pagamento mínimo</p>
+              <p className="text-sm font-semibold text-white">{isCredit ? '--' : fmt(minPayment)}</p>
             </div>
           </div>
 
@@ -101,33 +116,64 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
           )}
         </div>
 
-        <div className="bg-surface-dark rounded-lg divide-y divide-subtle-dark/50 px-4">
-            <InfoRow label="Limite total" value={creditCard.totalLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
-        </div>
-        
+        {/* Lançamentos agrupados por data (spec §4) */}
         <div>
-            <h3 className="font-bold text-white mb-3 text-lg">Lançamentos da Fatura Atual</h3>
-            {currentTransactions.length > 0 ? (
-                <div className="space-y-1">
-                {currentTransactions.map(tx => (
-                    <div key={tx.id} className="w-full p-3 rounded-lg flex items-center bg-surface-dark space-x-3">
-                         <div className="p-2 bg-background-dark rounded-full">
-                            <span className={`material-symbols-outlined ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-primary'}`}>{getIconForTx(tx.merchant)}</span>
+          <p className="text-xs text-gray-400 mb-3">
+            Confira aqui os detalhes da fatura e os lançamentos do mês.
+          </p>
+
+          {currentTransactions.length > 0 ? (
+            <div className="space-y-4">
+              {Object.entries(grouped).map(([date, txs]) => (
+                <div key={date}>
+                  <p className="text-xs text-gray-400 font-medium mb-2 px-1">{date}</p>
+                  <div className="space-y-1">
+                    {txs.map(tx => {
+                      const isRefund = tx.amount < 0 || tx.type === 'PAYMENT';
+                      const installLabel = tx.installments ?? null;
+
+                      return (
+                        <div key={tx.id} className="flex items-center gap-3 p-3 rounded-xl bg-surface-dark">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <span className={`material-symbols-outlined text-lg ${isRefund ? 'text-green-400' : 'text-primary'}`}>
+                              {getIconForTx(tx.merchant)}
+                            </span>
+                          </div>
+                          <div className="flex-grow min-w-0">
+                            <p className="font-semibold text-white text-sm truncate">{tx.merchant}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <p className="text-xs text-gray-400">
+                                {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                              </p>
+                              {installLabel && (
+                                <span className="text-xs text-gray-400 bg-white/5 px-1.5 py-0.5 rounded-full">
+                                  {installLabel}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <p className={`font-semibold text-sm flex-shrink-0 ${isRefund ? 'text-green-400' : 'text-white'}`}>
+                            {isRefund ? '+' : ''}{fmt(Math.abs(tx.amount))}
+                          </p>
                         </div>
-                        <div className="flex-grow text-left">
-                            <p className="font-semibold text-white">{tx.merchant} {tx.installments && <span className="text-xs text-gray-400">{tx.installments}</span>}</p>
-                            <p className="text-sm text-gray-400">{formatDateBR(tx.date)}</p>
-                        </div>
-                        <div className="text-right">
-                           <p className={`font-semibold ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-white'}`}>{tx.type === 'PAYMENT' ? '+' : ''} {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                        </div>
-                    </div>
-                ))}
+                      );
+                    })}
+                  </div>
                 </div>
-            ) : (
-                <p className="text-center text-gray-500 py-4">Nenhum lançamento nesta fatura.</p>
-            )}
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-500 py-8">Nenhum lançamento nesta fatura.</p>
+          )}
         </div>
+
+        {/* Footer totalizador (spec §6) */}
+        {currentTransactions.length > 0 && (
+          <div className="border-t-2 border-white/20 pt-4 flex justify-between items-center">
+            <p className="font-semibold text-white">Total do Titular</p>
+            <p className="font-bold text-white text-lg">{fmt(total)}</p>
+          </div>
+        )}
       </main>
     </div>
   );
