@@ -142,8 +142,78 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
                 </div>
             </section>
 
+            {/* Account Status Banner */}
+            {user.accountStatus && user.accountStatus !== 'adimplente' ? (
+                <section
+                    className="rounded-xl p-4 flex items-start gap-3"
+                    style={{
+                        background: user.accountStatus === 'inadimplente'
+                            ? 'rgba(239,68,68,0.12)'
+                            : 'rgba(234,179,8,0.12)',
+                        border: `1px solid ${user.accountStatus === 'inadimplente' ? 'rgba(239,68,68,0.35)' : 'rgba(234,179,8,0.35)'}`,
+                    }}
+                    aria-label={`Status da conta: ${user.accountStatus}`}
+                    data-testid="home-account-status-banner"
+                >
+                    <span
+                        className="material-symbols-outlined flex-shrink-0 mt-0.5"
+                        style={{
+                            fontSize: '22px',
+                            color: user.accountStatus === 'inadimplente' ? '#ef4444' : '#eab308',
+                            fontVariationSettings: "'FILL' 1",
+                        }}
+                    >
+                        {user.accountStatus === 'inadimplente' ? 'warning' : 'info'}
+                    </span>
+                    <div className="flex flex-col gap-1 flex-1">
+                        <p className="text-sm font-semibold text-white leading-tight">
+                            {user.accountStatus === 'inadimplente' ? 'Conta inadimplente' : 'Conta suspensa'}
+                        </p>
+                        {user.accountStatus === 'inadimplente' && (
+                            <p className="text-xs text-white/70 leading-snug">
+                                {user.daysOverdue
+                                    ? `${user.daysOverdue} dia${user.daysOverdue !== 1 ? 's' : ''} em atraso`
+                                    : 'Fatura em atraso'}
+                                {user.pendingCharges && user.pendingCharges > 0
+                                    ? ` • Encargos: ${user.pendingCharges.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                                    : ''}
+                            </p>
+                        )}
+                        <p className="text-xs text-white/50">Acesse Cartões para regularizar.</p>
+                    </div>
+                </section>
+            ) : user.billingCycle && (user.billingCycle.status === 'fechada' || user.billingCycle.status === 'vencida') ? (
+                <section
+                    className="rounded-xl p-3 flex items-center gap-3"
+                    style={{
+                        background: user.billingCycle.status === 'vencida'
+                            ? 'rgba(234,179,8,0.10)'
+                            : 'rgba(34,197,94,0.08)',
+                        border: `1px solid ${user.billingCycle.status === 'vencida' ? 'rgba(234,179,8,0.30)' : 'rgba(34,197,94,0.20)'}`,
+                    }}
+                    aria-label="Aviso de fatura"
+                    data-testid="home-invoice-reminder"
+                >
+                    <span
+                        className="material-symbols-outlined flex-shrink-0"
+                        style={{
+                            fontSize: '20px',
+                            color: user.billingCycle.status === 'vencida' ? '#eab308' : '#22c55e',
+                            fontVariationSettings: "'FILL' 1",
+                        }}
+                    >
+                        {user.billingCycle.status === 'vencida' ? 'schedule' : 'receipt_long'}
+                    </span>
+                    <p className="text-xs text-white/70 flex-1">
+                        {user.billingCycle.status === 'vencida'
+                            ? 'Fatura no prazo de carência — pague antes de ser marcado inadimplente.'
+                            : `Fatura fechada. Vence em ${new Date(user.billingCycle.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}.`}
+                    </p>
+                </section>
+            ) : null}
+
             {/* Limits Section */}
-            <section 
+            <section
                 className="test-limits-section"
                 id="home-limits-section"
                 data-testid="home-limits-section"
