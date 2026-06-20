@@ -122,6 +122,17 @@ export interface User {
     showStoriesPopup: boolean;
     purchasedItems: PurchasedItem[];
     creditCard: CreditCard;
+    // Billing status (issue #35)
+    accountStatus?: 'adimplente' | 'inadimplente' | 'suspenso';
+    daysOverdue?: number;
+    pendingCharges?: number;
+    billingCycle?: {
+        ref: string;
+        status: 'aberta' | 'fechada' | 'vencida' | 'inadimplente';
+        closeDate: string;
+        dueDate: string;
+        isActive: boolean;
+    } | null;
     // Legacy fields kept for compatibility if needed, but should be removed eventually
     id?: string;
     name?: string;

@@ -885,6 +885,45 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
         purchaseDate: r.purchase_date
     }));
 
+    // ── Billing status ────────────────────────────────────────────────────────
+    try {
+        const billingCfgRows = await databricksService.executeQuery(
+            `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
+        );
+        const billingCfg = billingCfgRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3, is_active: true };
+        const cycle = computeCurrentCycle(billingCfg);
+
+        const billingUserRow = await databricksService.executeQuery(`
+            SELECT COALESCE(account_status, 'adimplente') AS account_status,
+                   COALESCE(days_overdue, 0)              AS days_overdue
+            FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'
+        `);
+        const bu = billingUserRow[0] || {};
+
+        const chargeRows = await databricksService.executeQuery(`
+            SELECT charge_type, amount
+            FROM ${databricksService.fq('billing_charges')}
+            WHERE cpf = '${cpf}' AND invoice_reference = '${cycle.invoiceRef}' AND status = 'pending'
+        `);
+        const pendingCharges = chargeRows.reduce((s, c) => s + parseFloat(c.amount), 0);
+
+        normalized.accountStatus  = bu.account_status || 'adimplente';
+        normalized.daysOverdue    = Number(bu.days_overdue) || 0;
+        normalized.pendingCharges = Math.round(pendingCharges * 100) / 100;
+        normalized.billingCycle   = {
+            ref:       cycle.invoiceRef,
+            status:    cycle.cycleStatus,
+            closeDate: cycle.closeDate,
+            dueDate:   cycle.dueDate,
+            isActive:  billingCfg.is_active
+        };
+    } catch (_billingErr) {
+        normalized.accountStatus  = 'adimplente';
+        normalized.daysOverdue    = 0;
+        normalized.pendingCharges = 0;
+        normalized.billingCycle   = null;
+    }
+
     res.json({ success: true, user: normalized });
 }));
 
