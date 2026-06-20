@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Transaction, User } from '../types';
-import ExtratoCompra from './ExtratoCompra'; // Reusing the detail component
+import ExtratoCompra from './ExtratoCompra';
 
 interface ClosedInvoiceProps {
     user: User;
@@ -9,136 +9,279 @@ interface ClosedInvoiceProps {
     onParcel: () => void;
 }
 
-/**
- * ClosedInvoiceView: Displays transactions from the last closed invoice.
- * Each transaction is clickable to show its details.
- */
-const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayInvoice, onParcel }) => {
-    const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
+const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-    if (selectedTransaction) {
-        return <ExtratoCompra transaction={selectedTransaction} onBack={() => setSelectedTransaction(null)} />;
+function buildMonths(count = 6): { label: string; key: string }[] {
+    const now = new Date();
+    return Array.from({ length: count }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (count - 1 - i), 1);
+        return {
+            label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
+            key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        };
+    });
+}
+
+function categoryIcon(type?: string): string {
+    const map: Record<string, string> = {
+        SHOP_DEBIT: 'shopping_bag', INVOICE_PAYMENT: 'payments',
+        INVOICE_INSTALLMENT: 'credit_card', SHOP_CREDIT: 'store',
+        CASHBACK_CREDIT: 'redeem', default: 'receipt_long',
+    };
+    return map[type ?? 'default'] ?? map.default;
+}
+
+const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayInvoice, onParcel }) => {
+    const months = buildMonths(6);
+    const [activeMonth, setActiveMonth] = useState(months[months.length - 1].key);
+    const [hideValue, setHideValue] = useState(false);
+    const [expanded, setExpanded] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+    const carouselRef = useRef<HTMLDivElement>(null);
+
+    if (selectedTx) {
+        return <ExtratoCompra transaction={selectedTx} onBack={() => setSelectedTx(null)} />;
     }
 
     const { creditCard } = user;
-    // Uma fatura só está atrasada DEPOIS do fim do dia de vencimento
-    // Se hoje for o dia de vencimento ou anterior, não está atrasada
-    const isOverdue = creditCard.closedInvoice > 0 && creditCard.closedInvoiceDueDate && (() => {
-        const dueDate = new Date(creditCard.closedInvoiceDueDate);
-        // Definir fim do dia de vencimento (23:59:59.999)
-        dueDate.setUTCHours(23, 59, 59, 999);
-        const now = new Date();
-        // Só está atrasada se a data atual for depois do fim do dia de vencimento
-        return now > dueDate;
-    })();
-    const canAfford = user.balance >= creditCard.closedInvoice;
+    const invoiceAmount = creditCard.closedInvoice ?? 0;
+    const isCredit = invoiceAmount < 0;
+    const canAfford = user.balance >= invoiceAmount;
 
-    const handlePay = async () => {
-        setIsLoading(true);
-        try {
-            await onPayInvoice();
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    const dueDate = creditCard.closedInvoiceDueDate
+        ? new Date(creditCard.closedInvoiceDueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+        : '--/--';
 
-    // This is a simplified logic. A real implementation would use start and end dates
-    // of the closed billing cycle. Here, we'll just take a few recent transactions 
-    // and pretend they are from the closed invoice for demonstration.
-    const closedTransactions = creditCard.closedTransactions.length > 0 ? creditCard.closedTransactions : creditCard.transactions.slice(0, 5);
+    const minPayment = invoiceAmount > 0 ? Math.max(invoiceAmount * 0.15, 10) : 0;
 
-    const groupedTransactions = closedTransactions.reduce((acc, tx) => {
-        const dateKey = new Date(tx.date).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric' });
-        const formattedKey = dateKey.charAt(0).toUpperCase() + dateKey.slice(1).replace('-feira', '-feira,');
-        if (!acc[formattedKey]) acc[formattedKey] = [];
-        acc[formattedKey].push(tx);
+    const closedTxs = creditCard.closedTransactions?.length
+        ? creditCard.closedTransactions
+        : creditCard.transactions?.slice(0, 8) ?? [];
+
+    const grouped = closedTxs.reduce((acc, tx) => {
+        const key = new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(tx);
         return acc;
     }, {} as Record<string, Transaction[]>);
 
-    const transactionGroups = Object.entries(groupedTransactions).reverse();
+    const handlePay = async () => {
+        setIsLoading(true);
+        try { await onPayInvoice(); } finally { setIsLoading(false); }
+    };
 
     return (
-        <div className="bg-background-dark text-white flex flex-col h-full">
-            <header className="flex items-center p-4 sticky top-0 bg-background-dark z-10">
-                <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10">
-                    <span className="material-symbols-outlined">arrow_back</span>
-                </button>
-                <h1 className="text-2xl font-bold">Fatura Fechada</h1>
+        <div className="flex flex-col h-full bg-background-dark text-white">
+
+            {/* ── Header + carrossel de meses ── */}
+            <header className="bg-primary sticky top-0 z-20">
+                <div className="flex items-center px-4 pt-4 pb-2">
+                    <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
+                        <span className="material-symbols-outlined text-white">arrow_back</span>
+                    </button>
+                    <h1 className="flex-1 text-center text-lg font-semibold text-white">Fatura</h1>
+                    <div className="w-10" />
+                </div>
+                <div
+                    ref={carouselRef}
+                    className="flex overflow-x-auto scrollbar-hide snap-x snap-mandatory px-4 pb-3 gap-6"
+                    style={{ scrollbarWidth: 'none' }}
+                >
+                    {months.map(m => {
+                        const isActive = m.key === activeMonth;
+                        return (
+                            <button
+                                key={m.key}
+                                onClick={() => setActiveMonth(m.key)}
+                                className="snap-center shrink-0 flex flex-col items-center gap-1"
+                            >
+                                <span
+                                    className={`text-sm capitalize transition-opacity ${isActive ? 'text-white font-semibold opacity-100' : 'text-white opacity-60'}`}
+                                >
+                                    {m.label}
+                                </span>
+                                {isActive && (
+                                    <span className="block w-full h-0.5 bg-white rounded-full" />
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
             </header>
 
-            <main className="flex-grow overflow-y-auto p-4 space-y-6">
-                {creditCard.isBlocked && (
-                    <div className="bg-red-800 border border-red-600 text-red-200 p-4 rounded-lg text-center animate-fade-in">
-                        <h3 className="font-bold text-lg flex items-center justify-center gap-2"><span className="material-symbols-outlined">lock</span>Cartão Bloqueado</h3>
-                        <p className="text-sm mt-1">Sua fatura está em atraso. Pague agora para desbloquear seu cartão e evitar mais juros.</p>
-                    </div>
-                )}
-                {isOverdue && !creditCard.isBlocked && (
-                    <div className="bg-orange-800 border border-orange-600 text-orange-200 p-4 rounded-lg text-center">
-                        <h3 className="font-bold text-lg flex items-center justify-center gap-2"><span className="material-symbols-outlined">warning</span>Fatura Atrasada</h3>
-                        <p className="text-sm mt-1">Pague agora para evitar juros e o bloqueio do seu cartão.</p>
-                    </div>
-                )}
-                <div className="bg-surface-dark rounded-lg divide-y divide-subtle-dark/50 px-4">
-                    <div className="flex justify-between items-center py-4">
-                        <span className="text-sm text-gray-400">Fatura fechada</span>
-                        <span className="text-sm font-semibold text-orange-400">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCard.closedInvoice)}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-4">
-                        <span className="text-sm text-gray-400">Vencimento</span>
-                        <span className="text-sm font-semibold text-white">{creditCard.closedInvoiceDueDate ? new Date(creditCard.closedInvoiceDueDate).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'}) : '--'}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-4">
-                        <span className="text-sm text-gray-400">Limite disponível</span>
-                        <span className="text-sm font-semibold text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCard.availableLimit)}</span>
-                    </div>
-                </div>
-                
-                <div className="flex flex-col gap-3">
-                    <button onClick={onParcel} disabled={creditCard.closedInvoice <= 0} className="w-full py-3 font-semibold text-primary bg-transparent border border-primary rounded-lg hover:bg-primary/10 disabled:border-gray-600 disabled:text-gray-600 disabled:cursor-not-allowed">
-                        Parcelar Fatura
-                    </button>
-                    <button onClick={handlePay} disabled={isLoading || creditCard.closedInvoice <= 0 || !canAfford} className="w-full py-3 font-semibold text-background-dark bg-primary rounded-lg hover:bg-primary/90 disabled:bg-gray-600 disabled:cursor-not-allowed">
-                        {isLoading ? 'Pagando...' : 'Pagar valor total'}
-                    </button>
-                    {!canAfford && creditCard.closedInvoice > 0 && <p className="text-xs text-red-400 text-center">Saldo em conta insuficiente para o pagamento total. Tente parcelar.</p>}
-                </div>
+            <main className="flex-1 overflow-y-auto p-4 space-y-5 pb-8">
 
-                <div>
-                    <h3 className="font-bold text-white mb-3 text-lg">Lançamentos da Fatura Fechada</h3>
-                    {transactionGroups.length > 0 ? transactionGroups.map(([date, txs]: [string, Transaction[]]) => (
-                     <div key={date} className="space-y-4">
-                        <p className="font-semibold text-gray-400">{date}</p>
-                        <div className="space-y-2">
-                            {txs.map(tx => (
-                                <button 
-                                    key={tx.id} 
-                                    onClick={() => setSelectedTransaction(tx)}
-                                    className="w-full flex items-center gap-4 hover:bg-surface-dark rounded-lg p-3 transition-colors duration-200 text-left"
-                                >
-                                    <div className="flex items-center justify-center rounded-md bg-surface-dark shrink-0 size-10">
-                                        <span className="material-symbols-outlined text-primary">receipt_long</span>
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="text-white font-medium">{tx.merchant} {tx.installments && <span className="text-xs text-gray-400">{tx.installments}</span>}</p>
-                                        <p className="text-gray-400 text-sm">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className={`font-semibold text-white`}>
-                                            {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </p>
-                                    </div>
-                                </button>
-                            ))}
+                {/* ── Card de resumo ── */}
+                <div className="bg-surface-dark rounded-2xl p-5 shadow-lg space-y-4">
+                    {/* Tag status */}
+                    {isCredit ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium bg-primary/15 text-primary px-3 py-1 rounded-full">
+                            <span className="material-symbols-outlined text-base">info</span>
+                            Não há fatura para pagar neste mês
+                        </span>
+                    ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-500/15 text-green-400 px-3 py-1 rounded-full">
+                            <span className="material-symbols-outlined text-base">check_circle</span>
+                            A fatura está fechada
+                        </span>
+                    )}
+
+                    {/* Valor total */}
+                    <div>
+                        <p className="text-xs text-gray-400 mb-1">Valor total</p>
+                        <div className="flex items-center justify-between">
+                            <p className={`text-3xl font-bold ${isCredit ? 'text-primary' : 'text-white'}`}>
+                                {hideValue ? '••••••' : fmt(Math.abs(invoiceAmount))}
+                            </p>
+                            <button
+                                onClick={() => setHideValue(v => !v)}
+                                className="p-2 text-gray-400 hover:text-white"
+                            >
+                                <span className="material-symbols-outlined">
+                                    {hideValue ? 'visibility_off' : 'visibility'}
+                                </span>
+                            </button>
                         </div>
                     </div>
-                )) : (
-                    <div className="text-center py-10">
-                        <p className="text-gray-500">Nenhuma compra na sua fatura fechada.</p>
+
+                    {/* Grid vencimento | pagamento mínimo */}
+                    {!isCredit && invoiceAmount > 0 && (
+                        <div className="grid grid-cols-2 gap-4 pt-1 border-t border-white/10">
+                            <div>
+                                <p className="text-xs text-gray-400">Vence em</p>
+                                <p className="text-sm font-semibold text-white">{dueDate}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-400">Pagamento mínimo</p>
+                                <p className="text-sm font-semibold text-white">{fmt(minPayment)}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* CTA */}
+                    {!isCredit && invoiceAmount > 0 && (
+                        <div className="space-y-2 pt-1">
+                            <button
+                                onClick={handlePay}
+                                disabled={isLoading || !canAfford}
+                                className="w-full py-3 rounded-lg bg-primary text-white font-semibold text-center disabled:bg-gray-600 disabled:cursor-not-allowed"
+                            >
+                                {isLoading ? 'Pagando...' : 'Pagar fatura'}
+                            </button>
+                            <button
+                                onClick={onParcel}
+                                disabled={invoiceAmount <= 0}
+                                className="w-full py-2.5 rounded-lg border border-primary text-primary font-semibold text-sm disabled:border-gray-600 disabled:text-gray-600 disabled:cursor-not-allowed"
+                            >
+                                Parcelar fatura
+                            </button>
+                            {!canAfford && (
+                                <p className="text-xs text-red-400 text-center">
+                                    Saldo insuficiente para pagamento total. Tente parcelar.
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Lista de lançamentos ── */}
+                {closedTxs.length > 0 && (
+                    <div>
+                        <p className="text-xs text-gray-400 mb-3">
+                            Confira aqui os detalhes da fatura e os lançamentos do mês.
+                        </p>
+
+                        {Object.entries(grouped).map(([date, txs]) => (
+                            <div key={date} className="mb-4">
+                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 sticky top-0 bg-background-dark py-1">
+                                    {date}
+                                </p>
+                                <div className="space-y-1">
+                                    {txs.map(tx => {
+                                        const isExpanded = expanded === tx.id;
+                                        const isRefund = tx.amount < 0;
+                                        const installLabel = tx.installments ?? (tx.currentInstallment && tx.totalInstallments
+                                            ? `(${tx.currentInstallment}/${tx.totalInstallments})`
+                                            : null);
+                                        return (
+                                            <div key={tx.id}>
+                                                <button
+                                                    onClick={() => setExpanded(isExpanded ? null : tx.id)}
+                                                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-surface-dark/60 transition-colors text-left"
+                                                >
+                                                    {/* Ícone */}
+                                                    <div className="shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                                        <span className="material-symbols-outlined text-primary text-base">
+                                                            {categoryIcon(tx.type)}
+                                                        </span>
+                                                    </div>
+                                                    {/* Texto */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-1">
+                                                            <p className="text-sm font-medium text-white truncate">
+                                                                {tx.merchant ?? tx.description ?? 'Lançamento'}
+                                                            </p>
+                                                            {installLabel && (
+                                                                <span className="text-xs text-gray-400 shrink-0">{installLabel}</span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-gray-400">
+                                                            {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                                        </p>
+                                                    </div>
+                                                    {/* Valor */}
+                                                    <p className={`text-sm font-semibold shrink-0 ${isRefund ? 'text-primary' : 'text-white'}`}>
+                                                        {isRefund ? '+' : ''}{fmt(Math.abs(tx.amount))}
+                                                    </p>
+                                                </button>
+
+                                                {/* Accordion expandido */}
+                                                {isExpanded && (
+                                                    <div className="mx-3 mb-2 rounded-xl bg-surface-dark/50 px-4 py-3 space-y-2">
+                                                        {tx.category && (
+                                                            <div className="flex justify-between text-xs border-b border-white/5 pb-2">
+                                                                <span className="text-gray-400">Categoria</span>
+                                                                <span className="text-white capitalize">{tx.category}</span>
+                                                            </div>
+                                                        )}
+                                                        <div className="flex justify-between text-xs border-b border-white/5 pb-2">
+                                                            <span className="text-gray-400">Data</span>
+                                                            <span className="text-white">
+                                                                {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between text-xs">
+                                                            <span className="text-gray-400">Valor</span>
+                                                            <span className={isRefund ? 'text-primary' : 'text-white'}>
+                                                                {fmt(Math.abs(tx.amount))}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+
+                        {/* Rodapé totalizador */}
+                        <div className="border-t-2 border-white/20 pt-4 flex justify-between items-center">
+                            <span className="font-semibold text-white">Total do Titular</span>
+                            <span className={`font-bold text-lg ${isCredit ? 'text-primary' : 'text-white'}`}>
+                                {fmt(Math.abs(invoiceAmount))}
+                            </span>
+                        </div>
                     </div>
                 )}
-                </div>
+
+                {closedTxs.length === 0 && (
+                    <div className="text-center py-12">
+                        <span className="material-symbols-outlined text-4xl text-gray-600">receipt_long</span>
+                        <p className="text-gray-500 mt-2">Nenhuma compra nesta fatura.</p>
+                    </div>
+                )}
             </main>
         </div>
     );
