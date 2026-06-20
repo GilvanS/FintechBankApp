@@ -8,6 +8,8 @@ import { API_BASE_URL } from '../apiConfig';
 const DEV_API_URL = API_BASE_URL;
 const API_CACHE_KEY = 'apiBaseUrlCache';
 const CACHE_DURATION_MS = 60 * 60 * 1000; // 60 minutos
+const IP_PROBE_CACHE_KEY = 'apiProbeUrlCache';
+const PROBE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
 
 // Cria a instance do Axios SEM uma baseURL fixa
 const api = axios.create({
@@ -92,70 +94,132 @@ export const setApiBaseUrl = async (url: string) => {
     console.log('API Base URL configurada:', base);
 };
 
+// ─── Helpers internos de URL ────────────────────────────────────────────────
+
+function buildBaseUrl(host: string): string {
+    const t = host.trim().replace(/\/+$/, '');
+    if (t.startsWith('/')) return t.endsWith('/api/v1') ? t : t + '/api/v1';
+    return t.endsWith('/api/v1') ? t : t.endsWith('/api') ? t + '/v1' : t + '/api/v1';
+}
+
+// ─── Probe cache (24h) ──────────────────────────────────────────────────────
+
+async function loadProbedApiUrl(): Promise<string | null> {
+    try {
+        const { value } = await Preferences.get({ key: IP_PROBE_CACHE_KEY });
+        if (!value) return null;
+        const cached = JSON.parse(value);
+        if (Date.now() - cached.timestamp > PROBE_CACHE_TTL_MS) return null;
+        return cached.url as string;
+    } catch {
+        return null;
+    }
+}
+
+async function saveProbedApiUrl(url: string): Promise<void> {
+    try {
+        await Preferences.set({
+            key: IP_PROBE_CACHE_KEY,
+            value: JSON.stringify({ url, timestamp: Date.now() }),
+        });
+    } catch (e) {
+        console.warn('⚠️ Erro ao salvar probe cache:', e);
+    }
+}
+
+// ─── Subnet probe ───────────────────────────────────────────────────────────
+
+async function probeSubnetForServer(subnetPrefix: string, port: number): Promise<string | null> {
+    // Varre .90 a .119 — faixa DHCP típica em redes domésticas/escritório
+    const candidates = Array.from({ length: 30 }, (_, i) => `http://${subnetPrefix}.${90 + i}:${port}`);
+
+    const tryOne = (host: string): Promise<string> =>
+        axios.get(`${host}/api/v1/health`, { timeout: 1500, validateStatus: s => s < 500 })
+            .then(res => {
+                if (res.data?.success === true || res.data?.status === 'ok') return host;
+                throw new Error('not ok');
+            });
+
+    try {
+        return await Promise.any(candidates.map(c => tryOne(c)));
+    } catch {
+        return null;
+    }
+}
+
+async function runBackgroundProbe(): Promise<void> {
+    const currentBase = api.defaults.baseURL || '';
+    // Extrai http://IP:porta do baseURL (ex: "http://192.168.0.106:3001/api/v1" → host="192.168.0.106", port=3001)
+    const m = currentBase.match(/^https?:\/\/([\d.]+):(\d+)/);
+    if (!m) return; // URL relativa ou hostname — não provar
+    const [, ip, portStr] = m;
+    const subnet = ip.match(/^(\d+\.\d+\.\d+)\.\d+$/)?.[1];
+    if (!subnet) return;
+
+    console.log(`🔍 [Probe] Varrendo ${subnet}.90–119 na porta ${portStr}...`);
+    const found = await probeSubnetForServer(subnet, parseInt(portStr, 10));
+    if (found) {
+        const newBase = buildBaseUrl(found);
+        api.defaults.baseURL = newBase;
+        console.log(`✅ [Probe] Servidor encontrado: ${newBase}`);
+        await saveProbedApiUrl(found);
+    } else {
+        console.warn(`❌ [Probe] Nenhum servidor respondeu no subnet ${subnet}.0/24`);
+    }
+}
+
+// ─── initializeApi ──────────────────────────────────────────────────────────
+
 /**
- * Função para inicializar la API quando o app abre.
- * OTIMIZADO: Não bloqueia a renderização inicial - configuração assíncrona em background
+ * Inicializa a API quando o app abre.
+ * - Configura baseURL imediatamente (síncrono, sem bloqueio)
+ * - Prefere URL de probe em cache (24h) sobre o IP de build-time
+ * - Roda health check em background após 2s; se falhar, faz subnet probe
  */
 export const initializeApi = async () => {
-    // No APK, sempre usar URL absoluta (não há proxy)
     console.log('🚀 Inicializando API...');
-    console.log('📱 Ambiente:', typeof window !== 'undefined' ? 'Browser/APK' : 'SSR');
-    
-    // OTIMIZADO: Configurar baseURL imediatamente sem esperar cache
-    // O cache será salvo em background sem bloquear a inicialização
-    const t = DEV_API_URL.trim().replace(/\/+$/, '');
-    let base = t;
-    
-    if (t.startsWith('/')) {
-        if (t.endsWith('/api/v1')) {
-            base = t;
-        } else if (t.endsWith('/api')) {
-            base = t + '/v1';
-        } else {
-            base = t + '/v1';
-        }
-    } else {
-        if (t.endsWith('/api/v1')) {
-            base = t;
-        } else if (t.endsWith('/api')) {
-            base = t + '/v1';
-        } else {
-            base = t + '/api/v1';
-        }
-    }
-    
-    // Configurar baseURL imediatamente (síncrono)
+
+    const hardcodedBase = buildBaseUrl(DEV_API_URL);
+
+    // Tenta cache de probe (24h) para sobreviver a troca de DHCP sem rebuild
+    const probedUrl = await loadProbedApiUrl();
+    const base = probedUrl ? buildBaseUrl(probedUrl) : hardcodedBase;
+
     api.defaults.baseURL = base;
-    console.log(`✅ BaseURL configurada: ${api.defaults.baseURL}`);
-    
-    // CRÍTICO PARA PERFORMANCE APK: Salvar cache usando requestIdleCallback
-    // Preferences.set pode bloquear o thread principal no Android
-    const cacheData = {
-        url: base,
-        timestamp: Date.now(),
-    };
-    
+    console.log(`✅ BaseURL: ${base} (${probedUrl ? 'probe cache' : 'build-time'})`);
+
+    // Salvar cache padrão em background (comportamento anterior mantido)
     const saveCache = async () => {
         try {
-            await Preferences.set({
-                key: API_CACHE_KEY,
-                value: JSON.stringify(cacheData)
-            });
-            console.log('✅ Cache da API salvo em background');
-        } catch (error) {
-            console.warn('⚠️ Erro ao salvar cache da API (não crítico):', error);
+            await Preferences.set({ key: API_CACHE_KEY, value: JSON.stringify({ url: base, timestamp: Date.now() }) });
+        } catch (e) {
+            console.warn('⚠️ Erro ao salvar cache da API:', e);
         }
     };
-
-    // Usar requestIdleCallback se disponível, senão setTimeout com delay maior
     if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
         (window as any).requestIdleCallback(saveCache, { timeout: 2000 });
     } else {
         setTimeout(saveCache, 1000);
     }
-    
-    // REMOVIDO: Health check na inicialização causa lentidão desnecessária
-    // A verificação será feita apenas quando necessário (ex: tela de login)
+
+    // Health check em background (2s de delay para não competir com render inicial)
+    // Se falhar → subnet probe automático
+    setTimeout(async () => {
+        try {
+            const res = await axios.get(`${api.defaults.baseURL}/health`, {
+                timeout: 3000,
+                validateStatus: s => s < 500,
+            });
+            if (res.data?.success === true || res.data?.status === 'ok') {
+                console.log(`✅ [BG] Health check OK: ${api.defaults.baseURL}`);
+                return;
+            }
+        } catch {
+            // falhou — vai para probe
+        }
+        console.warn(`⚠️ [BG] Health check falhou — iniciando subnet probe...`);
+        await runBackgroundProbe();
+    }, 2000);
 };
 
 export async function healthCheck(): Promise<boolean> {
