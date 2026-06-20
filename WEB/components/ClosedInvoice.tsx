@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { User, CardTransaction } from '../types';
 
 interface ClosedInvoiceProps {
@@ -9,6 +9,17 @@ interface ClosedInvoiceProps {
 }
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+function buildMonths(count = 6): { label: string; key: string }[] {
+    const now = new Date();
+    return Array.from({ length: count }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (count - 1 - i), 1);
+        return {
+            label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
+            key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        };
+    });
+}
 
 function categoryIcon(tx: CardTransaction): string {
     const m = tx.merchant?.toLowerCase() ?? '';
@@ -30,6 +41,10 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
   const { creditCard, balance } = user;
   const [isLoading, setIsLoading] = useState(false);
   const [hideValue, setHideValue] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const months = buildMonths(6);
+  const [activeMonth, setActiveMonth] = useState(months[months.length - 1].key);
+  const carouselRef = useRef<HTMLDivElement>(null);
 
   const invoiceAmount = creditCard.closedInvoice ?? 0;
   const isCredit = invoiceAmount < 0;
@@ -70,13 +85,37 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
   return (
     <div className="bg-background-dark text-white min-h-full flex flex-col">
 
-      <header className="flex items-center p-4 bg-primary sticky top-0 z-20">
-        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
-          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/>
-          </svg>
-        </button>
-        <h2 className="text-xl font-bold text-white flex-1 text-center pr-8">Fatura Fechada</h2>
+      {/* ── Header + carrossel de meses (spec §1) ── */}
+      <header className="bg-primary sticky top-0 z-20">
+        <div className="flex items-center px-4 pt-4 pb-2">
+          <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <h2 className="flex-1 text-center text-lg font-semibold text-white pr-8">Fatura Fechada</h2>
+        </div>
+        <div
+          ref={carouselRef}
+          className="flex overflow-x-auto pb-3 px-4 gap-6"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+        >
+          {months.map(m => {
+            const isActive = m.key === activeMonth;
+            return (
+              <button
+                key={m.key}
+                onClick={() => setActiveMonth(m.key)}
+                className="shrink-0 flex flex-col items-center gap-1"
+              >
+                <span className={`text-sm capitalize transition-opacity ${isActive ? 'text-white font-semibold opacity-100' : 'text-white opacity-60'}`}>
+                  {m.label}
+                </span>
+                {isActive && <span className="block w-full h-0.5 bg-white rounded-full" />}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
       <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-5 pb-8">
@@ -135,15 +174,10 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
 
           {/* Encargos se inadimplente */}
           {user.accountStatus === 'inadimplente' && !!user.pendingCharges && user.pendingCharges > 0 && (
-            <div
-              className="flex items-center gap-2 pt-1 border-t border-red-400/20"
-              data-testid="alert-invoice-inadimplente"
-            >
+            <div className="flex items-center gap-2 pt-1 border-t border-red-400/20" data-testid="alert-invoice-inadimplente">
               <span className="material-symbols-outlined text-red-400 text-sm" aria-hidden="true">warning</span>
               <p className="text-xs text-red-400">
-                {user.daysOverdue
-                  ? `${user.daysOverdue} dia${user.daysOverdue !== 1 ? 's' : ''} em atraso • `
-                  : ''}
+                {user.daysOverdue ? `${user.daysOverdue} dia${user.daysOverdue !== 1 ? 's' : ''} em atraso • ` : ''}
                 Encargos: {fmt(user.pendingCharges)}
               </p>
             </div>
@@ -184,9 +218,10 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
             <div className="space-y-4">
               {Object.entries(grouped).map(([date, txs]) => (
                 <div key={date}>
-                  <p className="text-xs text-gray-400 font-medium mb-2 px-1">{date}</p>
+                  <p className="text-xs text-gray-400 font-medium mb-2 px-1 sticky top-0 bg-background-dark py-1">{date}</p>
                   <div className="space-y-1">
                     {txs.map(tx => {
+                      const isExpanded = expanded === tx.id;
                       const isRefund = tx.amount < 0;
                       const installLabel = tx.installments
                         ?? (tx.currentInstallment && tx.totalInstallments
@@ -194,28 +229,61 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
                           : null);
 
                       return (
-                        <div key={tx.id} className="flex items-center gap-3 p-3 rounded-xl bg-surface-dark">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <span className={`material-symbols-outlined text-lg ${isRefund ? 'text-green-400' : 'text-primary'}`}>
-                              {categoryIcon(tx)}
-                            </span>
-                          </div>
-                          <div className="flex-grow min-w-0">
-                            <p className="font-semibold text-white text-sm truncate">{tx.merchant}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <p className="text-xs text-gray-400">
+                        <div key={tx.id}>
+                          <button
+                            onClick={() => setExpanded(isExpanded ? null : tx.id)}
+                            className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-surface-dark/60 transition-colors text-left"
+                          >
+                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <span className={`material-symbols-outlined text-lg ${isRefund ? 'text-green-400' : 'text-primary'}`}>
+                                {categoryIcon(tx)}
+                              </span>
+                            </div>
+                            <div className="flex-grow min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-semibold text-white text-sm truncate">{tx.merchant}</p>
+                                {installLabel && (
+                                  <span className="text-xs text-gray-400 bg-white/5 px-1.5 py-0.5 rounded-full shrink-0">
+                                    {installLabel}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-400 mt-0.5">
                                 {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                               </p>
-                              {installLabel && (
-                                <span className="text-xs text-gray-400 bg-white/5 px-1.5 py-0.5 rounded-full">
-                                  {installLabel}
-                                </span>
-                              )}
                             </div>
-                          </div>
-                          <p className={`font-semibold text-sm flex-shrink-0 ${isRefund ? 'text-primary' : 'text-white'}`}>
-                            {isRefund ? '+' : ''}{fmt(Math.abs(tx.amount))}
-                          </p>
+                            <p className={`font-semibold text-sm flex-shrink-0 ${isRefund ? 'text-primary' : 'text-white'}`}>
+                              {isRefund ? '+' : ''}{fmt(Math.abs(tx.amount))}
+                            </p>
+                          </button>
+
+                          {/* Accordion expandido (spec §5) */}
+                          {isExpanded && (
+                            <div className="mx-3 mb-2 rounded-xl bg-surface-dark/50 px-4 py-3 space-y-2">
+                              <div className="flex justify-between text-xs border-b border-white/5 pb-2">
+                                <span className="text-gray-400">Data</span>
+                                <span className="text-white">
+                                  {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                </span>
+                              </div>
+                              {installLabel && (
+                                <div className="flex justify-between text-xs border-b border-white/5 pb-2">
+                                  <span className="text-gray-400">Parcela</span>
+                                  <span className="text-white">{installLabel}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between text-xs border-b border-white/5 pb-2">
+                                <span className="text-gray-400">Tipo</span>
+                                <span className="text-white capitalize">{tx.type.toLowerCase().replace('_', ' ')}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400">Valor</span>
+                                <span className={isRefund ? 'text-primary' : 'text-white'}>
+                                  {fmt(Math.abs(tx.amount))}
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}

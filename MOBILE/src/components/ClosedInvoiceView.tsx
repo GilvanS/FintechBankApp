@@ -49,6 +49,21 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
     const isCredit = invoiceAmount < 0;
     const canAfford = user.balance >= invoiceAmount;
 
+    const isOverdue = invoiceAmount > 0 && !!creditCard.closedInvoiceDueDate && (() => {
+        const due = new Date(creditCard.closedInvoiceDueDate!);
+        due.setUTCHours(23, 59, 59, 999);
+        return new Date() > due;
+    })();
+    const closedStatusKey = user.accountStatus === 'inadimplente' ? 'inadimplente'
+        : isOverdue ? 'vencida'
+        : 'fechada';
+    const closedStatusMap = {
+        fechada:      { label: 'A fatura está fechada',        icon: 'check_circle', color: 'text-green-400',  bg: 'bg-green-500/15' },
+        vencida:      { label: 'Fatura vencida — pague agora', icon: 'schedule',     color: 'text-yellow-400', bg: 'bg-yellow-500/15' },
+        inadimplente: { label: 'Conta inadimplente',           icon: 'warning',      color: 'text-red-400',    bg: 'bg-red-500/15' },
+    } as const;
+    const closedStatus = closedStatusMap[closedStatusKey];
+
     const dueDate = creditCard.closedInvoiceDueDate
         ? new Date(creditCard.closedInvoiceDueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
         : '--/--';
@@ -121,9 +136,9 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                             Não há fatura para pagar neste mês
                         </span>
                     ) : (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-500/15 text-green-400 px-3 py-1 rounded-full">
-                            <span className="material-symbols-outlined text-base">check_circle</span>
-                            A fatura está fechada
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium ${closedStatus.bg} ${closedStatus.color} px-3 py-1 rounded-full`}>
+                            <span className="material-symbols-outlined text-base">{closedStatus.icon}</span>
+                            {closedStatus.label}
                         </span>
                     )}
 

@@ -28,6 +28,7 @@ const getIconForTx = (merchant: string) => {
 const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
   const { creditCard } = user;
   const [hideValue, setHideValue] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const cycleStatus = user.billingCycle?.status ?? 'aberta';
   const status = statusConfig[cycleStatus] ?? statusConfig.aberta;
 
@@ -129,32 +130,69 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
                   <p className="text-xs text-gray-400 font-medium mb-2 px-1">{date}</p>
                   <div className="space-y-1">
                     {txs.map(tx => {
+                      const isExpanded = expanded === tx.id;
                       const isRefund = tx.amount < 0 || tx.type === 'PAYMENT';
-                      const installLabel = tx.installments ?? null;
+                      const installLabel = tx.installments
+                        ?? (tx.currentInstallment && tx.totalInstallments
+                          ? `${tx.currentInstallment}/${tx.totalInstallments}`
+                          : null);
 
                       return (
-                        <div key={tx.id} className="flex items-center gap-3 p-3 rounded-xl bg-surface-dark">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <span className={`material-symbols-outlined text-lg ${isRefund ? 'text-green-400' : 'text-primary'}`}>
-                              {getIconForTx(tx.merchant)}
-                            </span>
-                          </div>
-                          <div className="flex-grow min-w-0">
-                            <p className="font-semibold text-white text-sm truncate">{tx.merchant}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <p className="text-xs text-gray-400">
+                        <div key={tx.id}>
+                          <button
+                            onClick={() => setExpanded(isExpanded ? null : tx.id)}
+                            className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-surface-dark/60 transition-colors text-left"
+                          >
+                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <span className={`material-symbols-outlined text-lg ${isRefund ? 'text-green-400' : 'text-primary'}`}>
+                                {getIconForTx(tx.merchant)}
+                              </span>
+                            </div>
+                            <div className="flex-grow min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-semibold text-white text-sm truncate">{tx.merchant}</p>
+                                {installLabel && (
+                                  <span className="text-xs text-gray-400 bg-white/5 px-1.5 py-0.5 rounded-full shrink-0">
+                                    {installLabel}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-400 mt-0.5">
                                 {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                               </p>
-                              {installLabel && (
-                                <span className="text-xs text-gray-400 bg-white/5 px-1.5 py-0.5 rounded-full">
-                                  {installLabel}
-                                </span>
-                              )}
                             </div>
-                          </div>
-                          <p className={`font-semibold text-sm flex-shrink-0 ${isRefund ? 'text-green-400' : 'text-white'}`}>
-                            {isRefund ? '+' : ''}{fmt(Math.abs(tx.amount))}
-                          </p>
+                            <p className={`font-semibold text-sm flex-shrink-0 ${isRefund ? 'text-green-400' : 'text-white'}`}>
+                              {isRefund ? '+' : ''}{fmt(Math.abs(tx.amount))}
+                            </p>
+                          </button>
+
+                          {/* Accordion expandido (spec §5) */}
+                          {isExpanded && (
+                            <div className="mx-3 mb-2 rounded-xl bg-surface-dark/50 px-4 py-3 space-y-2">
+                              <div className="flex justify-between text-xs border-b border-white/5 pb-2">
+                                <span className="text-gray-400">Data</span>
+                                <span className="text-white">
+                                  {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                </span>
+                              </div>
+                              {installLabel && (
+                                <div className="flex justify-between text-xs border-b border-white/5 pb-2">
+                                  <span className="text-gray-400">Parcela</span>
+                                  <span className="text-white">{installLabel}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between text-xs border-b border-white/5 pb-2">
+                                <span className="text-gray-400">Tipo</span>
+                                <span className="text-white capitalize">{tx.type.toLowerCase().replace('_', ' ')}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400">Valor</span>
+                                <span className={isRefund ? 'text-green-400' : 'text-white'}>
+                                  {fmt(Math.abs(tx.amount))}
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
