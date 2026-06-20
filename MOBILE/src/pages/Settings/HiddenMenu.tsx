@@ -32,6 +32,9 @@ const HiddenMenu: React.FC<HiddenMenuProps> = ({ onClose }) => {
     }
     setStatus('testing');
     setStatusMsg('Testando conexao...');
+    // AbortController manual — AbortSignal.timeout() nao e suportado no WebView Android
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
       // Monta URL de health check respeitando o padrao /api/v1/health
       const base = target.replace(/\/+$/, '');
@@ -41,7 +44,8 @@ const HiddenMenu: React.FC<HiddenMenuProps> = ({ onClose }) => {
         ? `${base}/v1/health`
         : `${base}/api/v1/health`;
 
-      const res = await fetch(healthUrl, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(healthUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await res.json();
       if (data?.success === true || data?.status === 'ok') {
         setStatus('ok');
@@ -51,8 +55,14 @@ const HiddenMenu: React.FC<HiddenMenuProps> = ({ onClose }) => {
         setStatusMsg(`Servidor respondeu, mas retornou: ${JSON.stringify(data)}`);
       }
     } catch (e: any) {
+      clearTimeout(timeoutId);
+      const isAbort = e?.name === 'AbortError';
       setStatus('error');
-      setStatusMsg(`Falha na conexao: ${e?.message ?? 'Timeout ou servidor inacessivel'}`);
+      setStatusMsg(
+        isAbort
+          ? 'Timeout: servidor nao respondeu em 8 segundos. Verifique o IP e se a API esta rodando.'
+          : `Falha na conexao: ${e?.message ?? 'Servidor inacessivel'}`
+      );
     }
   };
 
