@@ -23,8 +23,11 @@ async function checkPostgresContainers() {
         for (const line of lines) {
             const [name, image, ports] = line.split('|');
             
-            // Verificar se é um container PostgreSQL
-            if (image && (image.toLowerCase().includes('postgres') || name.toLowerCase().includes('postgres') || name.toLowerCase().includes('pg'))) {
+            // Verificar se é um container PostgreSQL (excluir pgadmin e outras ferramentas de admin)
+            const img = image ? image.toLowerCase() : '';
+            const isPostgresServer = img.startsWith('postgres') || img.includes('/postgres');
+            const isPgAdminTool = img.includes('pgadmin') || img.includes('adminer') || img.includes('dpage/');
+            if (isPostgresServer && !isPgAdminTool) {
                 // Extrair portas mapeadas
                 const portMatches = ports.match(/(\d+):(\d+)/g);
                 const mappedPorts = portMatches ? portMatches.map(p => {

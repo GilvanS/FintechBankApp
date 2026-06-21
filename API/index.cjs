@@ -3014,13 +3014,28 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
             SET credit_card_available_limit = ${restoredLimit.toFixed(2)}
             WHERE cpf = '${cpf}'
         `);
+        const remaining = totalDue - payAmount;
+        const daysOverdue = parseInt(user.days_overdue || 0);
+        const nowDate = new Date();
+        const invoiceRef = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}`;
+        const { multa, juros } = calcCharges(remaining, daysOverdue);
+        if (multa > 0 || juros > 0) {
+            const chargeBase = databricksService.generateUUID();
+            await databricksService.executeQuery(`
+                INSERT INTO ${databricksService.fq('billing_charges')}
+                (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
+                VALUES
+                ('${chargeBase}_m', ${esc(cpf)}, ${esc(invoiceRef)}, 'multa', ${multa}, ${daysOverdue}, ${remaining.toFixed(2)}),
+                ('${chargeBase}_j', ${esc(cpf)}, ${esc(invoiceRef)}, 'juros_mora', ${juros}, ${daysOverdue}, ${remaining.toFixed(2)})
+            `);
+        }
         await notificationsRepo.addNotification({
             cpf,
             title: 'Pagamento parcial de fatura',
-            message: `R$ ${payAmount.toFixed(2)} pago. Saldo devedor: R$ ${(totalDue - payAmount).toFixed(2)}.`,
+            message: `R$ ${payAmount.toFixed(2)} pago. Saldo devedor: R$ ${remaining.toFixed(2)}. Encargos: R$ ${(multa + juros).toFixed(2)}.`,
             actionUrl: '/dashboard'
         });
-        return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue });
+        return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining, charges: { multa, juros } });
     }
 
     // Pagamento total: deletar parcelas, restaurar limite, avançar vencimento
