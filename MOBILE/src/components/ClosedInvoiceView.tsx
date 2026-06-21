@@ -13,13 +13,19 @@ const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', curren
 
 function buildMonths(count = 6): { label: string; key: string }[] {
     const now = new Date();
-    return Array.from({ length: count }, (_, i) => {
+    const months = Array.from({ length: count }, (_, i) => {
         const d = new Date(now.getFullYear(), now.getMonth() - (count - 1 - i), 1);
         return {
             label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
             key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
         };
     });
+    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    months.push({
+        label: next.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
+        key: `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`,
+    });
+    return months;
 }
 
 function categoryIcon(type?: string): string {
@@ -32,8 +38,10 @@ function categoryIcon(type?: string): string {
 }
 
 const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayInvoice, onParcel }) => {
-    const months = buildMonths(6);
-    const [activeMonth, setActiveMonth] = useState(months[months.length - 1].key);
+    const months = buildMonths(6); // returns 7 items: 5 past + current + next
+    const currentMonthKey = months[months.length - 2].key;
+    const nextMonthKey = months[months.length - 1].key;
+    const [activeMonth, setActiveMonth] = useState(currentMonthKey);
     const [hideValue, setHideValue] = useState(false);
     const [expanded, setExpanded] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -48,11 +56,17 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
     }
 
     const { creditCard } = user;
-    const invoiceAmount = creditCard.closedInvoice ?? 0;
+    const isOpenInvoice = activeMonth === currentMonthKey;
+    const isNextMonth = activeMonth === nextMonthKey;
+    const invoiceAmount = isOpenInvoice
+        ? (creditCard.currentInvoice ?? 0)
+        : isNextMonth
+            ? (user.pendingCharges ?? 0)
+            : (creditCard.closedInvoice ?? 0);
     const isCredit = invoiceAmount < 0;
     const canAfford = user.balance >= invoiceAmount;
 
-    const isOverdue = invoiceAmount > 0 && !!creditCard.closedInvoiceDueDate && (() => {
+    const isOverdue = !isOpenInvoice && !isNextMonth && invoiceAmount > 0 && !!creditCard.closedInvoiceDueDate && (() => {
         const due = new Date(creditCard.closedInvoiceDueDate!);
         due.setUTCHours(23, 59, 59, 999);
         return new Date() > due;
@@ -75,9 +89,13 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
     const effectiveMin = user.balance > 0 ? Math.min(user.balance, minPayment) : minPayment;
     const minLabel = user.balance < minPayment ? 'Pagar o máximo possível' : 'Pagar mínimo (15%)';
 
-    const closedTxs = creditCard.closedTransactions?.length
-        ? creditCard.closedTransactions
-        : creditCard.transactions?.slice(0, 8) ?? [];
+    const closedTxs = isOpenInvoice
+        ? (creditCard.transactions ?? [])
+        : isNextMonth
+            ? []
+            : (creditCard.closedTransactions?.length
+                ? creditCard.closedTransactions
+                : creditCard.transactions?.slice(0, 8) ?? []);
 
     const grouped = closedTxs.reduce((acc, tx) => {
         const key = new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
@@ -145,7 +163,17 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                 {/* ── Card de resumo ── */}
                 <div className="bg-surface-dark rounded-2xl p-5 shadow-lg space-y-4">
                     {/* Tag status */}
-                    {isCredit ? (
+                    {isNextMonth ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium bg-gray-500/15 text-gray-400 px-3 py-1 rounded-full">
+                            <span className="material-symbols-outlined text-base">schedule</span>
+                            Próxima fatura — encargos previstos
+                        </span>
+                    ) : isOpenInvoice ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium bg-blue-500/15 text-blue-400 px-3 py-1 rounded-full">
+                            <span className="material-symbols-outlined text-base">pending</span>
+                            Fatura em aberto
+                        </span>
+                    ) : isCredit ? (
                         <span className="inline-flex items-center gap-1 text-xs font-medium bg-primary/15 text-primary px-3 py-1 rounded-full">
                             <span className="material-symbols-outlined text-base">info</span>
                             Não há fatura para pagar neste mês
@@ -176,7 +204,7 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                     </div>
 
                     {/* Grid vencimento | pagamento mínimo */}
-                    {!isCredit && invoiceAmount > 0 && (
+                    {!isOpenInvoice && !isNextMonth && !isCredit && invoiceAmount > 0 && (
                         <div className="grid grid-cols-2 gap-4 pt-1 border-t border-white/10">
                             <div>
                                 <p className="text-xs text-gray-400">Vence em</p>
@@ -190,7 +218,7 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                     )}
 
                     {/* CTA */}
-                    {!isCredit && invoiceAmount > 0 && (
+                    {!isOpenInvoice && !isNextMonth && !isCredit && invoiceAmount > 0 && (
                         <div className="space-y-2 pt-1">
                             {payStep === 'idle' ? (
                                 <>
@@ -337,10 +365,34 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                     </div>
                 )}
 
-                {closedTxs.length === 0 && (
+                {closedTxs.length === 0 && !isNextMonth && (
                     <div className="text-center py-12">
                         <span className="material-symbols-outlined text-4xl text-gray-600">receipt_long</span>
                         <p className="text-gray-500 mt-2">Nenhuma compra nesta fatura.</p>
+                    </div>
+                )}
+
+                {isNextMonth && (
+                    <div className="bg-surface-dark rounded-2xl p-5 space-y-3">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Encargos previstos</p>
+                        {invoiceAmount > 0 ? (
+                            <>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-300">Multa (2%)</span>
+                                    <span className="text-yellow-400 font-semibold">
+                                        {fmt(Math.round(invoiceAmount * 0.02 * 100) / 100)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm border-t border-white/10 pt-2">
+                                    <span className="text-gray-400 text-xs">Originado de pagamento parcial ou mínimo no ciclo atual</span>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="text-center py-6">
+                                <span className="material-symbols-outlined text-4xl text-green-600">check_circle</span>
+                                <p className="text-gray-400 mt-2 text-sm">Nenhum encargo previsto para o próximo ciclo.</p>
+                            </div>
+                        )}
                     </div>
                 )}
             </main>

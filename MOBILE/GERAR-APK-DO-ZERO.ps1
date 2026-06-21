@@ -83,10 +83,15 @@ function Write-Utf8NoBom { param($Path, $Value) [System.IO.File]::WriteAllText((
 $apiConfigPath = "src\apiConfig.ts"
 if (Test-Path $apiConfigPath) {
     $content = Get-Content $apiConfigPath -Raw -Encoding UTF8
-    # Alteração: 2026-06-19 - Corrigido bug de expansao de variavel do PowerShell ($detectedIp:3001 interpretado como escopo) isolando a variavel com subexpressao
-    $content = $content -replace "export const API_BASE_URL = 'http://[^']*';", "export const API_BASE_URL = 'http://$($detectedIp):3001';"
+    # Corrigido: regex agora aponta para API_DEFAULT_URL (que contem a URL literal)
+    $content = $content -replace "export const API_DEFAULT_URL = 'http://[^']*';", "export const API_DEFAULT_URL = 'http://$($detectedIp):3001';"
+    # Atualizar PROBE_SUBNETS: sub-rede do IP detectado entra como primeira opcao
+    $subnetPrefix = ($detectedIp -split '\.')[0..2] -join '.'
+    $allSubnets = @($subnetPrefix) + @('192.168.0', '192.168.1', '10.0.0', '10.0.1') | Select-Object -Unique
+    $subnetsStr = ($allSubnets | ForEach-Object { "'$_'" }) -join ', '
+    $content = $content -replace "export const PROBE_SUBNETS = \[[^\]]*\];", "export const PROBE_SUBNETS = [$subnetsStr];"
     Write-Utf8NoBom -Path $apiConfigPath -Value $content.TrimEnd()
-    Write-Host "   OK: apiConfig.ts atualizado com IP $detectedIp" -ForegroundColor Green
+    Write-Host "   OK: apiConfig.ts atualizado com IP $detectedIp (sub-rede $subnetPrefix)" -ForegroundColor Green
 } else {
     Write-Host "   AVISO: apiConfig.ts nao encontrado" -ForegroundColor Yellow
 }
@@ -203,40 +208,24 @@ if (Test-Path "android") {
         Write-Host "      OK: build removida" -ForegroundColor Green
     }
     
-    # Alteração: 2026-06-19 - Adicionado encerramento forcado de processos java/kotlin para liberar caches e validacao estrita da delecao do cache .gradle_user_home
-    Write-Host "      Encerrando processos de background (java, kotlin) para liberar locks de arquivos..." -ForegroundColor Yellow
+    # Encerrar processos java/kotlin para liberar locks antes de limpar
+    Write-Host "      Encerrando processos de background (java, kotlin)..." -ForegroundColor Yellow
     Stop-Process -Name "java" -Force -ErrorAction SilentlyContinue
     Stop-Process -Name "kotlin-daemon" -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
 
-    # Limpar cache do Gradle (importante para limpeza completa)
+    # Limpar apenas o cache de configuracao local do Gradle (nao o diretorio de distribuicao)
     if (Test-Path ".gradle") {
-        Write-Host "      Removendo cache do Gradle..." -ForegroundColor Yellow
+        Write-Host "      Removendo cache local do Gradle (.gradle)..." -ForegroundColor Yellow
         Remove-Item -Recurse -Force ".gradle" -ErrorAction SilentlyContinue
-        if (Test-Path ".gradle") {
-            Write-Host "      AVISO: Nao foi possivel remover a pasta .gradle completamente." -ForegroundColor Yellow
+        if (-not (Test-Path ".gradle")) {
+            Write-Host "      OK: Cache local do Gradle removido" -ForegroundColor Green
         } else {
-            Write-Host "      OK: Cache do Gradle removido" -ForegroundColor Green
+            Write-Host "      AVISO: Nao foi possivel remover .gradle completamente (continuando)" -ForegroundColor Yellow
         }
     }
-    if (Test-Path ".gradle_user_home") {
-        Write-Host "      Removendo .gradle_user_home..." -ForegroundColor Yellow
-        Remove-Item -Recurse -Force ".gradle_user_home" -ErrorAction SilentlyContinue
-        if (Test-Path ".gradle_user_home") {
-            Write-Host "      AVISO: A pasta .gradle_user_home ainda esta presente. Tentando parar processos java/kotlin novamente..." -ForegroundColor Yellow
-            Stop-Process -Name "java" -Force -ErrorAction SilentlyContinue
-            Stop-Process -Name "kotlin-daemon" -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 2
-            Remove-Item -Recurse -Force ".gradle_user_home" -ErrorAction SilentlyContinue
-            if (Test-Path ".gradle_user_home") {
-                Write-Host "      ERRO: Nao foi possivel deletar .gradle_user_home. Arquivos estao travados." -ForegroundColor Red
-                Write-Host "      Feche seu editor de codigo (VS Code / Android Studio) para liberar os locks e execute novamente." -ForegroundColor Red
-                Set-Location ".."
-                exit 1
-            }
-        }
-        Write-Host "      OK: .gradle_user_home removido" -ForegroundColor Green
-    }
+    # NOTA: .gradle_user_home NAO e deletado — contem o binario do Gradle (gradle-X.X-bin.zip)
+    # Deletar essa pasta forca re-download e causa timeout em conexoes lentas.
 
     
     Set-Location ".."
