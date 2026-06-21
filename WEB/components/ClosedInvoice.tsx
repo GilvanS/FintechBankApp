@@ -12,13 +12,19 @@ const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', curren
 
 function buildMonths(count = 6): { label: string; key: string }[] {
     const now = new Date();
-    return Array.from({ length: count }, (_, i) => {
+    const months = Array.from({ length: count }, (_, i) => {
         const d = new Date(now.getFullYear(), now.getMonth() - (count - 1 - i), 1);
         return {
             label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
             key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
         };
     });
+    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    months.push({
+        label: next.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
+        key: `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`,
+    });
+    return months;
 }
 
 function categoryIcon(tx: CardTransaction): string {
@@ -45,15 +51,22 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
   const [customAmount, setCustomAmount] = useState('');
   const [hideValue, setHideValue] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const months = buildMonths(6);
-  const [activeMonth, setActiveMonth] = useState(months[months.length - 1].key);
+  const months = buildMonths(6); // returns 7 items: 5 past + current + next
+  const currentMonthKey = months[months.length - 2].key;
+  const nextMonthKey = months[months.length - 1].key;
+  const [activeMonth, setActiveMonth] = useState(currentMonthKey);
   const carouselRef = useRef<HTMLDivElement>(null);
 
-  const invoiceAmount = creditCard.closedInvoice ?? 0;
+  const isOpenInvoice = activeMonth === currentMonthKey;
+  const isNextMonth = activeMonth === nextMonthKey;
+  const invoiceAmount = isOpenInvoice
+    ? (creditCard.currentInvoice ?? 0)
+    : isNextMonth
+      ? (user.pendingCharges ?? 0)
+      : (creditCard.closedInvoice ?? 0);
   const isCredit = invoiceAmount < 0;
-  const canAfford = balance >= invoiceAmount;
 
-  const isOverdue = invoiceAmount > 0 && !!creditCard.closedInvoiceDueDate && (() => {
+  const isOverdue = !isOpenInvoice && !isNextMonth && invoiceAmount > 0 && !!creditCard.closedInvoiceDueDate && (() => {
     const due = new Date(creditCard.closedInvoiceDueDate!);
     due.setUTCHours(23, 59, 59, 999);
     return new Date() > due;
@@ -73,7 +86,11 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
   const effectiveMin = balance > 0 ? Math.min(balance, minPayment) : minPayment;
   const minLabel = balance < minPayment ? 'Pagar o máximo possível' : 'Pagar mínimo (15%)';
 
-  const closedTxs = creditCard.closedTransactions ?? [];
+  const closedTxs = isOpenInvoice
+    ? (creditCard.transactions ?? [])
+    : isNextMonth
+      ? []
+      : (creditCard.closedTransactions ?? []);
   const grouped: Record<string, CardTransaction[]> = {};
   for (const tx of closedTxs) {
     const key = new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
@@ -108,7 +125,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/>
             </svg>
           </button>
-          <h2 className="flex-1 text-center text-lg font-semibold text-white pr-8">Fatura Fechada</h2>
+          <h2 className="flex-1 text-center text-lg font-semibold text-white pr-8">Fatura</h2>
         </div>
         <div
           ref={carouselRef}
@@ -139,7 +156,17 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
         <div className="bg-surface-dark rounded-2xl p-5 shadow-lg space-y-4">
 
           {/* Status tag */}
-          {isCredit ? (
+          {isNextMonth ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-500/15 text-gray-400 border border-gray-500/20">
+              <span className="material-symbols-outlined text-sm" aria-hidden="true">schedule</span>
+              Próxima fatura — encargos previstos
+            </span>
+          ) : isOpenInvoice ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/20">
+              <span className="material-symbols-outlined text-sm" aria-hidden="true">pending</span>
+              Fatura em aberto
+            </span>
+          ) : isCredit ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/15 text-primary">
               <span className="material-symbols-outlined text-sm" aria-hidden="true">info</span>
               Não há fatura para pagar neste mês
@@ -174,7 +201,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
           </div>
 
           {/* Grid vencimento | pagamento mínimo */}
-          {!isCredit && invoiceAmount > 0 && (
+          {!isOpenInvoice && !isNextMonth && !isCredit && invoiceAmount > 0 && (
             <div className="grid grid-cols-2 gap-4 pt-1 border-t border-white/10">
               <div>
                 <p className="text-xs text-gray-400">Vence em</p>
@@ -199,7 +226,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
           )}
 
           {/* CTAs */}
-          {!isCredit && invoiceAmount > 0 && (
+          {!isOpenInvoice && !isNextMonth && !isCredit && invoiceAmount > 0 && (
             <div className="space-y-2 pt-1">
               {payStep === 'idle' ? (
                 <>
@@ -261,7 +288,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
             Confira aqui os detalhes da fatura e os lançamentos do mês.
           </p>
 
-          {closedTxs.length > 0 ? (
+          {isNextMonth ? null : closedTxs.length > 0 ? (
             <div className="space-y-4">
               {Object.entries(grouped).map(([date, txs]) => (
                 <div key={date}>
@@ -341,10 +368,34 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
           ) : (
             <p className="text-center text-gray-500 py-8">Nenhum lançamento nesta fatura.</p>
           )}
+
+          {isNextMonth && (
+            <div className="bg-surface-dark rounded-2xl p-5 space-y-3 mt-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Encargos previstos</p>
+              {invoiceAmount > 0 ? (
+                <>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-300">Multa (2%)</span>
+                    <span className="text-yellow-400 font-semibold">
+                      {fmt(Math.round(invoiceAmount * 0.02 * 100) / 100)}
+                    </span>
+                  </div>
+                  <div className="border-t border-white/10 pt-2">
+                    <p className="text-xs text-gray-400">Originado de pagamento parcial ou mínimo no ciclo atual.</p>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <span className="material-symbols-outlined text-4xl text-green-600">check_circle</span>
+                  <p className="text-gray-400 mt-2 text-sm">Nenhum encargo previsto para o próximo ciclo.</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Footer totalizador (spec §6) ── */}
-        {closedTxs.length > 0 && (
+        {!isNextMonth && closedTxs.length > 0 && (
           <div className="border-t-2 border-white/20 pt-4 flex justify-between items-center">
             <p className="font-semibold text-white">Total do Titular</p>
             <p className="font-bold text-white text-lg">{fmt(total)}</p>
