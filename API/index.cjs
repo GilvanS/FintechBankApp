@@ -2984,15 +2984,15 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
         return res.status(400).json({ success: false, message: 'Nenhuma parcela vencida para pagamento.' });
     }
 
+    const balance = parseFloat(user.balance || 0);
     const minPayment = Math.max(totalDue * 0.15, 10);
+    const effectiveMin = balance > 0 ? Math.min(balance, minPayment) : minPayment;
     const requestedAmount = typeof amount === 'number' && amount > 0 ? amount : totalDue;
     const payAmount = Math.min(requestedAmount, totalDue);
 
-    if (payAmount < minPayment - 0.01) {
-        return res.status(400).json({ success: false, message: `Valor mínimo de pagamento é R$ ${minPayment.toFixed(2)}.` });
+    if (payAmount < effectiveMin - 0.01) {
+        return res.status(400).json({ success: false, message: `Valor mínimo de pagamento é R$ ${effectiveMin.toFixed(2)}.` });
     }
-
-    const balance = parseFloat(user.balance || 0);
     if (balance < payAmount) return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
 
     const availableLimit = parseFloat(user.credit_card_available_limit || 0);

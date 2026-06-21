@@ -36,6 +36,8 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: { user: User; o
   const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const invoiceAmount = creditCard.closedInvoice;
   const minPayment = Math.max(invoiceAmount * 0.15, 10);
+  const effectiveMin = balance > 0 ? Math.min(balance, minPayment) : minPayment;
+  const minLabel = balance < minPayment ? 'Pagar o máximo possível' : 'Pagar mínimo (15%)';
 
   const handlePay = async (amt: number) => {
     setIsLoading(true);
@@ -43,10 +45,10 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: { user: User; o
   };
   const confirmPay = () => {
     let amt = invoiceAmount;
-    if (payMode === 'min') amt = minPayment;
+    if (payMode === 'min') amt = effectiveMin;
     else if (payMode === 'custom') {
       const parsed = parseFloat(String(customAmount).replace(',', '.'));
-      if (isNaN(parsed) || parsed < minPayment) { alert(`Valor mínimo: ${fmt(minPayment)}`); return; }
+      if (isNaN(parsed) || parsed < effectiveMin) { alert(`Valor mínimo: ${fmt(effectiveMin)}`); return; }
       amt = Math.min(parsed, invoiceAmount);
     }
     handlePay(amt);
@@ -88,12 +90,15 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: { user: User; o
                         Parcelar Fatura
                     </button>
                     <button onClick={() => { setPayStep('pick'); setPayMode('total'); setCustomAmount(''); }}
-                        disabled={isLoading || invoiceAmount <= 0 || balance < minPayment}
+                        disabled={isLoading || invoiceAmount <= 0 || balance <= 0}
                         className="w-full py-3 font-semibold text-background-dark bg-primary rounded-lg hover:bg-primary/90 disabled:bg-gray-600 disabled:cursor-not-allowed">
                         Pagar fatura
                     </button>
-                    {balance < minPayment && invoiceAmount > 0 && (
-                        <p className="text-xs text-red-400 text-center">Saldo insuficiente para o pagamento mínimo ({fmt(minPayment)}).</p>
+                    {balance > 0 && balance < minPayment && invoiceAmount > 0 && (
+                        <p className="text-xs text-yellow-400 text-center">Saldo disponível: {fmt(balance)}. Você pode pagar o máximo possível.</p>
+                    )}
+                    {balance <= 0 && invoiceAmount > 0 && (
+                        <p className="text-xs text-red-400 text-center">Saldo insuficiente para qualquer pagamento.</p>
                     )}
                 </>
             ) : (
@@ -101,7 +106,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: { user: User; o
                     <p className="text-xs font-medium text-gray-400">Escolha o valor a pagar</p>
                     {([
                         { key: 'total', label: 'Pagar total',        value: invoiceAmount },
-                        { key: 'min',   label: 'Pagar mínimo (15%)', value: minPayment },
+                        { key: 'min',   label: minLabel,             value: effectiveMin },
                     ] as const).map(opt => (
                         <button key={opt.key} onClick={() => setPayMode(opt.key)}
                             className={`w-full flex justify-between items-center p-3 rounded-lg border text-sm transition-colors ${payMode === opt.key ? 'border-primary bg-primary/10' : 'border-white/10 hover:bg-white/5'}`}>
@@ -115,7 +120,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: { user: User; o
                     </button>
                     {payMode === 'custom' && (
                         <input type="number" value={customAmount} onChange={e => setCustomAmount(e.target.value)}
-                            placeholder={`Mínimo: ${fmt(minPayment)}`}
+                            placeholder={`Mínimo: ${fmt(effectiveMin)}`}
                             className="w-full bg-background-dark text-white text-sm p-3 rounded-lg border border-white/20 outline-none" />
                     )}
                     <div className="flex gap-2">

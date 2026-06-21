@@ -72,6 +72,8 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
         : '--/--';
 
     const minPayment = invoiceAmount > 0 ? Math.max(invoiceAmount * 0.15, 10) : 0;
+    const effectiveMin = user.balance > 0 ? Math.min(user.balance, minPayment) : minPayment;
+    const minLabel = user.balance < minPayment ? 'Pagar o máximo possível' : 'Pagar mínimo (15%)';
 
     const closedTxs = creditCard.closedTransactions?.length
         ? creditCard.closedTransactions
@@ -90,10 +92,10 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
     };
     const confirmPay = () => {
         let amt = invoiceAmount;
-        if (payMode === 'min') amt = minPayment;
+        if (payMode === 'min') amt = effectiveMin;
         else if (payMode === 'custom') {
             const parsed = parseFloat(String(customAmount).replace(',', '.'));
-            if (isNaN(parsed) || parsed < minPayment) { alert(`Valor mínimo: ${fmt(minPayment)}`); return; }
+            if (isNaN(parsed) || parsed < effectiveMin) { alert(`Valor mínimo: ${fmt(effectiveMin)}`); return; }
             amt = Math.min(parsed, invoiceAmount);
         }
         handlePay(amt);
@@ -182,7 +184,7 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400">Pagamento mínimo</p>
-                                <p className="text-sm font-semibold text-white">{fmt(minPayment)}</p>
+                                <p className="text-sm font-semibold text-white">{fmt(effectiveMin)}</p>
                             </div>
                         </div>
                     )}
@@ -194,7 +196,7 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                                 <>
                                     <button
                                         onClick={() => { setPayStep('pick'); setPayMode('total'); setCustomAmount(''); }}
-                                        disabled={isLoading || user.balance < minPayment}
+                                        disabled={isLoading || user.balance <= 0}
                                         className="w-full py-3 rounded-lg bg-primary text-white font-semibold text-center disabled:bg-gray-600 disabled:cursor-not-allowed"
                                     >
                                         Pagar fatura
@@ -202,16 +204,19 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                                     <button onClick={onParcel} className="w-full py-2.5 rounded-lg border border-primary text-primary font-semibold text-sm">
                                         Parcelar fatura
                                     </button>
-                                    {user.balance < minPayment && (
-                                        <p className="text-xs text-red-400 text-center">Saldo insuficiente para o pagamento mínimo ({fmt(minPayment)}).</p>
+                                    {user.balance > 0 && user.balance < minPayment && (
+                                        <p className="text-xs text-yellow-400 text-center">Saldo disponível: {fmt(user.balance)}. Você pode pagar o máximo possível.</p>
+                                    )}
+                                    {user.balance <= 0 && (
+                                        <p className="text-xs text-red-400 text-center">Saldo insuficiente para qualquer pagamento.</p>
                                     )}
                                 </>
                             ) : (
                                 <div className="space-y-2 border-t border-white/10 pt-3">
                                     <p className="text-xs font-medium text-gray-400">Escolha o valor a pagar</p>
                                     {([
-                                        { key: 'total', label: 'Pagar total', value: invoiceAmount },
-                                        { key: 'min',   label: `Pagar mínimo (15%)`, value: minPayment },
+                                        { key: 'total', label: 'Pagar total',   value: invoiceAmount },
+                                        { key: 'min',   label: minLabel,        value: effectiveMin },
                                     ] as const).map(opt => (
                                         <button key={opt.key} onClick={() => setPayMode(opt.key)}
                                             className={`w-full flex justify-between items-center p-3 rounded-lg border text-sm transition-colors ${payMode === opt.key ? 'border-primary bg-primary/10' : 'border-white/10 hover:bg-white/5'}`}>
@@ -225,7 +230,7 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                                     </button>
                                     {payMode === 'custom' && (
                                         <input type="number" value={customAmount} onChange={e => setCustomAmount(e.target.value)}
-                                            placeholder={`Mínimo: ${fmt(minPayment)}`}
+                                            placeholder={`Mínimo: ${fmt(effectiveMin)}`}
                                             className="w-full bg-background-dark text-white text-sm p-3 rounded-lg border border-white/20 focus:border-primary outline-none" />
                                     )}
                                     <div className="flex gap-2">

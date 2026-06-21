@@ -70,6 +70,8 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
     : '--/--';
 
   const minPayment = invoiceAmount > 0 ? Math.max(invoiceAmount * 0.15, 10) : 0;
+  const effectiveMin = balance > 0 ? Math.min(balance, minPayment) : minPayment;
+  const minLabel = balance < minPayment ? 'Pagar o máximo possível' : 'Pagar mínimo (15%)';
 
   const closedTxs = creditCard.closedTransactions ?? [];
   const grouped: Record<string, CardTransaction[]> = {};
@@ -86,10 +88,10 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
   };
   const confirmPay = () => {
     let amt = invoiceAmount;
-    if (payMode === 'min') amt = minPayment;
+    if (payMode === 'min') amt = effectiveMin;
     else if (payMode === 'custom') {
       const parsed = parseFloat(String(customAmount).replace(',', '.'));
-      if (isNaN(parsed) || parsed < minPayment) { alert(`Valor mínimo: ${fmt(minPayment)}`); return; }
+      if (isNaN(parsed) || parsed < effectiveMin) { alert(`Valor mínimo: ${fmt(effectiveMin)}`); return; }
       amt = Math.min(parsed, invoiceAmount);
     }
     handlePay(amt);
@@ -180,7 +182,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
               </div>
               <div>
                 <p className="text-xs text-gray-400">Pagamento mínimo</p>
-                <p className="text-sm font-semibold text-white">{fmt(minPayment)}</p>
+                <p className="text-sm font-semibold text-white">{fmt(effectiveMin)}</p>
               </div>
             </div>
           )}
@@ -203,7 +205,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
                 <>
                   <button
                     onClick={() => { setPayStep('pick'); setPayMode('total'); setCustomAmount(''); }}
-                    disabled={isLoading || balance < minPayment}
+                    disabled={isLoading || balance <= 0}
                     className="w-full py-3 font-bold text-white bg-primary rounded-lg hover:opacity-90 disabled:bg-gray-600 disabled:cursor-not-allowed transition-opacity"
                   >
                     Pagar fatura
@@ -211,16 +213,19 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
                   <button onClick={onParcel} className="w-full py-3 font-semibold text-primary bg-transparent border border-primary/50 rounded-lg hover:bg-primary/10 transition-colors">
                     Parcelar fatura
                   </button>
-                  {balance < minPayment && (
-                    <p className="text-xs text-red-400 text-center">Saldo insuficiente para o pagamento mínimo ({fmt(minPayment)}).</p>
+                  {balance > 0 && balance < minPayment && (
+                    <p className="text-xs text-yellow-400 text-center">Saldo disponível: {fmt(balance)}. Você pode pagar o máximo possível.</p>
+                  )}
+                  {balance <= 0 && (
+                    <p className="text-xs text-red-400 text-center">Saldo insuficiente para qualquer pagamento.</p>
                   )}
                 </>
               ) : (
                 <div className="space-y-2 border-t border-white/10 pt-3">
                   <p className="text-xs font-medium text-gray-400">Escolha o valor a pagar</p>
                   {([
-                    { key: 'total', label: 'Pagar total',        value: invoiceAmount },
-                    { key: 'min',   label: 'Pagar mínimo (15%)', value: minPayment },
+                    { key: 'total', label: 'Pagar total', value: invoiceAmount },
+                    { key: 'min',   label: minLabel,    value: effectiveMin },
                   ] as const).map(opt => (
                     <button key={opt.key} onClick={() => setPayMode(opt.key)}
                       className={`w-full flex justify-between items-center p-3 rounded-lg border text-sm transition-colors ${payMode === opt.key ? 'border-primary bg-primary/10' : 'border-white/10 hover:bg-white/5'}`}>
@@ -234,7 +239,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
                   </button>
                   {payMode === 'custom' && (
                     <input type="number" value={customAmount} onChange={e => setCustomAmount(e.target.value)}
-                      placeholder={`Mínimo: ${fmt(minPayment)}`}
+                      placeholder={`Mínimo: ${fmt(effectiveMin)}`}
                       className="w-full bg-background-dark text-white text-sm p-3 rounded-lg border border-white/20 focus:border-primary outline-none" />
                   )}
                   <div className="flex gap-2">
