@@ -320,11 +320,15 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
 
     // Prepara dados do recibo antes do refresh - evita perder o comprovante se o refresh falhar
     const fallbackCardLast4 = user.creditCard?.number?.slice(-4) || '----';
+    const totalDueInv = user.creditCard.closedInvoice;
+    const isPartialInv = amountToPay < totalDueInv - 0.01;
     setInvoicePaymentDetails({
         amountPaid: amountToPay,
         date: new Date().toISOString(),
         cardLast4: fallbackCardLast4,
-        transactionId: `inv-pay-${Date.now()}`
+        transactionId: `inv-pay-${Date.now()}`,
+        isPartial: isPartialInv,
+        remainingBalance: isPartialInv ? Math.max(totalDueInv - amountToPay, 0) : 0,
     });
 
     try {

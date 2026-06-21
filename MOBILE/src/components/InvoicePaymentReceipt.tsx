@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface InvoicePaymentReceiptProps {
   details: {
@@ -8,9 +8,13 @@ interface InvoicePaymentReceiptProps {
     transactionId: string;
     title?: string;
     amountLabel?: string;
+    isPartial?: boolean;
+    remainingBalance?: number;
   };
   onClose: () => void;
 }
+
+const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
 const InfoRow: React.FC<{ label: string, value: string | React.ReactNode, icon: React.ReactNode }> = ({ label, value, icon }) => (
   <div className="py-4 border-b border-gray-700 flex items-start space-x-4">
@@ -23,6 +27,28 @@ const InfoRow: React.FC<{ label: string, value: string | React.ReactNode, icon: 
 );
 
 const InvoicePaymentReceipt: React.FC<InvoicePaymentReceiptProps> = ({ details, onClose }) => {
+  const [countdown, setCountdown] = useState(5);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) {
+          clearInterval(timerRef.current!);
+          onClose();
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [onClose]);
+
+  const handleClose = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    onClose();
+  };
+
   return (
     <div className="h-screen flex flex-col bg-background-dark">
       <header className="flex-shrink-0 text-center pt-[calc(2rem+env(safe-area-inset-top))] px-6 pb-6">
@@ -30,37 +56,47 @@ const InvoicePaymentReceipt: React.FC<InvoicePaymentReceiptProps> = ({ details, 
           <svg className="w-10 h-10 text-background-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
         </div>
         <h2 className="text-2xl font-bold text-white">{details.title || 'Pagamento realizado com sucesso!'}</h2>
+        {details.isPartial && (
+          <p className="text-sm text-yellow-400 mt-2">Pagamento parcial — saldo devedor mantido na fatura.</p>
+        )}
       </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-6">
         <div className="bg-surface-dark rounded-lg p-4">
-            <InfoRow 
-            label={details.amountLabel || "Valor Pago"}
-                value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(details.amountPaid)}
-                icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 10v-1m0-6c-1.657 0-3 .895-3 2s1.343 2 3 2m0-4a2 2 0 100 4 2 2 0 000-4z" /></svg>}
+          <InfoRow
+            label={details.amountLabel || 'Valor Pago'}
+            value={fmt(details.amountPaid)}
+            icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 10v-1m0-6c-1.657 0-3 .895-3 2s1.343 2 3 2m0-4a2 2 0 100 4 2 2 0 000-4z" /></svg>}
+          />
+          {details.isPartial && details.remainingBalance != null && details.remainingBalance > 0 && (
+            <InfoRow
+              label="Saldo devedor restante"
+              value={<span className="text-yellow-400">{fmt(details.remainingBalance)}</span>}
+              icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>}
             />
-             <InfoRow 
-                label="Data do pagamento"
-                value={new Date(details.date).toLocaleString('pt-BR')}
-                icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>}
-            />
-             <InfoRow 
+          )}
+          <InfoRow
+            label="Data do pagamento"
+            value={new Date(details.date).toLocaleString('pt-BR')}
+            icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>}
+          />
+          <InfoRow
             label="Cartão"
             value={`**** ${details.cardLast4}`}
             icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>}
           />
-          <InfoRow 
-                label="ID da transação"
-                value={<span className="font-mono text-xs break-all">{details.transactionId}</span>}
+          <InfoRow
+            label="ID da transação"
+            value={<span className="font-mono text-xs break-all">{details.transactionId}</span>}
             icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>}
-            />
+          />
         </div>
         <p className="text-center text-sm text-subtle-dark mt-6">O valor pago será refletido no seu limite em alguns instantes.</p>
       </main>
 
       <footer className="flex-shrink-0 px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4">
-        <button onClick={onClose} className="w-full py-4 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90">
-          Voltar para o Início
+        <button onClick={handleClose} className="w-full py-4 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90">
+          Voltar para o Início{countdown > 0 ? ` (${countdown}s)` : ''}
         </button>
       </footer>
     </div>
@@ -68,4 +104,3 @@ const InvoicePaymentReceipt: React.FC<InvoicePaymentReceiptProps> = ({ details, 
 };
 
 export default InvoicePaymentReceipt;
-
