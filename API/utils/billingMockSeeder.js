@@ -208,6 +208,23 @@ async function clearMockBaseline(db, cpf) {
  *   3. Se não tem → gera novo histórico [TEST] + aplica cenário padrão
  */
 async function seedBillingMockData(db) {
+    // Pular seed se dados mock já existem e RESET_MOCK_ON_START não foi definido.
+    // Isso preserva pagamentos e alterações feitas durante a sessão anterior.
+    const forceReset = process.env.RESET_MOCK_ON_START === 'true';
+    if (!forceReset) {
+        const rows = await db.executeQuery(`
+            SELECT COUNT(*) as total FROM ${db.fq('transactions')}
+            WHERE (description LIKE '${PREFIX_TEST}%' OR description LIKE '${PREFIX_MOCK}%')
+            AND type = 'INVOICE_INSTALLMENT'
+        `);
+        const count = parseInt(String(rows[0]?.total ?? rows[0]?.count ?? '0'), 10);
+        if (count > 0) {
+            console.log(`⏭️  [BillingMock] ${count} transações mock detectadas — pulando reset.`);
+            console.log('   Para forçar reset: RESET_MOCK_ON_START=true no .env');
+            return;
+        }
+    }
+
     console.log('🌱 [BillingMock] Resetando massa de dados de faturamento...');
 
     await ensureMockBaselineTable(db);

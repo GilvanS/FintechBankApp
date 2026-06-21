@@ -294,16 +294,18 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
   };
 
   // ========== FLUXO DE PAGAMENTO DE FATURA ==========
-  const handlePayInvoice = () => {
-    passwordActionPayload.current = {}; // Inicializar objeto para receber o PIN
+  const handlePayInvoice = (amount: number) => {
+    passwordActionPayload.current = { amount };
     setPasswordAction(() => () => executePayInvoice());
-    setPasswordModalInfo({ title: 'Pagar Fatura', description: 'Digite seu PIN para confirmar o pagamento.' });
+    const fmtAmt = amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    setPasswordModalInfo({ title: 'Pagar Fatura', description: `Confirme o pagamento de ${fmtAmt}.` });
     setIsPasswordModalOpen(true);
   };
 
   const executePayInvoice = async () => {
     if (!user) return;
-    const amountToPay = user.creditCard.closedInvoice;
+    const selectedAmount = (passwordActionPayload.current as any)?.amount;
+    const amountToPay = typeof selectedAmount === 'number' ? selectedAmount : user.creditCard.closedInvoice;
     setIsProcessing(true);
     const pin = (passwordActionPayload.current as any)?.pin;
 
@@ -326,7 +328,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
     });
 
     try {
-        const result = await payCreditCardInvoice(user.cpf, pin);
+        const result = await payCreditCardInvoice(user.cpf, pin, amountToPay);
         if (result.success) {
             const refreshed = await getUserByCpf(user.cpf);
             if (refreshed.success && refreshed.user) {
@@ -480,7 +482,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
 
   return (
     <div className="h-full w-full flex flex-col bg-background-dark" style={{ position: 'relative', overflow: 'visible' }} id="app-home" data-testid="app-home" aria-label="App principal">
-        <div className={`flex-grow overflow-y-auto no-scrollbar ${showBottomNav ? 'pb-16' : ''}`} style={{ position: 'relative', zIndex: 1 }}>
+        <div className="flex-grow overflow-y-auto no-scrollbar" style={{ position: 'relative', zIndex: 1, paddingBottom: showBottomNav ? 'calc(64px + env(safe-area-inset-bottom))' : 0 }}>
             {renderContent()}
         </div>
         {showBottomNav && (

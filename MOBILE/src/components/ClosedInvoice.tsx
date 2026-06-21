@@ -5,8 +5,7 @@ import { User, CardTransaction } from '../types';
 interface ClosedInvoiceProps {
   user: User;
   onBack: () => void;
-  onPayInvoice: () => void;
-  // FIX: Updated onParcel prop to not require a payload, simplifying the initiation of the installment flow.
+  onPayInvoice: (amount: number) => void;
   onParcel: () => void;
 }
 
@@ -21,35 +20,36 @@ const InfoRow: React.FC<{ label: string; value: string; valueColor?: string; has
 );
 
 
-function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }) {
+function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: { user: User; onBack: () => void; onPayInvoice: (amount: number) => void; onParcel: () => void }) {
   const { creditCard, balance } = user;
   const [isLoading, setIsLoading] = useState(false);
-  // Uma fatura só está atrasada DEPOIS do fim do dia de vencimento
-  // Se hoje for o dia de vencimento ou anterior, não está atrasada
+  const [payStep, setPayStep] = useState<'idle' | 'pick'>('idle');
+  const [payMode, setPayMode] = useState<'total' | 'min' | 'custom'>('total');
+  const [customAmount, setCustomAmount] = useState('');
+
   const isOverdue = creditCard.closedInvoice > 0 && creditCard.closedInvoiceDueDate && (() => {
     const dueDate = new Date(creditCard.closedInvoiceDueDate);
-    // Definir fim do dia de vencimento (23:59:59.999)
     dueDate.setUTCHours(23, 59, 59, 999);
-    const now = new Date();
-    // Só está atrasada se a data atual for depois do fim do dia de vencimento
-    return now > dueDate;
+    return new Date() > dueDate;
   })();
-  // FIX: Added a check to see if the user can afford the full invoice payment.
-  const canAfford = balance >= creditCard.closedInvoice;
 
+  const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const invoiceAmount = creditCard.closedInvoice;
+  const minPayment = Math.max(invoiceAmount * 0.15, 10);
 
-  const handlePay = async () => {
+  const handlePay = async (amt: number) => {
     setIsLoading(true);
-    try {
-        await onPayInvoice();
-    } finally {
-        setIsLoading(false);
-    }
+    try { await onPayInvoice(amt); } finally { setIsLoading(false); setPayStep('idle'); }
   };
-
-  const handleParcel = () => {
-      // FIX: The onParcel call is now simplified to just trigger the navigation to the installment options screen.
-      onParcel();
+  const confirmPay = () => {
+    let amt = invoiceAmount;
+    if (payMode === 'min') amt = minPayment;
+    else if (payMode === 'custom') {
+      const parsed = parseFloat(String(customAmount).replace(',', '.'));
+      if (isNaN(parsed) || parsed < minPayment) { alert(`Valor mínimo: ${fmt(minPayment)}`); return; }
+      amt = Math.min(parsed, invoiceAmount);
+    }
+    handlePay(amt);
   };
 
   return (
@@ -81,15 +81,52 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }) {
             <InfoRow label="Limite total" value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCard.totalLimit)} />
         </div>
         
-        {/* FIX: The "Pagar" button is now disabled if the user's balance is insufficient, guiding them to the parceling option. */}
         <div className="flex flex-col gap-3">
-             <button onClick={handleParcel} disabled={creditCard.closedInvoice <= 0} className="w-full py-3 font-semibold text-primary bg-transparent border border-primary rounded-lg hover:bg-primary/10 disabled:border-gray-600 disabled:text-gray-600 disabled:cursor-not-allowed">
-                Parcelar Fatura
-            </button>
-             <button onClick={handlePay} disabled={isLoading || creditCard.closedInvoice <= 0 || !canAfford} className="w-full py-3 font-semibold text-background-dark bg-primary rounded-lg hover:bg-primary/90 disabled:bg-gray-600 disabled:cursor-not-allowed">
-                {isLoading ? 'Pagando...' : 'Pagar valor total'}
-            </button>
-            {!canAfford && creditCard.closedInvoice > 0 && <p className="text-xs text-red-400 text-center">Saldo em conta insuficiente para o pagamento total. Tente parcelar.</p>}
+            {payStep === 'idle' ? (
+                <>
+                    <button onClick={onParcel} className="w-full py-3 font-semibold text-primary bg-transparent border border-primary rounded-lg hover:bg-primary/10">
+                        Parcelar Fatura
+                    </button>
+                    <button onClick={() => { setPayStep('pick'); setPayMode('total'); setCustomAmount(''); }}
+                        disabled={isLoading || invoiceAmount <= 0 || balance < minPayment}
+                        className="w-full py-3 font-semibold text-background-dark bg-primary rounded-lg hover:bg-primary/90 disabled:bg-gray-600 disabled:cursor-not-allowed">
+                        Pagar fatura
+                    </button>
+                    {balance < minPayment && invoiceAmount > 0 && (
+                        <p className="text-xs text-red-400 text-center">Saldo insuficiente para o pagamento mínimo ({fmt(minPayment)}).</p>
+                    )}
+                </>
+            ) : (
+                <div className="space-y-2 border-t border-white/10 pt-2">
+                    <p className="text-xs font-medium text-gray-400">Escolha o valor a pagar</p>
+                    {([
+                        { key: 'total', label: 'Pagar total',        value: invoiceAmount },
+                        { key: 'min',   label: 'Pagar mínimo (15%)', value: minPayment },
+                    ] as const).map(opt => (
+                        <button key={opt.key} onClick={() => setPayMode(opt.key)}
+                            className={`w-full flex justify-between items-center p-3 rounded-lg border text-sm transition-colors ${payMode === opt.key ? 'border-primary bg-primary/10' : 'border-white/10 hover:bg-white/5'}`}>
+                            <span className={payMode === opt.key ? 'text-primary font-medium' : 'text-white'}>{opt.label}</span>
+                            <span className={`font-bold ${payMode === opt.key ? 'text-primary' : 'text-white'}`}>{fmt(opt.value)}</span>
+                        </button>
+                    ))}
+                    <button onClick={() => setPayMode('custom')}
+                        className={`w-full p-3 rounded-lg border text-sm text-left ${payMode === 'custom' ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-white/10 text-white'}`}>
+                        Outro valor
+                    </button>
+                    {payMode === 'custom' && (
+                        <input type="number" value={customAmount} onChange={e => setCustomAmount(e.target.value)}
+                            placeholder={`Mínimo: ${fmt(minPayment)}`}
+                            className="w-full bg-background-dark text-white text-sm p-3 rounded-lg border border-white/20 outline-none" />
+                    )}
+                    <div className="flex gap-2">
+                        <button onClick={() => setPayStep('idle')} className="flex-1 py-2.5 rounded-lg border border-white/20 text-white text-sm">Cancelar</button>
+                        <button onClick={confirmPay} disabled={isLoading || (payMode === 'custom' && !customAmount)}
+                            className="flex-1 py-2.5 rounded-lg bg-primary text-white font-semibold text-sm disabled:opacity-40">
+                            {isLoading ? 'Pagando...' : 'Confirmar'}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
         
         <div className="text-center text-xs text-gray-500">

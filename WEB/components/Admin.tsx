@@ -12,7 +12,11 @@ import {
     adminApproveLimitRequest,
     adminDenyLimitRequest,
     adminUpdateCardDetails,
-    adminGetStats
+    adminGetStats,
+    adminSeedTestScenario,
+    adminSaveAsMock,
+    adminClearMockBaseline,
+    adminResetTestData,
 } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
@@ -191,6 +195,38 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
         closeModal();
         fetchRequests(); // Refresh lists
         fetchStats(); // Refresh stats
+    };
+
+    // ── Billing Mock (issue #42) ─────────────────────────────────────────────
+    const [billingCpf, setBillingCpf] = useState('11111111111');
+    const [billingLoading, setBillingLoading] = useState(false);
+    const [billingMsg, setBillingMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+    const applyBillingScenario = async (scenario: string) => {
+        setBillingLoading(true); setBillingMsg(null);
+        const res = await adminSeedTestScenario(billingCpf || null, scenario);
+        setBillingMsg({ text: res.success ? `Cenário "${scenario}" aplicado.` : res.message || 'Erro.', ok: !!res.success });
+        setBillingLoading(false);
+    };
+    const saveBillingBaseline = async () => {
+        if (!billingCpf) return;
+        setBillingLoading(true); setBillingMsg(null);
+        const res = await adminSaveAsMock(billingCpf);
+        setBillingMsg({ text: res.success ? 'Baseline salvo. Reset restaurará este estado.' : res.message || 'Erro.', ok: !!res.success });
+        setBillingLoading(false);
+    };
+    const clearBillingBaseline = async () => {
+        if (!billingCpf) return;
+        setBillingLoading(true); setBillingMsg(null);
+        const res = await adminClearMockBaseline(billingCpf);
+        setBillingMsg({ text: res.success ? 'Baseline limpo. Reset usará o padrão.' : res.message || 'Erro.', ok: !!res.success });
+        setBillingLoading(false);
+    };
+    const resetAllTestData = async () => {
+        setBillingLoading(true); setBillingMsg(null);
+        const res = await adminResetTestData();
+        setBillingMsg({ text: res.success ? 'Dados de teste resetados.' : res.message || 'Erro.', ok: !!res.success });
+        setBillingLoading(false);
     };
 
     return (
@@ -553,6 +589,68 @@ const Admin: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                                 </div>
                             )) : <p className="text-subtle-dark text-sm text-center py-4 test-admin-no-requests" data-testid="admin-no-limit-requests">Nenhuma solicitação pendente.</p>}
                         </div>
+                    </div>
+
+                    {/* Massa de Teste — Billing Mock */}
+                    <div className="bg-surface-dark p-6 rounded-xl">
+                        <h2 className="text-lg font-semibold mb-1">Massa de Teste (Billing)</h2>
+                        <p className="text-xs text-subtle-dark mb-4">Aplica cenários de faturamento para automação. Não afeta dados de produção.</p>
+
+                        <p className="text-xs text-subtle-dark mb-2 font-medium">CPF alvo</p>
+                        <div className="flex gap-2 flex-wrap mb-2">
+                            {[
+                                { label: 'Todos', value: '' },
+                                { label: '111', value: '11111111111' },
+                                { label: '222', value: '22222222222' },
+                                { label: '333', value: '33333333333' },
+                                { label: '444', value: '44444444444' },
+                            ].map(opt => (
+                                <button key={opt.value || 'all'} onClick={() => setBillingCpf(opt.value)}
+                                    className={`text-xs px-2 py-1 rounded-lg border transition-colors ${billingCpf === opt.value ? 'border-primary bg-primary/10 text-primary' : 'border-white/10 text-subtle-dark hover:border-white/30'}`}>
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                        <input value={billingCpf} onChange={e => setBillingCpf(e.target.value.replace(/\D/g, ''))}
+                            placeholder="ou CPF personalizado…"
+                            className="w-full bg-background-dark text-white text-sm p-2 rounded-lg border border-white/10 mb-4" />
+
+                        <p className="text-xs text-subtle-dark mb-2 font-medium">Cenário</p>
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                            {[
+                                { key: 'adimplente',   label: 'Adimplente',   cls: 'text-green-400 border-green-400/30 bg-green-400/5' },
+                                { key: 'vencida',      label: 'Vencida',      cls: 'text-yellow-400 border-yellow-400/30 bg-yellow-400/5' },
+                                { key: 'inadimplente', label: 'Inadimplente', cls: 'text-red-400 border-red-400/30 bg-red-400/5' },
+                                { key: 'reset',        label: '↺ Reset',      cls: 'text-subtle-dark border-white/10' },
+                            ].map(s => (
+                                <button key={s.key} onClick={() => applyBillingScenario(s.key)}
+                                    disabled={billingLoading}
+                                    className={`text-xs py-2 px-3 rounded-lg border font-medium disabled:opacity-40 transition-colors ${s.cls}`}>
+                                    {s.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="flex gap-2 mb-3">
+                            <button onClick={saveBillingBaseline} disabled={billingLoading || !billingCpf}
+                                className="flex-1 text-xs py-2 px-3 rounded-lg border border-primary/30 bg-primary/5 text-primary disabled:opacity-40">
+                                Salvar como Mock
+                            </button>
+                            <button onClick={clearBillingBaseline} disabled={billingLoading || !billingCpf}
+                                className="flex-1 text-xs py-2 px-3 rounded-lg border border-white/10 text-subtle-dark disabled:opacity-40">
+                                Limpar Baseline
+                            </button>
+                        </div>
+                        <button onClick={resetAllTestData} disabled={billingLoading}
+                            className="w-full text-xs py-2 px-3 rounded-lg bg-red-500/10 border border-red-400/20 text-red-400 disabled:opacity-40">
+                            Reset Todos Dados de Teste
+                        </button>
+
+                        {billingMsg && (
+                            <p className={`text-xs mt-3 text-center font-medium ${billingMsg.ok ? 'text-green-400' : 'text-red-400'}`}>
+                                {billingMsg.text}
+                            </p>
+                        )}
                     </div>
                 </section>
             </main>

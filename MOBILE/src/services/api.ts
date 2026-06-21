@@ -1002,9 +1002,10 @@ export async function purchaseWithCard(cpf: string, items: any[], cashbackUsed: 
 }
 
 // Método: payCreditCardInvoice - Pagar fatura do cartão
-export async function payCreditCardInvoice(cpf: string, pin: string): Promise<{ success: boolean; message: string; user?: User }> {
+export async function payCreditCardInvoice(cpf: string, pin: string, amount?: number): Promise<{ success: boolean; message: string; user?: User }> {
     try {
-        const payload = { cpf, pin };
+        const payload: Record<string, unknown> = { cpf, pin };
+        if (amount !== undefined) payload.amount = amount;
 
         const res = await api.post('/cards/invoice/pay', payload, {
             headers: getAuthHeaders('json'),
@@ -1129,6 +1130,51 @@ export async function updateUserProfile(
         return { success: true, message: 'Perfil atualizado!', user: res.data?.user };
     } catch (error: any) {
         return { success: false, message: error?.response?.data?.message || 'Erro ao atualizar perfil' };
+    }
+}
+
+// ── Admin Billing Mock (issue #42) ──────────────────────────────────────────
+
+export async function adminSeedTestScenario(
+    cpf: string | null,
+    scenario: string,
+    opts?: { daysOverdue?: number; invoiceAmount?: number }
+): Promise<{ success: boolean; message?: string; applied?: any[] }> {
+    try {
+        const res = await api.post('/admin/billing/seed-test-scenarios',
+            { ...(cpf ? { cpf } : {}), scenario, ...opts },
+            { headers: getAuthHeaders() }
+        );
+        return { success: true, applied: res.data?.applied };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao aplicar cenário.' };
+    }
+}
+
+export async function adminSaveAsMock(cpf: string): Promise<{ success: boolean; message?: string }> {
+    try {
+        const res = await api.post('/admin/billing/save-as-mock', { cpf }, { headers: getAuthHeaders() });
+        return { success: !!res.data?.success };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao salvar baseline.' };
+    }
+}
+
+export async function adminClearMockBaseline(cpf: string): Promise<{ success: boolean; message?: string }> {
+    try {
+        const res = await api.post('/admin/billing/clear-mock-baseline', { cpf }, { headers: getAuthHeaders() });
+        return { success: !!res.data?.success };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao limpar baseline.' };
+    }
+}
+
+export async function adminResetTestData(): Promise<{ success: boolean; message?: string }> {
+    try {
+        const res = await api.post('/test/reset', {}, { headers: getAuthHeaders() });
+        return { success: !!res.data?.success };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao resetar dados.' };
     }
 }
 

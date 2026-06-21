@@ -265,11 +265,11 @@ export const purchaseWithDebit = async (cpf: string, items: PurchasedItem[], cas
   }
 };
 
-export const payCreditCardInvoice = async (cpf: string, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const payCreditCardInvoice = async (cpf: string, pin: string, amount?: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/cards/invoice/pay', {
       method: 'POST',
-      body: JSON.stringify({ cpf, pin })
+      body: JSON.stringify({ cpf, pin, ...(amount !== undefined ? { amount } : {}) })
     });
     return result;
   } catch (error: any) {
@@ -557,6 +557,51 @@ export const getProducts = async (): Promise<{ success: boolean; products?: Purc
   } catch (error: any) {
     return { success: false, message: error.message || 'Erro ao buscar produtos', products: [] };
   }
+};
+
+// ── Admin Billing Mock (issue #42) ──────────────────────────────────────────
+
+export const adminSeedTestScenario = async (
+    cpf: string | null,
+    scenario: string,
+    opts?: { daysOverdue?: number; invoiceAmount?: number }
+): Promise<{ success: boolean; message?: string; applied?: any[] }> => {
+    try {
+        const result = await apiCall<{ success: boolean; applied: any[] }>('/admin/billing/seed-test-scenarios', {
+            method: 'POST',
+            body: JSON.stringify({ ...(cpf ? { cpf } : {}), scenario, ...opts }),
+        });
+        return { success: true, applied: result.applied };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao aplicar cenário.' };
+    }
+};
+
+export const adminSaveAsMock = async (cpf: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+        await apiCall('/admin/billing/save-as-mock', { method: 'POST', body: JSON.stringify({ cpf }) });
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao salvar baseline.' };
+    }
+};
+
+export const adminClearMockBaseline = async (cpf: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+        await apiCall('/admin/billing/clear-mock-baseline', { method: 'POST', body: JSON.stringify({ cpf }) });
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao limpar baseline.' };
+    }
+};
+
+export const adminResetTestData = async (): Promise<{ success: boolean; message?: string }> => {
+    try {
+        await apiCall('/test/reset', { method: 'POST' });
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao resetar dados.' };
+    }
 };
 
 // No-op in real API mode; overridden by mockApi.ts alias in demo mode

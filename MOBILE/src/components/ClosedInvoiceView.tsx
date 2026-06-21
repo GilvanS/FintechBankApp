@@ -5,7 +5,7 @@ import ExtratoCompra from './ExtratoCompra';
 interface ClosedInvoiceProps {
     user: User;
     onBack: () => void;
-    onPayInvoice: () => void;
+    onPayInvoice: (amount: number) => void;
     onParcel: () => void;
 }
 
@@ -37,6 +37,9 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
     const [hideValue, setHideValue] = useState(false);
     const [expanded, setExpanded] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [payStep, setPayStep] = useState<'idle' | 'pick'>('idle');
+    const [payMode, setPayMode] = useState<'total' | 'min' | 'custom'>('total');
+    const [customAmount, setCustomAmount] = useState('');
     const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
     const carouselRef = useRef<HTMLDivElement>(null);
 
@@ -81,9 +84,19 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
         return acc;
     }, {} as Record<string, Transaction[]>);
 
-    const handlePay = async () => {
+    const handlePay = async (amt: number) => {
         setIsLoading(true);
-        try { await onPayInvoice(); } finally { setIsLoading(false); }
+        try { await onPayInvoice(amt); } finally { setIsLoading(false); setPayStep('idle'); }
+    };
+    const confirmPay = () => {
+        let amt = invoiceAmount;
+        if (payMode === 'min') amt = minPayment;
+        else if (payMode === 'custom') {
+            const parsed = parseFloat(String(customAmount).replace(',', '.'));
+            if (isNaN(parsed) || parsed < minPayment) { alert(`Valor mínimo: ${fmt(minPayment)}`); return; }
+            amt = Math.min(parsed, invoiceAmount);
+        }
+        handlePay(amt);
     };
 
     return (
@@ -177,24 +190,52 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                     {/* CTA */}
                     {!isCredit && invoiceAmount > 0 && (
                         <div className="space-y-2 pt-1">
-                            <button
-                                onClick={handlePay}
-                                disabled={isLoading || !canAfford}
-                                className="w-full py-3 rounded-lg bg-primary text-white font-semibold text-center disabled:bg-gray-600 disabled:cursor-not-allowed"
-                            >
-                                {isLoading ? 'Pagando...' : 'Pagar fatura'}
-                            </button>
-                            <button
-                                onClick={onParcel}
-                                disabled={invoiceAmount <= 0}
-                                className="w-full py-2.5 rounded-lg border border-primary text-primary font-semibold text-sm disabled:border-gray-600 disabled:text-gray-600 disabled:cursor-not-allowed"
-                            >
-                                Parcelar fatura
-                            </button>
-                            {!canAfford && (
-                                <p className="text-xs text-red-400 text-center">
-                                    Saldo insuficiente para pagamento total. Tente parcelar.
-                                </p>
+                            {payStep === 'idle' ? (
+                                <>
+                                    <button
+                                        onClick={() => { setPayStep('pick'); setPayMode('total'); setCustomAmount(''); }}
+                                        disabled={isLoading || user.balance < minPayment}
+                                        className="w-full py-3 rounded-lg bg-primary text-white font-semibold text-center disabled:bg-gray-600 disabled:cursor-not-allowed"
+                                    >
+                                        Pagar fatura
+                                    </button>
+                                    <button onClick={onParcel} className="w-full py-2.5 rounded-lg border border-primary text-primary font-semibold text-sm">
+                                        Parcelar fatura
+                                    </button>
+                                    {user.balance < minPayment && (
+                                        <p className="text-xs text-red-400 text-center">Saldo insuficiente para o pagamento mínimo ({fmt(minPayment)}).</p>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="space-y-2 border-t border-white/10 pt-3">
+                                    <p className="text-xs font-medium text-gray-400">Escolha o valor a pagar</p>
+                                    {([
+                                        { key: 'total', label: 'Pagar total', value: invoiceAmount },
+                                        { key: 'min',   label: `Pagar mínimo (15%)`, value: minPayment },
+                                    ] as const).map(opt => (
+                                        <button key={opt.key} onClick={() => setPayMode(opt.key)}
+                                            className={`w-full flex justify-between items-center p-3 rounded-lg border text-sm transition-colors ${payMode === opt.key ? 'border-primary bg-primary/10' : 'border-white/10 hover:bg-white/5'}`}>
+                                            <span className={payMode === opt.key ? 'text-primary font-medium' : 'text-white'}>{opt.label}</span>
+                                            <span className={`font-bold ${payMode === opt.key ? 'text-primary' : 'text-white'}`}>{fmt(opt.value)}</span>
+                                        </button>
+                                    ))}
+                                    <button onClick={() => setPayMode('custom')}
+                                        className={`w-full p-3 rounded-lg border text-sm text-left transition-colors ${payMode === 'custom' ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-white/10 text-white hover:bg-white/5'}`}>
+                                        Outro valor
+                                    </button>
+                                    {payMode === 'custom' && (
+                                        <input type="number" value={customAmount} onChange={e => setCustomAmount(e.target.value)}
+                                            placeholder={`Mínimo: ${fmt(minPayment)}`}
+                                            className="w-full bg-background-dark text-white text-sm p-3 rounded-lg border border-white/20 focus:border-primary outline-none" />
+                                    )}
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setPayStep('idle')} className="flex-1 py-2.5 rounded-lg border border-white/20 text-white text-sm">Cancelar</button>
+                                        <button onClick={confirmPay} disabled={isLoading || (payMode === 'custom' && !customAmount)}
+                                            className="flex-1 py-2.5 rounded-lg bg-primary text-white font-semibold text-sm disabled:opacity-40">
+                                            {isLoading ? 'Pagando...' : 'Confirmar'}
+                                        </button>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     )}

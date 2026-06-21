@@ -2960,7 +2960,7 @@ apiRouter.post('/cards/invoice/parcel', bearerAuth(), asyncHandler(async (req, r
 }));
 
 apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res) => {
-    const { cpf, pin } = req.body || {};
+    const { cpf, pin, amount } = req.body || {};
     if (!cpf || cpf.length !== 11 || !pin || pin.length !== 4) {
         return res.status(400).json({ success: false, message: 'Payload invalido.' });
     }
@@ -2969,30 +2969,67 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
     const user = await usersRepo.findByCpf(cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
 
-    // Alinhar corte com vencimento da fatura (fim do dia UTC). Fallback: hoje 23:59:59.
     let cutoff = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
     if (isNaN(cutoff.getTime())) cutoff = new Date();
     cutoff.setUTCHours(23, 59, 59, 999);
+    const cutoffIso = cutoff.toISOString();
 
-    const result = await cardRepo.payDueInstallments({ cpf, cutoffIso: cutoff.toISOString() });
-    if (result.totalDue <= 0) {
+    const { esc } = repoContext;
+    const dueRows = await databricksService.executeQuery(`
+        SELECT amount FROM ${databricksService.fq('transactions')}
+        WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
+    `);
+    const totalDue = dueRows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
+    if (totalDue <= 0) {
         return res.status(400).json({ success: false, message: 'Nenhuma parcela vencida para pagamento.' });
     }
 
+    const minPayment = Math.max(totalDue * 0.15, 10);
+    const requestedAmount = typeof amount === 'number' && amount > 0 ? amount : totalDue;
+    const payAmount = Math.min(requestedAmount, totalDue);
+
+    if (payAmount < minPayment - 0.01) {
+        return res.status(400).json({ success: false, message: `Valor mínimo de pagamento é R$ ${minPayment.toFixed(2)}.` });
+    }
+
     const balance = parseFloat(user.balance || 0);
-    if (balance < result.totalDue) return res.status(400).json({ success: false, message: 'Saldo insuficiente' });
+    if (balance < payAmount) return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
 
-    await usersRepo.updateBalance(cpf, (balance - result.totalDue).toFixed(2));
-
-    // Restaurar limite proporcional ao pagamento e avançar vencimento
     const availableLimit = parseFloat(user.credit_card_available_limit || 0);
     const totalLimit = parseFloat(user.credit_card_total_limit || 0);
-    const restoredLimit = Math.min(totalLimit, availableLimit + result.totalDue);
 
+    if (payAmount < totalDue - 0.01) {
+        // Pagamento parcial: registrar sem deletar parcelas
+        const nowIso = new Date().toISOString();
+        const payId = databricksService.generateUUID();
+        await databricksService.executeQuery(`
+            INSERT INTO ${databricksService.fq('transactions')}
+            (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+            VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-payAmount).toFixed(2))}, 'Pagamento parcial de fatura', NULL, NULL, NULL, ${esc(nowIso)})
+        `);
+        await usersRepo.updateBalance(cpf, (balance - payAmount).toFixed(2));
+        const restoredLimit = Math.min(totalLimit, availableLimit + payAmount);
+        await databricksService.executeQuery(`
+            UPDATE ${databricksService.fq('users')}
+            SET credit_card_available_limit = ${restoredLimit.toFixed(2)}
+            WHERE cpf = '${cpf}'
+        `);
+        await notificationsRepo.addNotification({
+            cpf,
+            title: 'Pagamento parcial de fatura',
+            message: `R$ ${payAmount.toFixed(2)} pago. Saldo devedor: R$ ${(totalDue - payAmount).toFixed(2)}.`,
+            actionUrl: '/dashboard'
+        });
+        return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue });
+    }
+
+    // Pagamento total: deletar parcelas, restaurar limite, avançar vencimento
+    const result = await cardRepo.payDueInstallments({ cpf, cutoffIso });
+    await usersRepo.updateBalance(cpf, (balance - result.totalDue).toFixed(2));
+    const restoredLimit = Math.min(totalLimit, availableLimit + result.totalDue);
     const currentInvDue = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
     const nextInvDue = new Date(currentInvDue);
     nextInvDue.setMonth(currentInvDue.getMonth() + 1);
-
     await databricksService.executeQuery(`
         UPDATE ${databricksService.fq('users')}
         SET credit_card_available_limit = ${restoredLimit.toFixed(2)},
@@ -3000,14 +3037,12 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
             credit_card_invoice_due_date = '${nextInvDue.toISOString()}'
         WHERE cpf = '${cpf}'
     `);
-
     await notificationsRepo.addNotification({
         cpf,
         title: 'Pagamento de fatura',
         message: 'Fatura paga com sucesso. Limite restaurado e novo vencimento definido.',
         actionUrl: '/dashboard'
     });
-
     res.json({ success: true, message: 'Fatura paga com sucesso.' });
 }));
 

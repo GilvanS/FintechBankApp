@@ -302,16 +302,18 @@ const Dashboard: React.FC = () => {
 
 
     // --- Other Actions ---
-    const handlePayInvoice = () => {
-        passwordActionPayload.current = {}; // Inicializar objeto para receber o PIN
+    const handlePayInvoice = (amount: number) => {
+        passwordActionPayload.current = { amount };
         setPasswordAction(() => () => executePayInvoice());
-        setPasswordModalInfo({ title: 'Pagar Fatura', description: 'Digite seu PIN para confirmar o pagamento.' });
+        const fmtAmt = amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        setPasswordModalInfo({ title: 'Pagar Fatura', description: `Confirme o pagamento de ${fmtAmt}.` });
         setIsPasswordModalOpen(true);
     };
-    
+
     const executePayInvoice = async () => {
         if (!user) return;
-        const amountToPay = user.creditCard.closedInvoice;
+        const selectedAmount = (passwordActionPayload.current as any)?.amount;
+        const amountToPay = typeof selectedAmount === 'number' ? selectedAmount : user.creditCard.closedInvoice;
         setIsProcessing(true);
         const pin = (passwordActionPayload.current as any)?.pin;
 
@@ -333,7 +335,7 @@ const Dashboard: React.FC = () => {
             transactionId: `inv-pay-${Date.now()}`
         });
 
-        const result = await payCreditCardInvoice(user.cpf, pin);
+        const result = await payCreditCardInvoice(user.cpf, pin, amountToPay);
         if (result.success) {
             const refreshed = await getUserByCpf(user.cpf);
             if (refreshed.success && refreshed.user) {
