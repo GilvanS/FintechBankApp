@@ -9,8 +9,9 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:8.7.2'
         classpath 'com.google.gms:google-services:4.4.2'
-        // Add the App Distribution Gradle plugin
-        classpath 'com.google.firebase:firebase-appdistribution-gradle:5.0.0'
+        // firebase-appdistribution-gradle:5.0.0 requer Java 25 (incompativel com Java 21)
+        // Descomentar apenas para distribuicao via Firebase CI/CD
+        // classpath 'com.google.firebase:firebase-appdistribution-gradle:5.0.0'
     }
 }
 

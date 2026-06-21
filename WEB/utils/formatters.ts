@@ -4,7 +4,7 @@ export const formatCPF = (cpf: string): string => {
   if (!cleaned) return '';
   const match = cleaned.match(/^(\d{0,3})(\d{0,3})(\d{0,3})(\d{0,2})$/);
   if (!match) return cleaned;
-  
+
   let formatted = match[1];
   if (match[2]) {
     formatted += `.${match[2]}`;
@@ -18,20 +18,13 @@ export const formatCPF = (cpf: string): string => {
   return formatted;
 };
 
-/**
- * Formata um valor monetário enquanto o usuário digita
- * Converte para formato brasileiro: R$ 0,00
- */
 export const formatCurrency = (value: string): string => {
-  // Remove tudo que não é número
   const numbers = value.replace(/\D/g, '');
-  
+
   if (!numbers) return '';
-  
-  // Converte para número e divide por 100 para obter os centavos
+
   const amount = parseInt(numbers, 10) / 100;
-  
-  // Formata como moeda brasileira
+
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
@@ -40,52 +33,45 @@ export const formatCurrency = (value: string): string => {
   }).format(amount);
 };
 
-/**
- * Converte valor formatado de volta para número
- * Ex: "R$ 1.234,56" -> 1234.56
- */
 export const parseCurrency = (formattedValue: string): number => {
   const cleaned = formattedValue.replace(/[^\d,]/g, '').replace(',', '.');
   return parseFloat(cleaned) || 0;
 };
 
-const BR_TZ = 'America/Sao_Paulo';
+// BRT = UTC-3, fixo desde 2019 (Brasil aboliu horário de verão)
+const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
 
-// Banco retorna timestamps sem marcador de fuso (ex: "2026-06-18 00:23:23.754").
-// new Date() interpreta strings sem fuso como hora LOCAL, não UTC.
-// Esta função força a interpretação como UTC antes de converter.
+// Garante que strings sem fuso (ex: "2026-06-18 00:23:23") sejam tratadas como UTC
 function asUTC(date: string | Date): Date {
     if (date instanceof Date) return date;
-    // Se já tem indicador de fuso (Z ou +HH:MM), usa direto
     if (/Z$|[+-]\d{2}:\d{2}$/.test(date)) return new Date(date);
-    // Sem fuso: troca espaço por T e anexa Z para forçar UTC
     return new Date(date.replace(' ', 'T') + 'Z');
 }
 
+// Converte UTC → BRT subtraindo 3h manualmente (sem depender de Intl.DateTimeFormat)
+function toBRT(date: string | Date): Date {
+    return new Date(asUTC(date).getTime() - BRT_OFFSET_MS);
+}
+
+export const formatDateBR = (date: string | Date): string => {
+    const brt = toBRT(date);
+    const d = brt.getUTCDate().toString().padStart(2, '0');
+    const m = (brt.getUTCMonth() + 1).toString().padStart(2, '0');
+    const y = brt.getUTCFullYear();
+    return `${d}/${m}/${y}`;
+};
+
+export const formatTimeBR = (date: string | Date): string => {
+    const utc = asUTC(date);
+    const brt = new Date(utc.getTime() - BRT_OFFSET_MS);
+    console.log('[BRT-DEBUG] input:', date, '| UTC:', utc.toISOString(), '| BRT h:', brt.getUTCHours(), 'min:', brt.getUTCMinutes());
+    const h = brt.getUTCHours().toString().padStart(2, '0');
+    const min = brt.getUTCMinutes().toString().padStart(2, '0');
+    return `${h}:${min}`;
+};
+
 export const formatDateTimeBR = (date: string | Date): string =>
-    asUTC(date).toLocaleString('pt-BR', {
-        timeZone: BR_TZ,
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-
-export const formatDateBR = (date: string | Date): string =>
-    asUTC(date).toLocaleDateString('pt-BR', {
-        timeZone: BR_TZ,
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-    });
-
-export const formatTimeBR = (date: string | Date): string =>
-    asUTC(date).toLocaleTimeString('pt-BR', {
-        timeZone: BR_TZ,
-        hour: '2-digit',
-        minute: '2-digit',
-    });
+    `${formatDateBR(date)} ${formatTimeBR(date)}`;
 
 export const isValidCPF = (cpf: string): boolean => {
   const clean = cpf.replace(/\D/g, '');

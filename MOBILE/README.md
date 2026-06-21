@@ -115,3 +115,49 @@ Siga estes passos **toda vez que for iniciar o desenvolvimento mobile**:
    Dentro do Android Studio, clique no botão "Run" (▶️) para instalar e iniciar o aplicativo no seu dispositivo conectado.
 
 Agora o seu aplicativo se comunicará com a API através do túnel do `ngrok`, garantindo uma conexão estável durante todo o desenvolvimento.
+
+---
+
+## ⚠️ Troubleshooting — Erro ao Gerar APK
+
+### `Unsupported class file major version 69` (Java 25 incompatível)
+
+**Sintoma:** O build falha no passo 6 (Gradle) com:
+
+```
+BUG! exception in phase 'semantic analysis' in source unit '_BuildScript_'
+Unsupported class file major version 69
+```
+
+**Causa:** O plugin `firebase-appdistribution-gradle:5.0.0` foi compilado com **Java 25** (class file version 69). O JVM 21, que é o que o Gradle 8.9 suporta, não consegue carregar esse bytecode.
+
+**Solução aplicada no projeto:** O plugin está comentado nos dois arquivos abaixo. Essa é a configuração correta para builds locais:
+
+```groovy
+// android/build.gradle
+// classpath 'com.google.firebase:firebase-appdistribution-gradle:5.0.0'
+
+// android/app/build.gradle
+// apply plugin: 'com.google.firebase.appdistribution'
+```
+
+**Impacto:** Nenhum. O Firebase App Distribution serve apenas para distribuir APKs via CI/CD (Firebase Hosting para testers). Firebase Analytics, Crashlytics e outros SDKs Firebase continuam funcionando normalmente.
+
+**Requisito de Java:** Use o **JDK 21 (LTS)** e confirme com:
+
+```powershell
+java -version          # deve mostrar 21.x
+$env:JAVA_HOME         # deve apontar para jdk-21
+```
+
+Se tiver JDK 25 instalado no sistema, garanta que `JAVA_HOME` aponta para o JDK 21.
+
+**Para reativar a distribuição Firebase** (somente para CI/CD com Java 25):
+
+```groovy
+// android/build.gradle — descomentar:
+classpath 'com.google.firebase:firebase-appdistribution-gradle:5.0.0'
+
+// android/app/build.gradle — descomentar:
+apply plugin: 'com.google.firebase.appdistribution'
+```

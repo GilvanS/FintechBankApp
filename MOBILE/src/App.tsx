@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { IonApp, setupIonicReact } from '@ionic/react';
+import { App as CapApp } from '@capacitor/app';
 import { Preferences } from '@capacitor/preferences';
 import { User } from './types';
 import { AuthContext } from './context/AuthContext';
@@ -100,13 +101,39 @@ const App: React.FC = () => {
   const [view, setView] = useState('prelogin'); // prelogin, login, home, signup, resetPassword
 
   useEffect(() => {
-    // OTIMIZADO: Inicialização não-bloqueante - apenas configura view e API em background
-    setView('prelogin');
-    
-    // Inicializar API em background sem bloquear a renderização (sem delay)
-    initializeApi().catch((error) => {
-      console.error('Erro ao inicializar API (não crítico):', error);
+    const restoreSession = async () => {
+      await initializeApi().catch((e) => console.error('Erro ao inicializar API:', e));
+
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        try {
+          const result = await getProfile();
+          if (result.success && result.user) {
+            const normalized = normalizeUserShape(result.user);
+            setUser(normalized);
+            setView('home');
+            return;
+          }
+        } catch (_) {}
+        // Token inválido ou expirado — limpar e ir para prelogin
+        localStorage.removeItem('authToken');
+        await Preferences.remove({ key: 'token' }).catch(() => {});
+      }
+      setView('prelogin');
+    };
+
+    restoreSession();
+
+    // Back button Android: minimizar o app em vez de fechar
+    const listenerPromise = CapApp.addListener('backButton', ({ canGoBack }) => {
+      if (!canGoBack) {
+        CapApp.minimizeApp();
+      }
     });
+
+    return () => {
+      listenerPromise.then((l) => l.remove()).catch(() => {});
+    };
   }, []);
 
   const handleLogin = (loggedInUser: Omit<User, 'password'>) => {

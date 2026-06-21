@@ -1,6 +1,6 @@
 
 apply plugin: 'com.android.application'
-apply plugin: 'com.google.firebase.appdistribution' // Apply the plugin
+// apply plugin: 'com.google.firebase.appdistribution' // Apply the plugin
 
 // Add this block to read the keystore properties
 def keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -16,8 +16,8 @@ android {
         applicationId "com.fintechbank.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2026020320
-        versionName "4.0.4-20260203-2047"
+        versionCode 2026062022
+        versionName "4.0.4-20260620-2226"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -51,11 +51,12 @@ android {
             }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            firebaseAppDistribution {
-                artifactType = "APK"
-                releaseNotes = "Release inicial para homologaÃƒÂ§ÃƒÂ£o"
-                testers = "seu_email_de_teste@exemplo.com"
-            }
+//            firebaseAppDistribution {
+//                artifactType = "APK"
+//                releaseNotes = "Release inicial para homologação"
+//                testers = "seu_email_de_teste@exemplo.com"
+//            }
+
         }
     }
 }

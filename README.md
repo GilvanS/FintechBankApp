@@ -169,8 +169,30 @@ Após instalar o APK:
 
 - ✅ Node.js instalado
 - ✅ Android SDK instalado
-- ✅ Java JDK instalado
+- ✅ **Java JDK 21** instalado e configurado em `JAVA_HOME`
 - ✅ Dispositivo Android conectado (opcional, para instalação automática)
+
+> **⚠️ IMPORTANTE — Versão do Java**
+>
+> Use obrigatoriamente o **JDK 21 (LTS)**. O Gradle 8.9 **não suporta Java 25**.
+>
+> Se você tiver o JDK 25 instalado na máquina, o build vai falhar com:
+> ```
+> BUG! Unsupported class file major version 69
+> ```
+> Isso acontece porque o plugin `firebase-appdistribution-gradle:5.0.0` foi compilado com Java 25, e o JVM 21 não consegue carregar esse bytecode.
+>
+> **Solução aplicada:** O plugin Firebase App Distribution está comentado nos arquivos `android/build.gradle` e `android/app/build.gradle`. Esse plugin serve apenas para distribuição via Firebase CI/CD e **não afeta** nenhuma funcionalidade do app.
+>
+> Para reativar (só se for fazer distribuição via Firebase):
+> ```groovy
+> // android/build.gradle — descomentar:
+> classpath 'com.google.firebase:firebase-appdistribution-gradle:5.0.0'
+>
+> // android/app/build.gradle — descomentar:
+> apply plugin: 'com.google.firebase.appdistribution'
+> ```
+> Ao reativar, use **Java 25** como `JAVA_HOME`.
 
 ### Processo Manual (Alternativo)
 

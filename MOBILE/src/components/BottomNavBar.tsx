@@ -52,16 +52,18 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) 
     ];
 
     return (
-        <nav 
-            className="fixed bottom-0 left-0 right-0 flex-shrink-0 bg-surface-dark border-t border-white/10 flex items-center justify-around h-16 pb-[env(safe-area-inset-bottom)]"
-            style={{ 
+        <nav
+            className="fixed bottom-0 left-0 right-0 flex-shrink-0 bg-surface-dark border-t border-white/10 flex items-center justify-around"
+            style={{
                 zIndex: 9999,
                 position: 'fixed',
                 display: 'flex',
                 visibility: 'visible',
                 opacity: 1,
                 backgroundColor: '#161D2B',
-                minHeight: '64px'
+                minHeight: '64px',
+                paddingBottom: 'env(safe-area-inset-bottom)',
+                height: 'auto',
             }}
             id="bottom-nav"
             data-testid="bottom-nav"

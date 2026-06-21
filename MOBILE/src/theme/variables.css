@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Garante altura total para a cadeia h-full funcionar no Capacitor Android */
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
 /* Ionic Dark Theme Override */
 :root {
   --ion-background-color: #0B1120;
