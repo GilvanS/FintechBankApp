@@ -76,7 +76,7 @@ describe('HomeView - Render', () => {
     fireEvent.click(visibilityIcon.parentElement!);
 
     // Agora, o saldo deve estar ofuscado e o valor original não deve estar visível
-    expect(within(saldoSection).getByText('R$ ********')).toBeInTheDocument();
+    expect(within(saldoSection).getByText('R$ ••••••')).toBeInTheDocument();
     expect(within(saldoSection).queryByText(/1.234,56/)).not.toBeInTheDocument();
   });
 
