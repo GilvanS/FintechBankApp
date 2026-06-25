@@ -115,7 +115,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
   };
 
   return (
-    <div className="bg-background-dark text-white min-h-full flex flex-col">
+    <div className="bg-volt-yellow text-black min-h-full flex flex-col">
 
       {/* ── Header + carrossel de meses (spec §1) ── */}
       <header className="bg-primary sticky top-0 z-20">
