@@ -13,15 +13,23 @@ export default {
     theme: {
         extend: {
             colors: {
+                /* Legacy dark-theme tokens (kept for components not yet restyled) */
                 'primary': '#00D18B',
                 'background-light': '#f6f8f6',
                 'background-dark': '#121212',
                 'surface-dark': '#1E1E1E',
                 'text-dark': '#E5E7EB',
                 'subtle-dark': '#9CA3AF',
+                /* Volt Fintech brutalist palette */
+                'volt-yellow': '#FFD700',
+                'volt-green': '#A2FF00',
+                'volt-cream': '#FFED86',
+                'volt-white': '#FFFFFF',
+                'volt-black': '#000000',
             },
             fontFamily: {
-                'display': ['Manrope', 'sans-serif'],
+                'display': ['Space Grotesk', 'Manrope', 'sans-serif'],
+                'sans': ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
             },
             borderRadius: {
                 DEFAULT: '0.25rem',

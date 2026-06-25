@@ -99,7 +99,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
   };
 
   return (
-    <div className="bg-background-dark text-white min-h-full flex flex-col">
+    <div className="bg-volt-yellow text-black min-h-full flex flex-col">
 
       <header className="bg-primary sticky top-0 z-20">
         <div className="flex items-center px-4 pt-4 pb-2">

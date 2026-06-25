@@ -135,7 +135,7 @@ function App() {
     return (
         <AuthContext.Provider value={authContextValue}>
             <DemoBanner />
-            <div className="h-screen w-screen bg-background-dark font-sans overflow-hidden">
+            <div className="h-screen w-screen bg-volt-yellow font-sans overflow-hidden">
                 <Routes>
                     <Route path="/" element={
                         <PreLoginDashboard
@@ -164,7 +164,7 @@ function App() {
                     } />
                     <Route path="/dashboard" element={
                         <ProtectedRoute>
-                            <Suspense fallback={<div className="h-screen bg-background-dark flex items-center justify-center"><span className="text-primary text-xl">Carregando...</span></div>}>
+                            <Suspense fallback={<div className="h-screen bg-volt-yellow flex items-center justify-center"><span className="text-volt-black text-xl font-black">Carregando...</span></div>}>
                                 <Dashboard />
                             </Suspense>
                         </ProtectedRoute>

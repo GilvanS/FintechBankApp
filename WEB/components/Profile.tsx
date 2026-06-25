@@ -27,14 +27,14 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
 
     const MainView = () => {
         const SettingButton: React.FC<{label: string, icon: React.ReactNode, onClick: () => void, notification?: boolean, testId?: string }> = ({ label, icon, onClick, notification, testId }) => (
-            <button onClick={onClick} className="w-full text-left p-4 bg-surface-dark rounded-lg font-medium text-white hover:bg-white/10 flex justify-between items-center relative" type="button" data-testid={testId} data-cy={testId} data-playwright={testId} aria-label={label}>
+            <button onClick={onClick} className="w-full text-left p-4 volt-card font-bold text-black hover:bg-volt-cream flex justify-between items-center relative cursor-pointer active:scale-[0.99] transition-all" type="button" data-testid={testId} data-cy={testId} data-playwright={testId} aria-label={label}>
                 <div className="flex items-center space-x-4">
-                    <div className="text-primary">{icon}</div>
-                    <span>{label}</span>
+                    <div className="w-9 h-9 rounded-full bg-black flex items-center justify-center text-volt-yellow flex-shrink-0">{icon}</div>
+                    <span className="font-black text-black" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{label}</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                    {notification && <div className="w-2 h-2 bg-orange-500 rounded-full"></div>}
-                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
+                    {notification && <div className="w-2 h-2 bg-orange-500 rounded-full border border-black"></div>}
+                    <svg className="w-5 h-5 text-black/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"/></svg>
                 </div>
             </button>
         );
@@ -43,7 +43,7 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
 
         return (
             <div
-                className="bg-background-dark min-h-full relative test-profile"
+                className="bg-volt-yellow min-h-full relative test-profile"
                 id="profile"
                 data-testid="profile"
                 data-cy="profile"
@@ -52,21 +52,22 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
                 {/* Version Popup */}
                 {showVersionPopup && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowVersionPopup(false)}>
-                        <div className="bg-surface-dark p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center border border-white/10" onClick={e => e.stopPropagation()}>
-                            <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <span className="material-symbols-outlined text-3xl text-primary">info</span>
+                        <div className="volt-card p-8 max-w-sm w-full text-center" onClick={e => e.stopPropagation()}>
+                            <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center mx-auto mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                <span className="material-symbols-outlined text-3xl text-volt-yellow">info</span>
                             </div>
-                            <h3 className="text-xl font-bold text-white mb-2">Informações do App</h3>
-                            <div className="bg-background-dark p-4 rounded-lg mb-6 text-left space-y-2">
-                                <p className="text-gray-400 text-sm">Versão do Projeto</p>
-                                <p className="text-white font-mono text-lg">{AppVersion.current}</p>
-                                <div className="h-px bg-white/10 my-2"></div>
-                                <p className="text-gray-400 text-sm">Detalhes da Build</p>
-                                <pre className="text-primary font-mono text-xs whitespace-pre-wrap">{AppVersion.fullDetails}</pre>
+                            <h3 className="text-xl font-black text-black mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Informações do App</h3>
+                            <div className="volt-surface-high p-4 mb-6 text-left space-y-2">
+                                <p className="text-black/60 text-sm font-semibold">Versão do Projeto</p>
+                                <p className="text-black font-mono text-lg font-black">{AppVersion.current}</p>
+                                <div className="h-px bg-black/20 my-2"></div>
+                                <p className="text-black/60 text-sm font-semibold">Detalhes da Build</p>
+                                <pre className="text-black font-mono text-xs whitespace-pre-wrap">{AppVersion.fullDetails}</pre>
                             </div>
                             <button
                                 onClick={() => setShowVersionPopup(false)}
-                                className="w-full py-3 bg-primary text-background-dark font-bold rounded-lg hover:bg-primary-light transition-colors"
+                                className="w-full py-3 bg-black text-volt-yellow font-black rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:opacity-90 transition-opacity active:scale-[0.98]"
+                                style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                             >
                                 Fechar
                             </button>
@@ -74,10 +75,10 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
                     </div>
                 )}
 
-                <header className="p-4 flex items-center border-b border-subtle-dark/50">
+                <header className="px-4 pt-6 pb-4 flex items-center gap-3">
                     <button
                         onClick={() => onNavigate('home')}
-                        className="p-2 -ml-2 rounded-full hover:bg-white/10 mr-2 test-back-button"
+                        className="w-10 h-10 rounded-full bg-black flex items-center justify-center border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:opacity-80 transition-opacity test-back-button"
                         id="btn-profile-back"
                         name="back-button"
                         data-testid="profile-back-button"
@@ -86,22 +87,26 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
                         aria-label="Voltar"
                         type="button"
                     >
-                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+                        <svg className="w-5 h-5 text-volt-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
                     </button>
-                    <h2 className="text-2xl font-bold text-white">Meu Perfil</h2>
+                    <h2 className="text-2xl font-black text-black" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Meu Perfil</h2>
                 </header>
 
-                <div className="p-4 space-y-4">
-                    {/* ... (existing user info) */}
-                     <div className="text-center" id="profile-info" data-testid="profile-info" data-cy="profile-info">
-                        <div className="w-24 h-24 rounded-full bg-surface-dark text-white flex items-center justify-center font-bold text-4xl mx-auto mb-3 border-4 border-subtle-dark">
+                <div className="px-4 pb-4 space-y-4">
+                    {/* ── Profile Info Card ── */}
+                     <div className="volt-card p-5 flex flex-col items-center text-center space-y-3" id="profile-info" data-testid="profile-info" data-cy="profile-info">
+                        <div className="w-20 h-20 rounded-full bg-black text-volt-yellow flex items-center justify-center font-black text-3xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                            style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                             {user.fullName.charAt(0)}
                         </div>
-                        <p className="font-bold text-xl text-white test-profile-name" data-testid="profile-name" data-cy="profile-name">{user.fullName}</p>
-                        <p className="text-sm text-gray-400 test-profile-username" data-testid="profile-email" data-cy="profile-email">{user.username || user.email}</p>
+                        <div>
+                            <p className="font-black text-xl text-black test-profile-name" data-testid="profile-name" data-cy="profile-name"
+                                style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{user.fullName}</p>
+                            <p className="text-sm text-black/60 font-medium test-profile-username" data-testid="profile-email" data-cy="profile-email">{user.username || user.email}</p>
+                        </div>
                     </div>
                     
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                         <SettingButton testId="edit-profile-button" label="Meus dados" icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>} onClick={() => setView('myData')} />
                         <SettingButton testId="profile-security-button" label="Segurança" icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>} onClick={() => setView('security')} />
                         <SettingButton testId="profile-notifications-button" label="Notificações" notification icon={<svg className={iconClasses} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>} onClick={() => setView('notifications')} />
@@ -114,7 +119,7 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
                     <div className="pt-4 space-y-4">
                         <button
                             onClick={logout}
-                            className="w-full text-center py-3 font-semibold text-red-400 bg-transparent border border-red-900/80 rounded-lg hover:bg-red-900/70 test-logout"
+                            className="w-full text-center py-3 font-black text-white bg-black border-4 border-black rounded-2xl hover:bg-red-700 hover:border-red-700 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:scale-[0.98] transition-all test-logout"
                             id="btn-logout"
                             name="logout"
                             data-testid="logout-button"
@@ -122,6 +127,7 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
                             data-playwright="logout-button"
                             aria-label="Sair do App"
                             type="button"
+                            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                         >
                             Sair do App
                         </button>
@@ -172,7 +178,7 @@ const Profile: React.FC<ProfileProps> = ({ onNavigate }) => {
     }
 
 
-    return <div className="h-full flex flex-col bg-background-dark max-w-2xl mx-auto w-full">{renderView()}</div>;
+    return <div className="h-full flex flex-col bg-volt-yellow max-w-2xl mx-auto w-full">{renderView()}</div>;
 };
 
 export default Profile;

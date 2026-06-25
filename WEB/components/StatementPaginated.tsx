@@ -127,17 +127,17 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
 
     return (
         <main
-            className="flex-1 p-4 md:p-6 lg:p-8 space-y-8 test-statement-paginated"
+            className="flex-1 p-4 md:p-6 lg:p-8 space-y-6 bg-volt-yellow test-statement-paginated"
             id="statement-paginated"
             data-testid="statement-paginated"
             data-cy="statement-paginated"
             data-playwright="statement-paginated"
             role="main"
         >
-            <header className="flex items-center">
+            <header className="flex items-center gap-3">
                 <button
                     onClick={onBack}
-                    className="mr-4 text-white test-statement-paginated-back-button"
+                    className="w-10 h-10 rounded-full bg-black flex items-center justify-center text-volt-yellow border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:opacity-80 transition-opacity test-statement-paginated-back-button"
                     id="btn-statement-paginated-back"
                     name="statement-paginated-back"
                     data-testid="statement-paginated-back-button"
@@ -149,22 +149,21 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                     <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
                 </button>
                 <h1
-                    className="text-white text-4xl font-black leading-tight tracking-[-0.033em] test-statement-paginated-title"
+                    className="text-black text-3xl font-black leading-tight test-statement-paginated-title"
+                    style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                     id="statement-paginated-title"
                     data-testid="statement-paginated-title"
                 >Extrato da Conta</h1>
             </header>
 
             {/* Saldo */}
-            <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl p-6">
+            <div className="volt-card p-5">
                 <div className="flex items-center justify-between">
-                    <p className="text-white/70 text-base font-normal leading-normal">Saldo atual</p>
-                    <button className="text-white/70 hover:text-white" type="button" aria-label="Mostrar saldo">
-                        <span className="material-symbols-outlined" aria-hidden="true">visibility</span>
-                    </button>
+                    <p className="text-black/60 text-xs font-bold uppercase tracking-widest">Saldo atual</p>
                 </div>
                 <p
-                    className="text-white text-4xl font-bold mt-2 test-statement-paginated-balance"
+                    className="text-black text-4xl font-black mt-1 test-statement-paginated-balance"
+                    style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                     id="statement-paginated-balance"
                     data-testid="statement-paginated-balance"
                     data-cy="statement-paginated-balance"
@@ -172,22 +171,32 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                 >{user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
             </div>
 
-            {/* Filtros por categoria — chips */}
-            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1" data-testid="statement-paginated-tabs" role="tablist">
+            {/* Filtros por categoria — estilo volt */}
+            <div
+                className="flex gap-2 overflow-x-auto no-scrollbar test-statement-paginated-tabs"
+                id="statement-paginated-tabs"
+                data-testid="statement-paginated-tabs"
+                role="tablist"
+                aria-label="Filtros de transações"
+            >
                 {([
-                    { key: 'all',       label: 'Todos',          icon: 'apps' },
-                    { key: 'purchases', label: 'Compras',        icon: 'shopping_bag' },
-                    { key: 'pix',       label: 'PIX',            icon: 'currency_exchange' },
-                    { key: 'transfers', label: 'Transferências', icon: 'swap_horiz' },
-                    { key: 'payments',  label: 'Pagamentos',     icon: 'receipt_long' },
+                    { key: 'all',       label: 'Todos'          },
+                    { key: 'purchases', label: 'Compras'        },
+                    { key: 'pix',       label: 'PIX'            },
+                    { key: 'transfers', label: 'Transferências' },
+                    { key: 'payments',  label: 'Pagamentos'     },
                 ] as const).map(tab => (
                     <button key={tab.key} onClick={() => handleTabChange(tab.key)}
-                        className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
-                            activeTab === tab.key ? 'bg-primary text-white' : 'bg-white/10 text-white/70 hover:bg-white/15 hover:text-white'
+                        className={`flex-shrink-0 py-2 px-4 font-black text-xs uppercase tracking-wider transition-all whitespace-nowrap rounded-full border-2 border-black test-tab-${tab.key} ${
+                            activeTab === tab.key
+                                ? 'bg-black text-volt-yellow shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                                : 'bg-volt-cream text-black hover:bg-volt-yellow'
                         }`}
-                        data-testid={`tab-${tab.key}`} data-cy={`tab-${tab.key}`} data-playwright={`tab-${tab.key}`}
+                        id={`tab-${tab.key}`}
+                        data-testid={`tab-${tab.key}`}
+                        data-cy={`tab-${tab.key}`}
+                        data-playwright={`tab-${tab.key}`}
                         role="tab" aria-selected={activeTab === tab.key} type="button">
-                        <span className="material-symbols-outlined text-base">{tab.icon}</span>
                         {tab.label}
                     </button>
                 ))}
@@ -195,7 +204,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
 
             {/* Lista de transações */}
             <div className="space-y-4">
-                <h2 className="text-white/90 text-lg font-semibold px-4">Transações</h2>
+                <h2 className="text-black text-xs font-black uppercase tracking-widest px-1">Transações</h2>
                 <div
                     className="flex flex-col gap-2 test-statement-paginated-list"
                     id="statement-paginated-list"
@@ -212,7 +221,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                             role="status"
                             aria-live="polite"
                         >
-                            <p className="text-white/60">Carregando transações...</p>
+                            <p className="text-black/60 font-semibold">Carregando transações...</p>
                         </div>
                     ) : transactions.length === 0 ? (
                         <div
@@ -222,7 +231,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                             role="status"
                             aria-live="polite"
                         >
-                            <p className="text-white/60">Nenhuma transação encontrada</p>
+                            <p className="text-black/60 font-semibold">Nenhuma transação encontrada</p>
                         </div>
                     ) : (
                         transactions.map((tx) => {
@@ -233,7 +242,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                                 <button
                                     key={tx.id}
                                     onClick={() => setSelectedTransaction(tx)}
-                                    className="w-full flex items-center gap-4 hover:bg-white/5 rounded-lg p-4 transition-colors duration-200 text-left cursor-pointer test-statement-paginated-item"
+                                    className="w-full flex items-center gap-4 volt-card p-4 mb-2 transition-all duration-200 text-left cursor-pointer hover:bg-volt-cream active:scale-[0.99] test-statement-paginated-item"
                                     data-testid="statement-paginated-item"
                                     data-cy="statement-paginated-item"
                                     data-playwright="statement-paginated-item"
@@ -243,17 +252,18 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                                     type="button"
                                     role="listitem"
                                 >
-                                    <div className="text-white flex items-center justify-center rounded-full bg-primary/10 shrink-0 size-10">
-                                        <span className="material-symbols-outlined text-primary" aria-hidden="true">{getIconForType(tx.type)}</span>
+                                    <div className="flex items-center justify-center rounded-full bg-black shrink-0 size-10 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                        <span className="material-symbols-outlined text-volt-yellow" aria-hidden="true" style={{ fontSize: '18px' }}>{getIconForType(tx.type)}</span>
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="text-white/50 text-xs mb-0.5 test-statement-paginated-item-date" data-testid="statement-paginated-item-date">{date} • {time} • {typeLabel}</p>
-                                        <p className="text-white text-base font-medium leading-normal test-statement-paginated-item-description" data-testid="statement-paginated-item-description">{tx.description}</p>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-black/50 text-xs mb-0.5 font-semibold test-statement-paginated-item-date" data-testid="statement-paginated-item-date">{date} • {time} • {typeLabel}</p>
+                                        <p className="text-black text-sm font-black leading-normal truncate test-statement-paginated-item-description" data-testid="statement-paginated-item-description">{tx.description}</p>
                                     </div>
-                                    <div className="text-right">
+                                    <div className="text-right flex-shrink-0">
                                         <p
-                                            className={`text-base font-semibold test-statement-paginated-item-amount ${tx.amount < 0 ? 'text-orange-400' : 'text-primary'}`}
+                                            className={`text-base font-black test-statement-paginated-item-amount ${tx.amount < 0 ? 'text-red-600' : 'text-green-700'}`}
                                             data-testid="statement-paginated-item-amount"
+                                            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                                         >
                                             {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                         </p>

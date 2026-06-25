@@ -488,7 +488,7 @@ const Dashboard: React.FC = () => {
             data-cy="dashboard"
             data-playwright="dashboard"
             data-current-view={currentView}
-            className="h-full w-full flex flex-col bg-background-dark overflow-hidden"
+            className="h-full w-full flex flex-col bg-volt-yellow overflow-hidden"
         >
             <div
                 id="dashboard-content"
