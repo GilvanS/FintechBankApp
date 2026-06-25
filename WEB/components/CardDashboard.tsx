@@ -10,6 +10,11 @@ interface CardDashboardProps {
 const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'current' | 'future'>('current');
+    const [cardType, setCardType] = useState<'fisico' | 'virtual'>('fisico');
+    const [showPin, setShowPin] = useState(false);
+    const [pinRevealed, setPinRevealed] = useState(false);
+    const [isNfc, setIsNfc] = useState(true);
+    const [subView, setSubView] = useState<null | 'limits' | 'services'>(null);
 
     if (!user) return null;
     const { creditCard } = user;
@@ -53,8 +58,110 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
         return 'receipt_long';
     };
 
+    if (subView === 'limits') {
+        const usedLimit = creditCard.totalLimit - creditCard.availableLimit;
+        const usedPct = creditCard.totalLimit > 0 ? Math.round((usedLimit / creditCard.totalLimit) * 100) : 0;
+        return (
+            <div className="bg-background-dark text-white min-h-full flex flex-col" data-testid="limits-screen">
+                <header className="flex items-center gap-2 p-4 border-b border-white/10">
+                    <button onClick={() => setSubView(null)} className="p-2 -ml-2 rounded-full hover:bg-white/10" data-testid="limits-back">
+                        <span className="material-symbols-outlined">arrow_back</span>
+                    </button>
+                    <h1 className="text-xl font-bold">Meus Limites</h1>
+                </header>
+                <main className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <div className="bg-surface-dark rounded-2xl p-5 space-y-3">
+                        <p className="text-sm text-white/60">Limite total do cartão</p>
+                        <p className="text-3xl font-bold" data-testid="total-limit">{creditCard.totalLimit.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</p>
+                        <div className="w-full bg-white/10 rounded-full h-2">
+                            <div className="bg-primary h-2 rounded-full transition-all" style={{width:`${usedPct}%`}} data-testid="limit-bar" />
+                        </div>
+                        <div className="flex justify-between text-xs text-white/50">
+                            <span>Usado: {usedLimit.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</span>
+                            <span>{usedPct}%</span>
+                        </div>
+                    </div>
+                    {[
+                        {label:'Limite disponível', val:creditCard.availableLimit, icon:'credit_score', color:'text-green-400', testid:'available-limit'},
+                        {label:'Limite usado',      val:usedLimit,                 icon:'credit_card',  color:'text-orange-400', testid:'used-limit'},
+                        {label:'Fatura atual',      val:creditCard.currentInvoice, icon:'receipt_long', color:'text-blue-400',   testid:'current-invoice-limit'},
+                        {label:'Fatura fechada',    val:creditCard.closedInvoice,  icon:'lock',         color:'text-red-400',    testid:'closed-invoice-limit'},
+                    ].map(r => (
+                        <div key={r.label} className="flex items-center gap-3 bg-surface-dark rounded-xl p-4">
+                            <span className={`material-symbols-outlined ${r.color}`}>{r.icon}</span>
+                            <div className="flex-1">
+                                <p className="text-xs text-white/50">{r.label}</p>
+                                <p className="font-semibold" data-testid={r.testid}>{r.val.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</p>
+                            </div>
+                        </div>
+                    ))}
+                    <button className="w-full py-3 bg-primary/20 text-primary rounded-xl text-sm font-medium border border-primary/30" data-testid="auto-limit-button">
+                        Aprovação automática de limite
+                    </button>
+                </main>
+            </div>
+        );
+    }
+
+    if (subView === 'services') {
+        const services = [
+            {icon:'add_card',          label:'Cartão adicional',       testid:'service-additional-card'},
+            {icon:'redeem',            label:'Benefícios e promoções', testid:'service-benefits'},
+            {icon:'lock',              label:'Bloqueio/Desbloqueio',   testid:'service-block'},
+            {icon:'receipt',           label:'Fatura digital',         testid:'service-digital-invoice'},
+            {icon:'workspace_premium', label:'Pontos',                 testid:'service-points'},
+            {icon:'account_balance',   label:'Open Finance',           testid:'service-open-finance'},
+            {icon:'password',          label:'Ver senha',              testid:'service-pin'},
+            {icon:'contactless',       label:'Compras por Aproximação',testid:'service-contactless'},
+        ];
+        return (
+            <div className="bg-background-dark text-white min-h-full flex flex-col" data-testid="services-screen">
+                <header className="flex items-center gap-2 p-4 border-b border-white/10">
+                    <button onClick={() => setSubView(null)} className="p-2 -ml-2 rounded-full hover:bg-white/10" data-testid="services-back">
+                        <span className="material-symbols-outlined">arrow_back</span>
+                    </button>
+                    <h1 className="text-xl font-bold">Outros Serviços</h1>
+                </header>
+                <main className="flex-1 overflow-y-auto p-4">
+                    <div className="grid grid-cols-2 gap-3" data-testid="services-grid">
+                        {services.map(s => (
+                            <button key={s.label}
+                                onClick={s.label === 'Ver senha' ? () => { setSubView(null); setShowPin(true); setPinRevealed(false); } : undefined}
+                                className="flex flex-col items-center gap-2 p-5 bg-surface-dark rounded-2xl hover:bg-white/10 transition-colors"
+                                data-testid={s.testid}>
+                                <span className="material-symbols-outlined text-primary text-3xl">{s.icon}</span>
+                                <span className="text-sm text-white/80 text-center leading-tight">{s.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </main>
+            </div>
+        );
+    }
+
     return (
-        <div 
+        <>
+        {showPin && (
+            <div className="fixed inset-0 z-50 bg-black/70 flex items-end justify-center" data-testid="pin-modal-overlay" onClick={() => setShowPin(false)}>
+                <div className="bg-surface-dark w-full max-w-md rounded-t-3xl p-8 space-y-6" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-lg font-bold">Visualizar senha</h2>
+                        <button onClick={() => setShowPin(false)} className="text-gray-400 hover:text-white"><span className="material-symbols-outlined">close</span></button>
+                    </div>
+                    <p className="text-sm text-gray-400">Cartão final {creditCard.number?.slice(-4) || '0000'} • VISA</p>
+                    <div className="text-center space-y-2">
+                        <p className="text-xs text-gray-400">Senha do cartão</p>
+                        <button onClick={() => setPinRevealed(v => !v)} data-testid="pin-reveal-button"
+                            className="flex items-center justify-center gap-3 w-full py-4 bg-background-dark rounded-xl border border-white/10">
+                            <span className="text-3xl font-bold tracking-widest font-mono" data-testid="pin-digits">{pinRevealed ? '• • • •' : '* * * *'}</span>
+                            <span className="material-symbols-outlined text-primary">{pinRevealed ? 'visibility_off' : 'visibility'}</span>
+                        </button>
+                        <p className="text-xs text-gray-500">Toque para {pinRevealed ? 'ocultar' : 'visualizar'}</p>
+                    </div>
+                </div>
+            </div>
+        )}
+        <div
             className="bg-background-dark text-white min-h-full flex flex-col test-card-dashboard"
             id="card-dashboard"
             data-testid="card-dashboard"
@@ -90,12 +197,87 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     Meu Cartão
                 </h2>
             </header>
-            <main 
+            {/* Tabs Físico / Virtual */}
+            <div className="flex mx-4 mt-3 bg-surface-dark rounded-full p-1" data-testid="card-type-tabs">
+                {(['fisico', 'virtual'] as const).map(t => (
+                    <button key={t} onClick={() => setCardType(t)}
+                        className={`flex-1 py-1.5 text-sm font-medium rounded-full transition-colors ${cardType === t ? 'bg-primary text-white' : 'text-white/50'}`}
+                        data-testid={`card-type-${t}`}>
+                        {t === 'fisico' ? 'Cartão físico' : 'Cartão virtual'}
+                    </button>
+                ))}
+            </div>
+            <main
                 className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-6 test-card-main"
                 id="card-main"
                 data-testid="card-main"
                 data-cy="card-main"
             >
+                {/* Visual do cartão */}
+                <div className={`relative rounded-2xl p-6 text-white overflow-hidden shadow-xl ${cardType === 'fisico' ? 'bg-gradient-to-br from-primary via-primary/80 to-purple-700' : 'bg-gradient-to-br from-gray-700 via-gray-600 to-gray-800'}`} data-testid="card-visual">
+                    <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full" />
+                    <div className="absolute -bottom-8 -left-4 w-20 h-20 bg-white/10 rounded-full" />
+                    <div className="relative z-10 space-y-4">
+                        <div className="flex justify-between items-start">
+                            <span className="text-xs font-semibold tracking-widest opacity-80">FINTECHBANK</span>
+                            {isNfc && <span className="material-symbols-outlined text-white opacity-70">contactless</span>}
+                        </div>
+                        <p className="font-mono text-lg tracking-widest" data-testid="card-number">•••• •••• •••• {creditCard.number?.slice(-4) || '0000'}</p>
+                        <div className="flex justify-between items-end">
+                            <div>
+                                <p className="text-xs opacity-60">Titular</p>
+                                <p className="text-sm font-semibold">{user.fullName?.split(' ')[0].toUpperCase() || 'TITULAR'}</p>
+                            </div>
+                            <span className="text-xs font-bold tracking-widest opacity-80">{cardType === 'virtual' ? 'VIRTUAL' : 'VISA'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Ações rápidas */}
+                <div className="grid grid-cols-3 gap-2" data-testid="card-quick-actions">
+                    {[
+                        { label: 'Ver fatura', icon: 'receipt_long', action: () => onNavigate('closedInvoice') },
+                        { label: 'Meus limites', icon: 'credit_score', action: () => setSubView('limits') },
+                        { label: 'Ver senha', icon: 'password', action: () => { setShowPin(true); setPinRevealed(false); } },
+                    ].map(a => (
+                        <button key={a.label} onClick={a.action}
+                            className="flex flex-col items-center gap-1.5 p-3 bg-surface-dark rounded-xl hover:bg-white/10 transition-colors"
+                            data-testid={`card-action-${a.label.replace(/\s/g,'').toLowerCase()}`}>
+                            <span className="material-symbols-outlined text-primary">{a.icon}</span>
+                            <span className="text-xs text-white/70 text-center leading-tight">{a.label}</span>
+                        </button>
+                    ))}
+                </div>
+
+                {/* Configurações */}
+                <div className="bg-surface-dark rounded-2xl overflow-hidden" data-testid="card-settings">
+                    {[
+                        { label: 'Pagar com aproximação', sub: 'NFC', icon: 'contactless', value: isNfc, onToggle: () => setIsNfc(v => !v), testid: 'toggle-nfc' },
+                        { label: creditCard.isBlocked ? 'Cartão bloqueado' : 'Bloquear cartão', sub: creditCard.isBlocked ? 'Toque para desbloquear' : 'Bloqueie temporariamente', icon: creditCard.isBlocked ? 'lock' : 'lock_open', value: creditCard.isBlocked, onToggle: () => {}, testid: 'toggle-block' },
+                    ].map((item, i) => (
+                        <div key={item.label} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-white/5' : ''}`}>
+                            <span className={`material-symbols-outlined ${item.value ? 'text-primary' : 'text-gray-400'}`}>{item.icon}</span>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm text-white font-medium">{item.label}</p>
+                                <p className="text-xs text-gray-400">{item.sub}</p>
+                            </div>
+                            <button onClick={item.onToggle} data-testid={item.testid}
+                                className={`relative w-12 h-6 rounded-full transition-colors ${item.value ? 'bg-primary' : 'bg-white/20'}`}>
+                                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${item.value ? 'translate-x-7' : 'translate-x-1'}`} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Outros Serviços */}
+                <button onClick={() => setSubView('services')}
+                    className="w-full flex items-center gap-3 p-4 bg-surface-dark rounded-xl hover:bg-white/10 transition-colors"
+                    data-testid="other-services-button">
+                    <span className="material-symbols-outlined text-primary">grid_view</span>
+                    <span className="font-medium">Outros Serviços</span>
+                    <span className="material-symbols-outlined text-white/40 ml-auto">chevron_right</span>
+                </button>
+
                  {creditCard.isBlocked && (
                     <div 
                         className="bg-red-800 border border-red-600 text-red-200 p-4 rounded-lg text-center animate-fade-in"
@@ -354,11 +536,12 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     </div>
                 </div>
             </main>
-             <style>{`
+            <style>{`
                 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
                 .animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
             `}</style>
         </div>
+        </>
     );
 };
 

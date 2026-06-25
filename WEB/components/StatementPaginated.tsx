@@ -10,10 +10,10 @@ interface StatementPaginatedProps {
     onBack: () => void;
 }
 
-type TabType = 'purchases' | 'pix' | 'transfers' | 'payments';
+type TabType = 'all' | 'purchases' | 'pix' | 'transfers' | 'payments';
 
 function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProps) {
-    const [activeTab, setActiveTab] = useState<TabType>('purchases');
+    const [activeTab, setActiveTab] = useState<TabType>('all');
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -34,7 +34,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
         if (!user?.cpf) return;
         setIsLoading(true);
         try {
-            const result = await getUserStatementPaginated(user.cpf, page, limit, type);
+            const result = await getUserStatementPaginated(user.cpf, page, limit, type === 'all' ? undefined : type);
             if (result.success && result.transactions) {
                 setTransactions(result.transactions);
                 if (result.pagination) {
@@ -79,7 +79,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
         }
     };
 
-    const getIconForType = (type: Transaction['type']) => {
+    const getIconForType = (type: string) => {
         switch (type) {
             case 'PIX_SENT':
             case 'PIX_RECEIVED':
@@ -97,7 +97,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
         }
     };
 
-    const getTypeLabel = (type: Transaction['type']): string => {
+    const getTypeLabel = (type: string): string => {
         switch (type) {
             case 'PIX_SENT': return 'PIX Enviado';
             case 'PIX_RECEIVED': return 'PIX Recebido';
@@ -172,82 +172,25 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                 >{user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
             </div>
 
-            {/* Abas de filtro */}
-            <div
-                className="flex gap-2 border-b border-subtle-dark/50 overflow-x-auto no-scrollbar test-statement-paginated-tabs"
-                id="statement-paginated-tabs"
-                data-testid="statement-paginated-tabs"
-                role="tablist"
-                aria-label="Filtros de transações"
-            >
-                <button
-                    onClick={() => handleTabChange('purchases')}
-                    className={`flex-shrink-0 py-3 px-4 text-center font-semibold transition-colors whitespace-nowrap test-tab-purchases ${
-                        activeTab === 'purchases'
-                            ? 'text-primary border-b-2 border-primary'
-                            : 'text-white/60 hover:text-white'
-                    }`}
-                    id="tab-purchases"
-                    data-testid="tab-purchases"
-                    data-cy="tab-purchases"
-                    data-playwright="tab-purchases"
-                    role="tab"
-                    aria-selected={activeTab === 'purchases'}
-                    type="button"
-                >
-                    Compras
-                </button>
-                <button
-                    onClick={() => handleTabChange('pix')}
-                    className={`flex-shrink-0 py-3 px-4 text-center font-semibold transition-colors whitespace-nowrap test-tab-pix ${
-                        activeTab === 'pix'
-                            ? 'text-primary border-b-2 border-primary'
-                            : 'text-white/60 hover:text-white'
-                    }`}
-                    id="tab-pix"
-                    data-testid="tab-pix"
-                    data-cy="tab-pix"
-                    data-playwright="tab-pix"
-                    role="tab"
-                    aria-selected={activeTab === 'pix'}
-                    type="button"
-                >
-                    PIX
-                </button>
-                <button
-                    onClick={() => handleTabChange('transfers')}
-                    className={`flex-shrink-0 py-3 px-4 text-center font-semibold transition-colors whitespace-nowrap test-tab-transfers ${
-                        activeTab === 'transfers'
-                            ? 'text-primary border-b-2 border-primary'
-                            : 'text-white/60 hover:text-white'
-                    }`}
-                    id="tab-transfers"
-                    data-testid="tab-transfers"
-                    data-cy="tab-transfers"
-                    data-playwright="tab-transfers"
-                    role="tab"
-                    aria-selected={activeTab === 'transfers'}
-                    type="button"
-                >
-                    Transferências
-                </button>
-                <button
-                    onClick={() => handleTabChange('payments')}
-                    className={`flex-shrink-0 py-3 px-4 text-center font-semibold transition-colors whitespace-nowrap test-tab-payments ${
-                        activeTab === 'payments'
-                            ? 'text-primary border-b-2 border-primary'
-                            : 'text-white/60 hover:text-white'
-                    }`}
-                    id="tab-payments"
-                    data-testid="tab-payments"
-                    data-cy="tab-payments"
-                    data-playwright="tab-payments"
-                    role="tab"
-                    aria-selected={activeTab === 'payments'}
-                    type="button"
-                >
-                    Pagamentos
-                </button>
+            {/* Filtros por categoria — chips */}
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1" data-testid="statement-paginated-tabs" role="tablist">
+                {([
+                    { key: 'all',       label: 'Todos',          icon: 'apps' },
+                    { key: 'purchases', label: 'Compras',        icon: 'shopping_bag' },
+                    { key: 'pix',       label: 'PIX',            icon: 'currency_exchange' },
+                    { key: 'transfers', label: 'Transferências', icon: 'swap_horiz' },
+                    { key: 'payments',  label: 'Pagamentos',     icon: 'receipt_long' },
+                ] as const).map(tab => (
+                    <button key={tab.key} onClick={() => handleTabChange(tab.key)}
+                        className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+                            activeTab === tab.key ? 'bg-primary text-white' : 'bg-white/10 text-white/70 hover:bg-white/15 hover:text-white'
+                        }`}
+                        data-testid={`tab-${tab.key}`} data-cy={`tab-${tab.key}`} data-playwright={`tab-${tab.key}`}
+                        role="tab" aria-selected={activeTab === tab.key} type="button">
+                        <span className="material-symbols-outlined text-base">{tab.icon}</span>
+                        {tab.label}
+                    </button>
+                ))}
             </div>
 
             {/* Lista de transações */}

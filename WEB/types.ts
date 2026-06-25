@@ -35,6 +35,8 @@ export interface CreditCard {
     isBlocked: boolean;
     transactions: CardTransaction[];
     closedTransactions: CardTransaction[];
+    futureInstallments?: Record<string, number>;
+    futureInstallmentsDetail?: Record<string, { description: string; amount: number; num: number; total: number }[]>;
 }
 
 export interface PixKey {

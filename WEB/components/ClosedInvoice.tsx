@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { User, CardTransaction } from '../types';
 
 interface ClosedInvoiceProps {
@@ -10,22 +10,7 @@ interface ClosedInvoiceProps {
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-function buildMonths(count = 6): { label: string; key: string }[] {
-    const now = new Date();
-    const months = Array.from({ length: count }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() - (count - 1 - i), 1);
-        return {
-            label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
-            key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        };
-    });
-    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    months.push({
-        label: next.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
-        key: `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`,
-    });
-    return months;
-}
+type InvoiceTab = 'fechada' | 'aberta' | 'historico' | 'proximas';
 
 function categoryIcon(tx: CardTransaction): string {
     const m = tx.merchant?.toLowerCase() ?? '';
@@ -49,16 +34,13 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
   const [payStep, setPayStep] = useState<'idle' | 'pick'>('idle');
   const [payMode, setPayMode] = useState<'total' | 'min' | 'custom'>('total');
   const [customAmount, setCustomAmount] = useState('');
+  const [customError, setCustomError] = useState('');
+  const [showCharges, setShowCharges] = useState(false);
   const [hideValue, setHideValue] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const months = buildMonths(6); // returns 7 items: 5 past + current + next
-  const currentMonthKey = months[months.length - 2].key;
-  const nextMonthKey = months[months.length - 1].key;
-  const [activeMonth, setActiveMonth] = useState(currentMonthKey);
-  const carouselRef = useRef<HTMLDivElement>(null);
-
-  const isOpenInvoice = activeMonth === currentMonthKey;
-  const isNextMonth = activeMonth === nextMonthKey;
+  const [activeTab, setActiveTab] = useState<InvoiceTab>('fechada');
+  const isOpenInvoice = activeTab === 'aberta';
+  const isNextMonth = activeTab === 'proximas';
   const invoiceAmount = isOpenInvoice
     ? (creditCard.currentInvoice ?? 0)
     : isNextMonth
@@ -108,7 +90,9 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
     if (payMode === 'min') amt = effectiveMin;
     else if (payMode === 'custom') {
       const parsed = parseFloat(String(customAmount).replace(',', '.'));
-      if (isNaN(parsed) || parsed < effectiveMin) { alert(`Valor mínimo: ${fmt(effectiveMin)}`); return; }
+      if (isNaN(parsed) || parsed <= 0) { setCustomError('Informe um valor válido.'); return; }
+      if (parsed < effectiveMin) { setCustomError(`Valor mínimo: ${fmt(effectiveMin)}`); return; }
+      setCustomError('');
       amt = Math.min(parsed, invoiceAmount);
     }
     handlePay(amt);
@@ -117,36 +101,27 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
   return (
     <div className="bg-background-dark text-white min-h-full flex flex-col">
 
-      {/* ── Header + carrossel de meses (spec §1) ── */}
       <header className="bg-primary sticky top-0 z-20">
         <div className="flex items-center px-4 pt-4 pb-2">
-          <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/>
-            </svg>
+          <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10" data-testid="invoice-back">
+            <span className="material-symbols-outlined text-white">arrow_back</span>
           </button>
           <h2 className="flex-1 text-center text-lg font-semibold text-white pr-8">Fatura</h2>
         </div>
-        <div
-          ref={carouselRef}
-          className="flex overflow-x-auto pb-3 px-4 gap-6"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
-        >
-          {months.map(m => {
-            const isActive = m.key === activeMonth;
-            return (
-              <button
-                key={m.key}
-                onClick={() => setActiveMonth(m.key)}
-                className="shrink-0 flex flex-col items-center gap-1"
-              >
-                <span className={`text-sm capitalize transition-opacity ${isActive ? 'text-white font-semibold opacity-100' : 'text-white opacity-60'}`}>
-                  {m.label}
-                </span>
-                {isActive && <span className="block w-full h-0.5 bg-white rounded-full" />}
-              </button>
-            );
-          })}
+        <div className="flex px-4 pb-1 gap-0" role="tablist">
+          {([
+            { key: 'fechada',  label: 'Fechada'  },
+            { key: 'aberta',   label: 'Aberta'   },
+            { key: 'historico',label: 'Histórico'},
+            { key: 'proximas', label: 'Próximas' },
+          ] as const).map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)}
+              className={`flex-1 py-2 text-sm font-medium transition-colors relative ${activeTab === t.key ? 'text-white' : 'text-white/50'}`}
+              data-testid={`tab-${t.key}`} role="tab" aria-selected={activeTab === t.key}>
+              {t.label}
+              {activeTab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />}
+            </button>
+          ))}
         </div>
       </header>
 
@@ -214,14 +189,52 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
             </div>
           )}
 
-          {/* Encargos se inadimplente */}
-          {user.accountStatus === 'inadimplente' && !!user.pendingCharges && user.pendingCharges > 0 && (
-            <div className="flex items-center gap-2 pt-1 border-t border-red-400/20" data-testid="alert-invoice-inadimplente">
-              <span className="material-symbols-outlined text-red-400 text-sm" aria-hidden="true">warning</span>
-              <p className="text-xs text-red-400">
-                {user.daysOverdue ? `${user.daysOverdue} dia${user.daysOverdue !== 1 ? 's' : ''} em atraso • ` : ''}
-                Encargos: {fmt(user.pendingCharges)}
-              </p>
+          {/* Encargos — accordion expansível */}
+          {!!user.pendingCharges && user.pendingCharges > 0 && (
+            <div className="pt-1 border-t border-red-400/20" data-testid="alert-invoice-inadimplente">
+              <button
+                onClick={() => setShowCharges(v => !v)}
+                className="w-full flex items-center justify-between gap-2 text-left group"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-red-400 text-sm" aria-hidden="true">warning</span>
+                  <span className="text-xs text-red-400 font-medium">
+                    Encargos por atraso — {fmt(user.pendingCharges)}
+                  </span>
+                </div>
+                <span className={`material-symbols-outlined text-red-400/70 text-sm transition-transform duration-200 ${showCharges ? 'rotate-180' : ''}`}>
+                  expand_more
+                </span>
+              </button>
+
+              {showCharges && (
+                <div className="mt-2 rounded-lg bg-red-400/5 border border-red-400/15 p-3 space-y-2">
+                  {user.daysOverdue != null && user.daysOverdue > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Dias em atraso</span>
+                      <span className="text-white font-medium">{user.daysOverdue} dia{user.daysOverdue !== 1 ? 's' : ''}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs border-t border-white/5 pt-2">
+                    <span className="text-gray-400">Multa (2%)</span>
+                    <span className="text-yellow-400 font-medium">
+                      {fmt(Math.round(invoiceAmount * 0.02 * 100) / 100)}
+                    </span>
+                  </div>
+                  {user.daysOverdue != null && user.daysOverdue > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Juros (0,0333%/dia × {user.daysOverdue}d)</span>
+                      <span className="text-yellow-400 font-medium">
+                        {fmt(Math.round(invoiceAmount * 0.000333 * user.daysOverdue * 100) / 100)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs border-t border-red-400/20 pt-2">
+                    <span className="text-red-400 font-semibold">Total de encargos</span>
+                    <span className="text-red-400 font-bold">{fmt(user.pendingCharges)}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -231,7 +244,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
               {payStep === 'idle' ? (
                 <>
                   <button
-                    onClick={() => { setPayStep('pick'); setPayMode('total'); setCustomAmount(''); }}
+                    onClick={() => { setPayStep('pick'); setPayMode('total'); setCustomAmount(''); setCustomError(''); }}
                     disabled={isLoading || balance <= 0}
                     className="w-full py-3 font-bold text-white bg-primary rounded-lg hover:opacity-90 disabled:bg-gray-600 disabled:cursor-not-allowed transition-opacity"
                   >
@@ -254,23 +267,26 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
                     { key: 'total', label: 'Pagar total', value: invoiceAmount },
                     { key: 'min',   label: minLabel,    value: effectiveMin },
                   ] as const).map(opt => (
-                    <button key={opt.key} onClick={() => setPayMode(opt.key)}
+                    <button key={opt.key} onClick={() => { setPayMode(opt.key); setCustomError(''); }}
                       className={`w-full flex justify-between items-center p-3 rounded-lg border text-sm transition-colors ${payMode === opt.key ? 'border-primary bg-primary/10' : 'border-white/10 hover:bg-white/5'}`}>
                       <span className={payMode === opt.key ? 'text-primary font-medium' : 'text-white'}>{opt.label}</span>
                       <span className={`font-bold ${payMode === opt.key ? 'text-primary' : 'text-white'}`}>{fmt(opt.value)}</span>
                     </button>
                   ))}
-                  <button onClick={() => setPayMode('custom')}
+                  <button onClick={() => { setPayMode('custom'); setCustomError(''); }}
                     className={`w-full p-3 rounded-lg border text-sm text-left transition-colors ${payMode === 'custom' ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-white/10 text-white hover:bg-white/5'}`}>
                     Outro valor
                   </button>
                   {payMode === 'custom' && (
-                    <input type="number" value={customAmount} onChange={e => setCustomAmount(e.target.value)}
-                      placeholder={`Mínimo: ${fmt(effectiveMin)}`}
-                      className="w-full bg-background-dark text-white text-sm p-3 rounded-lg border border-white/20 focus:border-primary outline-none" />
+                    <>
+                      <input type="number" value={customAmount} onChange={e => { setCustomAmount(e.target.value); setCustomError(''); }}
+                        placeholder={`Mínimo: ${fmt(effectiveMin)}`}
+                        className={`w-full bg-background-dark text-white text-sm p-3 rounded-lg border outline-none ${customError ? 'border-red-400 focus:border-red-400' : 'border-white/20 focus:border-primary'}`} />
+                      {customError && <p className="text-xs text-red-400 mt-1">{customError}</p>}
+                    </>
                   )}
                   <div className="flex gap-2">
-                    <button onClick={() => setPayStep('idle')} className="flex-1 py-2.5 rounded-lg border border-white/20 text-white text-sm">Cancelar</button>
+                    <button onClick={() => { setPayStep('idle'); setCustomError(''); }} className="flex-1 py-2.5 rounded-lg border border-white/20 text-white text-sm">Cancelar</button>
                     <button onClick={confirmPay} disabled={isLoading || (payMode === 'custom' && !customAmount)}
                       className="flex-1 py-2.5 rounded-lg bg-primary text-white font-semibold text-sm disabled:opacity-40">
                       {isLoading ? 'Pagando...' : 'Confirmar'}
@@ -288,7 +304,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
             Confira aqui os detalhes da fatura e os lançamentos do mês.
           </p>
 
-          {isNextMonth ? null : closedTxs.length > 0 ? (
+          {(isNextMonth || (activeTab === 'historico' && closedTxs.length === 0)) ? null : closedTxs.length > 0 ? (
             <div className="space-y-4">
               {Object.entries(grouped).map(([date, txs]) => (
                 <div key={date}>
@@ -369,33 +385,114 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel }: ClosedInvoicePr
             <p className="text-center text-gray-500 py-8">Nenhum lançamento nesta fatura.</p>
           )}
 
-          {isNextMonth && (
-            <div className="bg-surface-dark rounded-2xl p-5 space-y-3 mt-2">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Encargos previstos</p>
-              {invoiceAmount > 0 ? (
-                <>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-300">Multa (2%)</span>
-                    <span className="text-yellow-400 font-semibold">
-                      {fmt(Math.round(invoiceAmount * 0.02 * 100) / 100)}
-                    </span>
-                  </div>
-                  <div className="border-t border-white/10 pt-2">
-                    <p className="text-xs text-gray-400">Originado de pagamento parcial ou mínimo no ciclo atual.</p>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-6">
-                  <span className="material-symbols-outlined text-4xl text-green-600">check_circle</span>
-                  <p className="text-gray-400 mt-2 text-sm">Nenhum encargo previsto para o próximo ciclo.</p>
+          {activeTab === 'historico' && (() => {
+            const closedAmt = creditCard.closedInvoice ?? 0;
+            const displayAmt = closedAmt > 0 ? closedAmt : (creditCard.currentInvoice ?? 0);
+            const displayTxs: CardTransaction[] = closedAmt > 0
+              ? (creditCard.closedTransactions ?? [])
+              : (creditCard.transactions ?? []);
+            const isCurrentOpen = closedAmt === 0;
+            const monthLabel = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+            if (displayAmt === 0 && displayTxs.length === 0) {
+              return (
+                <div className="bg-surface-dark rounded-2xl p-5 text-center space-y-2 mt-2" data-testid="historico-empty">
+                  <span className="material-symbols-outlined text-gray-500 text-3xl">receipt_long</span>
+                  <p className="text-sm text-white/60">Nenhuma fatura disponível.</p>
                 </div>
-              )}
-            </div>
-          )}
+              );
+            }
+
+            const installmentTypes = ['INVOICE_INSTALLMENT', 'SHOP_CREDIT', 'PIX_CREDIT_SENT'];
+            const isInst = (t: CardTransaction) => installmentTypes.includes(t.type) || !!(t as any).installments || !!(t as any).totalInstallments;
+            const sumInstallments = displayTxs.filter(isInst).reduce((s, t) => s + Math.abs(t.amount), 0);
+            const sumOther = displayTxs.filter(t => !isInst(t)).reduce((s, t) => s + Math.abs(t.amount), 0);
+
+            return (
+              <div className="bg-surface-dark rounded-2xl p-5 space-y-4 mt-2" data-testid="historico-section">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary text-xl">history</span>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide capitalize">{monthLabel}</p>
+                  </div>
+                  {isCurrentOpen && (
+                    <span className="text-xs text-blue-400 bg-blue-400/10 border border-blue-400/20 px-2 py-0.5 rounded-full">em aberto</span>
+                  )}
+                </div>
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-white/70">{isCurrentOpen ? 'Fatura em aberto' : 'Última fatura fechada'}</p>
+                  <p className="text-2xl font-bold text-white" data-testid="historico-amount">{fmt(displayAmt)}</p>
+                </div>
+                {(sumInstallments > 0 || sumOther > 0) && (
+                  <div className="border-t border-white/10 pt-3 space-y-2">
+                    {sumInstallments > 0 && (
+                      <div className="flex justify-between items-center text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-base text-yellow-400">event_repeat</span>
+                          <span className="text-white/70">Parcelas</span>
+                        </div>
+                        <span className="font-semibold text-yellow-400" data-testid="historico-installments">{fmt(sumInstallments)}</span>
+                      </div>
+                    )}
+                    {sumOther > 0 && (
+                      <div className="flex justify-between items-center text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-base text-white/50">shopping_bag</span>
+                          <span className="text-white/70">Compras e outros</span>
+                        </div>
+                        <span className="font-semibold text-white" data-testid="historico-other">{fmt(sumOther)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {activeTab === 'proximas' && (() => {
+            const detail = creditCard.futureInstallmentsDetail ?? {};
+            const months = Object.keys(detail).sort();
+            if (months.length === 0) {
+              return (
+                <div className="bg-surface-dark rounded-2xl p-5 text-center space-y-2 mt-2" data-testid="proximas-empty">
+                  <span className="material-symbols-outlined text-green-500 text-3xl">check_circle</span>
+                  <p className="text-sm text-white/60">Nenhuma parcela futura registrada.</p>
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-3 mt-2" data-testid="proximas-section">
+                {months.map(monthKey => {
+                  const [year, mon] = monthKey.split('-');
+                  const label = new Date(Number(year), Number(mon) - 1, 1)
+                    .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                  const items = detail[monthKey];
+                  const monthTotal = items.reduce((s, i) => s + i.amount, 0);
+                  return (
+                    <div key={monthKey} className="bg-surface-dark rounded-2xl p-4 space-y-2" data-testid={`proximas-month-${monthKey}`}>
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide capitalize">{label}</p>
+                        <p className="text-sm font-bold text-white">{fmt(monthTotal)}</p>
+                      </div>
+                      {items.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-sm border-t border-white/5 pt-2">
+                          <div className="min-w-0 flex-1 pr-2">
+                            <p className="text-white/80 truncate">{item.description}</p>
+                            <p className="text-xs text-white/40">Parcela {item.num} de {item.total}</p>
+                          </div>
+                          <p className="text-white font-medium shrink-0">{fmt(item.amount)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── Footer totalizador (spec §6) ── */}
-        {!isNextMonth && closedTxs.length > 0 && (
+        {activeTab !== 'proximas' && activeTab !== 'historico' && closedTxs.length > 0 && (
           <div className="border-t-2 border-white/20 pt-4 flex justify-between items-center">
             <p className="font-semibold text-white">Total do Titular</p>
             <p className="font-bold text-white text-lg">{fmt(total)}</p>

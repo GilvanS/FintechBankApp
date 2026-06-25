@@ -456,7 +456,7 @@ const Dashboard: React.FC = () => {
             case 'anticipateInstallments':
                  return <AnticipateInstallments onBack={() => handleNavigate('cards')} onConfirmAnticipation={handleAnticipateInstallments} isProcessing={isProcessing} />;
             case 'installmentReviewInvoice':
-                if (!user || !parcelDetails) return <ClosedInvoice user={user!} onBack={handleBack} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
+                if (!user || !parcelDetails) return <ClosedInvoice user={user!} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
                 return <InstallmentReview type="invoice" user={user} details={parcelDetails} onConfirm={handleConfirmParcelInvoice} onBack={() => handleNavigate('installmentOptions')} />;
             case 'invoicePaymentReceipt':
                 if (!invoicePaymentDetails) return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
@@ -465,7 +465,7 @@ const Dashboard: React.FC = () => {
                 return <Products onNavigate={handleNavigate} />;
             case 'closedInvoice':
                 if (!user) return null;
-                return <ClosedInvoice user={user} onBack={handleBack} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
+                return <ClosedInvoice user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
             case 'installmentOptions':
                 if (!user) return null;
                 return <InstallmentOptions user={user} onBack={() => handleNavigate('closedInvoice')} onSelectOption={handleSelectInstallmentOption} />;

@@ -49,6 +49,8 @@ function normalizeUserShape(input: Partial<User>): User {
         isBlocked: toBool(ccRaw.isBlocked),
         transactions: Array.isArray(ccRaw.transactions) ? ccRaw.transactions : [],
         closedTransactions: Array.isArray(ccRaw.closedTransactions) ? ccRaw.closedTransactions : [],
+        futureInstallments: (ccRaw.futureInstallments && typeof ccRaw.futureInstallments === 'object') ? ccRaw.futureInstallments : undefined,
+        futureInstallmentsDetail: (ccRaw.futureInstallmentsDetail && typeof ccRaw.futureInstallmentsDetail === 'object') ? ccRaw.futureInstallmentsDetail : undefined,
     };
 
     const user: User = {
