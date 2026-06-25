@@ -38,6 +38,11 @@ export default defineConfig(() => {
         globals: true,
         environment: 'jsdom',
         pool: 'vmThreads',
+        server: {
+          deps: {
+            inline: ['@reduxjs/toolkit', 'recharts']
+          }
+        },
         setupFiles: './tests/setup.ts',
         include: ['tests/**/*.test.{ts,tsx}'],
         exclude: [

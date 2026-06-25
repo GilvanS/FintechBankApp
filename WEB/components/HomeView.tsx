@@ -1,16 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { User } from '../types';
-import NewsSection from './NewsSection';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { Search } from 'lucide-react';
 import HomeBanners from './HomeBanners';
+import NewsSection from './NewsSection';
 import ShopOffersBanner from './ShopOffersBanner';
+import BiometricModal from './BiometricModal';
 
 interface HomeViewProps {
     user: User;
-    onNavigate: (view: any) => void;
+    onNavigate: (view: string) => void;
 }
 
 const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
-    const [isBalanceVisible, setIsBalanceVisible] = useState(true);
+    const biometricEnabled = localStorage.getItem('volt_biometric_enabled') === 'true';
+    const [isBalanceVisible, setIsBalanceVisible] = useState(!biometricEnabled);
+    const [isBiometricOpen, setIsBiometricOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const categorySpendingData = useMemo(() => {
+        const categoryMap: Record<string, { value: number; color: string; emoji: string; name: string }> = {};
+        const allTransactions = user.transactions || [];
+        const expenses = allTransactions.filter(tx => 
+            tx.amount < 0 || ['PIX_SENT', 'PAYMENT', 'SHOP_DEBIT'].includes(tx.type)
+        );
+
+        expenses.forEach(tx => {
+            const desc = tx.description.toLowerCase();
+            let catKey = 'outros'; let catName = 'Outros'; let catColor = '#FFD700'; let catEmoji = '📦';
+            if (desc.includes('restaurante') || desc.includes('ifood') || desc.includes('padaria') || desc.includes('almoço') || desc.includes('ifd')) {
+                catKey = 'refeicao'; catName = 'Refeição'; catColor = '#FF5C8D'; catEmoji = '🍔';
+            } else if (desc.includes('uber') || desc.includes('posto') || desc.includes('transporte') || desc.includes('99')) {
+                catKey = 'mobilidade'; catName = 'Mobilidade'; catColor = '#00E5FF'; catEmoji = '🚗';
+            } else if (desc.includes('netflix') || desc.includes('spotify') || desc.includes('cinema') || desc.includes('prime')) {
+                catKey = 'cultura'; catName = 'Cultura'; catColor = '#A2FF00'; catEmoji = '🎭';
+            }
+
+            if (!categoryMap[catKey]) {
+                categoryMap[catKey] = { value: 0, color: catColor, emoji: catEmoji, name: catName };
+            }
+            categoryMap[catKey].value += Math.abs(tx.amount);
+        });
+
+        return Object.entries(categoryMap).map(([key, data]) => ({
+            key, name: data.name, value: data.value, color: data.color, emoji: data.emoji
+        })).sort((a, b) => b.value - a.value);
+    }, [user.transactions]);
+
+    const filteredTransactions = useMemo(() => {
+        const q = searchQuery.toLowerCase().trim();
+        const allTransactions = user.transactions || [];
+        if (!q) return allTransactions.slice(0, 5);
+        return allTransactions.filter(tx => 
+            tx.description.toLowerCase().includes(q) || 
+            (tx.recipientName && tx.recipientName.toLowerCase().includes(q))
+        );
+    }, [searchQuery, user.transactions]);
+
+    const toggleBalanceVisibility = () => {
+        if (biometricEnabled && !isBalanceVisible) {
+            setIsBiometricOpen(true);
+        } else {
+            setIsBalanceVisible(!isBalanceVisible);
+        }
+    };
 
     const fmt = (val: number) =>
         val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -65,7 +118,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
                         Saldo em conta
                     </p>
                     <button
-                        onClick={() => setIsBalanceVisible(!isBalanceVisible)}
+                        onClick={toggleBalanceVisibility}
                         className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-black/60 transition-colors hover:bg-black/10 test-toggle-balance"
                         id="btn-toggle-balance"
                         name="toggle-balance"
@@ -379,10 +432,145 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
                 </button>
             </section>
 
+            {/* ── Financial Insights Section ──────────────────────────────── */}
+            <section className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black">
+                <div className="flex justify-between items-center mb-3">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-[#A2FF00] border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs">
+                            💡
+                        </div>
+                        <div>
+                            <h3 className="font-black text-xs uppercase tracking-wider text-black">Insights Financeiros</h3>
+                            <p className="text-[10px] font-bold text-gray-700">Distribuição de gastos</p>
+                        </div>
+                    </div>
+                </div>
+
+                {categorySpendingData.length > 0 ? (
+                    <div className="flex flex-col gap-4 mt-4">
+                        <div className="w-full h-44 flex items-center justify-center relative">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie data={categorySpendingData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={3} dataKey="value">
+                                        {categorySpendingData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} stroke="#000000" strokeWidth={2} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#FFFFFF', border: '3px solid #000000', borderRadius: '12px', boxShadow: '4px 4px 0px 0px rgba(0,0,0,1)', fontFamily: 'Inter, sans-serif', fontSize: '11px', color: '#000000', fontWeight: 'bold' }}
+                                        formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Gasto']}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                            <div className="absolute flex flex-col items-center justify-center pointer-events-none text-center">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-gray-600">Total</span>
+                                <span className="text-xs font-black text-black">
+                                    R$ {categorySpendingData.reduce((acc, curr) => acc + curr.value, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mt-1">
+                            {categorySpendingData.map((entry) => {
+                                const total = categorySpendingData.reduce((acc, curr) => acc + curr.value, 0);
+                                const percent = total > 0 ? Math.round((entry.value / total) * 100) : 0;
+                                return (
+                                    <div key={entry.key} className="flex items-center gap-2 p-2 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-white text-black">
+                                        <div className="w-5 h-5 rounded-lg border-2 border-black flex items-center justify-center text-xs shrink-0" style={{ backgroundColor: entry.color }}>{entry.emoji}</div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center justify-between gap-1">
+                                                <span className="text-[10px] font-black truncate text-black">{entry.name}</span>
+                                                <span className="text-[9px] font-black shrink-0 text-gray-700">{percent}%</span>
+                                            </div>
+                                            <span className="text-[9px] font-black block text-gray-800">R$ {entry.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center py-8 border-2 border-black rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] bg-white text-black">
+                        <span className="text-2xl block mb-2">💸</span>
+                        <p className="text-xs font-black">Nenhum gasto registrado</p>
+                    </div>
+                )}
+            </section>
+
+            {/* ── Transactions Search and List Section ──────────────────────────────── */}
+            <section className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-4">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-volt-yellow border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs">
+                            🔍
+                        </div>
+                        <div>
+                            <h3 className="font-black text-xs uppercase tracking-wider text-black">Transações</h3>
+                            <p className="text-[10px] font-bold text-gray-700">Busque no seu extrato</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search size={16} className="text-gray-500" />
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Buscar transações..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-white border-2 border-black text-black text-xs rounded-xl focus:ring-0 focus:border-black block pl-9 p-2.5 font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    />
+                </div>
+
+                <div className="space-y-3 mt-2">
+                    {filteredTransactions.length > 0 ? (
+                        filteredTransactions.map((tx, idx) => (
+                            <div key={tx.id || idx} className="flex justify-between items-center p-3 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg border-2 border-black bg-gray-100 flex items-center justify-center shrink-0">
+                                        <span className="text-black material-symbols-outlined text-sm">
+                                            {tx.type.includes('PIX') ? 'pix' : 'receipt_long'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-black text-black truncate max-w-[140px]">{tx.description}</p>
+                                        <p className="text-[10px] font-bold text-gray-600">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className={`text-xs font-black ${tx.amount < 0 ? 'text-black' : 'text-[#00CC7A]'}`}>
+                                        {tx.amount < 0 ? '-' : '+'} R$ {Math.abs(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    </p>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="text-center py-6">
+                            <p className="text-xs font-black text-gray-500">Nenhuma transação encontrada</p>
+                        </div>
+                    )}
+                </div>
+                
+                <button
+                    onClick={() => onNavigate('statement')}
+                    className="w-full mt-2 py-2.5 bg-black text-volt-yellow border-2 border-black rounded-xl text-xs font-black uppercase tracking-wider active:scale-95 transition-transform"
+                >
+                    Ver Extrato Completo
+                </button>
+            </section>
+
             {/* ── Banners & News ──────────────────────────────── */}
             <HomeBanners onNavigate={onNavigate} />
-            <ShopOffersBanner onNavigate={onNavigate} />
             <NewsSection />
+            <ShopOffersBanner onNavigate={onNavigate} />
+
+            <BiometricModal
+                isOpen={isBiometricOpen}
+                onClose={() => setIsBiometricOpen(false)}
+                onSuccess={() => setIsBalanceVisible(true)}
+                theme={document.documentElement.classList.contains('dark') ? 'midnight' : 'yellow'}
+            />
         </main>
     );
 };
