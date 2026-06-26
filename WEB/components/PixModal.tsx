@@ -169,7 +169,7 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.95, y: 20, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="relative w-full max-w-md max-h-[88vh] bg-[#0a0a0a] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
+            className="bg-[#0a0a0a] text-white flex flex-col relative w-full max-w-5xl h-[90vh] rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden z-10"
           >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02] shrink-0">
@@ -427,15 +427,15 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
                     <span className="text-white/60">Destino:</span>
                     <span className="font-semibold text-white truncate max-w-[150px]">{recipientInfo?.name || pixKey}</span>
                   </div>
-                  {createdTx?.title && (
+                  {createdTx?.description && (
                     <div className="flex justify-between text-xs">
                       <span className="text-white/60">Descrição:</span>
-                      <span className="text-white italic truncate max-w-[150px]">{createdTx.title}</span>
+                      <span className="text-white italic truncate max-w-[150px]">{createdTx.description}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-[10px] text-white/40 border-t border-white/5 pt-2 mt-2">
-                    <span>{createdTx?.formattedDate}</span>
-                    <span>{createdTx?.time}</span>
+                    <span>{createdTx?.date ? new Date(createdTx.date).toLocaleDateString('pt-BR') : ''}</span>
+                    <span>{createdTx?.date ? new Date(createdTx.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                   </div>
                 </div>
 

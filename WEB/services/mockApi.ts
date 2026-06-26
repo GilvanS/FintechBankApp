@@ -1,5 +1,5 @@
 
-import { MOCK_USERS } from '../data/mockData';
+import { MOCK_USERS, MOCK_PRODUCTS } from '../data/mockData';
 import { User, PasswordResetRequest, LimitIncreaseRequest, AppNotification, PixKey, PixContact, Transaction, PurchasedItem, CreditCard, CardTransaction } from '../types';
 
 const STORE_KEY = 'fintech_app_data';
@@ -919,6 +919,12 @@ export const getUserByCpf = async (cpf: string): Promise<{ success: boolean; mes
     return { success: true, user: userWithoutPassword as User };
 };
 
+export const adminResetTestData = async (): Promise<{ success: boolean; message?: string }> => {
+    return { success: false, message: 'Função não suportada no mock' };
+};
+
+
+
 export const getUserMe = async (): Promise<{ success: boolean; message?: string; user?: User }> => {
     await delay(300);
     const token = localStorage.getItem('authToken');
@@ -962,5 +968,5 @@ export const getUserStatementPaginated = async (
 
 export const getProducts = async (): Promise<{ success: boolean; products?: PurchasedItem[]; message?: string }> => {
     await delay(300);
-    return { success: true, products: [] };
+    return { success: true, products: MOCK_PRODUCTS };
 };
