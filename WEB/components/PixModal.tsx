@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Send, CheckCircle2, AlertTriangle, Smartphone, Mail, Hash, User as UserIcon, BookUser, Key } from 'lucide-react';
-import { getPixContacts, getPixRecipientInfo, performPix, performPixCreditInstallment, getUserByCpf, getUserStatement } from '../services/api';
+import { getPixContacts, getPixRecipientInfo, performPix, performPixCreditInstallment, getUserByCpf, getUserStatement, addPixContact } from '../services/api';
 import { PixContact, Transaction } from '../types';
 import { parseCurrency, formatCurrency } from '../utils/formatters';
 import Contacts from './Contacts';
@@ -118,6 +118,8 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
               }
               setSubView('transfer');
               setSuccess(true);
+              // Salva destinatário como contato silenciosamente (ignora se já existe)
+              addPixContact(user.cpf, { name: recipientInfo.name, key: transferDetails.key }).catch(() => {});
           } else {
               setError(`Falha na transferência: ${result.message}`);
               setSubView('transfer');
@@ -180,23 +182,35 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.95, y: 20, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="relative w-full max-w-md bg-[#111111] border border-white/10 rounded-[2rem] p-6 shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+            className="relative w-full h-full max-w-5xl max-h-[90vh] bg-[#0a0a0a] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
           >
-            {/* Header */}
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                {subView === 'transfer' && !success && <span className="w-2 h-2 rounded-full bg-[#00E38B] animate-pulse"></span>}
-                {subView === 'transfer' ? (success ? 'Sucesso' : 'Enviar Pix') : 
-                 subView === 'confirmation' ? 'Confirmar Pix' : 
-                 subView === 'contacts' ? 'Contatos' : 'Minhas Chaves'}
-              </h3>
-              <button
-                onClick={handleClose}
-                className="text-white/60 hover:text-white p-1 rounded-full hover:bg-white/5 transition-colors"
-              >
-                <X size={20} />
-              </button>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02] shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-white/80">pix</span>
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-black text-white uppercase tracking-wider flex items-center gap-2">
+                            {subView === 'transfer' && !success && <span className="w-2 h-2 rounded-full bg-[#00E38B] animate-pulse"></span>}
+                            {subView === 'transfer' ? (success ? 'Sucesso' : 'Enviar Pix') : 
+                             subView === 'confirmation' ? 'Confirmar Pix' : 
+                             subView === 'contacts' ? 'Contatos' : 'Minhas Chaves'}
+                        </h2>
+                        <p className="text-xs text-white/50 uppercase tracking-widest">Área Pix</p>
+                    </div>
+                </div>
+                <button
+                    onClick={handleClose}
+                    className="p-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                >
+                    <X size={24} />
+                </button>
             </div>
+
+            <div className="flex-1 overflow-y-auto no-scrollbar relative bg-[#0a0a0a] p-6 flex flex-col items-center">
+              <div className="w-full max-w-md mx-auto">
+
 
             {/* Navigation inside modal */}
             {!success && subView !== 'confirmation' && (
@@ -485,6 +499,8 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
                     <PixKeyManagement onBack={() => setSubView('transfer')} />
                 </motion.div>
             )}
+              </div>
+            </div>
           </motion.div>
         </div>
       )}
