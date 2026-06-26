@@ -13,19 +13,31 @@ export default {
     theme: {
         extend: {
             colors: {
-                /* Legacy dark-theme tokens (kept for components not yet restyled) */
-                'primary': '#00D18B',
+                /* Legacy tokens (backward compat) */
+                'primary': '#00e38b',
                 'background-light': '#f6f8f6',
-                'background-dark': '#121212',
-                'surface-dark': '#1E1E1E',
-                'text-dark': '#E5E7EB',
-                'subtle-dark': '#9CA3AF',
-                /* Volt Fintech brutalist palette */
-                'volt-yellow': '#FFD700',
-                'volt-green': '#A2FF00',
-                'volt-cream': '#FFED86',
-                'volt-white': '#FFFFFF',
-                'volt-black': '#000000',
+                'background-dark': '#131313',
+                'surface-dark': '#201f1f',
+                'text-dark': '#e5e2e1',
+                'subtle-dark': '#b9cbbc',
+                /* ── Neon Fintech design system ── */
+                'volt-primary':       '#00ff9d', /* primary-container — neon green */
+                'volt-primary-dark':  '#00e38b', /* primary-fixed-dim */
+                'volt-dark':          '#131313', /* background — void backdrop */
+                'volt-surface':       '#201f1f', /* surface-container — cards */
+                'volt-surface-low':   '#1c1b1b', /* surface-container-low */
+                'volt-surface-high':  '#2a2a2a', /* surface-container-high */
+                'volt-surface-top':   '#353534', /* surface-container-highest */
+                'volt-white':         '#e5e2e1', /* on-surface */
+                'volt-muted':         '#b9cbbc', /* on-surface-variant */
+                'volt-black':         '#000000',
+                'volt-green':         '#00ff9d', /* alias for primary accent */
+                /* Semantic tokens */
+                'on-surface':         '#e5e2e1',
+                'on-surface-variant': '#b9cbbc',
+                'neon-secondary':     '#c9bfff', /* atmospheric purple */
+                'neon-outline':       '#849587',
+                'neon-error':         '#ffb4ab',
             },
             fontFamily: {
                 'display': ['Space Grotesk', 'Manrope', 'sans-serif'],
