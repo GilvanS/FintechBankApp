@@ -86,10 +86,10 @@ const Dashboard: React.FC = () => {
     const [theme, setTheme] = useState<'yellow' | 'midnight'>('midnight');
     useEffect(() => {
         const isDark = document.documentElement.classList.contains('dark');
-        setTheme(isDark ? 'midnight' : 'yellow');
+        setTheme('midnight');
         
         const observer = new MutationObserver(() => {
-            setTheme(document.documentElement.classList.contains('dark') ? 'midnight' : 'yellow');
+            setTheme('midnight');
         });
         observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
         return () => observer.disconnect();
@@ -258,16 +258,14 @@ const Dashboard: React.FC = () => {
     
     // --- Purchase Flow Logic ---
     const handleInitiatePurchase = (item: PurchasedItem) => {
-        // Add item to cart
         setCart(prevCart => {
             const existingItem = prevCart.find(i => i.id === item.id);
             if (existingItem) {
-                 // If item already in cart, just go to cart
                 return prevCart;
             }
             return [...prevCart, { ...item, quantity: 1 }];
         });
-        // Navigate to shopping cart
+        setIsShopModalOpen(false);
         handleNavigate('shoppingCart');
     };
 
@@ -639,7 +637,7 @@ const Dashboard: React.FC = () => {
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full h-full max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
+                            className="relative w-full h-fit max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
                         >
                             {/* Modal Header */}
                             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02] shrink-0">
@@ -688,7 +686,7 @@ const Dashboard: React.FC = () => {
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full h-full max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
+                            className="relative w-full h-fit max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
                         >
                             {/* Modal Header */}
                             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
@@ -738,7 +736,7 @@ const Dashboard: React.FC = () => {
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full h-full max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
+                            className="relative w-full h-fit max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
                         >
                             {/* Modal Header */}
                             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
@@ -758,12 +756,13 @@ const Dashboard: React.FC = () => {
                                     <span className="material-symbols-outlined text-xl">close</span>
                                 </button>
                             </div>
-                            <div className="flex-1 overflow-y-auto no-scrollbar relative bg-[#131313]">
-                                <LimitView
+                            {/* Modal Content Scroll Area */}
+                            <div className="shrink min-h-0 overflow-y-auto no-scrollbar relative bg-[#131313]">
+                                <LimitView 
                                     accountBalance={user!.balance}
                                     userProfile={user!}
                                     onTransactionComplete={handleTransactionCompleteLimit}
-                                    theme={theme}
+                                    theme={theme} 
                                 />
                             </div>
                         </motion.div>
