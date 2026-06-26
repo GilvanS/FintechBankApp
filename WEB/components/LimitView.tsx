@@ -106,7 +106,7 @@ export default function LimitView({
     b.code.includes(searchBank)
   );
 
-  const isMidnight = theme === 'midnight';
+  const isMidnight = true; // Forced Dark Mode
 
   // Real interest factor based on the HTML spec details:
   // - 1x: amount 300,17 -> juros 77,27, total 377,44 (Factor: 1.2574)
@@ -207,7 +207,7 @@ export default function LimitView({
   };
 
   return (
-    <div className={`w-full max-w-2xl mx-auto pb-8 pt-4 px-4 ${isMidnight ? 'text-white' : 'text-black'}`}>
+    <div className={`w-full max-w-4xl mx-auto pb-12 pt-6 px-8 ${isMidnight ? 'text-white' : 'text-black'}`}>
       
       {/* SCREEN 1: HOME LIMIT SCREEN */}
       {screen === 'home' && (
@@ -462,13 +462,13 @@ export default function LimitView({
                   </div>
                   <div className="text-right">
                     <p className="text-[8px] font-black uppercase text-on-surface-variant">TOTAL SOLICITADO</p>
-                    <p className="text-xs font-black text-[#00ff9d]">{formatBRL(withdrawAmount)}</p>
+                    <p className={`text-xs font-black ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>{formatBRL(withdrawAmount)}</p>
                   </div>
                 </div>
 
                 <div className="py-4 border-y border-zinc-800/10 my-3">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-2xl font-black text-[#00ff9d]">{installments}x</span>
+                    <span className={`text-2xl font-black ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>{installments}x</span>
                     <span className="text-xs text-on-surface-variant font-extrabold">×</span>
                     <span className={`text-2xl font-black ${isMidnight ? 'text-white' : 'text-black'}`}>
                       {formatBRL(currentValues.installmentValue)}
@@ -479,7 +479,7 @@ export default function LimitView({
                 <div className="grid grid-cols-2 gap-4 text-[10px]">
                   <div>
                     <span className="text-on-surface-variant block uppercase font-bold">Taxa de juros</span>
-                    <span className="font-extrabold text-[#00ff9d]">17.9% ao mês</span>
+                    <span className={`font-extrabold ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>17.9% ao mês</span>
                   </div>
                   <div className="text-right">
                     <span className="text-on-surface-variant block uppercase font-bold">1ª Parcela vence em</span>
@@ -514,8 +514,19 @@ export default function LimitView({
                 </div>
 
                 <button 
-                  onClick={() => { setInstallments(8); setScreen('transfer_details'); }}
-                  className="w-full py-2 bg-transparent hover:bg-[#00ff9d]/5 border border-[#00ff9d]/25 text-[#00ff9d]/70 hover:text-[#00ff9d] font-black rounded-lg text-[10px] uppercase tracking-wider transition-all"
+                  onClick={() => {
+                    if (withdrawAmount <= 0 || withdrawAmount > withdrawalLimit) {
+                      alert(`Valor de saque inválido. Máximo disponível: R$ ${withdrawalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+                      return;
+                    }
+                    setInstallments(8); 
+                    setScreen('transfer_details'); 
+                  }}
+                  className={`w-full py-2 bg-transparent border font-black rounded-lg text-[10px] uppercase tracking-wider transition-all ${
+                    isMidnight 
+                      ? 'hover:bg-[#00ff9d]/5 border-[#00ff9d]/25 text-[#00ff9d]/70 hover:text-[#00ff9d]' 
+                      : 'hover:bg-black/5 border-black/20 text-black/70 hover:text-black'
+                  }`}
                 >
                   Simular com 8 parcelas
                 </button>
@@ -563,7 +574,7 @@ export default function LimitView({
           </div>
 
           <section className="flex flex-col gap-1 text-center">
-            <h2 className="text-xl font-black text-[#00ff9d]">Transferência</h2>
+            <h2 className={`text-xl font-black ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>Transferência</h2>
             <p className="text-xs text-on-surface-variant">Pra qual banco quer transferir?</p>
           </section>
 
