@@ -5,13 +5,14 @@ import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purch
 
 import HomeView from './HomeView';
 import Profile from './Profile';
-import Pix from './Pix';
+import PixModal from './PixModal';
 import Statement from './Statement';
 import StatementPaginated from './StatementPaginated';
 import CardDashboard from './CardDashboard';
 import Shop from './Shop';
 import ShoppingCart from './ShoppingCart';
 import PaymentMethods from './PaymentMethods';
+import DepositModal from './DepositModal';
 import InstallmentModal from './InstallmentModal';
 import PurchaseConfirmation from './PurchaseConfirmation';
 import BottomNavBar from './BottomNavBar';
@@ -26,6 +27,9 @@ import Products from './Products';
 import ClosedInvoice from './ClosedInvoice';
 import InstallmentOptions from './InstallmentOptions';
 import CurrentInvoice from './CurrentInvoice';
+import Header from './Header';
+import LimitView from './LimitView';
+import { AnimatePresence, motion } from 'motion/react';
 
 const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; onClose: () => void; }> = ({ isOpen, onGoToPayment, onClose }) => {
     if (!isOpen) return null;
@@ -62,7 +66,7 @@ const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; o
 };
 
 
-type View = 'home' | 'cards' | 'shop' | 'investments' | 'profile' | 'statement' | 'pix' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'currentInvoice';
+type View = 'home' | 'cards' | 'shop' | 'investments' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'currentInvoice' | 'limit';
 
 const Dashboard: React.FC = () => {
     const { user, updateUser, logout, view: topLevelView, navigateTo } = useAuth();
@@ -71,6 +75,25 @@ const Dashboard: React.FC = () => {
 
     const [cart, setCart] = useState<PurchasedItem[]>([]);
     const [currentItem, setCurrentItem] = useState<PurchasedItem | null>(null);
+    const [isPixModalOpen, setIsPixModalOpen] = useState(false);
+    const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
+    const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+    const [isShopModalOpen, setIsShopModalOpen] = useState(false);
+    const [isCardsModalOpen, setIsCardsModalOpen] = useState(false);
+    const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
+    const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+
+    const [theme, setTheme] = useState<'yellow' | 'midnight'>('yellow');
+    useEffect(() => {
+        const isDark = document.documentElement.classList.contains('dark');
+        setTheme(isDark ? 'midnight' : 'yellow');
+        
+        const observer = new MutationObserver(() => {
+            setTheme(document.documentElement.classList.contains('dark') ? 'midnight' : 'yellow');
+        });
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        return () => observer.disconnect();
+    }, []);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [passwordAction, setPasswordAction] = useState<(() => void) | null>(null);
     const passwordActionPayload = useRef<any>(null); // Ref to hold payload for password actions
@@ -87,13 +110,12 @@ const Dashboard: React.FC = () => {
     const [invoicePaymentDetails, setInvoicePaymentDetails] = useState<any>(null);
     
     useEffect(() => {
-        // Show modal if user navigates to cards and the card is blocked
-        if (currentView === 'cards' && user?.creditCard.isBlocked) {
+        if (isCardsModalOpen && user?.creditCard.isBlocked) {
             setIsBlockedModalOpen(true);
-        } else {
+        } else if (!isCardsModalOpen) {
             setIsBlockedModalOpen(false);
         }
-    }, [currentView, user]);
+    }, [isCardsModalOpen, user]);
 
     // Refresh automatico ao entrar em telas de cartoes
     useEffect(() => {
@@ -103,7 +125,6 @@ const Dashboard: React.FC = () => {
             if (!user) return;
 
             const viewsToRefresh: View[] = [
-                'cards',
                 'currentInvoice',
                 'closedInvoice',
                 'installmentOptions',
@@ -123,21 +144,27 @@ const Dashboard: React.FC = () => {
         return () => { cancelled = true; };
     }, [currentView, user, updateUser]);
 
-    // NOVO: Refresh do extrato quando entrar na view 'statement'
+    // Refresh quando modal de cards abre
     useEffect(() => {
+        if (!isCardsModalOpen || !user) return;
         let cancelled = false;
+        getUserByCpf(user.cpf).then(r => {
+            if (r.success && r.user && !cancelled) updateUser(r.user);
+        });
+        return () => { cancelled = true; };
+    }, [isCardsModalOpen]);
 
-        const refreshStatementIfNeeded = async () => {
-            if (!user || currentView !== 'statement') return;
-            const stmt = await getUserStatement(user.cpf);
+    // Refresh extrato quando modal de statement abre
+    useEffect(() => {
+        if (!isStatementModalOpen || !user) return;
+        let cancelled = false;
+        getUserStatement(user.cpf).then(stmt => {
             if (stmt.success && stmt.transactions && !cancelled) {
                 updateUser({ transactions: stmt.transactions });
             }
-        };
-
-        refreshStatementIfNeeded();
+        });
         return () => { cancelled = true; };
-    }, [currentView, user, updateUser]);
+    }, [isStatementModalOpen]);
     const handleGoToPaymentFromModal = () => {
         setIsBlockedModalOpen(false);
         handleNavigate('closedInvoice');
@@ -145,10 +172,41 @@ const Dashboard: React.FC = () => {
     
     const handleCloseBlockedModal = () => {
         setIsBlockedModalOpen(false);
-        handleBack();
+        setIsCardsModalOpen(false);
     };
 
     const handleNavigate = useCallback((newView: View, item?: any) => {
+        if (newView === 'pix') {
+            setIsPixModalOpen(true);
+            return;
+        }
+        if (newView === 'deposit') {
+            setIsDepositModalOpen(true);
+            return;
+        }
+        if (newView === 'admin') {
+            setIsAdminModalOpen(true);
+            return;
+        }
+        if (newView === 'shop') {
+            setIsShopModalOpen(true);
+            return;
+        }
+        if (newView === 'cards') {
+            setCurrentView('home');
+            setIsCardsModalOpen(true);
+            return;
+        }
+        if (newView === 'statement') {
+            setCurrentView('home');
+            setIsStatementModalOpen(true);
+            return;
+        }
+        if (newView === 'limit') {
+            setCurrentView('home');
+            setIsLimitModalOpen(true);
+            return;
+        }
         if (newView === currentView) return;
         setPreviousView(currentView);
         setCurrentView(newView);
@@ -157,6 +215,26 @@ const Dashboard: React.FC = () => {
 
     const handleBack = () => {
         setCurrentView(previousView);
+    };
+
+    const handleTransactionCompleteLimit = (newTx: Transaction, amount: number) => {
+        if (!user) return;
+        const updatedUser = {
+            ...user,
+            balance: user.balance + amount,
+            transactions: [newTx, ...user.transactions],
+        };
+        updateUser(updatedUser);
+    };
+
+    const handleDepositComplete = (newTx: Transaction, amount: number) => {
+        if (!user) return;
+        const updatedUser = {
+            ...user,
+            balance: user.balance + amount,
+            transactions: [newTx, ...user.transactions],
+        };
+        updateUser(updatedUser);
     };
 
     // --- Cart Logic ---
@@ -426,25 +504,14 @@ const Dashboard: React.FC = () => {
     };
     
     const renderContent = () => {
-        if (topLevelView === 'admin' && user?.role === 'admin') {
-            return <Admin onBack={() => navigateTo('dashboard')} />;
-        }
 
         switch (currentView) {
             case 'home':
                 return <HomeView user={user!} onNavigate={handleNavigate} />;
             case 'profile':
                 return <Profile onNavigate={navigateTo} />;
-            case 'pix':
-                return <Pix onBack={() => handleNavigate('home')} />;
-            case 'statement':
-                return <StatementPaginated user={user!} onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
-            case 'cards':
-                return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
-            case 'shop':
-                return <Shop onBack={() => handleNavigate('home')} onAddToCart={handleAddToCart} onInitiatePurchase={handleInitiatePurchase} cartItemCount={cart.length} onNavigate={handleNavigate} />;
             case 'shoppingCart':
-                return <ShoppingCart cart={cart} onBack={() => handleNavigate('shop')} onCheckout={handleCheckout} onUpdateQuantity={handleUpdateCartQuantity} />;
+                return <ShoppingCart cart={cart} onBack={() => setIsShopModalOpen(true)} onCheckout={handleCheckout} onUpdateQuantity={handleUpdateCartQuantity} />;
             case 'paymentMethods':
                 return <PaymentMethods user={user!} item={currentItem} onBack={() => cart.length > 0 ? handleNavigate('shoppingCart') : handleNavigate('shop')} onSelectMethod={handleSelectPaymentMethod} />;
             case 'purchaseConfirmation':
@@ -490,15 +557,18 @@ const Dashboard: React.FC = () => {
             data-current-view={currentView}
             className="h-full w-full flex flex-col bg-volt-yellow overflow-hidden"
         >
+            {topLevelView !== 'admin' && (
+                <Header currentView={currentView} onNavigate={handleNavigate} user={user} />
+            )}
             <div
                 id="dashboard-content"
                 data-testid="dashboard-content"
                 data-cy="dashboard-content"
-                className="flex-grow overflow-y-auto no-scrollbar"
+                className="flex-grow overflow-y-auto no-scrollbar pt-20"
             >
                 {renderContent()}
             </div>
-            {['home', 'cards', 'shop', 'products', 'profile', 'pix'].includes(currentView) && (
+            {topLevelView !== 'admin' && ['home', 'products', 'profile'].includes(currentView) && !isCardsModalOpen && !isStatementModalOpen && !isLimitModalOpen && (
                  <BottomNavBar currentView={currentView} onNavigate={(view) => handleNavigate(view)} />
             )}
             
@@ -506,11 +576,25 @@ const Dashboard: React.FC = () => {
             
             <PasswordModal
                 isOpen={isPasswordModalOpen}
-                onClose={() => setIsPasswordModalOpen(false)}
+                onClose={() => {
+                    setIsPasswordModalOpen(false);
+                    setPasswordAction(null);
+                }}
                 onConfirm={handlePasswordConfirm}
                 title={passwordModalInfo.title}
                 description={passwordModalInfo.description}
                 isLoading={isProcessing}
+            />
+            {isPixModalOpen && (
+                <PixModal 
+                    isOpen={isPixModalOpen} 
+                    onClose={() => setIsPixModalOpen(false)} 
+                />
+            )}
+            <DepositModal
+                isOpen={isDepositModalOpen}
+                onClose={() => setIsDepositModalOpen(false)}
+                onDepositComplete={handleDepositComplete}
             />
             {currentItem && (
                 <InstallmentModal
@@ -524,6 +608,116 @@ const Dashboard: React.FC = () => {
                     }}
                 />
             )}
+            <Admin 
+                isOpen={isAdminModalOpen || (topLevelView === 'admin' && user?.role === 'admin')} 
+                onClose={() => {
+                    if (topLevelView === 'admin') navigateTo('dashboard');
+                    setIsAdminModalOpen(false);
+                }} 
+            />
+            <Shop
+                isOpen={isShopModalOpen}
+                onClose={() => setIsShopModalOpen(false)}
+                onAddToCart={handleAddToCart}
+                onInitiatePurchase={handleInitiatePurchase}
+                cartItemCount={cart.length}
+                onNavigate={handleNavigate}
+            />
+
+            {/* ── Cards Modal ──────────────────────────── */}
+            <AnimatePresence>
+                {isCardsModalOpen && (
+                    <motion.div
+                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
+                        <motion.div
+                            className="flex-1 overflow-y-auto no-scrollbar"
+                            initial={{ y: '4%', opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: '4%', opacity: 0 }}
+                            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+                        >
+                            <CardDashboard
+                                onBack={() => setIsCardsModalOpen(false)}
+                                onNavigate={(view) => {
+                                    setIsCardsModalOpen(false);
+                                    if (view !== 'home' && view !== 'cards') handleNavigate(view as View);
+                                }}
+                            />
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ── Statement Modal ───────────────────────── */}
+            <AnimatePresence>
+                {isStatementModalOpen && (
+                    <motion.div
+                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
+                        <motion.div
+                            className="flex-1 overflow-y-auto no-scrollbar"
+                            initial={{ y: '4%', opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: '4%', opacity: 0 }}
+                            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+                        >
+                            <StatementPaginated
+                                user={user!}
+                                onNavigate={(view) => {
+                                    setIsStatementModalOpen(false);
+                                    if (view !== 'home' && view !== 'statement') handleNavigate(view as View);
+                                }}
+                                onBack={() => setIsStatementModalOpen(false)}
+                            />
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ── Limit Modal ───────────────────────────── */}
+            <AnimatePresence>
+                {isLimitModalOpen && (
+                    <motion.div
+                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
+                        <div className="flex items-center justify-between px-4 py-3 shrink-0 bg-[#0a0a0a] border-b border-white/10">
+                            <span className="text-white font-black text-lg" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Limites e Contas</span>
+                            <button
+                                onClick={() => setIsLimitModalOpen(false)}
+                                className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+                                aria-label="Fechar"
+                                type="button"
+                            >
+                                <span className="material-symbols-outlined text-xl">close</span>
+                            </button>
+                        </div>
+                        <motion.div
+                            className="flex-1 overflow-y-auto no-scrollbar"
+                            initial={{ y: '4%', opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: '4%', opacity: 0 }}
+                            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+                        >
+                            <LimitView
+                                accountBalance={user!.balance}
+                                userProfile={user!}
+                                onTransactionComplete={handleTransactionCompleteLimit}
+                                theme={theme}
+                            />
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
