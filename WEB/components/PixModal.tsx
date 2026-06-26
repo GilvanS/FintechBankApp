@@ -473,21 +473,20 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
               </div>
             </div>
           </motion.div>
+          {/* PasswordModal dentro do z-[100] para não ficar atrás do backdrop */}
+          <PasswordModal
+              isOpen={isPasswordModalOpen}
+              onClose={() => {
+                  setIsPasswordModalOpen(false);
+                  setPendingPinAction(null);
+              }}
+              onConfirm={handlePasswordConfirm}
+              title="Confirmar Transferência"
+              description="Digite sua senha de 4 dígitos."
+              isLoading={loading}
+          />
         </div>
       )}
-      
-      {/* Password Modal */}
-      <PasswordModal
-          isOpen={isPasswordModalOpen}
-          onClose={() => {
-              setIsPasswordModalOpen(false);
-              setPendingPinAction(null);
-          }}
-          onConfirm={handlePasswordConfirm}
-          title="Confirmar Transferência"
-          description="Digite sua senha de 4 dígitos."
-          isLoading={loading}
-      />
     </AnimatePresence>
   );
 }
