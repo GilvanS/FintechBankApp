@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Send, CheckCircle2, AlertTriangle, Smartphone, Mail, Hash, User as UserIcon, BookUser, Key } from 'lucide-react';
-import { getPixContacts, getPixRecipientInfo, performPix, performPixCreditInstallment, getUserByCpf, getUserStatement, addPixContact } from '../services/api';
+import { X, Send, CheckCircle2, AlertTriangle, Smartphone, Mail, Hash, User as UserIcon, Key } from 'lucide-react';
+import { getPixRecipientInfo, performPix, performPixCreditInstallment, getUserByCpf, getUserStatement, addPixContact } from '../services/api';
 import { PixContact, Transaction } from '../types';
 import { parseCurrency, formatCurrency } from '../utils/formatters';
 import Contacts from './Contacts';
@@ -34,20 +34,7 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [pendingPinAction, setPendingPinAction] = useState<null | ((pin: string) => Promise<void>)>(null);
 
-  const [contacts, setContacts] = useState<PixContact[]>([]);
   const [useCredit, setUseCredit] = useState(false);
-
-  useEffect(() => {
-      const fetchContacts = async () => {
-          if (user) {
-              const fetchedContacts = await getPixContacts(user.cpf);
-              setContacts(fetchedContacts);
-          }
-      };
-      if (isOpen) {
-          fetchContacts();
-      }
-  }, [user, isOpen]);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const inputValue = e.target.value;
@@ -471,26 +458,10 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
 
             {subView === 'contacts' && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-white">
-                     {/* Inline Contacts View */}
-                     {contacts.length === 0 ? (
-                         <div className="text-center py-8 text-white/40">Nenhum contato salvo.</div>
-                     ) : (
-                         <div className="space-y-3 mt-4">
-                             {contacts.map(c => (
-                                 <div key={c.id} onClick={() => handleSelectContact(c)} className="flex items-center justify-between p-3 bg-white/5 rounded-xl hover:bg-white/10 cursor-pointer transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center">
-                                            <BookUser size={18} className="text-[#00E38B]" />
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-bold">{c.name}</p>
-                                            <p className="text-xs text-white/60">{c.key}</p>
-                                        </div>
-                                    </div>
-                                 </div>
-                             ))}
-                         </div>
-                     )}
+                    <Contacts
+                        onSelectContact={handleSelectContact}
+                        onBack={() => setSubView('transfer')}
+                    />
                 </motion.div>
             )}
 
