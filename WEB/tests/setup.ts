@@ -13,4 +13,8 @@ vi.mock('recharts', () => ({
     YAxis: () => null,
     CartesianGrid: () => null,
     Legend: () => null,
+    LineChart: ({ children }: any) => children,
+    Line: () => null,
+    AreaChart: ({ children }: any) => children,
+    Area: () => null,
 }));

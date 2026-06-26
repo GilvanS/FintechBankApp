@@ -48,13 +48,10 @@ describe('HomeView - Render', () => {
 
     render(<HomeView user={user} onNavigate={onNavigate} />);
 
-    // As asserções que já passavam são mantidas
     expect(screen.getByText(/Saldo em conta/i)).toBeInTheDocument();
-    expect(screen.getByText(/Vencimento:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Fatura Atual/i)).toBeInTheDocument();
     expect(screen.getByText(/Ver fatura e limite/i)).toBeInTheDocument();
 
-    // A linha que falhava agora é mais específica
-    // Procura pelo saldo dentro da seção "Saldo em conta"
     const saldoSection = screen.getByText(/Saldo em conta/i).closest('section');
     expect(within(saldoSection).getByText(/1.234,56/)).toBeInTheDocument();
   });
@@ -71,12 +68,12 @@ describe('HomeView - Render', () => {
     // Verifica se o saldo está visível inicialmente
     expect(within(saldoSection).getByText(/1.234,56/)).toBeInTheDocument();
 
-    // Clica no ícone de visibilidade dentro da seção
-    const visibilityIcon = within(saldoSection).getByText('visibility');
-    fireEvent.click(visibilityIcon.parentElement!);
+    // O botão de visibilidade é o primeiro botão da seção (Lucide Eye SVG)
+    const eyeButton = within(saldoSection).getAllByRole('button')[0];
+    fireEvent.click(eyeButton);
 
     // Agora, o saldo deve estar ofuscado e o valor original não deve estar visível
-    expect(within(saldoSection).getByText('R$ ••••••')).toBeInTheDocument();
+    expect(within(saldoSection).getByText('••••••')).toBeInTheDocument();
     expect(within(saldoSection).queryByText(/1.234,56/)).not.toBeInTheDocument();
   });
 

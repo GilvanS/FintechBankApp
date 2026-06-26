@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { formatDateBR } from '../utils/formatters';
+import { motion, AnimatePresence } from 'motion/react';
+import { ShieldAlert, ToggleLeft, ToggleRight } from 'lucide-react';
 
 interface CardDashboardProps {
     onBack: () => void;
@@ -8,7 +10,7 @@ interface CardDashboardProps {
 }
 
 const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => {
-    const { user } = useAuth();
+    const { user, updateUser } = useAuth();
     const [activeTab, setActiveTab] = useState<'current' | 'future'>('current');
     const [cardType, setCardType] = useState<'fisico' | 'virtual'>('fisico');
     const [showPin, setShowPin] = useState(false);
@@ -62,7 +64,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
         const usedLimit = creditCard.totalLimit - creditCard.availableLimit;
         const usedPct = creditCard.totalLimit > 0 ? Math.round((usedLimit / creditCard.totalLimit) * 100) : 0;
         return (
-            <div className="bg-background-dark text-white min-h-full flex flex-col" data-testid="limits-screen">
+            <div className="bg-[#0a0a0a] text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28" data-testid="limits-screen">
                 <header className="flex items-center gap-2 p-4 border-b border-white/10">
                     <button onClick={() => setSubView(null)} className="p-2 -ml-2 rounded-full hover:bg-white/10" data-testid="limits-back">
                         <span className="material-symbols-outlined">arrow_back</span>
@@ -70,11 +72,11 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     <h1 className="text-xl font-bold">Meus Limites</h1>
                 </header>
                 <main className="flex-1 overflow-y-auto p-4 space-y-4">
-                    <div className="bg-surface-dark rounded-2xl p-5 space-y-3">
+                    <div className="bg-white/5 rounded-2xl p-5 space-y-3">
                         <p className="text-sm text-white/60">Limite total do cartão</p>
                         <p className="text-3xl font-bold" data-testid="total-limit">{creditCard.totalLimit.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</p>
                         <div className="w-full bg-white/10 rounded-full h-2">
-                            <div className="bg-primary h-2 rounded-full transition-all" style={{width:`${usedPct}%`}} data-testid="limit-bar" />
+                            <div className="bg-volt-primary h-2 rounded-full transition-all" style={{width:`${usedPct}%`}} data-testid="limit-bar" />
                         </div>
                         <div className="flex justify-between text-xs text-white/50">
                             <span>Usado: {usedLimit.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</span>
@@ -87,7 +89,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                         {label:'Fatura atual',      val:creditCard.currentInvoice, icon:'receipt_long', color:'text-blue-400',   testid:'current-invoice-limit'},
                         {label:'Fatura fechada',    val:creditCard.closedInvoice,  icon:'lock',         color:'text-red-400',    testid:'closed-invoice-limit'},
                     ].map(r => (
-                        <div key={r.label} className="flex items-center gap-3 bg-surface-dark rounded-xl p-4">
+                        <div key={r.label} className="flex items-center gap-3 bg-white/5 rounded-xl p-4">
                             <span className={`material-symbols-outlined ${r.color}`}>{r.icon}</span>
                             <div className="flex-1">
                                 <p className="text-xs text-white/50">{r.label}</p>
@@ -95,7 +97,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                             </div>
                         </div>
                     ))}
-                    <button className="w-full py-3 bg-primary/20 text-primary rounded-xl text-sm font-medium border border-primary/30" data-testid="auto-limit-button">
+                    <button className="w-full py-3 bg-volt-primary/20 text-volt-primary rounded-xl text-sm font-medium border border-volt-primary/30" data-testid="auto-limit-button">
                         Aprovação automática de limite
                     </button>
                 </main>
@@ -115,7 +117,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
             {icon:'contactless',       label:'Compras por Aproximação',testid:'service-contactless'},
         ];
         return (
-            <div className="bg-background-dark text-white min-h-full flex flex-col" data-testid="services-screen">
+            <div className="bg-[#0a0a0a] text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28" data-testid="services-screen">
                 <header className="flex items-center gap-2 p-4 border-b border-white/10">
                     <button onClick={() => setSubView(null)} className="p-2 -ml-2 rounded-full hover:bg-white/10" data-testid="services-back">
                         <span className="material-symbols-outlined">arrow_back</span>
@@ -127,9 +129,9 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                         {services.map(s => (
                             <button key={s.label}
                                 onClick={s.label === 'Ver senha' ? () => { setSubView(null); setShowPin(true); setPinRevealed(false); } : undefined}
-                                className="flex flex-col items-center gap-2 p-5 bg-surface-dark rounded-2xl hover:bg-white/10 transition-colors"
+                                className="flex flex-col items-center gap-2 p-5 bg-white/5 rounded-2xl hover:bg-white/10 transition-colors"
                                 data-testid={s.testid}>
-                                <span className="material-symbols-outlined text-primary text-3xl">{s.icon}</span>
+                                <span className="material-symbols-outlined text-volt-primary text-3xl">{s.icon}</span>
                                 <span className="text-sm text-white/80 text-center leading-tight">{s.label}</span>
                             </button>
                         ))}
@@ -162,7 +164,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
             </div>
         )}
         <div
-            className="bg-volt-yellow text-black min-h-full flex flex-col test-card-dashboard"
+            className="bg-[#0a0a0a] text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28 test-card-dashboard"
             id="card-dashboard"
             data-testid="card-dashboard"
             data-cy="card-dashboard"
@@ -188,7 +190,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
                 </button>
                 <h2 
-                    className="text-2xl font-bold text-black test-card-title"
+                    className="text-2xl font-bold text-white test-card-title"
                     id="card-title"
                     data-testid="card-title"
                     data-cy="card-title"
@@ -198,10 +200,10 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 </h2>
             </header>
             {/* Tabs Físico / Virtual */}
-            <div className="flex mx-4 mt-3 bg-surface-dark rounded-full p-1" data-testid="card-type-tabs">
+            <div className="flex mx-4 mt-3 bg-white/5 border border-white/5 rounded-xl p-1" data-testid="card-type-tabs">
                 {(['fisico', 'virtual'] as const).map(t => (
                     <button key={t} onClick={() => setCardType(t)}
-                        className={`flex-1 py-1.5 text-sm font-medium rounded-full transition-colors ${cardType === t ? 'bg-primary text-white' : 'text-white/50'}`}
+                        className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all cursor-pointer ${cardType === t ? 'bg-white/10 text-volt-primary shadow-md' : 'text-white/50 hover:text-white'}`}
                         data-testid={`card-type-${t}`}>
                         {t === 'fisico' ? 'Cartão físico' : 'Cartão virtual'}
                     </button>
@@ -214,23 +216,75 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 data-cy="card-main"
             >
                 {/* Visual do cartão */}
-                <div className={`relative rounded-2xl p-6 text-white overflow-hidden shadow-xl ${cardType === 'fisico' ? 'bg-gradient-to-br from-primary via-primary/80 to-purple-700' : 'bg-gradient-to-br from-gray-700 via-gray-600 to-gray-800'}`} data-testid="card-visual">
-                    <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full" />
-                    <div className="absolute -bottom-8 -left-4 w-20 h-20 bg-white/10 rounded-full" />
-                    <div className="relative z-10 space-y-4">
-                        <div className="flex justify-between items-start">
-                            <span className="text-xs font-semibold tracking-widest opacity-80">FINTECHBANK</span>
-                            {isNfc && <span className="material-symbols-outlined text-white opacity-70">contactless</span>}
-                        </div>
-                        <p className="font-mono text-lg tracking-widest" data-testid="card-number">•••• •••• •••• {creditCard.number?.slice(-4) || '0000'}</p>
-                        <div className="flex justify-between items-end">
-                            <div>
-                                <p className="text-xs opacity-60">Titular</p>
-                                <p className="text-sm font-semibold">{user.fullName?.split(' ')[0].toUpperCase() || 'TITULAR'}</p>
+                <div className="relative w-full aspect-[1.58/1] rounded-2xl overflow-hidden shadow-2xl" style={{ perspective: '1000px' }}>
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={cardType}
+                            initial={{ rotateY: -90, opacity: 0 }}
+                            animate={{ rotateY: 0, opacity: 1 }}
+                            exit={{ rotateY: 90, opacity: 0 }}
+                            transition={{ duration: 0.4, ease: "easeInOut" }}
+                            className={`absolute inset-0 p-6 flex flex-col justify-between ${
+                                cardType === 'fisico'
+                                    ? 'bg-gradient-to-br from-[#00DF89] via-[#6d28d9] to-[#3b0764]'
+                                    : 'bg-gradient-to-br from-[#00f2fe] via-[#0284c7] to-[#1e1b4b]'
+                            }`}
+                        >
+                            <div className="flex justify-between items-start">
+                                <span className="italic font-black text-2xl tracking-tighter text-white opacity-90 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]">
+                                    VOLT
+                                </span>
+                                <div className="flex items-center gap-2">
+                                    {cardType === 'virtual' && (
+                                        <span className="text-[9px] uppercase font-bold tracking-widest bg-white/20 px-2 py-0.5 rounded-full text-white">
+                                            Virtual
+                                        </span>
+                                    )}
+                                    {isNfc && (
+                                        <span className="material-symbols-outlined text-white/80">contactless</span>
+                                    )}
+                                </div>
                             </div>
-                            <span className="text-xs font-bold tracking-widest opacity-80">{cardType === 'virtual' ? 'VIRTUAL' : 'VISA'}</span>
-                        </div>
-                    </div>
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-7 bg-white/20 rounded-md border border-white/10 flex items-center justify-center">
+                                        <div className="w-6 h-4 border border-white/10 rounded-sm bg-yellow-500/10" />
+                                    </div>
+                                    <div className="text-white/85 font-mono tracking-widest text-base drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
+                                        •••• •••• •••• {creditCard.number?.slice(-4) || '0000'}
+                                    </div>
+                                </div>
+                                <div className="flex justify-between items-end">
+                                    <div className="space-y-0.5">
+                                        <p className="text-[8px] text-white/50 uppercase tracking-widest font-bold">Titular</p>
+                                        <p className="text-white font-bold tracking-widest uppercase text-sm drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
+                                            {user.fullName?.split(' ')[0]}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[8px] text-white/50 uppercase tracking-widest font-bold">Validade</p>
+                                        <p className="text-white font-mono font-bold text-xs">{creditCard.expiry || '12/29'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </AnimatePresence>
+                    <AnimatePresence>
+                        {creditCard.isBlocked && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center gap-2 z-10"
+                            >
+                                <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
+                                    <ShieldAlert size={24} className="animate-pulse" />
+                                </div>
+                                <p className="font-extrabold text-sm tracking-widest uppercase text-white">Cartão Bloqueado</p>
+                                <p className="text-[10px] text-white/50">Desbloqueie no interruptor abaixo</p>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
 
                 {/* Ações rápidas */}
@@ -241,39 +295,73 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                         { label: 'Ver senha', icon: 'password', action: () => { setShowPin(true); setPinRevealed(false); } },
                     ].map(a => (
                         <button key={a.label} onClick={a.action}
-                            className="flex flex-col items-center gap-1.5 p-3 bg-surface-dark rounded-xl hover:bg-white/10 transition-colors"
+                            className="flex flex-col items-center gap-1.5 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
                             data-testid={`card-action-${a.label.replace(/\s/g,'').toLowerCase()}`}>
-                            <span className="material-symbols-outlined text-primary">{a.icon}</span>
+                            <span className="material-symbols-outlined text-volt-primary">{a.icon}</span>
                             <span className="text-xs text-white/70 text-center leading-tight">{a.label}</span>
                         </button>
                     ))}
                 </div>
 
                 {/* Configurações */}
-                <div className="bg-surface-dark rounded-2xl overflow-hidden" data-testid="card-settings">
-                    {[
-                        { label: 'Pagar com aproximação', sub: 'NFC', icon: 'contactless', value: isNfc, onToggle: () => setIsNfc(v => !v), testid: 'toggle-nfc' },
-                        { label: creditCard.isBlocked ? 'Cartão bloqueado' : 'Bloquear cartão', sub: creditCard.isBlocked ? 'Toque para desbloquear' : 'Bloqueie temporariamente', icon: creditCard.isBlocked ? 'lock' : 'lock_open', value: creditCard.isBlocked, onToggle: () => {}, testid: 'toggle-block' },
-                    ].map((item, i) => (
-                        <div key={item.label} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-white/5' : ''}`}>
-                            <span className={`material-symbols-outlined ${item.value ? 'text-primary' : 'text-gray-400'}`}>{item.icon}</span>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm text-white font-medium">{item.label}</p>
-                                <p className="text-xs text-gray-400">{item.sub}</p>
+                <div className="space-y-3">
+                    {/* NFC Toggle */}
+                    <div className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl">
+                        <div className="flex items-center gap-3">
+                            <span className="p-2 bg-volt-primary/10 text-volt-primary rounded-xl">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                            </span>
+                            <div>
+                                <p className="text-sm text-white font-bold">Pagar por aproximação (NFC)</p>
+                                <p className="text-[11px] text-white/50">Ativar pagamentos sem contato</p>
                             </div>
-                            <button onClick={item.onToggle} data-testid={item.testid}
-                                className={`relative w-12 h-6 rounded-full transition-colors ${item.value ? 'bg-primary' : 'bg-white/20'}`}>
-                                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${item.value ? 'translate-x-7' : 'translate-x-1'}`} />
-                            </button>
                         </div>
-                    ))}
+                        <button onClick={() => setIsNfc(!isNfc)} className="text-volt-primary cursor-pointer" data-testid="toggle-nfc">
+                            {isNfc ? (
+                                <ToggleRight size={38} className="text-volt-primary" />
+                            ) : (
+                                <ToggleLeft size={38} className="text-white/40" />
+                            )}
+                        </button>
+                    </div>
+
+                    {/* Block Toggle */}
+                    <div className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl">
+                        <div className="flex items-center gap-3">
+                            <span className={`p-2 rounded-xl ${creditCard.isBlocked ? 'bg-red-500/10 text-red-500' : 'bg-white/5 text-white/50'}`}>
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                            </span>
+                            <div>
+                                <p className={`text-sm font-bold ${creditCard.isBlocked ? 'text-red-400' : 'text-white'}`}>Bloquear cartão</p>
+                                <p className="text-[11px] text-white/50">Bloqueie temporariamente</p>
+                            </div>
+                        </div>
+                        <button onClick={() => {
+                            updateUser({
+                                creditCard: {
+                                    ...creditCard,
+                                    isBlocked: !creditCard.isBlocked
+                                }
+                            });
+                        }} className="text-volt-primary cursor-pointer" data-testid="toggle-block">
+                            {creditCard.isBlocked ? (
+                                <ToggleRight size={38} className="text-red-500" />
+                            ) : (
+                                <ToggleLeft size={38} className="text-white/40" />
+                            )}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Outros Serviços */}
                 <button onClick={() => setSubView('services')}
-                    className="w-full flex items-center gap-3 p-4 bg-surface-dark rounded-xl hover:bg-white/10 transition-colors"
+                    className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
                     data-testid="other-services-button">
-                    <span className="material-symbols-outlined text-primary">grid_view</span>
+                    <span className="material-symbols-outlined text-volt-primary">grid_view</span>
                     <span className="font-medium">Outros Serviços</span>
                     <span className="material-symbols-outlined text-white/40 ml-auto">chevron_right</span>
                 </button>
@@ -314,7 +402,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 )}
                 <button 
                     onClick={() => onNavigate('currentInvoice')} 
-                    className="volt-card p-5 space-y-4 w-full text-left hover:bg-volt-cream transition-all test-current-invoice-card"
+                    className="bg-white/5 border border-white/5 rounded-2xl p-5 space-y-4 w-full text-left hover:border-volt-primary/50 transition-all test-current-invoice-card"
                     id="btn-current-invoice"
                     name="current-invoice-button"
                     data-testid="card-current-invoice-button"
@@ -325,7 +413,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 >
                     <div className="flex justify-between items-start">
                         <span 
-                            className="font-bold text-lg test-current-invoice-label"
+                            className="font-bold text-lg text-white test-current-invoice-label"
                             data-testid="card-current-invoice-label"
                         >
                             Fatura Atual
@@ -347,10 +435,10 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     >
                         {creditCard.currentInvoice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </p>
-                    <div className="text-sm test-current-invoice-limit">
+                    <div className="text-sm text-white/50 test-current-invoice-limit">
                         <p>
                             Limite Disponível: <span 
-                                className="font-semibold text-primary test-available-limit-value"
+                                className="font-semibold text-volt-primary test-available-limit-value"
                                 id="available-limit-value"
                                 data-testid="card-available-limit-value"
                                 data-cy="card-available-limit-value"
@@ -369,7 +457,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 >
                     <button 
                         onClick={() => onNavigate('closedInvoice')} 
-                        className={`p-4 volt-card text-center hover:bg-volt-cream transition-all test-closed-invoice-button ${(isOverdue || creditCard.isBlocked) ? 'border-2 border-red-500 animate-pulse' : ''}`}
+                        className={`p-4 bg-white/5 border border-white/5 rounded-2xl text-center hover:border-volt-primary/50 transition-all test-closed-invoice-button ${(isOverdue || creditCard.isBlocked) ? 'border-2 border-red-500 animate-pulse' : ''}`}
                         id="btn-closed-invoice"
                         name="closed-invoice-button"
                         data-testid="card-closed-invoice-button"
@@ -378,7 +466,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                         aria-label="Ver fatura fechada"
                         type="button"
                     >
-                        <p className="font-semibold text-black test-closed-invoice-label" data-testid="card-closed-invoice-label">Fatura Fechada</p>
+                        <p className="font-semibold text-white/80 test-closed-invoice-label" data-testid="card-closed-invoice-label">Fatura Fechada</p>
                         <p 
                             className={`font-bold test-closed-invoice-value ${(isOverdue || creditCard.isBlocked) ? 'text-red-400' : 'text-orange-400'}`}
                             id="closed-invoice-value"
@@ -390,7 +478,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     </button>
                     <button 
                         onClick={() => onNavigate('anticipateInstallments')} 
-                        className="p-4 volt-card text-center hover:bg-volt-cream test-anticipate-button"
+                        className="p-4 bg-white/5 border border-white/5 rounded-2xl text-center hover:border-volt-primary/50 transition-all test-anticipate-button"
                         id="btn-anticipate"
                         name="anticipate-button"
                         data-testid="card-anticipate-button"
@@ -399,14 +487,14 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                         aria-label="Antecipar parcelas"
                         type="button"
                     >
-                        <p className="font-semibold text-black test-anticipate-label" data-testid="card-anticipate-label">Antecipar Parcelas</p>
-                         <p className="text-xs text-gray-400 test-anticipate-subtitle" data-testid="card-anticipate-subtitle">Ganhe descontos</p>
+                        <p className="font-semibold text-white/80 test-anticipate-label" data-testid="card-anticipate-label">Antecipar Parcelas</p>
+                         <p className="text-xs text-white/40 test-anticipate-subtitle" data-testid="card-anticipate-subtitle">Ganhe descontos</p>
                     </button>
                 </div>
 
                 <button 
                     onClick={() => onNavigate('points')} 
-                    className="w-full flex items-center p-4 volt-card hover:bg-volt-cream transition-colors text-left space-x-4 test-points-button"
+                    className="w-full flex items-center p-4 bg-white/5 border border-white/5 rounded-2xl hover:border-volt-primary/50 transition-colors text-left space-x-4 test-points-button"
                     id="btn-points"
                     name="points-button"
                     data-testid="card-points-button"
@@ -417,7 +505,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 >
                     <span className="material-symbols-outlined text-2xl text-orange-400" aria-hidden="true">workspace_premium</span>
                     <div className="flex-grow">
-                        <p className="font-bold text-black test-points-title" data-testid="card-points-title">Fintech Loop</p>
+                        <p className="font-bold text-white test-points-title" data-testid="card-points-title">Fintech Loop</p>
                         <p 
                             className="text-sm text-gray-400 test-points-value"
                             id="points-value"
@@ -431,10 +519,10 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 </button>
 
                 <div className="test-transactions-section" id="transactions-section" data-testid="card-transactions-section" data-cy="card-transactions-section">
-                    <div className="flex border-b border-subtle-dark test-transactions-tabs" id="transactions-tabs" data-testid="card-transactions-tabs">
+                    <div className="flex border-b border-white/10 test-transactions-tabs" id="transactions-tabs" data-testid="card-transactions-tabs">
                         <button 
                             onClick={() => setActiveTab('current')}
-                            className={`flex-1 py-3 text-sm font-semibold text-center transition-colors test-tab-current ${activeTab === 'current' ? 'text-primary border-b-2 border-primary' : 'text-gray-400 hover:text-black'}`}
+                            className={`flex-1 py-3 text-sm font-semibold text-center transition-colors test-tab-current ${activeTab === 'current' ? 'text-volt-primary border-b-2 border-volt-primary' : 'text-white/50 hover:text-white'}`}
                             id="btn-tab-current"
                             name="tab-current"
                             data-testid="card-tab-current"
@@ -449,7 +537,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                         </button>
                         <button 
                             onClick={() => setActiveTab('future')}
-                            className={`flex-1 py-3 text-sm font-semibold text-center transition-colors test-tab-future ${activeTab === 'future' ? 'text-primary border-b-2 border-primary' : 'text-gray-400 hover:text-black'}`}
+                            className={`flex-1 py-3 text-sm font-semibold text-center transition-colors test-tab-future ${activeTab === 'future' ? 'text-volt-primary border-b-2 border-volt-primary' : 'text-white/50 hover:text-white'}`}
                             id="btn-tab-future"
                             name="tab-future"
                             data-testid="card-tab-future"
@@ -469,7 +557,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                             <div className="mb-4 flex justify-end test-anticipate-all-section" data-testid="card-anticipate-all-section">
                                 <button 
                                     onClick={() => onNavigate('anticipateInstallments')}
-                                    className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors text-sm font-semibold test-anticipate-all-button"
+                                    className="flex items-center gap-2 px-4 py-2 bg-volt-primary/10 text-volt-primary rounded-lg hover:bg-volt-primary/20 transition-colors text-sm font-semibold test-anticipate-all-button"
                                     id="btn-anticipate-all"
                                     name="anticipate-all-button"
                                     data-testid="card-anticipate-all-button"
@@ -489,7 +577,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                                 <div 
                                     key={tx.id} 
                                     onClick={() => activeTab === 'future' ? onNavigate('anticipateInstallments') : null}
-                                    className={`w-full p-3 volt-card flex items-center space-x-3 test-transaction-item ${activeTab === 'future' ? 'cursor-pointer hover:bg-white/5' : ''}`}
+                                    className={`w-full p-3 bg-white/5 border border-white/5 rounded-xl flex items-center space-x-3 test-transaction-item ${activeTab === 'future' ? 'cursor-pointer hover:border-volt-primary/50' : ''}`}
                                     id={`transaction-${tx.id}`}
                                     data-testid={`card-transaction-${tx.id}`}
                                     data-cy={`card-transaction-${tx.id}`}
@@ -498,27 +586,27 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                                     aria-label={`Transação ${tx.merchant}`}
                                     tabIndex={activeTab === 'future' ? 0 : undefined}
                                 >
-                                    <div className="p-2 bg-black rounded-full test-transaction-icon">
-                                        <span className={`material-symbols-outlined ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-primary'}`} aria-hidden="true">{getIconForTx(tx.merchant)}</span>
+                                    <div className="p-2 bg-white/5 rounded-full test-transaction-icon">
+                                        <span className={`material-symbols-outlined ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-volt-primary'}`} aria-hidden="true">{getIconForTx(tx.merchant)}</span>
                                     </div>
                                     <div className="flex-grow text-left test-transaction-details">
-                                        <p className="font-semibold text-black test-transaction-merchant" data-testid={`card-transaction-merchant-${tx.id}`}>
-                                            {tx.merchant} {tx.installments && <span className="text-xs text-gray-400 test-transaction-installments" data-testid={`card-transaction-installments-${tx.id}`}>{tx.installments}</span>}
+                                        <p className="font-semibold text-white/90 test-transaction-merchant" data-testid={`card-transaction-merchant-${tx.id}`}>
+                                            {tx.merchant} {tx.installments && <span className="text-xs text-white/40 test-transaction-installments" data-testid={`card-transaction-installments-${tx.id}`}>{tx.installments}</span>}
                                         </p>
-                                        <p className="text-sm text-gray-400 test-transaction-date" data-testid={`card-transaction-date-${tx.id}`}>
+                                        <p className="text-sm text-white/50 test-transaction-date" data-testid={`card-transaction-date-${tx.id}`}>
                                             {formatDateBR(tx.date)}
                                         </p>
                                     </div>
                                     <div className="text-right test-transaction-amount">
                                         <p 
-                                            className={`font-semibold test-transaction-amount-value ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-black'}`}
+                                            className={`font-semibold test-transaction-amount-value ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-white'}`}
                                             id={`transaction-amount-${tx.id}`}
                                             data-testid={`card-transaction-amount-${tx.id}`}
                                             data-cy={`card-transaction-amount-${tx.id}`}
                                         >
                                             {tx.type === 'PAYMENT' ? '+' : ''} {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                         </p>
-                                        {activeTab === 'future' && <p className="text-xs text-primary mt-1 test-anticipate-hint" data-testid="card-anticipate-hint">Toque para antecipar</p>}
+                                        {activeTab === 'future' && <p className="text-xs text-volt-primary mt-1 test-anticipate-hint" data-testid="card-anticipate-hint">Toque para antecipar</p>}
                                     </div>
                                 </div>
                             ))}
