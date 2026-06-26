@@ -192,13 +192,10 @@ export default function LimitView({
 
       const newTx: Transaction = {
         id: Math.random().toString(36).substring(2, 11),
-        title: `Saque Limite Cartão (${installments}x)`,
+        description: `Saque Limite Cartão (${installments}x)`,
         amount: withdrawAmount, // credits to main account balance!
-        type: 'income',
-        category: 'outros',
+        type: 'DEPOSIT',
         date: now.toISOString(),
-        formattedDate: `${weekdays[now.getDay()]} • ${formattedDate}`,
-        time: `${formatNumber(now.getHours())}:${formatNumber(now.getMinutes())}`
       };
 
       // Deduct from withdrawal limit, add to account balance!
@@ -210,7 +207,7 @@ export default function LimitView({
   };
 
   return (
-    <div className={`w-full max-w-md mx-auto pb-28 pt-4 px-4 ${isMidnight ? 'text-white' : 'text-black'}`}>
+    <div className={`w-full max-w-2xl mx-auto pb-8 pt-4 px-4 ${isMidnight ? 'text-white' : 'text-black'}`}>
       
       {/* SCREEN 1: HOME LIMIT SCREEN */}
       {screen === 'home' && (
@@ -227,7 +224,7 @@ export default function LimitView({
             </div>
             <div className={`py-1.5 px-3 rounded-xl border flex items-center gap-1.5 ${
               isMidnight 
-                ? 'bg-zinc-900 border-zinc-800' 
+                ? 'bg-volt-surface border-white/10'
                 : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
             }`}>
               <CreditCard size={12} className={isMidnight ? 'text-[#00ff9d]' : 'text-black'} />
@@ -238,7 +235,7 @@ export default function LimitView({
           {/* Main Available Purchases Limit Card */}
           <div className={`relative overflow-hidden rounded-2xl p-6 border transition-all duration-300 ${
             isMidnight 
-              ? 'bg-zinc-900/80 border-zinc-800/80 shadow-lg shadow-black/20' 
+              ? 'bg-volt-surface border-white/10 shadow-lg shadow-black/20' 
               : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
           }`}>
             <div className="absolute -top-12 -right-12 w-32 h-32 bg-[#00ff9d]/5 blur-3xl rounded-full"></div>
@@ -252,7 +249,7 @@ export default function LimitView({
             <div className="mt-6 space-y-3">
               {/* Progress bar */}
               <div className={`w-full h-2.5 rounded-full overflow-hidden ${
-                isMidnight ? 'bg-zinc-950 border border-zinc-800' : 'bg-gray-100 border-2 border-black'
+                isMidnight ? 'bg-[#0a0a0a] border border-white/10' : 'bg-gray-100 border-2 border-black'
               }`}>
                 <div 
                   className={`h-full rounded-full transition-all duration-500 ${
@@ -292,7 +289,7 @@ export default function LimitView({
             {/* Withdraw Bento Box */}
             <div className={`rounded-2xl p-6 border space-y-4 transition-all ${
               isMidnight 
-                ? 'bg-zinc-900/80 border-zinc-800/80 shadow-md' 
+                ? 'bg-volt-surface border-white/10 shadow-md' 
                 : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
             }`}>
               <div className="flex items-center gap-3">
@@ -338,12 +335,12 @@ export default function LimitView({
             {/* Automatic Limit Increase Toggle */}
             <div className={`rounded-xl p-4 border flex items-center justify-between transition-all ${
               isMidnight 
-                ? 'bg-zinc-900/80 border-zinc-800/80' 
+                ? 'bg-volt-surface border-white/10' 
                 : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                  isMidnight ? 'bg-zinc-950 border border-zinc-850' : 'bg-gray-100'
+                  isMidnight ? 'bg-[#0a0a0a] border border-white/10' : 'bg-gray-100'
                 }`}>
                   🐾
                 </div>
@@ -360,7 +357,7 @@ export default function LimitView({
                 />
                 <div className={`w-10 h-6 rounded-full transition-colors peer-focus:outline-none ${
                   isMidnight 
-                    ? 'bg-zinc-850 border border-zinc-800' 
+                    ? 'bg-white/10 border border-white/10'
                     : 'bg-gray-200 border-2 border-black'
                 } peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black`}></div>
               </label>
@@ -381,7 +378,7 @@ export default function LimitView({
             <button 
               onClick={() => setScreen('home')}
               className={`p-2 rounded-xl transition-colors shrink-0 ${
-                isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-gray-100 text-black'
+                isMidnight ? 'bg-white/5 hover:bg-white/10 text-white/40 hover:text-white' : 'hover:bg-gray-100 text-black'
               }`}
             >
               <ArrowLeft size={18} />
@@ -399,7 +396,7 @@ export default function LimitView({
 
           {/* Amount input box */}
           <div className={`p-4 rounded-xl border flex flex-col gap-1 transition-all ${
-            isMidnight ? 'bg-zinc-900 border-zinc-850 focus-within:border-[#00ff9d]' : 'bg-white border-2 border-black focus-within:ring-2 focus-within:ring-black'
+            isMidnight ? 'bg-volt-surface border-white/10 focus-within:border-[#00ff9d]' : 'bg-white border-2 border-black focus-within:ring-2 focus-within:ring-black'
           }`}>
             <label className="text-[10px] uppercase tracking-wider font-extrabold text-on-surface-variant">Qual valor você precisa?</label>
             <div className="flex items-baseline gap-1.5 border-b border-[#00ff9d] pb-1">
@@ -434,7 +431,7 @@ export default function LimitView({
                         ? 'border-[#00ff9d] bg-[#00ff9d]/10 text-[#00ff9d] shadow-[0_0_12px_rgba(0,255,157,0.15)]'
                         : 'border-black bg-[#A2FF00] text-black font-extrabold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
                       : isMidnight
-                        ? 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white'
+                        ? 'border-white/10 bg-[#131313] text-white/40 hover:text-white hover:border-white/20'
                         : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                   }`}
                 >
@@ -451,7 +448,7 @@ export default function LimitView({
             <div className="space-y-3">
               {/* Card 1: Menor Prazo */}
               <div className={`p-5 rounded-2xl border relative overflow-hidden transition-all duration-300 ${
-                isMidnight ? 'bg-zinc-900 border-zinc-850 hover:border-[#00ff9d]/30' : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                isMidnight ? 'bg-volt-surface border-white/10 hover:border-[#00ff9d]/30' : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
               }`}>
                 {/* Green marker left border */}
                 <div className="absolute top-0 left-0 w-1 h-full bg-[#00ff9d]" />
@@ -493,7 +490,7 @@ export default function LimitView({
 
               {/* Card 2: Parcela Média */}
               <div className={`p-5 rounded-2xl border relative overflow-hidden transition-all duration-300 ${
-                isMidnight ? 'bg-zinc-900 border-zinc-850' : 'bg-white border-2 border-black'
+                isMidnight ? 'bg-volt-surface border-white/10' : 'bg-white border-2 border-black'
               }`}>
                 {/* Purple marker left border */}
                 <div className="absolute top-0 left-0 w-1 h-full bg-purple-500" />
@@ -517,8 +514,8 @@ export default function LimitView({
                 </div>
 
                 <button 
-                  onClick={() => setInstallments(8)}
-                  className="w-full py-2 bg-transparent hover:bg-zinc-800/30 border border-purple-500/40 text-purple-400 font-black rounded-lg text-[10px] uppercase tracking-wider transition-all"
+                  onClick={() => { setInstallments(8); setScreen('transfer_details'); }}
+                  className="w-full py-2 bg-transparent hover:bg-[#00ff9d]/5 border border-[#00ff9d]/25 text-[#00ff9d]/70 hover:text-[#00ff9d] font-black rounded-lg text-[10px] uppercase tracking-wider transition-all"
                 >
                   Simular com 8 parcelas
                 </button>
@@ -554,7 +551,7 @@ export default function LimitView({
             <button 
               onClick={() => setScreen('simulation')}
               className={`p-2 rounded-xl transition-colors shrink-0 ${
-                isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-gray-100 text-black'
+                isMidnight ? 'bg-white/5 hover:bg-white/10 text-white/40 hover:text-white' : 'hover:bg-gray-100 text-black'
               }`}
             >
               <ArrowLeft size={18} />
@@ -574,7 +571,7 @@ export default function LimitView({
           <div className="space-y-2">
             <div className={`p-3 rounded-xl flex items-center gap-2 border transition-all ${
               isMidnight 
-                ? 'bg-zinc-900 border-zinc-850 focus-within:border-[#00ff9d]' 
+                ? 'bg-volt-surface border-white/10 focus-within:border-[#00ff9d]' 
                 : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
             }`}>
               <Search className="text-on-surface-variant" size={16} />
@@ -589,7 +586,7 @@ export default function LimitView({
 
             {/* Banks List Drawer */}
             <div className={`max-h-36 overflow-y-auto rounded-xl p-2 space-y-1 ${
-              isMidnight ? 'bg-zinc-950 border border-zinc-900' : 'bg-gray-50 border border-black/5'
+              isMidnight ? 'bg-[#0a0a0a] border border-white/10' : 'bg-gray-50 border border-black/5'
             }`}>
               {filteredBanks.map(b => {
                 const isSelected = selectedBank.id === b.id;
@@ -606,7 +603,7 @@ export default function LimitView({
                           ? 'bg-[#00ff9d]/10 text-[#00ff9d]'
                           : 'bg-black text-white'
                         : isMidnight
-                          ? 'hover:bg-zinc-900 text-zinc-300'
+                          ? 'hover:bg-white/5 text-white/80'
                           : 'hover:bg-gray-150 text-zinc-700'
                     }`}
                   >
@@ -631,7 +628,7 @@ export default function LimitView({
               {/* Agency Input */}
               <div className={`p-4 rounded-xl border flex flex-col gap-1 transition-all ${
                 isMidnight 
-                  ? 'bg-zinc-900 border-zinc-850 focus-within:border-[#00ff9d]' 
+                  ? 'bg-volt-surface border-white/10 focus-within:border-[#00ff9d]' 
                   : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
               }`}>
                 <label className="text-[9px] uppercase tracking-wider font-extrabold text-on-surface-variant">Agência</label>
@@ -648,7 +645,7 @@ export default function LimitView({
               {/* Account Input */}
               <div className={`p-4 rounded-xl border flex flex-col gap-1 transition-all ${
                 isMidnight 
-                  ? 'bg-zinc-900 border-zinc-850 focus-within:border-[#00ff9d]' 
+                  ? 'bg-volt-surface border-white/10 focus-within:border-[#00ff9d]' 
                   : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
               }`}>
                 <label className="text-[9px] uppercase tracking-wider font-extrabold text-on-surface-variant">Conta com dígito</label>
@@ -668,7 +665,7 @@ export default function LimitView({
           <section className="space-y-2 text-center">
             <h3 className="text-xs font-black uppercase tracking-wider text-on-surface-variant">E qual tipo de conta?</h3>
             <div className={`flex p-1 rounded-full overflow-hidden ${
-              isMidnight ? 'bg-zinc-950 border border-zinc-900' : 'bg-gray-100'
+              isMidnight ? 'bg-[#0a0a0a] border border-white/10' : 'bg-gray-100'
             }`}>
               <button
                 onClick={() => setAccountType('corrente')}
@@ -699,7 +696,7 @@ export default function LimitView({
 
           {/* Warning Information Box */}
           <div className={`p-4 rounded-xl border-l-4 border-[#00ff9d] flex gap-3 items-start ${
-            isMidnight ? 'bg-zinc-900 border-zinc-850' : 'bg-green-50/50'
+            isMidnight ? 'bg-volt-surface border-white/10' : 'bg-green-50/50'
           }`}>
             <Info className="text-[#00ff9d] shrink-0 mt-0.5" size={16} />
             <div className="space-y-1">
@@ -738,7 +735,7 @@ export default function LimitView({
             <button 
               onClick={() => setScreen('transfer_details')}
               className={`p-2 rounded-xl transition-colors shrink-0 ${
-                isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-gray-100 text-black'
+                isMidnight ? 'bg-white/5 hover:bg-white/10 text-white/40 hover:text-white' : 'hover:bg-gray-100 text-black'
               }`}
             >
               <ArrowLeft size={18} />
@@ -756,7 +753,7 @@ export default function LimitView({
 
           {/* Summary Bento Layout Card */}
           <div className={`rounded-xl p-5 border relative overflow-hidden transition-all duration-300 ${
-            isMidnight ? 'bg-zinc-900 border-zinc-850' : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+            isMidnight ? 'bg-volt-surface border-white/10' : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
           }`}>
             <div className="absolute top-0 left-0 w-1 h-full bg-[#00ff9d] shadow-[0_0_10px_rgba(0,255,157,0.5)]" />
             
@@ -771,7 +768,7 @@ export default function LimitView({
             <div className="space-y-4">
               {/* Card Detail Row */}
               <div className={`p-3 rounded-lg border flex justify-between items-center ${
-                isMidnight ? 'bg-zinc-950 border-zinc-850' : 'bg-gray-50'
+                isMidnight ? 'bg-[#0a0a0a] border-white/10' : 'bg-gray-50'
               }`}>
                 <div className="flex items-center gap-3">
                   <CreditCard className="text-purple-400" size={16} />
@@ -813,7 +810,7 @@ export default function LimitView({
 
                 {/* Sub details boxes */}
                 <div className={`p-3 rounded-lg border space-y-1.5 text-[11px] ${
-                  isMidnight ? 'bg-zinc-950 border-zinc-850' : 'bg-gray-50'
+                  isMidnight ? 'bg-[#0a0a0a] border-white/10' : 'bg-gray-50'
                 }`}>
                   <div className="flex justify-between">
                     <span className="text-on-surface-variant font-medium">Valor Financiado</span>

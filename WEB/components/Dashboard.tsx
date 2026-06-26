@@ -83,7 +83,7 @@ const Dashboard: React.FC = () => {
     const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
     const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
 
-    const [theme, setTheme] = useState<'yellow' | 'midnight'>('yellow');
+    const [theme, setTheme] = useState<'yellow' | 'midnight'>('midnight');
     useEffect(() => {
         const isDark = document.documentElement.classList.contains('dark');
         setTheme(isDark ? 'midnight' : 'yellow');
@@ -627,95 +627,147 @@ const Dashboard: React.FC = () => {
             {/* ── Cards Modal ──────────────────────────── */}
             <AnimatePresence>
                 {isCardsModalOpen && (
-                    <motion.div
-                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                    >
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-12 lg:p-24">
                         <motion.div
-                            className="flex-1 overflow-y-auto no-scrollbar"
-                            initial={{ y: '4%', opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            exit={{ y: '4%', opacity: 0 }}
-                            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                            onClick={() => setIsCardsModalOpen(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative w-full h-full max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
                         >
-                            <CardDashboard
-                                onBack={() => setIsCardsModalOpen(false)}
-                                onNavigate={(view) => {
-                                    setIsCardsModalOpen(false);
-                                    if (view !== 'home' && view !== 'cards') handleNavigate(view as View);
-                                }}
-                            />
+                            {/* Modal Header */}
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02] shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                                        <span className="material-symbols-outlined text-white/80">credit_card</span>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-black text-white uppercase tracking-wider">Meus Cartões</h2>
+                                        <p className="text-xs text-white/50 uppercase tracking-widest">Gestão de Cartões</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setIsCardsModalOpen(false)}
+                                    className="p-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-xl">close</span>
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto no-scrollbar relative bg-[#131313]">
+                                <CardDashboard
+                                    onBack={() => setIsCardsModalOpen(false)}
+                                    onNavigate={(view) => {
+                                        setIsCardsModalOpen(false);
+                                        if (view !== 'home' && view !== 'cards') handleNavigate(view as View);
+                                    }}
+                                />
+                            </div>
                         </motion.div>
-                    </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
 
             {/* ── Statement Modal ───────────────────────── */}
             <AnimatePresence>
                 {isStatementModalOpen && (
-                    <motion.div
-                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                    >
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-12 lg:p-24">
                         <motion.div
-                            className="flex-1 overflow-y-auto no-scrollbar"
-                            initial={{ y: '4%', opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            exit={{ y: '4%', opacity: 0 }}
-                            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                            onClick={() => setIsStatementModalOpen(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative w-full h-full max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
                         >
-                            <StatementPaginated
-                                user={user!}
-                                onNavigate={(view) => {
-                                    setIsStatementModalOpen(false);
-                                    if (view !== 'home' && view !== 'statement') handleNavigate(view as View);
-                                }}
-                                onBack={() => setIsStatementModalOpen(false)}
-                            />
+                            {/* Modal Header */}
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                                        <span className="material-symbols-outlined text-white/80">receipt_long</span>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-black text-white uppercase tracking-wider">Extrato</h2>
+                                        <p className="text-xs text-white/50 uppercase tracking-widest">Histórico de Movimentações</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setIsStatementModalOpen(false)}
+                                    className="p-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-xl">close</span>
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto no-scrollbar relative bg-[#131313]">
+                                <StatementPaginated
+                                    user={user!}
+                                    onNavigate={(view) => {
+                                        setIsStatementModalOpen(false);
+                                        if (view !== 'home' && view !== 'statement') handleNavigate(view as View);
+                                    }}
+                                    onBack={() => setIsStatementModalOpen(false)}
+                                />
+                            </div>
                         </motion.div>
-                    </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
 
             {/* ── Limit Modal ───────────────────────────── */}
             <AnimatePresence>
                 {isLimitModalOpen && (
-                    <motion.div
-                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                    >
-                        <div className="flex items-center justify-between px-4 py-3 shrink-0 bg-[#0a0a0a] border-b border-white/10">
-                            <span className="text-white font-black text-lg" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Limites e Contas</span>
-                            <button
-                                onClick={() => setIsLimitModalOpen(false)}
-                                className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
-                                aria-label="Fechar"
-                                type="button"
-                            >
-                                <span className="material-symbols-outlined text-xl">close</span>
-                            </button>
-                        </div>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-12 lg:p-24">
                         <motion.div
-                            className="flex-1 overflow-y-auto no-scrollbar"
-                            initial={{ y: '4%', opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            exit={{ y: '4%', opacity: 0 }}
-                            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                            onClick={() => setIsLimitModalOpen(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative w-full h-full max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
                         >
-                            <LimitView
-                                accountBalance={user!.balance}
-                                userProfile={user!}
-                                onTransactionComplete={handleTransactionCompleteLimit}
-                                theme={theme}
-                            />
+                            {/* Modal Header */}
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                                        <span className="material-symbols-outlined text-white/80">account_balance</span>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-black text-white uppercase tracking-wider">Limites e Contas</h2>
+                                        <p className="text-xs text-white/50 uppercase tracking-widest">Gestão de Limite</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setIsLimitModalOpen(false)}
+                                    className="p-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-xl">close</span>
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto no-scrollbar relative bg-[#131313]">
+                                <LimitView
+                                    accountBalance={user!.balance}
+                                    userProfile={user!}
+                                    onTransactionComplete={handleTransactionCompleteLimit}
+                                    theme={theme}
+                                />
+                            </div>
                         </motion.div>
-                    </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
         </div>
