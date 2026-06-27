@@ -92,6 +92,17 @@ function App() {
         initializeMockUsers();
     }, []);
 
+    // Aplicar tema no boot — padrao midnight, respeita preferencia salva
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('volt_theme') || 'midnight';
+        if (savedTheme === 'midnight') {
+            document.body.classList.add('theme-midnight');
+        } else {
+            document.body.classList.remove('theme-midnight');
+        }
+    }, []);
+
+
     const handleLogin = (loggedInUser: Omit<User, 'password'>) => {
         const normalized = normalizeUserShape(loggedInUser as Partial<User>);
         setUser(normalized as User);

@@ -20,8 +20,8 @@ export default {
                 'surface-dark': '#201f1f',
                 'text-dark': '#e5e2e1',
                 'subtle-dark': '#b9cbbc',
-                /* ── Neon Fintech design system ── */
-                'volt-primary':       '#00ff9d', /* primary-container — neon green */
+                /* ── Midnight Dark tokens ── */
+                'volt-primary':       '#00ff9d', /* primary — neon green */
                 'volt-primary-dark':  '#00e38b', /* primary-fixed-dim */
                 'volt-dark':          '#131313', /* background — void backdrop */
                 'volt-surface':       '#201f1f', /* surface-container — cards */
@@ -32,6 +32,12 @@ export default {
                 'volt-muted':         '#b9cbbc', /* on-surface-variant */
                 'volt-black':         '#000000',
                 'volt-green':         '#00ff9d', /* alias for primary accent */
+                /* ── Yellow Brutalist tokens ── */
+                'volt-yellow':        '#FFD700', /* background — vibrant yellow */
+                'volt-yellow-pastel': '#FFED86', /* surface-high — pastel cream */
+                'volt-lime':          '#A2FF00', /* primary — vibrant lime */
+                'volt-cyan':          '#00E5FF', /* secondary button */
+                'volt-pink-focus':    '#FF5C8D', /* input focus border */
                 /* Semantic tokens */
                 'on-surface':         '#e5e2e1',
                 'on-surface-variant': '#b9cbbc',

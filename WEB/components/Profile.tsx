@@ -60,13 +60,14 @@ export default function Profile({ onNavigate }: ProfileProps) {
 
   const onThemeToggle = (newTheme: 'yellow' | 'midnight') => {
     setTheme(newTheme);
-    // You could also toggle a global dark class here
+    localStorage.setItem('volt_theme', newTheme);
     if (newTheme === 'midnight') {
-      document.documentElement.classList.add('dark');
+      document.body.classList.add('theme-midnight');
     } else {
-      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('theme-midnight');
     }
   }
+
 
   const onBiometricToggle = (enabled: boolean) => {
     setBiometricEnabled(enabled);
