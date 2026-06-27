@@ -113,6 +113,147 @@ components:
           type: string
           example: "Erro na operação"
 
+    PixCategorizeRequest:
+      type: object
+      required: [description]
+      properties:
+        description:
+          type: string
+          description: Descrição da transação a categorizar
+          example: "iFood - Pedido #1234"
+
+    PixCategorizeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        category:
+          type: string
+          enum: [refeicao, mobilidade, moradia, saude, cultura, compras, educacao, outros]
+          example: "refeicao"
+        confidence:
+          type: integer
+          description: Confiança da categorização (0-100)
+          example: 92
+        reason:
+          type: string
+          example: "Palavra-chave: ifood"
+
+    FinancialHealthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        score:
+          type: integer
+          description: Score de saúde financeira (0-100)
+          example: 78
+        creditUtilization:
+          type: integer
+          description: Percentual de utilização do crédito
+          example: 35
+        balance:
+          type: number
+          format: float
+          example: 2500.00
+        suggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [warning, success, info]
+              text:
+                type: string
+
+    RecurringBill:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "uuid-xxxx"
+        cpf:
+          type: string
+          example: "11111111111"
+        name:
+          type: string
+          example: "Netflix"
+        amount:
+          type: number
+          format: float
+          example: 39.90
+        dueDay:
+          type: integer
+          example: 15
+        category:
+          type: string
+          example: "cultura"
+        status:
+          type: string
+          enum: [pending, paid]
+          example: "pending"
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    RecurringBillRequest:
+      type: object
+      required: [name, amount, dueDay]
+      properties:
+        name:
+          type: string
+          example: "Netflix"
+        amount:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 39.90
+        dueDay:
+          type: integer
+          minimum: 1
+          maximum: 31
+          example: 15
+        category:
+          type: string
+          example: "cultura"
+
+    StatementExportRequest:
+      type: object
+      required: [format, filter, transactions]
+      properties:
+        format:
+          type: string
+          enum: [pdf, csv]
+          example: "csv"
+        filter:
+          type: string
+          enum: [all, filtered]
+          example: "all"
+        transactions:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date-time
+              type:
+                type: string
+              description:
+                type: string
+              amount:
+                type: number
+
 paths:
   /health:
     get:
@@ -631,6 +772,228 @@ paths:
               schema: { $ref: '#/components/schemas/User' }
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ─── Endpoints de Migração new-base (#58) ───────────────────────────────────
+
+  /pix/categorize:
+    post:
+      tags: [PIX]
+      summary: Categorizar transação PIX
+      description: |
+        Categoriza automaticamente uma transação PIX por palavras-chave e histórico do usuário.
+        Substitui a integração com Gemini/AI — lógica local no backend.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PixCategorizeRequest' }
+      responses:
+        '200':
+          description: Categoria identificada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PixCategorizeResponse' }
+        '400':
+          description: Campo description ausente ou inválido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /financial-health/{cpf}:
+    get:
+      tags: [Users]
+      summary: Score de saúde financeira
+      description: |
+        Calcula score de saúde financeira (0-100) baseado em saldo, utilização do crédito
+        e histórico de transações dos últimos 90 dias.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+          description: CPF do usuário (apenas o próprio usuário ou admin)
+      responses:
+        '200':
+          description: Score calculado com sucesso
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinancialHealthResponse' }
+        '403':
+          description: Acesso negado (CPF diferente sem ser admin)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Usuário não encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /recurring-bills/{cpf}:
+    get:
+      tags: [Financeiro]
+      summary: Listar contas recorrentes
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+      responses:
+        '200':
+          description: Lista de contas recorrentes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  bills:
+                    type: array
+                    items: { $ref: '#/components/schemas/RecurringBill' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    post:
+      tags: [Financeiro]
+      summary: Criar conta recorrente
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecurringBillRequest' }
+      responses:
+        '201':
+          description: Conta criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  bill: { $ref: '#/components/schemas/RecurringBill' }
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /recurring-bills/{cpf}/{billId}:
+    put:
+      tags: [Financeiro]
+      summary: Atualizar conta recorrente
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+        - name: billId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecurringBillRequest' }
+      responses:
+        '200':
+          description: Conta atualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '404':
+          description: Conta não encontrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    delete:
+      tags: [Financeiro]
+      summary: Remover conta recorrente
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+        - name: billId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Conta removida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /statement/export:
+    post:
+      tags: [Financeiro]
+      summary: Exportar extrato
+      description: |
+        Exporta extrato em CSV (download direto) ou PDF (retorna JSON estruturado
+        para o frontend renderizar com jsPDF).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StatementExportRequest' }
+      responses:
+        '200':
+          description: Extrato exportado
+          content:
+            text/csv:
+              schema:
+                type: string
+                description: Arquivo CSV com BOM UTF-8
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  format: { type: string, example: "pdf" }
+                  data:
+                    type: object
+                    properties:
+                      generatedAt: { type: string, format: date-time }
+                      userCpf: { type: string }
+                      totalTransactions: { type: integer }
+                      transactions: { type: array, items: { type: object } }
+        '400':
+          description: Formato ou dados inválidos
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }

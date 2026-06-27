@@ -18,6 +18,7 @@ const DatabaseFactory = require('./services/database/DatabaseFactory');
 
 // --- Repositórios / Contexto ---
 const repoContext = require('./repositories/context');
+const recurringBillsRepo = require('./repositories/recurringBillsRepo');
 const notificationsRepo = require('./repositories/notificationsRepo');
 const shopRepo = require('./repositories/shopRepo');
 const pixRepo = require('./repositories/pixRepo');
@@ -3287,6 +3288,194 @@ apiRouter.get('/proxy/news', bearerAuth(), asyncHandler(async (req, res) => {
     auditLog(req, 'proxy_news_cache_fill');
     res.json({ success: true, news: data, cached: false });
 }));
+
+// ─── Migração New Base — Novos Endpoints (#58) ──────────────────────────────
+
+// Dicionário de categorização PIX por keywords
+const PIX_KEYWORD_MAP = [
+    { category: 'refeicao',    keywords: ['ifood', 'rappi', 'uber eats', 'restaurante', 'lanche', 'pizza', 'burger', 'mcdonalds', 'subway'] },
+    { category: 'mobilidade',  keywords: ['uber', '99', 'cabify', 'taxi', 'onibus', 'metro', 'combustivel', 'posto', 'shell', 'petrobras'] },
+    { category: 'moradia',     keywords: ['aluguel', 'condominio', 'luz', 'agua', 'gas', 'energia', 'internet', 'telefone', 'tv', 'streaming'] },
+    { category: 'saude',       keywords: ['farmacia', 'drogaria', 'medico', 'hospital', 'clinica', 'dentista', 'plano', 'unimed'] },
+    { category: 'cultura',     keywords: ['netflix', 'spotify', 'amazon', 'disney', 'hbo', 'steam', 'playstation', 'xbox', 'cinema', 'livro'] },
+    { category: 'compras',     keywords: ['mercado', 'supermercado', 'carrefour', 'extra', 'pao de acucar', 'lojas', 'magazine', 'americanas'] },
+    { category: 'educacao',    keywords: ['escola', 'faculdade', 'curso', 'mensalidade', 'alura', 'udemy', 'material escolar'] },
+];
+
+apiRouter.post('/pix/categorize', bearerAuth(), asyncHandler(async (req, res) => {
+    const { description } = req.body || {};
+    if (!description || typeof description !== 'string') {
+        return res.status(400).json({ success: false, message: 'Campo description é obrigatório.' });
+    }
+    const lc = description.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+    // 1. Busca por keyword
+    for (const entry of PIX_KEYWORD_MAP) {
+        for (const kw of entry.keywords) {
+            if (lc.includes(kw)) {
+                return res.json({ success: true, category: entry.category, confidence: 92, reason: `Palavra-chave: ${kw}` });
+            }
+        }
+    }
+
+    // 2. Histórico do usuário para aprendizado de padrão
+    const cpf = req.user.cpf;
+    try {
+        const history = await databricksService.executeQuery(`
+            SELECT description, category
+            FROM ${databricksService.fq('transactions')}
+            WHERE from_user = ${escapeSQL(cpf)} OR to_user = ${escapeSQL(cpf)}
+            ORDER BY date DESC
+            LIMIT 50
+        `);
+        for (const tx of (history || [])) {
+            if (tx.category && tx.description) {
+                const txDesc = String(tx.description).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+                const words = lc.split(/\s+/).filter(w => w.length > 3);
+                if (words.some(w => txDesc.includes(w))) {
+                    return res.json({ success: true, category: tx.category, confidence: 65, reason: 'Padrão do histórico do usuário' });
+                }
+            }
+        }
+    } catch (_) { /* histórico indisponível — usa fallback */ }
+
+    // 3. Fallback
+    res.json({ success: true, category: 'outros', confidence: 30, reason: 'Sem correspondência encontrada' });
+}));
+
+apiRouter.get('/financial-health/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.params.cpf;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+
+    const userRows = await databricksService.executeQuery(
+        `SELECT balance, credit_card_available_limit, credit_card_total_limit FROM ${databricksService.fq('users')} WHERE cpf='${escapeSQL(cpf)}'`
+    );
+    if (!userRows || !userRows.length) {
+        return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    }
+    const user = userRows[0];
+
+    let txRows = [];
+    try {
+        txRows = await databricksService.executeQuery(`
+            SELECT amount, type, date
+            FROM ${databricksService.fq('transactions')}
+            WHERE from_user='${escapeSQL(cpf)}'
+            ORDER BY date DESC LIMIT 90
+        `);
+    } catch (_) {}
+
+    const totalLimit = parseFloat(user.credit_card_total_limit) || 0;
+    const availLimit = parseFloat(user.credit_card_available_limit) || totalLimit;
+    const usedLimit  = totalLimit - availLimit;
+    const utilization = totalLimit > 0 ? (usedLimit / totalLimit) * 100 : 0;
+    const balance = parseFloat(user.balance) || 0;
+
+    // Score simples (0-100): saldo positivo + baixa utilização do crédito
+    let score = 50;
+    if (balance > 1000) score += 15;
+    if (balance > 5000) score += 10;
+    if (utilization < 30) score += 15;
+    else if (utilization > 70) score -= 15;
+    if (txRows.length > 0) {
+        const totalSpent = txRows.reduce((acc, tx) => acc + parseFloat(tx.amount || 0), 0);
+        const avgMonthly = totalSpent / 3;
+        if (avgMonthly < balance) score += 10;
+    }
+    score = Math.max(0, Math.min(100, Math.round(score)));
+
+    const suggestions = [];
+    if (utilization > 70) suggestions.push({ type: 'warning', text: 'Utilização do crédito acima de 70% — tente reduzir.' });
+    if (balance < 500)    suggestions.push({ type: 'warning', text: 'Saldo baixo — considere criar uma reserva de emergência.' });
+    if (score >= 80)      suggestions.push({ type: 'success', text: 'Saúde financeira excelente! Continue assim.' });
+
+    res.json({ success: true, score, creditUtilization: Math.round(utilization), suggestions, balance });
+}));
+
+// Contas Recorrentes CRUD
+apiRouter.get('/recurring-bills/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.params.cpf;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    const rows = await recurringBillsRepo.list(cpf);
+    res.json({ success: true, bills: rows.map(recurringBillsRepo.normalize) });
+}));
+
+apiRouter.post('/recurring-bills/:cpf', bearerAuth(), [
+    body('name').isString().notEmpty().withMessage('Nome da conta é obrigatório.'),
+    body('amount').isFloat({ min: 0.01 }).withMessage('Valor deve ser maior que zero.'),
+    body('dueDay').isInt({ min: 1, max: 31 }).withMessage('Dia de vencimento deve ser entre 1 e 31.'),
+    body('category').optional().isString(),
+], handleValidationErrors, asyncHandler(async (req, res) => {
+    const cpf = req.params.cpf;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    const { name, amount, dueDay, category } = req.body;
+    const bill = await recurringBillsRepo.create({ cpf, name, amount, dueDay, category });
+    res.status(201).json({ success: true, bill: recurringBillsRepo.normalize(bill) });
+}));
+
+apiRouter.put('/recurring-bills/:cpf/:billId', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf, billId } = req.params;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    const { name, amount, dueDay, category, status } = req.body || {};
+    if (status && !['pending', 'paid'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Status deve ser pending ou paid.' });
+    }
+    const updated = await recurringBillsRepo.update({ cpf, billId, name, amount, dueDay, category, status });
+    if (!updated) return res.status(404).json({ success: false, message: 'Conta recorrente não encontrada.' });
+    res.json({ success: true, message: 'Conta atualizada com sucesso.' });
+}));
+
+apiRouter.delete('/recurring-bills/:cpf/:billId', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf, billId } = req.params;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    await recurringBillsRepo.remove({ cpf, billId });
+    res.json({ success: true, message: 'Conta recorrente removida.' });
+}));
+
+apiRouter.post('/statement/export', bearerAuth(), [
+    body('format').isIn(['pdf', 'csv']).withMessage('Formato deve ser pdf ou csv.'),
+    body('filter').isIn(['all', 'filtered']).withMessage('Filtro deve ser all ou filtered.'),
+    body('transactions').isArray().withMessage('transactions deve ser um array.'),
+], handleValidationErrors, asyncHandler(async (req, res) => {
+    const { format, transactions } = req.body;
+
+    if (format === 'csv') {
+        const lines = ['Data,Tipo,Descrição,Valor'];
+        for (const tx of transactions) {
+            const date = tx.date ? new Date(tx.date).toLocaleDateString('pt-BR') : '';
+            const desc = String(tx.description || '').replace(/,/g, ';');
+            const amount = parseFloat(tx.amount || 0).toFixed(2);
+            lines.push(`${date},${tx.type || ''},${desc},${amount}`);
+        }
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="extrato.csv"');
+        return res.send('﻿' + lines.join('\n'));
+    }
+
+    // PDF: retorna JSON estruturado (frontend renderiza com jsPDF ou similar)
+    res.json({
+        success: true,
+        format: 'pdf',
+        data: {
+            generatedAt: new Date().toISOString(),
+            userCpf: req.user.cpf,
+            totalTransactions: transactions.length,
+            transactions,
+        }
+    });
+}));
+
+// ─── Fim dos novos endpoints #58 ────────────────────────────────────────────
 
 const swaggerDocument = require('./swagger.json');
 
