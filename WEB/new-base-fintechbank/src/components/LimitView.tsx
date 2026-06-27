@@ -13,6 +13,7 @@ interface LimitViewProps {
   userProfile: UserProfile;
   onTransactionComplete: (newTx: Transaction, amount: number) => void;
   theme: 'yellow' | 'midnight';
+  showToast?: (title: string, message: string) => void;
 }
 
 interface Bank {
@@ -22,11 +23,12 @@ interface Bank {
   logo: string;
 }
 
-export default function LimitView({ 
-  accountBalance, 
-  userProfile, 
-  onTransactionComplete, 
-  theme 
+export default function LimitView({
+  accountBalance,
+  userProfile,
+  onTransactionComplete,
+  theme,
+  showToast,
 }: LimitViewProps) {
   // Wizard Steps: 
   // 'home' -> (opens modal) -> 'simulation' -> 'transfer_details' -> 'resumo' -> 'seguranca' -> 'success' -> 'receipt'
@@ -53,13 +55,13 @@ export default function LimitView({
   const [selectedBank, setSelectedBank] = useState<Bank>({
     id: 'bradesco', name: '237 - BANCO BRADESCO S.A.', code: '237', logo: '🏦'
   });
-  const [agency, setAgency] = useState('3861');
-  const [account, setAccount] = useState('22890-7');
+  const [agency, setAgency] = useState('');
+  const [account, setAccount] = useState('');
   const [accountType, setAccountType] = useState<'corrente' | 'poupança'>('corrente');
 
   // Security / PIN State
-  const [pin, setPin] = useState<string[]>(['3', '7', '1', '']);
-  const [focusedPinIndex, setFocusedPinIndex] = useState<number>(3);
+  const [pin, setPin] = useState<string[]>(['', '', '', '']);
+  const [focusedPinIndex, setFocusedPinIndex] = useState<number>(0);
 
   // Transaction history helper state
   const [lastWithdrawal, setLastWithdrawal] = useState<{
@@ -530,7 +532,7 @@ export default function LimitView({
           <button
             onClick={() => {
               if (withdrawAmount <= 0 || withdrawAmount > withdrawalLimit) {
-                alert(`Valor de saque inválido. Máximo disponível: R$ ${withdrawalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+                showToast?.('⚠️ Valor Inválido', `Máximo disponível: R$ ${withdrawalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
                 return;
               }
               setScreen('transfer_details');
@@ -714,7 +716,7 @@ export default function LimitView({
           <button
             onClick={() => {
               if (!agency || !account) {
-                alert('Preencha os campos de Agência e Conta.');
+                showToast?.('⚠️ Campos obrigatórios', 'Preencha os campos de Agência e Conta para continuar.');
                 return;
               }
               setScreen('resumo');
@@ -1059,7 +1061,7 @@ export default function LimitView({
               <h1 className="text-xs font-black uppercase tracking-wider text-[#00ff9d]">Saque com Cartão</h1>
             </div>
             <div className="flex items-center gap-3 text-on-surface-variant">
-              <button onClick={() => alert('Recibo compartilhado!')} className="hover:text-white"><Share2 size={16} /></button>
+              <button onClick={() => showToast?.('✅ Recibo Compartilhado', 'O resumo da proposta foi copiado.')} className="hover:text-white"><Share2 size={16} /></button>
               <button onClick={() => window.print()} className="hover:text-white"><Printer size={16} /></button>
             </div>
           </div>

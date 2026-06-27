@@ -11,6 +11,7 @@ interface ShopViewProps {
   accountBalance: number;
   onPurchaseComplete: (newTx: Transaction, amount: number) => void;
   theme: 'yellow' | 'midnight';
+  showToast?: (title: string, message: string) => void;
 }
 
 interface Product {
@@ -23,7 +24,7 @@ interface Product {
   description: string;
 }
 
-export default function ShopView({ accountBalance, onPurchaseComplete, theme }: ShopViewProps) {
+export default function ShopView({ accountBalance, onPurchaseComplete, theme, showToast }: ShopViewProps) {
   const [cashbackBalance, setCashbackBalance] = useState<number>(() => {
     const saved = localStorage.getItem('volt_cashback_balance');
     return saved ? parseFloat(saved) : 42.50;
@@ -159,7 +160,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
     if (!selectedProduct) return;
 
     if (paymentMethod === 'balance' && accountBalance < selectedProduct.price) {
-      alert('Saldo insuficiente para efetuar esta compra.');
+      showToast?.('⚠️ Saldo Insuficiente', 'Você não tem saldo suficiente para efetuar esta compra.');
       return;
     }
 
@@ -204,7 +205,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
   const handlePetSubscribe = () => {
     const petPrice = 11.99;
     if (accountBalance < petPrice) {
-      alert('Saldo de conta insuficiente para ativar o plano pet.');
+      showToast?.('⚠️ Saldo Insuficiente', 'Você não tem saldo suficiente para ativar o plano pet.');
       return;
     }
 
@@ -260,7 +261,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
 
   const handleRedeemCashback = () => {
     if (cashbackBalance <= 0) {
-      alert('Você ainda não tem saldo de cashback para resgatar.');
+      showToast?.('⚠️ Sem Cashback', 'Você ainda não tem saldo de cashback para resgatar.');
       return;
     }
 
@@ -285,7 +286,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
 
     onPurchaseComplete(newTx, redeemAmount);
     setCashbackBalance(0);
-    alert(`Sucesso! ${formatCurrency(redeemAmount)} de cashback foi transferido e creditado no seu saldo principal.`);
+    showToast?.('✅ Cashback Resgatado!', `${formatCurrency(redeemAmount)} de cashback foi creditado no seu saldo principal.`);
   };
 
   const isMidnight = theme === 'midnight';

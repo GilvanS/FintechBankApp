@@ -342,7 +342,15 @@ function DashboardShell() {
       api.getCreditCard(user.cpf).then(card => {
         if (card) {
           setCreditCard(card);
+          if (card.limitUsed) setInvoiceAmount(card.limitUsed);
           localStorage.setItem('volt_card', JSON.stringify(card));
+        }
+      }).catch(() => {});
+
+      api.getRecurringBills(user.cpf).then(bills => {
+        if (bills.length > 0) {
+          localStorage.setItem('volt_recurring_bills', JSON.stringify(bills));
+          checkRecurringBillNotifications();
         }
       }).catch(() => {});
     }
@@ -591,6 +599,7 @@ function DashboardShell() {
               accountBalance={accountBalance}
               onPurchaseComplete={handleTransactionComplete}
               theme={theme}
+              showToast={(title, message) => setToast({ title, message })}
             />
           </div>
         );
@@ -602,6 +611,7 @@ function DashboardShell() {
               userProfile={userProfile}
               onTransactionComplete={handleTransactionComplete}
               theme={theme}
+              showToast={(title, message) => setToast({ title, message })}
             />
           </div>
         );
