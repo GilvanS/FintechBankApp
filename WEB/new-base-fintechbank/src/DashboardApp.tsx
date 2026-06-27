@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import * as api from './services/api';
 import { motion, AnimatePresence } from 'motion/react';
 import { ActiveTab, Transaction, CreditCard, UserProfile, AppNotification } from './types';
 import Header from './components/Header';
@@ -99,18 +101,22 @@ const INITIAL_TRANSACTIONS: Transaction[] = [
   }
 ];
 
+const VALID_TABS: ActiveTab[] = ['home', 'cards', 'limit', 'shop', 'profile'];
+
 export default function DashboardApp() {
   const { user } = useAuth();
+  const { tab } = useParams<{ tab: string }>();
+  const navigate = useNavigate();
 
-  // Navigation tabs
-  const [activeTab, setActiveTab] = useState<ActiveTab>('home');
-  
+  // Derive active tab from URL (TASK 2)
+  const activeTab: ActiveTab = VALID_TABS.includes(tab as ActiveTab) ? (tab as ActiveTab) : 'home';
+
   // Sub-navigation view toggles (instead of rendering tabs, they render detail overlays)
   const [invoiceSubView, setInvoiceSubView] = useState(false);
   const [statementSubView, setStatementSubView] = useState(false);
 
-  // Core Financial States
-  const [accountBalance, setAccountBalance] = useState<number>(12450.65);
+  // Core Financial States — balance seeded from auth (TASK 3)
+  const [accountBalance, setAccountBalance] = useState<number>(() => user?.balance ?? 12450.65);
   const [biometricEnabled, setBiometricEnabled] = useState<boolean>(() => {
     return localStorage.getItem('volt_biometric_enabled') === 'true';
   });
@@ -329,6 +335,23 @@ export default function DashboardApp() {
 
     // Check recurring bill notifications
     checkRecurringBillNotifications();
+
+    // TASK 3: sync with real API data
+    if (user?.cpf) {
+      api.getTransactions(user.cpf).then(txs => {
+        if (txs.length > 0) {
+          setTransactions(txs);
+          localStorage.setItem('volt_txs', JSON.stringify(txs));
+        }
+      }).catch(() => {/* keep local data */});
+
+      api.getCreditCard(user.cpf).then(card => {
+        if (card) {
+          setCreditCard(card);
+          localStorage.setItem('volt_card', JSON.stringify(card));
+        }
+      }).catch(() => {});
+    }
   }, []);
 
   // Sync to local storage
@@ -499,11 +522,11 @@ export default function DashboardApp() {
     return false;
   };
 
-  // Switch tabs cleanly, reset subviews when using bottom bar
-  const handleTabChange = (tab: ActiveTab) => {
+  // Switch tabs — navigate to URL route (TASK 2)
+  const handleTabChange = (newTab: ActiveTab) => {
     setInvoiceSubView(false);
     setStatementSubView(false);
-    setActiveTab(tab);
+    navigate(`/dashboard/${newTab}`);
   };
 
   // Render subview or tab view cleanly with an elegant slide-up or fade-in transition
@@ -651,7 +674,7 @@ export default function DashboardApp() {
       </main>
 
       {/* Persistent Bottom Tab Bar */}
-      <Navbar activeTab={activeTab} setActiveTab={handleTabChange} />
+      <Navbar />
 
       {/* Modals overlays */}
       <PixModal

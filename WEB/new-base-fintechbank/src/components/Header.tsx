@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Bell, HelpCircle, ArrowLeft, LogOut, ShieldAlert, Sparkles, UserCheck, Trash2, Sun, Moon, LayoutGrid, Brain, TrendingUp, BarChart2, Activity, RefreshCw, ChevronRight, GripVertical, Pin } from 'lucide-react';
 import { ActiveTab, UserProfile, AppNotification, Transaction } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import AiAssistantModal from './AiAssistantModal';
 
 interface HubCard {
   id: string;
@@ -670,13 +669,6 @@ export default function Header({
           </div>
         )}
       </AnimatePresence>
-
-      <AiAssistantModal
-        isOpen={isAiModalOpen}
-        onClose={() => setIsAiModalOpen(false)}
-        transactions={transactions}
-        theme={theme}
-      />
 
       {/* Central Hub Navigation Overlay Modal */}
       <AnimatePresence>

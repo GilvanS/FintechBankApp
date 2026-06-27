@@ -16,7 +16,7 @@ export default function App() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route
-          path="/dashboard"
+          path="/dashboard/:tab?"
           element={
             <ProtectedRoute>
               <DashboardApp />
