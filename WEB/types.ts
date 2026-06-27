@@ -76,6 +76,12 @@ export interface AppNotification {
 }
 
 export interface PurchasedItem {
+    originalPrice?: number;
+    category?: string;
+    cashback?: string;
+    rating?: number;
+    reviews?: number;
+    isNew?: boolean;
     id: string;
     name: string;
     description: string;
