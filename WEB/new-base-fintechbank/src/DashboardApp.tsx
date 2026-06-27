@@ -487,19 +487,15 @@ function DashboardShell() {
     saveState(accountBalance, invoiceAmount, userProfile, updated, transactions);
   };
 
-  const payInvoice = (amount: number): boolean => {
+  const payInvoice = (amount: number, pin?: string): boolean => {
     if (accountBalance >= amount) {
       const updatedBalance = accountBalance - amount;
       const updatedInvoice = 0.00;
 
-      // Add a transaction for paying the invoice
       const now = new Date();
       const formatNumber = (num: number) => String(num).padStart(2, '0');
       const formattedDate = `${formatNumber(now.getDate())}/${formatNumber(now.getMonth() + 1)}/${now.getFullYear()}`;
-      
-      const weekdays = [
-        'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'
-      ];
+      const weekdays = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
       const newTx: Transaction = {
         id: Math.random().toString(36).substring(2, 11),
@@ -513,12 +509,15 @@ function DashboardShell() {
       };
 
       const updatedTxs = [newTx, ...transactions];
-
       setAccountBalance(updatedBalance);
       setInvoiceAmount(updatedInvoice);
       setTransactions(updatedTxs);
-      
       saveState(updatedBalance, updatedInvoice, userProfile, creditCard, updatedTxs);
+
+      if (pin && user?.cpf) {
+        api.payCreditCardInvoice(user.cpf, amount, pin).catch(() => {});
+      }
+
       return true;
     }
     return false;

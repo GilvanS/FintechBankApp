@@ -9,7 +9,7 @@ interface CardsViewProps {
   userProfile: UserProfile;
   setInvoiceSubView: (val: boolean) => void;
   invoiceAmount: number;
-  payInvoice: (amount: number) => boolean; // returns true if success
+  payInvoice: (amount: number, pin?: string) => boolean;
 }
 
 export default function CardsView({
@@ -27,6 +27,7 @@ export default function CardsView({
   const [tempLimit, setTempLimit] = useState(creditCard.limitTotal);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+  const [paymentPin, setPaymentPin] = useState('');
 
   const toggleNfc = () => {
     updateCreditCard({ isNfcEnabled: !creditCard.isNfcEnabled });
@@ -50,9 +51,11 @@ export default function CardsView({
       return;
     }
 
-    const success = payInvoice(invoiceAmount);
+    const pin = paymentPin.trim();
+    const success = payInvoice(invoiceAmount, pin.length === 4 ? pin : undefined);
     if (success) {
       setPaymentSuccess(true);
+      setPaymentPin('');
       setTimeout(() => {
         setPaymentSuccess(false);
         setShowPaymentModal(false);
@@ -441,6 +444,19 @@ export default function CardsView({
                         R$ {invoiceAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs text-on-surface-variant">PIN do cartão (opcional)</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={paymentPin}
+                      onChange={(e) => setPaymentPin(e.target.value.replace(/\D/g, ''))}
+                      placeholder="••••"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm text-center tracking-widest placeholder:text-white/20 focus:outline-none focus:border-volt-green/50"
+                    />
                   </div>
 
                   {paymentError && (

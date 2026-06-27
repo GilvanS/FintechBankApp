@@ -74,3 +74,10 @@ export async function getFinancialHealth(userId: string) {
     `/financial-health/${userId}`
   );
 }
+
+export async function payCreditCardInvoice(cpf: string, amount: number, pin: string): Promise<{ success: boolean; newBalance?: number; message?: string }> {
+  return apiCall<{ success: boolean; newBalance?: number; message?: string }>('/cards/invoice/pay', {
+    method: 'POST',
+    body: JSON.stringify({ cpf, pin, amount }),
+  });
+}
