@@ -30,7 +30,7 @@ export default function PixModal({ isOpen, onClose, accountBalance, onTransactio
     
     setIsAutoCategorizing(true);
     try {
-      const response = await fetch("/api/gemini/categorize", {
+      const response = await fetch("/api/pix-categorize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: desc }),

@@ -13,9 +13,7 @@ import StatementView from './components/StatementView';
 import ShopView from './components/ShopView';
 import ProfileView from './components/ProfileView';
 import LimitView from './components/LimitView';
-import PixModal from './components/PixModal';
-import DepositModal from './components/DepositModal';
-import BiometricModal from './components/BiometricModal';
+import { GlobalModalProvider, useGlobalModal } from './context/GlobalModalContext';
 
 // Initial Mock Data
 const INITIAL_TRANSACTIONS: Transaction[] = [
@@ -103,7 +101,8 @@ const INITIAL_TRANSACTIONS: Transaction[] = [
 
 const VALID_TABS: ActiveTab[] = ['home', 'cards', 'limit', 'shop', 'profile'];
 
-export default function DashboardApp() {
+function DashboardShell() {
+  const { openPix, openDeposit, openBiometric } = useGlobalModal();
   const { user } = useAuth();
   const { tab } = useParams<{ tab: string }>();
   const navigate = useNavigate();
@@ -124,7 +123,6 @@ export default function DashboardApp() {
     const biometric = localStorage.getItem('volt_biometric_enabled') === 'true';
     return !biometric;
   });
-  const [isBiometricOpen, setIsBiometricOpen] = useState(false);
   const [invoiceAmount, setInvoiceAmount] = useState<number>(1750.80);
 
   // Analytical and AI modal states lifted for the Header Central Hub
@@ -144,7 +142,7 @@ export default function DashboardApp() {
 
   const handleToggleBalanceVisibility = () => {
     if (biometricEnabled && !balanceIsVisible) {
-      setIsBiometricOpen(true);
+      openBiometric({ onSuccess: () => setBalanceIsVisible(true), theme });
     } else {
       setBalanceIsVisible(!balanceIsVisible);
     }
@@ -302,10 +300,6 @@ export default function DashboardApp() {
       return () => clearTimeout(timer);
     }
   }, [toast]);
-
-  // Modals
-  const [isPixOpen, setIsPixOpen] = useState(false);
-  const [isDepositOpen, setIsDepositOpen] = useState(false);
 
   // Apply body class when theme changes
   useEffect(() => {
@@ -562,8 +556,8 @@ export default function DashboardApp() {
               setInvoiceSubView={setInvoiceSubView}
               setStatementSubView={setStatementSubView}
               invoiceAmount={invoiceAmount}
-              openPixModal={() => setIsPixOpen(true)}
-              openDepositModal={() => setIsDepositOpen(true)}
+              openPixModal={() => openPix({ accountBalance, onTransactionComplete: handleTransactionComplete })}
+              openDepositModal={() => openDeposit({ onDepositComplete: handleDepositComplete })}
               transactions={transactions}
               onTransactionComplete={handleTransactionComplete}
               theme={theme}
@@ -676,27 +670,6 @@ export default function DashboardApp() {
       {/* Persistent Bottom Tab Bar */}
       <Navbar />
 
-      {/* Modals overlays */}
-      <PixModal
-        isOpen={isPixOpen}
-        onClose={() => setIsPixOpen(false)}
-        accountBalance={accountBalance}
-        onTransactionComplete={handleTransactionComplete}
-      />
-
-      <DepositModal
-        isOpen={isDepositOpen}
-        onClose={() => setIsDepositOpen(false)}
-        onDepositComplete={handleDepositComplete}
-      />
-
-      <BiometricModal
-        isOpen={isBiometricOpen}
-        onClose={() => setIsBiometricOpen(false)}
-        onSuccess={() => setBalanceIsVisible(true)}
-        theme={theme}
-      />
-
       {/* Real-time Push Notification Toast */}
       <AnimatePresence>
         {toast && (
@@ -726,5 +699,13 @@ export default function DashboardApp() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function DashboardApp() {
+  return (
+    <GlobalModalProvider>
+      <DashboardShell />
+    </GlobalModalProvider>
   );
 }
