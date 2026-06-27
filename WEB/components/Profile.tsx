@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Shield, HelpCircle, Info, Settings, Palette, Check, Edit2, Sun, Moon, Fingerprint, Bell, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { AppVersion } from '../utils/AppVersion';
