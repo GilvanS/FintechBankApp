@@ -543,10 +543,11 @@ function DashboardShell() {
     if (statementSubView) {
       return (
         <div key="statement_view">
-          <StatementView 
-            transactions={transactions} 
-            theme={theme} 
+          <StatementView
+            transactions={transactions}
+            theme={theme}
             onUpdateTransactionNote={handleUpdateTransactionNote}
+            userName={userProfile.name}
           />
         </div>
       );

@@ -7,12 +7,14 @@ interface StatementViewProps {
   transactions: Transaction[];
   theme?: 'yellow' | 'midnight';
   onUpdateTransactionNote?: (txId: string, note: string) => void;
+  userName?: string;
 }
 
-export default function StatementView({ 
-  transactions, 
+export default function StatementView({
+  transactions,
   theme = 'yellow',
-  onUpdateTransactionNote
+  onUpdateTransactionNote,
+  userName = 'Usuário',
 }: StatementViewProps) {
   const [activeFilter, setActiveFilter] = useState<'todos' | 'refeicao' | 'mobilidade' | 'cultura' | 'saude' | 'outros'>('todos');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -128,7 +130,7 @@ export default function StatementView({
           content += `                         EXTRATO DE TRANSAÇÕES - VOLT                   \n`;
           content += `========================================================================\n`;
           content += `Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}\n`;
-          content += `Titular: GILVAN SILVA\n`;
+          content += `Titular: ${userName}\n`;
           content += `Escopo: ${scope === 'filtrados' ? 'Filtrado na tela' : 'Histórico Completo'}\n`;
           content += `Total de Lançamentos: ${dataToExport.length}\n`;
           content += `------------------------------------------------------------------------\n\n`;
