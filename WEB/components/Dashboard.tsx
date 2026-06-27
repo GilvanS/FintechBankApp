@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { PurchasedItem, Transaction, User } from '../types';
 import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement } from '../services/api';
+import { useDialog } from '../contexts/GlobalDialogContext';
 
 import HomeView from './HomeView';
 import Profile from './Profile';
@@ -70,6 +71,7 @@ type View = 'home' | 'cards' | 'shop' | 'investments' | 'profile' | 'statement' 
 
 const Dashboard: React.FC = () => {
     const { user, updateUser, logout, view: topLevelView, navigateTo } = useAuth();
+    const { showDialog } = useDialog();
     const [currentView, setCurrentView] = useState<View>('home');
     const [previousView, setPreviousView] = useState<View>('home');
 
@@ -370,7 +372,7 @@ const Dashboard: React.FC = () => {
             if (result.message.includes('cartão de crédito está bloqueado')) {
                 setIsBlockedModalOpen(true);
             } else {
-                alert(result.message);
+            showDialog({ title: 'Aviso', message: result.message });
             }
         }
         setIsProcessing(false);
@@ -415,7 +417,7 @@ const Dashboard: React.FC = () => {
             }
             handleNavigate('invoicePaymentReceipt');
         } else {
-            alert(result.message);
+            showDialog({ title: 'Aviso', message: result.message });
         }
         setIsProcessing(false);
         setIsPasswordModalOpen(false);
@@ -450,10 +452,10 @@ const Dashboard: React.FC = () => {
             if (refreshed.success && refreshed.user) {
                 updateUser(refreshed.user);
             }
-            alert(result.message);
+            showDialog({ title: 'Aviso', message: result.message });
             handleNavigate('cards');
         } else {
-            alert(result.message);
+            showDialog({ title: 'Aviso', message: result.message });
         }
         setIsProcessing(false);
         setIsPasswordModalOpen(false);
@@ -480,10 +482,10 @@ const Dashboard: React.FC = () => {
             if (refreshed.success && refreshed.user) {
                 updateUser(refreshed.user);
             }
-            alert(result.message);
+            showDialog({ title: 'Aviso', message: result.message });
             handleNavigate('cards');
         } else {
-            alert(result.message);
+            showDialog({ title: 'Aviso', message: result.message });
         }
         setIsProcessing(false);
         setIsPasswordModalOpen(false);
@@ -625,7 +627,7 @@ const Dashboard: React.FC = () => {
             {/* ── Cards Modal ──────────────────────────── */}
             <AnimatePresence>
                 {isCardsModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-12 lg:p-24">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 pt-16">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -637,7 +639,7 @@ const Dashboard: React.FC = () => {
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full h-fit max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
+                            className="relative w-full h-fit max-h-[85vh] bg-[#131313] border border-white/10 shadow-2xl rounded-3xl flex flex-col overflow-hidden"
                         >
                             {/* Modal Header */}
                             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02] shrink-0">
@@ -674,7 +676,7 @@ const Dashboard: React.FC = () => {
             {/* ── Statement Modal ───────────────────────── */}
             <AnimatePresence>
                 {isStatementModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-12 lg:p-24">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 pt-16">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -686,7 +688,7 @@ const Dashboard: React.FC = () => {
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full h-fit max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
+                            className="relative w-full h-fit max-h-[85vh] bg-[#131313] border border-white/10 shadow-2xl rounded-3xl flex flex-col overflow-hidden"
                         >
                             {/* Modal Header */}
                             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
@@ -724,7 +726,7 @@ const Dashboard: React.FC = () => {
             {/* ── Limit Modal ───────────────────────────── */}
             <AnimatePresence>
                 {isLimitModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-12 lg:p-24">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 pt-16">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -736,7 +738,7 @@ const Dashboard: React.FC = () => {
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full h-fit max-w-5xl max-h-[90vh] bg-[#131313] border border-white/10 shadow-2xl rounded-[2rem] flex flex-col overflow-hidden"
+                            className="relative w-full h-fit max-h-[85vh] bg-[#131313] border border-white/10 shadow-2xl rounded-3xl flex flex-col overflow-hidden"
                         >
                             {/* Modal Header */}
                             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">

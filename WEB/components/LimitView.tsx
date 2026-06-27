@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { formatCurrency } from '../utils/formatters';
+import { useDialog } from '../contexts/GlobalDialogContext';
 import { 
   ArrowLeft, Info, CreditCard, Percent, Sliders, 
   Search, CheckCircle2, AlertTriangle, ArrowRight, Shield, 
@@ -516,7 +518,7 @@ export default function LimitView({
                 <button 
                   onClick={() => {
                     if (withdrawAmount <= 0 || withdrawAmount > withdrawalLimit) {
-                      alert(`Valor de saque inválido. Máximo disponível: R$ ${withdrawalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+                      showDialog({ title: 'Aviso', message: `Valor de saque inválido. Máximo disponível: R$ ${withdrawalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` });
                       return;
                     }
                     setInstallments(8); 
@@ -538,7 +540,7 @@ export default function LimitView({
           <button
             onClick={() => {
               if (withdrawAmount <= 0 || withdrawAmount > withdrawalLimit) {
-                alert(`Valor de saque inválido. Máximo disponível: R$ ${withdrawalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+                showDialog({ title: 'Aviso', message: `Valor de saque inválido. Máximo disponível: R$ ${withdrawalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` });
                 return;
               }
               setScreen('transfer_details');
@@ -722,7 +724,7 @@ export default function LimitView({
           <button
             onClick={() => {
               if (!agency || !account) {
-                alert('Preencha os campos de Agência e Conta.');
+                showDialog({ title: 'Atenção', message: 'Preencha os campos de Agência e Conta.' });
                 return;
               }
               setScreen('resumo');
@@ -1067,7 +1069,7 @@ export default function LimitView({
               <h1 className="text-xs font-black uppercase tracking-wider text-[#00ff9d]">Saque com Cartão</h1>
             </div>
             <div className="flex items-center gap-3 text-on-surface-variant">
-              <button onClick={() => alert('Recibo compartilhado!')} className="hover:text-white"><Share2 size={16} /></button>
+              <button onClick={() => showDialog({ title: 'Aviso', message: 'Recibo compartilhado!' })} className="hover:text-white"><Share2 size={16} /></button>
               <button onClick={() => window.print()} className="hover:text-white"><Printer size={16} /></button>
             </div>
           </div>
@@ -1180,7 +1182,7 @@ export default function LimitView({
               Concluir transferência
             </button>
             <button 
-              onClick={() => alert('Baixando PDF...')}
+              onClick={() => showDialog({ title: 'Aviso', message: 'Baixando PDF...' })}
               className="w-full py-3 rounded-xl font-black text-[10px] uppercase tracking-wider transition-all btn-secondary"
             >
               Ver recibo em PDF

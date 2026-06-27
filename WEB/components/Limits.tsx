@@ -49,7 +49,7 @@ const Limits: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     };
     
     return (
-        <div className="bg-background-dark text-white p-4 min-h-full">
+        <div className="bg-background-dark text-white p-4 min-h-full w-full max-w-md mx-auto pb-28">
             <header className="flex items-center mb-6">
                 <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-white/10">
                      <span className="material-symbols-outlined">arrow_back</span>
