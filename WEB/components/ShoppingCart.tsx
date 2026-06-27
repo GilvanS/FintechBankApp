@@ -16,7 +16,7 @@ const ShoppingCart: React.FC<ShoppingCartProps> = ({ cart, onBack, onCheckout, o
 
     return (
         <div
-            className="bg-background-dark text-white min-h-full flex flex-col test-shopping-cart"
+            className="bg-background-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28 test-shopping-cart"
             id="shopping-cart"
             data-testid="shopping-cart"
             data-cy="shopping-cart"

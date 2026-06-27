@@ -15,7 +15,7 @@ const ProductPage: React.FC<ProductPageProps> = ({ product, onBack, onPurchase, 
   if (!product) return null;
 
   return (
-    <div className="bg-background-dark text-white min-h-full flex flex-col">
+    <div className="bg-background-dark text-white min-h-full flex flex-col relative w-full max-w-7xl mx-auto test-product-page">
       <header className="absolute top-0 left-0 right-0 z-10 p-2 flex items-center justify-between">
         <button onClick={onBack} className="m-2 p-2 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-sm">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>

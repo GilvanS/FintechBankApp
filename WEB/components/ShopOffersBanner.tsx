@@ -11,24 +11,24 @@ const ShopOffersBanner: React.FC<ShopOffersBannerProps> = ({ onNavigate }) => {
 
     return (
         <section>
-            <h3 className="text-white text-lg font-bold leading-tight tracking-[-0.015em] px-4 pb-4 pt-4">Ofertas para Você</h3>
+            <h3 className="text-white text-sm font-black uppercase tracking-wider px-4 pb-4 pt-4">Ofertas para Você</h3>
             <div className="px-4">
-                <div className="bg-surface-dark p-6 rounded-xl flex flex-col items-center text-center">
+                <div className="bg-[#0a0a0a] border border-white/10 p-6 rounded-[2rem] flex flex-col items-center text-center shadow-lg">
                     <div className="flex -space-x-4 mb-4">
                         {featuredProducts.map(product => (
                             <img 
                                 key={product.id}
                                 src={product.imageUrl} 
                                 alt={product.name}
-                                className="w-16 h-16 rounded-full object-cover border-4 border-background-dark"
+                                className="w-16 h-16 rounded-full object-cover border-4 border-[#0a0a0a]"
                             />
                         ))}
                     </div>
-                    <h4 className="text-xl font-bold text-white mb-2">Descontos Exclusivos no Shop!</h4>
-                    <p className="text-sm text-white/70 mb-6">Encontre produtos incríveis com preços especiais e cashback.</p>
+                    <h4 className="text-lg font-black text-white mb-2">Descontos Exclusivos no Shop!</h4>
+                    <p className="text-xs text-white/50 mb-6">Encontre produtos incríveis com preços especiais e cashback.</p>
                     <button 
                         onClick={() => onNavigate('shoppingCart')} 
-                        className="flex h-12 w-full max-w-xs cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-primary px-6 text-base font-bold leading-normal text-background-dark transition-colors hover:bg-primary/90"
+                        className="flex h-12 w-full max-w-xs cursor-pointer items-center justify-center overflow-hidden rounded-xl bg-volt-primary px-6 text-sm font-bold leading-normal text-black transition-colors hover:bg-volt-primary/90"
                     >
                         Ir para o Carrinho
                     </button>
