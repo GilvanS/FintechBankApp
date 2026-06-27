@@ -75,6 +75,13 @@ export async function getFinancialHealth(userId: string) {
   );
 }
 
+export async function addRecurringBill(cpf: string, title: string, amount: number, category: string, dueDate: string): Promise<{ success: boolean }> {
+  return apiCall<{ success: boolean }>(`/recurring-bills/${cpf}`, {
+    method: 'POST',
+    body: JSON.stringify({ title, amount, category, dueDate, status: 'pending' }),
+  });
+}
+
 export async function payCreditCardInvoice(cpf: string, amount: number, pin: string): Promise<{ success: boolean; newBalance?: number; message?: string }> {
   return apiCall<{ success: boolean; newBalance?: number; message?: string }>('/cards/invoice/pay', {
     method: 'POST',

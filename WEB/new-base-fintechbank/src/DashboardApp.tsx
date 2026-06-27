@@ -14,6 +14,8 @@ import ShopView from './components/ShopView';
 import ProfileView from './components/ProfileView';
 import LimitView from './components/LimitView';
 import { GlobalModalProvider, useGlobalModal } from './context/GlobalModalContext';
+import FinancialHealthModal from './components/FinancialHealthModal';
+import AiRecurringBillModal from './components/AiRecurringBillModal';
 
 // Initial Mock Data
 const INITIAL_TRANSACTIONS: Transaction[] = [
@@ -600,6 +602,7 @@ function DashboardShell() {
               onPurchaseComplete={handleTransactionComplete}
               theme={theme}
               showToast={(title, message) => setToast({ title, message })}
+              userCpf={user?.cpf}
             />
           </div>
         );
@@ -708,6 +711,29 @@ function DashboardShell() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <FinancialHealthModal
+        isOpen={isFinancialHealthOpen}
+        onClose={() => setIsFinancialHealthOpen(false)}
+        transactions={transactions}
+        theme={theme}
+      />
+
+      <AiRecurringBillModal
+        isOpen={isAiRecurringModalOpen}
+        onClose={() => setIsAiRecurringModalOpen(false)}
+        transactions={transactions}
+        recurringBills={JSON.parse(localStorage.getItem('volt_recurring_bills') || '[]')}
+        onAddRecurringBill={(title, amount, category, dueDate) => {
+          if (user?.cpf) {
+            api.addRecurringBill(user.cpf, title, amount, category, dueDate).catch(() => {});
+          }
+          const bills = JSON.parse(localStorage.getItem('volt_recurring_bills') || '[]');
+          bills.push({ id: `rec_${Date.now()}`, title, amount: -Math.abs(amount), category, dueDate, status: 'pending' });
+          localStorage.setItem('volt_recurring_bills', JSON.stringify(bills));
+        }}
+        theme={theme}
+      />
     </div>
   );
 }

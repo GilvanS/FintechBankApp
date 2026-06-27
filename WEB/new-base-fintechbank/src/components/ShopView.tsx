@@ -6,12 +6,14 @@ import {
   Layers, ShoppingCart, Sparkle
 } from 'lucide-react';
 import { Transaction } from '../types';
+import * as api from '../services/api';
 
 interface ShopViewProps {
   accountBalance: number;
   onPurchaseComplete: (newTx: Transaction, amount: number) => void;
   theme: 'yellow' | 'midnight';
   showToast?: (title: string, message: string) => void;
+  userCpf?: string;
 }
 
 interface Product {
@@ -24,7 +26,7 @@ interface Product {
   description: string;
 }
 
-export default function ShopView({ accountBalance, onPurchaseComplete, theme, showToast }: ShopViewProps) {
+export default function ShopView({ accountBalance, onPurchaseComplete, theme, showToast, userCpf }: ShopViewProps) {
   const [cashbackBalance, setCashbackBalance] = useState<number>(() => {
     const saved = localStorage.getItem('volt_cashback_balance');
     return saved ? parseFloat(saved) : 42.50;
@@ -246,6 +248,9 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme, sh
             paidAtDate: formattedDate
           });
           localStorage.setItem('volt_recurring_bills', JSON.stringify(bills));
+          if (userCpf) {
+            api.addRecurringBill(userCpf, 'Plano Fintech Pet + Shop', petPrice, 'saude', '24/07/2026').catch(() => {});
+          }
         }
       } catch (e) {
         console.error(e);

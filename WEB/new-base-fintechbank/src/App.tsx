@@ -6,12 +6,13 @@ import Login from './components/auth/Login';
 import SignUp from './components/auth/SignUp';
 import ResetPassword from './components/auth/ResetPassword';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import PreLoginDashboard from './components/PreLoginDashboard';
 
 export default function App() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<PreLoginDashboard />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/reset-password" element={<ResetPassword />} />
