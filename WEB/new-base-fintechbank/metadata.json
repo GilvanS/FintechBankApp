@@ -1,0 +1,6 @@
+{
+  "name": "Volt Fintech",
+  "description": "A high-fidelity modern fintech app showcasing balances, statements, card management, and detailed financial reports.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

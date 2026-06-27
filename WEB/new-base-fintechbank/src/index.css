@@ -1,0 +1,539 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=Space+Grotesk:wght@500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --color-volt-green: #A2FF00;
+  --color-volt-dark: #FFD700;
+  --color-volt-surface: #FFFFFF;
+  --color-volt-surface-high: #FFED86;
+  --color-on-surface: #000000;
+  --color-on-surface-variant: #333333;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #FFD700 !important; /* Vibrant Yellow background! */
+  color: #000000 !important;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Base Headings space-grotesk */
+h1, h2, h3, h5, .font-display-lg {
+  font-family: 'Space Grotesk', sans-serif !important;
+}
+
+/* Brutalist Overrides */
+body:not(.theme-midnight) .bg-volt-dark {
+  background-color: #FFD700 !important;
+}
+
+/* Main Cards */
+body:not(.theme-midnight) .bg-volt-surface {
+  background-color: #FFFFFF !important;
+  border: 4px solid #000000 !important;
+  box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 1) !important;
+  color: #000000 !important;
+  border-radius: 1.5rem !important;
+}
+
+/* Inner High Contrast Items */
+body:not(.theme-midnight) .bg-volt-surface-high {
+  background-color: #FFED86 !important; /* Pastel cream yellow */
+  border: 3px solid #000000 !important;
+  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1) !important;
+  color: #000000 !important;
+  border-radius: 1rem !important;
+}
+
+/* Default state details inside brutalist elements */
+body:not(.theme-midnight) .bg-volt-surface *, 
+body:not(.theme-midnight) .bg-volt-surface-high *, 
+body:not(.theme-midnight) .modal-card *,
+body:not(.theme-midnight) header *,
+body:not(.theme-midnight) nav * {
+  color: #000000 !important;
+}
+
+/* Force specific colors for elements inside brutalist cards */
+body:not(.theme-midnight) .text-volt-green, body:not(.theme-midnight) .text-volt-green * {
+  color: #000000 !important;
+  font-weight: 900 !important;
+}
+
+body:not(.theme-midnight) .text-on-surface, body:not(.theme-midnight) .text-white, body:not(.theme-midnight) .text-white * {
+  color: #000000 !important;
+}
+
+body:not(.theme-midnight) .text-on-surface-variant, body:not(.theme-midnight) .text-on-surface-variant * {
+  color: #444444 !important;
+  font-weight: 700 !important;
+}
+
+/* Custom Neon Glow Effects replaced with Hard Shadows */
+body:not(.theme-midnight) .neon-glow, body:not(.theme-midnight) .neon-glow-strong, body:not(.theme-midnight) .purple-glow {
+  box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+body:not(.theme-midnight) .card-glow {
+  border: 4px solid #000000 !important;
+  box-shadow: 8px 8px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+/* Input Fields */
+body:not(.theme-midnight) input[type="text"], body:not(.theme-midnight) input[type="number"], body:not(.theme-midnight) select, body:not(.theme-midnight) textarea {
+  background-color: #FFFFFF !important;
+  border: 3px solid #000000 !important;
+  color: #000000 !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 3px 3px 0px 0px rgba(0, 0, 0, 1) !important;
+  font-weight: 700 !important;
+}
+
+body:not(.theme-midnight) input[type="text"]:focus, body:not(.theme-midnight) input[type="number"]:focus {
+  outline: none !important;
+  border-color: #FF5C8D !important; /* Pink border on focus */
+  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+/* Core Buttons Override */
+body:not(.theme-midnight) .bg-volt-green, 
+body:not(.theme-midnight) .btn-primary,
+body:not(.theme-midnight) button.btn-primary {
+  background-color: #A2FF00 !important; /* Vibrant Lime */
+  color: #000000 !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1) !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  transition: transform 0.1s, box-shadow 0.1s !important;
+}
+
+body:not(.theme-midnight) .bg-volt-green:hover, 
+body:not(.theme-midnight) .btn-primary:hover,
+body:not(.theme-midnight) button.btn-primary:hover {
+  transform: translate(-1px, -1px) !important;
+  box-shadow: 5px 5px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+body:not(.theme-midnight) .bg-volt-green:active, 
+body:not(.theme-midnight) .btn-primary:active,
+body:not(.theme-midnight) button.btn-primary:active {
+  transform: translate(3px, 3px) !important;
+  box-shadow: 1px 1px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+/* Secondary Buttons */
+body:not(.theme-midnight) .btn-secondary,
+body:not(.theme-midnight) button.btn-secondary {
+  background-color: #00E5FF !important; /* Vibrant Cyan */
+  color: #000000 !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1) !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  transition: transform 0.1s, box-shadow 0.1s !important;
+}
+
+body:not(.theme-midnight) .btn-secondary:hover,
+body:not(.theme-midnight) button.btn-secondary:hover {
+  background-color: #00D0EB !important;
+  transform: translate(-1px, -1px) !important;
+  box-shadow: 5px 5px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+body:not(.theme-midnight) .btn-secondary:active,
+body:not(.theme-midnight) button.btn-secondary:active {
+  transform: translate(3px, 3px) !important;
+  box-shadow: 1px 1px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+/* Custom Modal style card wrapper */
+body:not(.theme-midnight) .modal-card {
+  background-color: #FFFFFF !important;
+  border: 4px solid #000000 !important;
+  box-shadow: 10px 10px 0px 0px rgba(0, 0, 0, 1) !important;
+  border-radius: 2rem !important;
+  color: #000000 !important;
+}
+
+/* Progress Bar indicator */
+.bg-volt-green.rounded-full {
+  background-color: #A2FF00 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Custom Scrollbar Hiding */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Midnight Dark Theme Overrides */
+body.theme-midnight {
+  --color-volt-green: #00ff9d !important;
+  --color-volt-dark: #131313 !important;
+  --color-volt-surface: #131313 !important;
+  --color-volt-surface-high: #201f1f !important;
+  --color-on-surface: #e5e2e1 !important;
+  --color-on-surface-variant: #b9cbbc !important;
+
+  background-color: #131313 !important;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1.5px, transparent 1.5px) !important;
+  background-size: 24px 24px !important;
+  background-position: center !important;
+  color: #e5e2e1 !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Typography Overrides to use Inter for all elements under midnight */
+body.theme-midnight h1,
+body.theme-midnight h2,
+body.theme-midnight h3,
+body.theme-midnight h4,
+body.theme-midnight h5,
+body.theme-midnight h6,
+body.theme-midnight .font-display-lg {
+  font-family: 'Inter', sans-serif !important;
+}
+
+body.theme-midnight h1 {
+  font-size: 24px !important;
+  font-weight: 600 !important;
+  line-height: 32px !important;
+}
+@media (min-width: 640px) {
+  body.theme-midnight h1 {
+    font-size: 32px !important;
+    font-weight: 600 !important;
+    line-height: 40px !important;
+    letter-spacing: -0.01em !important;
+  }
+}
+
+body.theme-midnight h2 {
+  font-size: 20px !important;
+  font-weight: 500 !important;
+  line-height: 28px !important;
+}
+
+body.theme-midnight h3 {
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  line-height: 24px !important;
+}
+
+body.theme-midnight p,
+body.theme-midnight span,
+body.theme-midnight div {
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Surface strategy - Tonal Elevation & Luminous Depth */
+body.theme-midnight .bg-volt-surface {
+  background-color: #1c1b1b !important; /* Level 1 card surface */
+  border: 1px solid #1c1b1b !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+  color: #e5e2e1 !important;
+  border-radius: 1rem !important; /* 16px radius */
+  transition: border-color 0.2s ease, transform 0.2s ease !important;
+}
+
+body.theme-midnight .bg-volt-surface:hover {
+  border-color: #00ff9d !important; /* Interactive card highlights to primary on hover */
+}
+
+body.theme-midnight .bg-volt-surface-high {
+  background-color: #201f1f !important; /* Level 2 surface container */
+  border: 1px solid #2a2a2a !important;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25) !important;
+  color: #e5e2e1 !important;
+  border-radius: 0.75rem !important; /* 12px radius */
+}
+
+/* Beautiful custom overrides for standard layouts in midnight */
+body.theme-midnight .bg-white {
+  background-color: #1c1b1b !important;
+  border-color: #2a2a2a !important;
+}
+
+body.theme-midnight .bg-gray-100 {
+  background-color: #131313 !important;
+  border-color: #201f1f !important;
+}
+
+body.theme-midnight .bg-gray-50 {
+  background-color: #0e0e0e !important;
+}
+
+body.theme-midnight .bg-gray-200 {
+  background-color: #2a2a2a !important;
+  border-color: #353534 !important;
+}
+
+body.theme-midnight .bg-\[\#FFED86\] {
+  background-color: #201f1f !important;
+  color: #e5e2e1 !important;
+  border-color: #2a2a2a !important;
+}
+
+/* Specific text color transformations to keep text readable on dark */
+body.theme-midnight .text-black,
+body.theme-midnight .text-gray-900,
+body.theme-midnight .text-gray-800,
+body.theme-midnight .text-gray-700 {
+  color: #e5e2e1 !important;
+}
+
+body.theme-midnight .text-gray-600,
+body.theme-midnight .text-gray-500 {
+  color: #b9cbbc !important;
+}
+
+body.theme-midnight .text-volt-green, 
+body.theme-midnight .text-volt-green * {
+  color: #00ff9d !important; /* Electric neon green */
+}
+
+body.theme-midnight .text-on-surface, 
+body.theme-midnight .text-white, 
+body.theme-midnight .text-white * {
+  color: #e5e2e1 !important;
+}
+
+body.theme-midnight .text-on-surface-variant, 
+body.theme-midnight .text-on-surface-variant * {
+  color: #b9cbbc !important; /* Cool grey text */
+}
+
+/* High contrast elements that MUST keep dark text for readability */
+body.theme-midnight .bg-\[\#A2FF00\] *,
+body.theme-midnight .bg-volt-green *,
+body.theme-midnight .bg-\[\#00DF89\] *,
+body.theme-midnight .bg-\[\#00ff9d\] *,
+body.theme-midnight .bg-\[\#FFED86\] * {
+  color: #0c0c0c !important;
+}
+
+/* Elegant shadow transforms: turn chunky offset shadows into smooth modern ones with outer glows */
+body.theme-midnight [class*="shadow-["] {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Remove 3D borders & hard outlines */
+body.theme-midnight .neon-glow, 
+body.theme-midnight .neon-glow-strong, 
+body.theme-midnight .purple-glow,
+body.theme-midnight .card-glow {
+  border: 1px solid #1c1b1b !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+}
+
+body.theme-midnight .neon-glow:hover {
+  border-color: #00ff9d !important;
+}
+
+/* Header style under midnight */
+body.theme-midnight header {
+  background-color: #131313 !important;
+  border-bottom: 1px solid #1c1b1b !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Header action buttons */
+body.theme-midnight header button {
+  background-color: #1c1b1b !important;
+  border: 1px solid #201f1f !important;
+  box-shadow: none !important;
+}
+
+body.theme-midnight header button * {
+  color: #e5e2e1 !important;
+}
+
+body.theme-midnight header h1 {
+  color: #ffffff !important;
+}
+
+body.theme-midnight header h1.italic {
+  color: #00ff9d !important; /* Emerald green logo */
+}
+
+/* Nav container under midnight */
+body.theme-midnight nav {
+  background-color: #131313 !important;
+  border-top: 1px solid #1c1b1b !important;
+  box-shadow: 0 -4px 25px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Unselected navigation icons */
+body.theme-midnight nav button * {
+  color: #b9cbbc !important;
+}
+
+/* Selected navigation tab highlight container */
+body.theme-midnight nav span.absolute {
+  background-color: #00ff9d !important; /* Electric green active tab background */
+  border: none !important;
+  box-shadow: 0 0 15px rgba(0, 255, 157, 0.3) !important;
+}
+
+/* Active navigation item text and icon color */
+body.theme-midnight nav span.absolute ~ div,
+body.theme-midnight nav span.absolute ~ div *,
+body.theme-midnight nav span.absolute ~ span {
+  color: #0c0c0c !important; /* High contrast black on green */
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+/* Override input fields in midnight: Level 2 surface background, 8px radius, bottom green active border */
+body.theme-midnight input[type="text"], 
+body.theme-midnight input[type="number"], 
+body.theme-midnight select, 
+body.theme-midnight textarea {
+  background-color: #201f1f !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: 2px solid #353534 !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease !important;
+}
+
+body.theme-midnight input[type="text"]:focus, 
+body.theme-midnight input[type="number"]:focus,
+body.theme-midnight select:focus,
+body.theme-midnight textarea:focus {
+  outline: none !important;
+  border-bottom: 2px solid #00ff9d !important; /* Active state features a primary green bottom border (2px) */
+  background-color: #2a2a2a !important;
+}
+
+body.theme-midnight ::placeholder {
+  color: #6b7280 !important;
+  opacity: 1 !important;
+}
+
+/* Modal cards under midnight theme */
+body.theme-midnight .modal-card {
+  background-color: #1c1b1b !important;
+  border: 1px solid #2a2a2a !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+  color: #e5e2e1 !important;
+  border-radius: 1rem !important;
+}
+
+/* Core Buttons in midnight: Solid Green with clean glow look */
+body.theme-midnight .bg-volt-green, 
+body.theme-midnight .btn-primary,
+body.theme-midnight button.btn-primary {
+  background-color: #00ff9d !important; /* Electric green */
+  color: #0c0c0c !important;
+  border: none !important;
+  box-shadow: 0 0 15px rgba(0, 255, 157, 0.2) !important;
+  font-weight: 700 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+body.theme-midnight .bg-volt-green *, 
+body.theme-midnight .btn-primary *,
+body.theme-midnight button.btn-primary * {
+  color: #0c0c0c !important;
+}
+
+body.theme-midnight .bg-volt-green:hover, 
+body.theme-midnight .btn-primary:hover,
+body.theme-midnight button.btn-primary:hover {
+  background-color: #00e38b !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 0 20px rgba(0, 255, 157, 0.35) !important;
+}
+
+body.theme-midnight .bg-volt-green:active, 
+body.theme-midnight .btn-primary:active,
+body.theme-midnight button.btn-primary:active {
+  background-color: #006d40 !important;
+  transform: translateY(1px) !important;
+  box-shadow: 0 0 8px rgba(0, 255, 157, 0.1) !important;
+}
+
+/* Secondary Buttons in midnight: Transparent background with a 1px primary border */
+body.theme-midnight .btn-secondary,
+body.theme-midnight button.btn-secondary {
+  background-color: transparent !important;
+  color: #00ff9d !important;
+  border: 1px solid #00ff9d !important;
+  box-shadow: none !important;
+  font-weight: 700 !important;
+  text-transform: none !important;
+}
+
+body.theme-midnight .btn-secondary *,
+body.theme-midnight button.btn-secondary * {
+  color: #00ff9d !important;
+}
+
+body.theme-midnight .btn-secondary:hover,
+body.theme-midnight button.btn-secondary:hover {
+  background-color: rgba(0, 255, 157, 0.1) !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+body.theme-midnight .btn-secondary:active,
+body.theme-midnight button.btn-secondary:active {
+  transform: scale(0.98) !important;
+  box-shadow: none !important;
+}
+
+/* Selected nav items in midnight theme */
+body.theme-midnight nav button.active {
+  background-color: #00ff9d !important;
+  color: #0c0c0c !important;
+}
+
+/* Chips/Tags: Small, 4px radius, using a low-opacity primary green background (15% alpha) with solid primary green text for a "lit" effect */
+body.theme-midnight [class*="bg-volt-green/15"],
+body.theme-midnight [class*="bg-volt-green/10"] {
+  background-color: rgba(0, 255, 157, 0.15) !important;
+  color: #00ff9d !important;
+  border-radius: 4px !important;
+}
+
+/* Elegant Recharts Tooltip styling under midnight */
+body.theme-midnight .recharts-default-tooltip {
+  background-color: #1c1b1b !important;
+  border: 1px solid #2a2a2a !important;
+  color: #e5e2e1 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
+}
+
+body.theme-midnight .recharts-default-tooltip * {
+  color: #e5e2e1 !important;
+}
+
+/* Smooth charts grid and ticks */
+body.theme-midnight svg text {
+  fill: #b9cbbc !important;
+}
+
+body.theme-midnight svg line,
+body.theme-midnight svg path {
+  stroke: #201f1f !important;
+}
