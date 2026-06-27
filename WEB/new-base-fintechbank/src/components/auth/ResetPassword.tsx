@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 export default function ResetPassword() {
   const [cpf, setCpf] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle');
@@ -20,8 +18,9 @@ export default function ResetPassword() {
     e.preventDefault();
     setStatus('loading');
     try {
-      const res = await fetch(`${API_BASE}/api/request-new-password`, {
+      const res = await fetch('/api/auth/request-password-reset', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') }),
       });

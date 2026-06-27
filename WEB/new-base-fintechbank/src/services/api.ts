@@ -46,7 +46,7 @@ function adaptCreditCard(c: any): CreditCard {
     isNfcEnabled: true,
     type: 'physical',
     limitTotal: c.totalLimit ?? 5000,
-    limitUsed: c.currentInvoice ?? 0,
+    limitUsed: (c.totalLimit ?? 5000) - (c.availableLimit ?? (c.totalLimit ?? 5000)),
   };
 }
 
@@ -57,8 +57,8 @@ export async function getTransactions(cpf: string): Promise<Transaction[]> {
 
 export async function getCreditCard(cpf: string): Promise<CreditCard | null> {
   try {
-    const res = await apiCall<{ success: boolean; creditCard?: any }>(`/credit-card/${cpf}`);
-    return res.creditCard ? adaptCreditCard(res.creditCard) : null;
+    const res = await apiCall<{ success: boolean; user?: any }>(`/users/${cpf}`);
+    return res.user?.creditCard ? adaptCreditCard(res.user.creditCard) : null;
   } catch {
     return null;
   }
