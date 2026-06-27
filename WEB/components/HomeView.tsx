@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw } from 'lucide-react';
 
 import { User } from '../types';
+import { useDialog } from '../contexts/GlobalDialogContext';
 import HomeBanners from './HomeBanners';
 import NewsSection from './NewsSection';
 import ShopOffersBanner from './ShopOffersBanner';
@@ -28,6 +29,7 @@ interface HomeViewProps {
 
 
 const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
+  const { showDialog } = useDialog();
   const biometricEnabled = localStorage.getItem('volt_biometric_enabled') === 'true';
   const [balanceIsVisible, setIsBalanceVisible] = useState(!biometricEnabled);
   const [isBiometricOpen, setIsBiometricOpen] = useState(false);
@@ -61,7 +63,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
       localStorage.setItem('volt_monthly_goal', num.toString());
       setIsEditingGoal(false);
     } else {
-      alert('Por favor, insira um valor válido maior que zero.');
+      showDialog({ title: 'Atenção', message: 'Por favor, insira um valor válido maior que zero.' });
     }
   };
 
@@ -82,13 +84,13 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
     if (!bill) return;
 
     if (bill.status === 'paid') {
-      alert('Esta conta já foi paga!');
+      showDialog({ title: 'Aviso', message: 'Esta conta já foi paga!' });
       return;
     }
 
     const absoluteAmount = Math.abs(bill.amount);
     if (accountBalance < absoluteAmount) {
-      alert(`Saldo insuficiente! Seu saldo atual é R$ ${accountBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, mas o valor da conta é R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`);
+      showDialog({ title: 'Saldo insuficiente', message: `Saldo insuficiente! Seu saldo atual é R$ ${accountBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, mas o valor da conta é R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` });
       return;
     }
 
@@ -105,7 +107,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
       'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'
     ];
 
-    alert('Conta paga com sucesso!');
+    showDialog({ title: 'Sucesso', message: 'Conta paga com sucesso!' });
 
     const updatedBills = recurringBills.map(b => {
       if (b.id === billId) {
@@ -121,7 +123,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
     setRecurringBills(updatedBills);
     localStorage.setItem('volt_recurring_bills', JSON.stringify(updatedBills));
 
-    alert(`Sucesso! O pagamento de ${bill.title} de R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} foi realizado.`);
+    showDialog({ title: 'Sucesso', message: `Sucesso! O pagamento de ${bill.title} de R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} foi realizado.` });
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -511,7 +513,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
             {
               label: 'Contas',
               icon: Receipt,
-              action: () => alert('Contas e boletos para pagamento serão importados automaticamente pelo seu DDA.'),
+              action: () => showDialog({ title: 'Aviso', message: 'Contas e boletos para pagamento serão importados automaticamente pelo seu DDA.' }),
               highlight: false,
             },
           ].map((item, index) => {
@@ -691,7 +693,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
           {recurringBills.map((bill) => {
             const isPaid = bill.status === 'paid';
             const billAmountAbs = Math.abs(bill.amount);
-            const isMidnight = theme === 'midnight';
+            const isMidnight = true; // Forced Dark Mode
             const iconColorClass = isMidnight ? "text-[#00DF89]" : "text-black";
             
             const getBillIcon = (cat: string) => {
@@ -1077,7 +1079,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
       {/* Bento Teaser Card / Investments */}
       <motion.section
         variants={itemVariants}
-        onClick={() => alert('Parabéns pelo interesse! A Carteira Volt Rendimentos já está em desenvolvimento e oferecerá aplicações automáticas no CDI.')}
+        onClick={() => showDialog({ title: 'Aviso', message: 'Parabéns pelo interesse! A Carteira Volt Rendimentos já está em desenvolvimento e oferecerá aplicações automáticas no CDI.' })}
         className="relative rounded-2xl h-44 bg-volt-surface overflow-hidden flex items-center p-5 group cursor-pointer active:scale-[0.99] transition-transform shadow-2xl"
       >
         <div className="z-10 flex flex-col gap-1.5 max-w-[62%]">

@@ -1,30 +1,35 @@
 import React from 'react';
+import { Home, CreditCard, ShoppingBag, User, Sliders } from 'lucide-react';
+import { motion } from 'motion/react';
 
 interface BottomNavBarProps {
     currentView: string;
-    onNavigate: (view: 'home' | 'cards' | 'shop' | 'profile') => void;
+    onNavigate: (view: 'home' | 'cards' | 'shop' | 'profile' | 'limit') => void;
 }
 
 const navItems = [
-    { label: 'Início',  view: 'home',    icon: 'home' },
-    { label: 'Cartões', view: 'cards',   icon: 'credit_card' },
-    { label: 'Shop',    view: 'shop',    icon: 'storefront' },
-    { label: 'Perfil',  view: 'profile', icon: 'person' },
+    { label: 'Início',  view: 'home',    icon: Home },
+    { label: 'Cartões', view: 'cards',   icon: CreditCard },
+    { label: 'Limite',  view: 'limit',   icon: Sliders },
+    { label: 'Shop',    view: 'shop',    icon: ShoppingBag },
+    { label: 'Perfil',  view: 'profile', icon: User },
 ] as const;
 
 const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) => {
     return (
-        /* Volt brutalist pill navbar — white card with hard black shadow, floats above yellow bg */
+        /* Volt sleek dark pill navbar — dark surface, floating, glowing active state */
         <nav
             id="bottom-nav"
             data-testid="bottom-nav"
             data-cy="bottom-nav"
             data-playwright="bottom-nav"
             aria-label="Navegação principal"
-            className="flex-shrink-0 mx-3 mb-3 bg-white border-4 border-black rounded-full flex justify-around items-center h-20 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+            className="flex-shrink-0 mx-auto w-[calc(100%-1.5rem)] max-w-[424px] mb-4 bg-volt-surface border border-white/10 rounded-[2rem] flex justify-around items-center h-[72px] shadow-lg z-40 backdrop-blur-md"
         >
             {navItems.map(item => {
+                const Icon = item.icon;
                 const isActive = currentView === item.view;
+                
                 return (
                     <button
                         key={item.view}
@@ -37,20 +42,33 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) 
                         aria-label={item.label}
                         aria-current={isActive ? 'page' : undefined}
                         type="button"
-                        className={`relative flex flex-col items-center justify-center w-16 h-14 rounded-full transition-colors cursor-pointer test-nav-${item.view}`}
+                        className={`relative flex flex-col items-center justify-center w-16 h-14 rounded-full transition-colors cursor-pointer test-nav-${item.view} group`}
                     >
                         {/* Active pill highlight */}
                         {isActive && (
-                            <span className="absolute inset-0 bg-[#00E5FF] border-2 border-black rounded-full shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
+                            <motion.span
+                                layoutId="activeTabGlow"
+                                className="absolute inset-0 bg-volt-primary/10 border border-volt-primary/20 rounded-full"
+                                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                            />
                         )}
-                        <span
-                            className={`material-symbols-outlined z-10 text-xl ${isActive ? 'text-black' : 'text-gray-500'}`}
-                            aria-hidden="true"
-                            style={{ fontSize: '20px' }}
+                        
+                        <motion.div
+                            animate={{
+                                scale: isActive ? 1.1 : 1,
+                                y: isActive ? -1 : 0,
+                            }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                            className={`${
+                                isActive
+                                  ? 'text-volt-primary drop-shadow-[0_0_8px_rgba(0,255,157,0.5)]'
+                                  : 'text-zinc-500 group-hover:text-white'
+                            } transition-all duration-300 z-10`}
                         >
-                            {item.icon}
-                        </span>
-                        <span className={`text-[9px] font-black mt-0.5 tracking-wider uppercase z-10 ${isActive ? 'text-black' : 'text-gray-500'}`}>
+                            <Icon size={18} className={isActive ? 'stroke-[2.5]' : 'stroke-[2]'} />
+                        </motion.div>
+
+                        <span className={`text-[9px] font-bold mt-0.5 tracking-wider uppercase z-10 transition-colors ${isActive ? 'text-volt-primary' : 'text-zinc-500 group-hover:text-white'}`}>
                             {item.label}
                         </span>
                     </button>

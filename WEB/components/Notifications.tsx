@@ -23,9 +23,8 @@ function Notifications({ onBack }: NotificationsProps) {
         if (user) {
             setIsLoading(true);
             const result = await getNotifications(user.cpf);
-            if (result.success) {
-                const userNotifications = result.notifications!;
-                setNotifications(userNotifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+            if (Array.isArray(result)) {
+                setNotifications(result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
             }
             setIsLoading(false);
         }

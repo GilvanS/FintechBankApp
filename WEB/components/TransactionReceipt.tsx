@@ -70,7 +70,7 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
         : (tx.merchant || transaction.description);
 
     return (
-        <div className="min-h-full bg-background-dark text-white flex flex-col" data-testid="transaction-receipt">
+        <div className="h-full bg-[#0a0a0a] text-white flex flex-col w-full max-w-md mx-auto" data-testid="transaction-receipt">
             <header className="flex items-center justify-between p-4 border-b border-white/10">
                 <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10" data-testid="receipt-back">
                     <span className="material-symbols-outlined">arrow_back</span>
@@ -97,14 +97,14 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                     <p className="text-xs text-white/40">{dateStr} às {timeStr}</p>
                 </div>
 
-                <div className="bg-surface-dark rounded-2xl p-4" data-testid="receipt-origin">
+                <div className="bg-white/5 rounded-2xl p-4 border border-white/10" data-testid="receipt-origin">
                     <p className="text-xs text-white/40 uppercase tracking-wider mb-2">Origem</p>
                     <Row label="Nome" value={originName} testid="receipt-origin-name" />
                     <Row label="Instituição" value="FintechBank" />
                     {(user as any)?.cpf && <Row label="CPF" value={`***.${(user as any).cpf.slice(3,6)}.${(user as any).cpf.slice(6,9)}-**`} testid="receipt-origin-cpf" />}
                 </div>
 
-                <div className="bg-surface-dark rounded-2xl p-4" data-testid="receipt-destination">
+                <div className="bg-white/5 rounded-2xl p-4 border border-white/10" data-testid="receipt-destination">
                     <p className="text-xs text-white/40 uppercase tracking-wider mb-2">
                         {transaction.type === 'PIX_RECEIVED' ? 'Remetente' : 'Destinatário'}
                     </p>
@@ -116,7 +116,7 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                     {transaction.description && !isPix && <Row label="Descrição" value={transaction.description} testid="receipt-description" />}
                 </div>
 
-                <div className="bg-surface-dark rounded-2xl p-4" data-testid="receipt-id-section">
+                <div className="bg-white/5 rounded-2xl p-4 border border-white/10" data-testid="receipt-id-section">
                     <div className="flex justify-between items-start gap-2 pb-3 border-b border-white/5">
                         <div className="min-w-0">
                             <p className="text-xs text-white/40 uppercase tracking-wider mb-1">ID da transação</p>
@@ -130,7 +130,7 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                     <Row label="Data e Hora" value={`${dateStr}, ${timeStr}`} testid="receipt-datetime" />
                 </div>
 
-                <button className="w-full flex items-center gap-3 p-4 bg-surface-dark rounded-2xl hover:bg-white/5 transition-colors" data-testid="receipt-help">
+                <button className="w-full flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-colors" data-testid="receipt-help">
                     <span className="material-symbols-outlined text-white/50">forum</span>
                     <span className="text-sm text-white/70 flex-1 text-left">Problema com esta transação?</span>
                     <span className="material-symbols-outlined text-white/30">chevron_right</span>

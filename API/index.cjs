@@ -803,6 +803,16 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
         return null;
     }).filter(Boolean);
 
+    // Janela do ciclo de billing para filtro correto das faturas
+    const _bcRows = await databricksService.executeQuery(
+        `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
+    );
+    const _bc = _bcRows[0] || { close_day: 20, due_day: 10 };
+    const _cyc = computeCurrentCycle(_bc);
+    const _cd = _cyc.closeDate;
+    const _closeMs = Date.UTC(_cd.getFullYear(), _cd.getMonth(), _cd.getDate(), 23, 59, 59, 999);
+    const _prevCloseMs = Date.UTC(_cd.getFullYear(), _cd.getMonth() - 1, _cd.getDate(), 23, 59, 59, 999);
+
     const invoiceDueDate = normalized.creditCard?.invoiceDueDate ? new Date(normalized.creditCard.invoiceDueDate) : null;
     let invoiceDueDateEndOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
     if (invoiceDueDateEndOfDay) invoiceDueDateEndOfDay.setUTCHours(23, 59, 59, 999);
@@ -814,9 +824,9 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
     normalized.creditCard.currentInvoice = cardTransactions
         .filter(tx => {
             const txDate = new Date(tx.date).getTime();
-            const isInPeriod = !invoiceDueDateEndOfDay || txDate <= invoiceDueDateEndOfDay.getTime();
-            if (!isInPeriod) return false;
-            
+            // Fatura aberta: apenas transações do ciclo atual (após último fechamento)
+            if (txDate <= _closeMs) return false;
+
             // Sempre incluir parcelas
             if (tx.type === 'INVOICE_INSTALLMENT') return true;
             
@@ -839,7 +849,7 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
             
             return false;
         })
-        .reduce((sum, tx) => sum + tx.amount, 0);
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
 
     const isBlocked = Boolean(normalized.creditCard?.isBlocked);
     const now = new Date();
@@ -859,12 +869,56 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
         normalized.creditCard.currentInvoice = 0;
     } else {
         // Nao bloqueado: usar cutoff baseado no invoiceDueDate (consistente com a fatura atual)
+        // Fatura fechada: janela do ciclo anterior (prevCloseDate → closeDate)
         closedTransactions = cardTransactions
-            .filter(tx => tx.type === 'INVOICE_INSTALLMENT' && new Date(tx.date).getTime() <= cutoff.getTime());
+            .filter(tx => tx.type === 'INVOICE_INSTALLMENT'
+                && new Date(tx.date).getTime() > _prevCloseMs
+                && new Date(tx.date).getTime() <= _closeMs);
     }
 
     normalized.creditCard.closedTransactions = closedTransactions;
-    normalized.creditCard.closedInvoice = closedTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+    const rawInvoiceTotal = closedTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    // Pagamentos feitos APÓS o fechamento = pagamentos para a fatura fechada atual
+    const paidInCycle = cardRows
+        .filter(r => r.type === 'INVOICE_PAYMENT' && new Date(r.date).getTime() > _closeMs)
+        .reduce((sum, r) => sum + Math.abs(parseFloat(r.amount || 0)), 0);
+    normalized.creditCard.closedInvoice = Math.max(0, rawInvoiceTotal - paidInCycle);
+
+    // Parcelas futuras projetadas a partir de installment_plans ativos
+    try {
+        const _futurePlans = await databricksService.executeQuery(`
+            SELECT installment_amount, remaining_installments, next_due_date,
+                   description, installments AS total_installments
+            FROM ${databricksService.fq('installment_plans')}
+            WHERE cpf = '${cpf}' AND LOWER(status) = 'active' AND remaining_installments > 0
+        `);
+        const _futMap = {};
+        const _futDetail = {};
+        for (const _plan of (_futurePlans || [])) {
+            if (!_plan.remaining_installments || !_plan.next_due_date) continue;
+            let _d = new Date(_plan.next_due_date);
+            const _amt = parseFloat(_plan.installment_amount || 0);
+            const _total = parseInt(_plan.total_installments, 10) || 1;
+            const _remaining = parseInt(_plan.remaining_installments, 10);
+            const _startNum = _total - _remaining + 1;
+            const _desc = (_plan.description || 'Compra parcelada').replace(/\s*\(credito\)\s*$/i, '');
+            for (let _i = 0; _i < _remaining; _i++) {
+                const _ref = _d.getUTCFullYear() + '-' + String(_d.getUTCMonth() + 1).padStart(2, '0');
+                _futMap[_ref] = Math.round(((_futMap[_ref] || 0) + _amt) * 100) / 100;
+                if (!_futDetail[_ref]) _futDetail[_ref] = [];
+                _futDetail[_ref].push({ description: _desc, amount: _amt, num: _startNum + _i, total: _total });
+                const _nd = new Date(_d);
+                _nd.setUTCMonth(_nd.getUTCMonth() + 1);
+                _d = _nd;
+            }
+        }
+        normalized.creditCard.futureInstallments = _futMap;
+        normalized.creditCard.futureInstallmentsDetail = _futDetail;
+    } catch (_e) {
+        console.error('❌ futureInstallments error:', _e);
+        normalized.creditCard.futureInstallments = {};
+        normalized.creditCard.futureInstallmentsDetail = {};
+    }
 
     // Adicionar purchasedItems do banco
     const purchaseRows = await databricksService.executeQuery(`
@@ -904,7 +958,7 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
         const chargeRows = await databricksService.executeQuery(`
             SELECT charge_type, amount
             FROM ${databricksService.fq('billing_charges')}
-            WHERE cpf = '${cpf}' AND invoice_reference = '${cycle.invoiceRef}' AND status = 'pending'
+            WHERE cpf = '${cpf}' AND status = 'pending'
         `);
         const pendingCharges = chargeRows.reduce((s, c) => s + parseFloat(c.amount), 0);
 
@@ -985,6 +1039,16 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
         return null;
     }).filter(Boolean);
 
+    // Janela do ciclo de billing para filtro correto das faturas
+    const _bcRows = await databricksService.executeQuery(
+        `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
+    );
+    const _bc = _bcRows[0] || { close_day: 20, due_day: 10 };
+    const _cyc = computeCurrentCycle(_bc);
+    const _cd = _cyc.closeDate;
+    const _closeMs = Date.UTC(_cd.getFullYear(), _cd.getMonth(), _cd.getDate(), 23, 59, 59, 999);
+    const _prevCloseMs = Date.UTC(_cd.getFullYear(), _cd.getMonth() - 1, _cd.getDate(), 23, 59, 59, 999);
+
     const invoiceDueDate = normalized.creditCard?.invoiceDueDate ? new Date(normalized.creditCard.invoiceDueDate) : null;
     const invoiceDueDateEndOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
     if (invoiceDueDateEndOfDay) invoiceDueDateEndOfDay.setUTCHours(23, 59, 59, 999);
@@ -996,9 +1060,9 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
     normalized.creditCard.currentInvoice = cardTransactions
         .filter(tx => {
             const txDate = new Date(tx.date).getTime();
-            const isInPeriod = !invoiceDueDateEndOfDay || txDate <= invoiceDueDateEndOfDay.getTime();
-            if (!isInPeriod) return false;
-            
+            // Fatura aberta: apenas transações do ciclo atual (após último fechamento)
+            if (txDate <= _closeMs) return false;
+
             // Sempre incluir parcelas
             if (tx.type === 'INVOICE_INSTALLMENT') return true;
             
@@ -1021,7 +1085,7 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
             
             return false;
         })
-        .reduce((sum, tx) => sum + tx.amount, 0);
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
 
     const isBlocked = Boolean(normalized.creditCard?.isBlocked);
     const now = new Date();
@@ -1040,12 +1104,56 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
         normalized.creditCard.currentInvoice = 0;
     } else {
         // Não bloqueado: usar cutoff baseado no invoiceDueDate
+        // Fatura fechada: janela do ciclo anterior (prevCloseDate → closeDate)
         closedTransactions = cardTransactions
-            .filter(tx => tx.type === 'INVOICE_INSTALLMENT' && new Date(tx.date).getTime() <= cutoff.getTime());
+            .filter(tx => tx.type === 'INVOICE_INSTALLMENT'
+                && new Date(tx.date).getTime() > _prevCloseMs
+                && new Date(tx.date).getTime() <= _closeMs);
     }
 
     normalized.creditCard.closedTransactions = closedTransactions;
-    normalized.creditCard.closedInvoice = closedTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+    const rawInvoiceTotal = closedTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    // Pagamentos feitos APÓS o fechamento = pagamentos para a fatura fechada atual
+    const paidInCycle = cardRows
+        .filter(r => r.type === 'INVOICE_PAYMENT' && new Date(r.date).getTime() > _closeMs)
+        .reduce((sum, r) => sum + Math.abs(parseFloat(r.amount || 0)), 0);
+    normalized.creditCard.closedInvoice = Math.max(0, rawInvoiceTotal - paidInCycle);
+
+    // Parcelas futuras projetadas a partir de installment_plans ativos
+    try {
+        const _futurePlans = await databricksService.executeQuery(`
+            SELECT installment_amount, remaining_installments, next_due_date,
+                   description, installments AS total_installments
+            FROM ${databricksService.fq('installment_plans')}
+            WHERE cpf = '${cpf}' AND LOWER(status) = 'active' AND remaining_installments > 0
+        `);
+        const _futMap = {};
+        const _futDetail = {};
+        for (const _plan of (_futurePlans || [])) {
+            if (!_plan.remaining_installments || !_plan.next_due_date) continue;
+            let _d = new Date(_plan.next_due_date);
+            const _amt = parseFloat(_plan.installment_amount || 0);
+            const _total = parseInt(_plan.total_installments, 10) || 1;
+            const _remaining = parseInt(_plan.remaining_installments, 10);
+            const _startNum = _total - _remaining + 1;
+            const _desc = (_plan.description || 'Compra parcelada').replace(/\s*\(credito\)\s*$/i, '');
+            for (let _i = 0; _i < _remaining; _i++) {
+                const _ref = _d.getUTCFullYear() + '-' + String(_d.getUTCMonth() + 1).padStart(2, '0');
+                _futMap[_ref] = Math.round(((_futMap[_ref] || 0) + _amt) * 100) / 100;
+                if (!_futDetail[_ref]) _futDetail[_ref] = [];
+                _futDetail[_ref].push({ description: _desc, amount: _amt, num: _startNum + _i, total: _total });
+                const _nd = new Date(_d);
+                _nd.setUTCMonth(_nd.getUTCMonth() + 1);
+                _d = _nd;
+            }
+        }
+        normalized.creditCard.futureInstallments = _futMap;
+        normalized.creditCard.futureInstallmentsDetail = _futDetail;
+    } catch (_e) {
+        console.error('❌ futureInstallments error:', _e);
+        normalized.creditCard.futureInstallments = {};
+        normalized.creditCard.futureInstallmentsDetail = {};
+    }
 
     // Adicionar purchasedItems do banco
     const purchaseRows = await databricksService.executeQuery(`
@@ -1066,6 +1174,44 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
         pointsEarned: r.points_earned != null ? parseInt(r.points_earned, 10) : undefined,
         purchaseDate: r.purchase_date
     }));
+
+    // Billing status — accountStatus, daysOverdue, pendingCharges, billingCycle
+    try {
+        const billingCfgRows = await databricksService.executeQuery(
+            `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
+        );
+        const billingCfg = billingCfgRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3, is_active: true };
+        const cycle = computeCurrentCycle(billingCfg);
+
+        const billingUserRow = await databricksService.executeQuery(`
+            SELECT COALESCE(account_status, 'adimplente') AS account_status,
+                   COALESCE(days_overdue, 0)              AS days_overdue
+            FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'
+        `);
+        const bu = billingUserRow[0] || {};
+
+        const chargeRows = await databricksService.executeQuery(`
+            SELECT charge_type, amount
+            FROM ${databricksService.fq('billing_charges')}
+            WHERE cpf = '${cpf}' AND status = 'pending'
+        `);
+        const pendingCharges = chargeRows.reduce((s, c) => s + parseFloat(c.amount), 0);
+
+        normalized.accountStatus  = bu.account_status || 'adimplente';
+        normalized.daysOverdue    = Number(bu.days_overdue) || 0;
+        normalized.pendingCharges = Math.round(pendingCharges * 100) / 100;
+        normalized.billingCycle   = {
+            status:    cycle.cycleStatus,
+            closeDate: cycle.closeDate,
+            dueDate:   cycle.dueDate,
+            invoiceRef: cycle.invoiceRef,
+        };
+    } catch (_) {
+        normalized.accountStatus  = 'adimplente';
+        normalized.daysOverdue    = 0;
+        normalized.pendingCharges = 0;
+        normalized.billingCycle   = null;
+    }
 
     res.json({ success: true, user: normalized });
 }));
@@ -1548,32 +1694,18 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
 
         // Gerar somente a 1a parcela na fatura atual e criar plano agregado para as futuras
         if (qty >= 2) {
-            const invoiceDueStr = user.credit_card_invoice_due_date;
             const now = new Date();
-            
-            // Determinar em qual fatura a primeira parcela deve entrar
-            // Se não há data de vencimento, usar data atual como referência
-            let firstDue;
-            if (!invoiceDueStr) {
-                // Se não há data de vencimento configurada, criar uma para o próximo mês
-                firstDue = new Date(now);
-                firstDue.setMonth(now.getMonth() + 1);
-                firstDue.setUTCHours(23, 59, 59, 999);
-            } else {
-                const invoiceDue = new Date(invoiceDueStr);
-                invoiceDue.setUTCHours(23, 59, 59, 999);
-                
-                // Se a fatura ainda não venceu (ou vence hoje), a primeira parcela entra na fatura atual
-                // Se a fatura já venceu, a primeira parcela entra na próxima fatura
-                if (invoiceDue >= now) {
-                    // Fatura ainda está aberta, parcela entra na fatura atual
-                    firstDue = invoiceDue;
-                } else {
-                    // Fatura já venceu, parcela entra na próxima fatura (mês seguinte)
-                    firstDue = new Date(invoiceDue);
-                    firstDue.setMonth(invoiceDue.getMonth() + 1);
-                }
-            }
+
+            // Usar o próximo close_day do ciclo de billing como data da 1ª parcela
+            // Garante que a parcela caia dentro da janela da fatura aberta atual
+            const chkBcRows = await databricksService.executeQuery(
+                `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
+            );
+            const chkBc = chkBcRows[0] || { close_day: 20, due_day: 10 };
+            const chkCyc = computeCurrentCycle(chkBc);
+            // próximo close_day = closeDate (Date local) + 1 mês em UTC
+            const _chkCd = chkCyc.closeDate;
+            const firstDue = new Date(Date.UTC(_chkCd.getFullYear(), _chkCd.getMonth() + 1, _chkCd.getDate(), 23, 59, 59, 999));
 
             const parcela = totalParcelado / qty;
 
@@ -1588,7 +1720,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             // Plano agregado (restante das parcelas)
             const remainingBalance = (totalParcelado - parcela).toFixed(2);
             const nextDueDate = new Date(firstDue);
-            nextDueDate.setMonth(firstDue.getMonth() + 1);
+            nextDueDate.setUTCMonth(firstDue.getUTCMonth() + 1);
 
             const planId = databricksService.generateUUID();
             const { esc } = require('./repositories/context');
@@ -3016,8 +3148,10 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
         `);
         const remaining = totalDue - payAmount;
         const daysOverdue = parseInt(user.days_overdue || 0);
-        const nowDate = new Date();
-        const invoiceRef = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}`;
+        const billingCfgForRef = (await databricksService.executeQuery(
+            `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
+        ))[0] || { close_day: 20, due_day: 10, grace_period_days: 3 };
+        const { invoiceRef } = computeCurrentCycle(billingCfgForRef);
         const { multa, juros } = calcCharges(remaining, daysOverdue);
         if (multa > 0 || juros > 0) {
             const chargeBase = databricksService.generateUUID();

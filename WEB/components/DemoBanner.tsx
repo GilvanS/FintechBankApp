@@ -1,6 +1,6 @@
 import React from 'react';
 
-const IS_DEMO = import.meta.env.VITE_USE_MOCK_API === 'true';
+const IS_DEMO = (import.meta as any).env?.VITE_USE_MOCK_API === 'true';
 
 export default function DemoBanner() {
   if (!IS_DEMO) return null;

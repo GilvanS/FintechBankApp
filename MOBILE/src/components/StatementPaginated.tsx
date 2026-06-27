@@ -11,11 +11,11 @@ interface StatementPaginatedProps {
     onBack: () => void;
 }
 
-type TabType = 'purchases' | 'pix' | 'transfers' | 'payments';
+type TabType = 'all' | 'purchases' | 'pix' | 'transfers' | 'payments';
 
 function StatementPaginated({ onNavigate, onBack }: StatementPaginatedProps) {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<TabType>('purchases');
+    const [activeTab, setActiveTab] = useState<TabType>('all');
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ function StatementPaginated({ onNavigate, onBack }: StatementPaginatedProps) {
         setIsLoading(true);
         setError(null);
         try {
-            const result = await getUserStatementPaginated(user.cpf, page, limit, type);
+            const result = await getUserStatementPaginated(user.cpf, page, limit, type === 'all' ? undefined : type);
             if (result.success && result.transactions) {
                 setTransactions(result.transactions);
                 if (result.pagination) setPagination(result.pagination);
@@ -82,7 +82,7 @@ function StatementPaginated({ onNavigate, onBack }: StatementPaginatedProps) {
         }
     };
 
-    const getIconForType = (type: Transaction['type']) => {
+    const getIconForType = (type: string) => {
         switch (type) {
             case 'PIX_SENT':
             case 'PIX_RECEIVED':
@@ -100,7 +100,7 @@ function StatementPaginated({ onNavigate, onBack }: StatementPaginatedProps) {
         }
     };
 
-    const getTypeLabel = (type: Transaction['type']): string => {
+    const getTypeLabel = (type: string): string => {
         switch (type) {
             case 'PIX_SENT': return 'PIX Enviado';
             case 'PIX_RECEIVED': return 'PIX Recebido';
@@ -146,87 +146,79 @@ function StatementPaginated({ onNavigate, onBack }: StatementPaginatedProps) {
                     <p className="text-white text-4xl font-bold mt-2">{user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                 </div>
 
-                {/* Abas de filtro */}
-                <div className="flex gap-2 border-b border-subtle-dark/50 overflow-x-auto no-scrollbar">
-                    <button
-                        onClick={() => handleTabChange('purchases')}
-                        className={`flex-shrink-0 py-3 px-4 text-center font-semibold transition-colors whitespace-nowrap ${
-                            activeTab === 'purchases'
-                                ? 'text-primary border-b-2 border-primary'
-                                : 'text-white/60 hover:text-white'
-                        }`}
-                    >
-                        Compras
-                    </button>
-                    <button
-                        onClick={() => handleTabChange('pix')}
-                        className={`flex-shrink-0 py-3 px-4 text-center font-semibold transition-colors whitespace-nowrap ${
-                            activeTab === 'pix'
-                                ? 'text-primary border-b-2 border-primary'
-                                : 'text-white/60 hover:text-white'
-                        }`}
-                    >
-                        PIX
-                    </button>
-                    <button
-                        onClick={() => handleTabChange('transfers')}
-                        className={`flex-shrink-0 py-3 px-4 text-center font-semibold transition-colors whitespace-nowrap ${
-                            activeTab === 'transfers'
-                                ? 'text-primary border-b-2 border-primary'
-                                : 'text-white/60 hover:text-white'
-                        }`}
-                    >
-                        Transferências
-                    </button>
-                    <button
-                        onClick={() => handleTabChange('payments')}
-                        className={`flex-shrink-0 py-3 px-4 text-center font-semibold transition-colors whitespace-nowrap ${
-                            activeTab === 'payments'
-                                ? 'text-primary border-b-2 border-primary'
-                                : 'text-white/60 hover:text-white'
-                        }`}
-                    >
-                        Pagamentos
-                    </button>
+                {/* Filtros por categoria — chips */}
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                    {([
+                        { key: 'all',       label: 'Todos',           icon: 'apps' },
+                        { key: 'purchases', label: 'Compras',         icon: 'shopping_bag' },
+                        { key: 'pix',       label: 'PIX',             icon: 'currency_exchange' },
+                        { key: 'transfers', label: 'Transferências',  icon: 'swap_horiz' },
+                        { key: 'payments',  label: 'Pagamentos',      icon: 'receipt_long' },
+                    ] as const).map(tab => (
+                        <button
+                            key={tab.key}
+                            onClick={() => handleTabChange(tab.key)}
+                            className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+                                activeTab === tab.key
+                                    ? 'bg-primary text-white'
+                                    : 'bg-white/10 text-white/70 hover:bg-white/15 hover:text-white'
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-base">{tab.icon}</span>
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
 
-                {/* Lista de transações */}
-                <div className="flex flex-col gap-2">
+                {/* Lista de transações agrupada por data */}
+                <div className="flex flex-col gap-0">
                     {isLoading ? (
                         <LoadingSpinner message="Carregando transações..." />
                     ) : error ? (
                         <ErrorState message={error} onRetry={() => fetchStatement(currentPage, activeTab)} />
                     ) : transactions.length === 0 ? (
-                        <div className="flex items-center justify-center p-8">
-                            <p className="text-white/60">Nenhuma transação encontrada</p>
+                        <div className="flex flex-col items-center justify-center py-12 gap-3">
+                            <span className="material-symbols-outlined text-4xl text-white/20">receipt_long</span>
+                            <p className="text-white/40 text-sm">Nenhuma transação encontrada</p>
                         </div>
-                    ) : (
-                        transactions.map((tx) => {
-                            const time = new Date(tx.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                            const date = new Date(tx.date).toLocaleDateString('pt-BR');
-                            const typeLabel = getTypeLabel(tx.type);
-                            return (
-                                <button
-                                    key={tx.id}
-                                    onClick={() => setSelectedTransaction(tx)}
-                                    className="w-full flex items-center gap-4 hover:bg-white/5 rounded-lg p-4 transition-colors duration-200 text-left cursor-pointer"
-                                >
-                                    <div className="text-white flex items-center justify-center rounded-full bg-primary/10 shrink-0 size-10">
-                                        <span className="material-symbols-outlined text-primary">{getIconForType(tx.type)}</span>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-white/50 text-xs mb-0.5">{date} • {time} • {typeLabel}</p>
-                                        <p className="text-white text-base font-medium leading-normal truncate">{tx.description}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className={`text-base font-semibold ${tx.amount < 0 ? 'text-orange-400' : 'text-primary'}`}>
-                                            {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </p>
-                                    </div>
-                                </button>
-                            );
-                        })
-                    )}
+                    ) : (() => {
+                        const grouped: Record<string, Transaction[]> = {};
+                        transactions.forEach(tx => {
+                            const d = new Date(tx.date);
+                            const key = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+                            if (!grouped[key]) grouped[key] = [];
+                            grouped[key].push(tx);
+                        });
+                        return Object.entries(grouped).map(([dateLabel, dayTxs]) => (
+                            <div key={dateLabel} className="mb-4">
+                                <p className="text-xs font-semibold text-white/40 uppercase tracking-wide py-2 first-letter:capitalize">{dateLabel}</p>
+                                <div className="space-y-0.5">
+                                    {dayTxs.map((tx) => {
+                                        const time = new Date(tx.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                                        const typeLabel = getTypeLabel(tx.type);
+                                        return (
+                                            <button
+                                                key={tx.id}
+                                                onClick={() => setSelectedTransaction(tx)}
+                                                className="w-full flex items-center gap-3 hover:bg-white/5 rounded-xl p-3 transition-colors duration-200 text-left cursor-pointer"
+                                            >
+                                                <div className="flex items-center justify-center rounded-full bg-primary/10 shrink-0 size-10">
+                                                    <span className="material-symbols-outlined text-primary text-base">{getIconForType(tx.type)}</span>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-white text-sm font-medium leading-normal truncate">{tx.description}</p>
+                                                    <p className="text-white/40 text-xs mt-0.5">{time} • {typeLabel}</p>
+                                                </div>
+                                                <p className={`text-sm font-semibold shrink-0 ${tx.amount < 0 ? 'text-white' : 'text-primary'}`}>
+                                                    {tx.amount < 0 ? '- ' : '+ '}{Math.abs(tx.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                                </p>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ));
+                    })()}
                 </div>
 
                 {/* Paginação */}

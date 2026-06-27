@@ -29,6 +29,29 @@ ANALISE-E-PLANO.md
 .claude-flow/
 WEB/coverage/
 
+# Graphify — saída gerada localmente
+graphify-out/
+
+# Crash dumps do bash/terminal
+*.stackdump
+
+# Arquivos de coordenação local de agentes
+.swarm/
+.agent/
+
+# Arquivos de referência / zips de design
+*.zip
+WEB/volt-fintech/
+
+# Backups e scripts locais de portagem
+CLAUDE.md.pre-ruflo
+graphify_pipeline.py
+port_*.py
+WEB/port_home_view.py
+
+# Configuração local do MCP (caminhos específicos da máquina)
+.mcp.json
+
 # Pasta de imagens de exemplo para inspiracao (nao versionar)
 .exemplos/
 exemplos/

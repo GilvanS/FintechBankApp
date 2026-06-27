@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { User } from '../types';
 // FIX: Imported formatCPF for consistency and removed local implementation.
 import { formatCPF } from '../utils/formatters';
+import { useDialog } from '../contexts/GlobalDialogContext';
 
 interface SettingsProps {
     user: User;
@@ -17,6 +18,7 @@ interface SettingsProps {
 }
 
 const Settings: React.FC<SettingsProps> = ({ user, onLogout, onBack, onNavigateToAdmin }) => {
+    const { showDialog } = useDialog();
 
     const SettingButton: React.FC<{label: string, onClick: () => void, testId?: string}> = ({ label, onClick, testId }) => (
         <button onClick={onClick} className="w-full text-left p-4 bg-gray-900 rounded-lg font-medium text-white hover:bg-gray-800 flex justify-between items-center" type="button" data-testid={testId} data-cy={testId} data-playwright={testId} aria-label={label}>
@@ -27,7 +29,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onLogout, onBack, onNavigateT
 
     return (
         <div
-            className="bg-black min-h-full test-settings"
+            className="bg-black h-full w-full max-w-md mx-auto pb-28 test-settings"
             id="settings"
             data-testid="settings"
             data-cy="settings"
@@ -63,9 +65,9 @@ const Settings: React.FC<SettingsProps> = ({ user, onLogout, onBack, onNavigateT
                     {user.role === 'admin' && (
                         <SettingButton testId="settings-admin" label="Painel do Administrador" onClick={onNavigateToAdmin} />
                     )}
-                    <SettingButton testId="settings-mydata" label="Meus dados" onClick={() => alert('Em desenvolvimento')} />
-                    <SettingButton testId="settings-security" label="Segurança" onClick={() => alert('Em desenvolvimento')} />
-                    <SettingButton testId="settings-notifications" label="Notificações" onClick={() => alert('Em desenvolvimento')} />
+                    <SettingButton testId="settings-mydata" label="Meus dados" onClick={() => showDialog({ title: 'Aviso', message: 'Em desenvolvimento' })} />
+                    <SettingButton testId="settings-security" label="Segurança" onClick={() => showDialog({ title: 'Aviso', message: 'Em desenvolvimento' })} />
+                    <SettingButton testId="settings-notifications" label="Notificações" onClick={() => showDialog({ title: 'Aviso', message: 'Em desenvolvimento' })} />
                 </div>
 
                 <div className="pt-4">

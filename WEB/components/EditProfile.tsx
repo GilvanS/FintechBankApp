@@ -46,7 +46,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
 
     return (
         <div
-            className="bg-background-dark text-white p-4 min-h-full flex flex-col test-edit-profile"
+            className="bg-background-dark text-white p-4 min-h-full flex flex-col w-full max-w-md mx-auto pb-28 test-edit-profile"
             id="edit-profile"
             data-testid="edit-profile"
             data-cy="edit-profile"

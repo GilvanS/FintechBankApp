@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Transaction } from '../types';
+import { useAuth } from '../context/AuthContext';
 import { useToast, ToastContainer } from './Toast';
 
 interface TransactionReceiptProps {
@@ -7,228 +8,168 @@ interface TransactionReceiptProps {
     onBack: () => void;
 }
 
-const InfoRow: React.FC<{ label: string, value: string | React.ReactNode }> = ({ label, value }) => (
-    <div className="py-3 border-b border-gray-800 flex justify-between items-center text-sm">
-        <span className="text-gray-400">{label}</span>
-        <span className="font-semibold text-white text-right break-all">{value}</span>
+const Row: React.FC<{ label: string; value: React.ReactNode; mono?: boolean; testid?: string }> = ({ label, value, mono, testid }) => (
+    <div className="flex justify-between items-start gap-4 py-3 border-b border-white/5 last:border-0">
+        <span className="text-sm text-white/50 shrink-0">{label}</span>
+        <span className={`text-sm text-white text-right break-all ${mono ? 'font-mono text-xs' : 'font-medium'}`} data-testid={testid}>{value}</span>
     </div>
 );
 
+const typeLabel: Record<string, string> = {
+    PIX_SENT: 'PIX Enviado',
+    PIX_RECEIVED: 'PIX Recebido',
+    PIX_CREDIT_SENT: 'PIX Parcelado',
+    DEPOSIT: 'Depósito',
+    PAYMENT: 'Pagamento',
+    SHOP_DEBIT: 'Compra no Débito',
+    SHOP_CREDIT: 'Compra no Crédito',
+    INVOICE_INSTALLMENT: 'Parcela de Fatura',
+    INVOICE_PAYMENT: 'Pagamento de Fatura',
+    INVOICE_ANTICIPATION: 'Antecipação de Parcelas',
+    CASHBACK_CREDIT: 'Cashback',
+    POINTS_EARNED: 'Pontos Ganhos',
+};
+
+const typeIcon: Record<string, string> = {
+    PIX_SENT: 'currency_exchange',
+    PIX_RECEIVED: 'currency_exchange',
+    PIX_CREDIT_SENT: 'currency_exchange',
+    DEPOSIT: 'savings',
+    PAYMENT: 'receipt_long',
+    SHOP_DEBIT: 'contactless',
+    SHOP_CREDIT: 'credit_card',
+    INVOICE_INSTALLMENT: 'event_repeat',
+    INVOICE_PAYMENT: 'check_circle',
+    INVOICE_ANTICIPATION: 'fast_forward',
+    CASHBACK_CREDIT: 'redeem',
+};
+
 const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, onBack }) => {
+    const { user } = useAuth();
     const { toast, showSuccess, showError, hide } = useToast();
+    const [idCopied, setIdCopied] = useState(false);
 
+    const tx = transaction as any;
     const amount = Math.abs(transaction.amount);
-    const formattedAmount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
-    const date = new Date(transaction.date).toLocaleDateString('pt-BR', {
-        weekday: 'long',
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric'
-    });
-    const time = new Date(transaction.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const formattedDate = new Date(transaction.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
-
-    const getTransactionTypeLabel = (type: Transaction['type']): string => {
-        switch (type) {
-            case 'PIX_SENT': return 'PIX Enviado';
-            case 'PIX_RECEIVED': return 'PIX Recebido';
-            case 'PIX_CREDIT_SENT': return 'PIX Parcelado Enviado';
-            case 'DEPOSIT': return 'Depósito';
-            case 'PAYMENT': return 'Pagamento';
-            case 'SHOP_DEBIT': return 'Compra no Débito';
-            case 'SHOP_CREDIT': return 'Compra no Crédito';
-            case 'INVOICE_INSTALLMENT': return 'Parcela de Fatura';
-            case 'INVOICE_PAYMENT': return 'Pagamento de Fatura';
-            case 'CASHBACK_CREDIT': return 'Cashback';
-            case 'POINTS_EARNED': return 'Pontos Ganhos';
-            default: return 'Transação';
-        }
-    };
-
-    const getTransactionIcon = (type: Transaction['type']): string => {
-        switch (type) {
-            case 'PIX_SENT':
-            case 'PIX_RECEIVED':
-            case 'PIX_CREDIT_SENT': return 'currency_exchange';
-            case 'PAYMENT': return 'receipt_long';
-            case 'DEPOSIT': return 'savings';
-            case 'SHOP_DEBIT': return 'shopping_cart';
-            case 'SHOP_CREDIT': return 'credit_card';
-            case 'INVOICE_INSTALLMENT': return 'event_repeat';
-            case 'INVOICE_PAYMENT': return 'check_circle';
-            case 'CASHBACK_CREDIT': return 'redeem';
-            case 'POINTS_EARNED': return 'star';
-            default: return 'receipt_long';
-        }
-    };
-
-    const getPaymentMethodLabel = (type: Transaction['type']): string => {
-        switch (type) {
-            case 'PIX_SENT':
-            case 'PIX_RECEIVED':
-            case 'PIX_CREDIT_SENT': return 'Transferência via PIX';
-            case 'SHOP_DEBIT': return 'Pagamento por aproximação com cartão físico';
-            case 'SHOP_CREDIT': return 'Compra no Crédito';
-            case 'INVOICE_INSTALLMENT': return 'Parcelamento de Fatura';
-            case 'INVOICE_PAYMENT': return 'Pagamento de Fatura';
-            case 'PAYMENT': return 'Pagamento de fatura';
-            case 'DEPOSIT': return 'Depósito em conta';
-            default: return 'Transação';
-        }
-    };
-
     const isDebit = transaction.amount < 0;
     const isPix = transaction.type === 'PIX_SENT' || transaction.type === 'PIX_RECEIVED' || transaction.type === 'PIX_CREDIT_SENT';
+    const label = typeLabel[transaction.type] || 'Transação';
+    const icon = typeIcon[transaction.type] || 'receipt_long';
 
-    async function handleShare() {
-        let text = `Comprovante de ${getTransactionTypeLabel(transaction.type)}\n`;
-        text += `Valor: ${formattedAmount}\n`;
-        text += `Data: ${date} às ${time}\n`;
-        text += `Descrição: ${transaction.description}\n`;
+    const formattedAmount = amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const dateObj = new Date(transaction.date);
+    const dateStr = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const timeStr = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-        if (isPix) {
-            if (transaction.type === 'PIX_RECEIVED') {
-                text += `Enviado por: ${transaction.senderName || transaction.from || '-'}\n`;
-            } else {
-                text += `Enviado para: ${transaction.recipientName || transaction.to || '-'}\n`;
-            }
-        }
+    const txId = String(transaction.id);
+    const shortId = txId.length > 20 ? `${txId.slice(0, 8)}...${txId.slice(-8)}` : txId;
 
-        text += `ID da Transação: ${transaction.id}\n`;
-
+    async function copyId() {
         try {
-            if (navigator.share) {
-                await navigator.share({ title: `Comprovante ${getTransactionTypeLabel(transaction.type)}`, text });
-                showSuccess('Comprovante compartilhado com sucesso');
-            } else if (navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(text);
-                showSuccess('Comprovante copiado para a área de transferência');
-            } else {
-                throw new Error('Compartilhamento indisponível neste dispositivo');
-            }
-        } catch (err: any) {
-            if (err.name !== 'AbortError') {
-                showError(err?.message || 'Falha ao compartilhar comprovante');
-            }
-        }
+            await navigator.clipboard.writeText(txId);
+            setIdCopied(true);
+            showSuccess('ID copiado!');
+            setTimeout(() => setIdCopied(false), 2000);
+        } catch { showError('Não foi possível copiar'); }
     }
 
+    async function handleShare() {
+        const lines = [
+            `Comprovante ${label}`,
+            `Valor: ${formattedAmount}`,
+            `Data: ${dateStr} às ${timeStr}`,
+            isPix && transaction.type !== 'PIX_RECEIVED'
+                ? `Para: ${tx.recipientName || tx.to || '-'}`
+                : isPix ? `De: ${tx.senderName || tx.from || '-'}` : '',
+            `ID: ${txId}`,
+            'FintechBank',
+        ].filter(Boolean).join('\n');
+        try {
+            if (navigator.share) { await navigator.share({ title: `Comprovante ${label}`, text: lines }); showSuccess('Compartilhado!'); }
+            else { await navigator.clipboard.writeText(lines); showSuccess('Copiado para área de transferência'); }
+        } catch (e: any) { if (e?.name !== 'AbortError') showError('Falha ao compartilhar'); }
+    }
+
+    const originName = user?.fullName || 'Você';
+    const destName = isPix
+        ? (transaction.type === 'PIX_RECEIVED' ? (tx.senderName || tx.from || 'Remetente') : (tx.recipientName || tx.to || 'Destinatário'))
+        : (tx.merchant || transaction.description);
+
     return (
-        <div className="p-4 bg-black h-screen text-white flex flex-col safe-top safe-bottom">
-            <header className="flex items-center justify-between mb-6 flex-shrink-0">
-                <div className="flex items-center">
-                    <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-gray-800">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
-                    </button>
-                    <h2 className="text-2xl font-bold text-white">Comprovante</h2>
-                </div>
-                <button onClick={handleShare} className="p-2 rounded-full hover:bg-gray-800">
+        <div className="bg-background-dark text-white min-h-screen flex flex-col" data-testid="transaction-receipt">
+            <header className="flex items-center justify-between p-4 pt-[calc(1rem+env(safe-area-inset-top))]">
+                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10" data-testid="receipt-back">
+                    <span className="material-symbols-outlined">arrow_back</span>
+                </button>
+                <h1 className="text-lg font-bold">Comprovante</h1>
+                <button onClick={handleShare} className="p-2 rounded-full hover:bg-white/10" data-testid="receipt-share">
                     <span className="material-symbols-outlined">share</span>
                 </button>
             </header>
 
-            <main className="flex-grow overflow-y-auto no-scrollbar space-y-6 pb-4">
-                {/* Transaction Type and Date */}
-                <div>
-                    <p className="text-sm text-gray-400">
-                        {transaction.type === 'SHOP_DEBIT' ? 'Compra no Débito' :
-                            transaction.type === 'SHOP_CREDIT' ? 'Compra no Crédito' :
-                                getTransactionTypeLabel(transaction.type)}
-                        {(transaction as any).category && ` › ${(transaction as any).category}`}
+            <main className="flex-1 overflow-y-auto no-scrollbar px-4 pb-6 space-y-4">
+                {/* Hero */}
+                <div className="flex flex-col items-center py-6 space-y-3">
+                    <div className={`rounded-full p-4 ${isDebit ? 'bg-orange-500/20' : 'bg-green-500/20'}`}>
+                        <span className={`material-symbols-outlined text-3xl ${isDebit ? 'text-orange-400' : 'text-green-400'}`}>{icon}</span>
+                    </div>
+                    <p className="text-sm text-white/60">{label}</p>
+                    <p className={`text-4xl font-bold ${isDebit ? 'text-white' : 'text-green-400'}`} data-testid="receipt-amount">
+                        {isDebit ? '- ' : '+ '}{formattedAmount}
                     </p>
-                    <p className="text-sm text-gray-400">{date}, às {time}</p>
-                </div>
-
-                {/* Amount and Description */}
-                <div className="flex justify-between items-center">
-                    <div>
-                        {(transaction as any).merchant ? (
-                            <h1 className="text-2xl font-bold">{(transaction as any).merchant}</h1>
-                        ) : (
-                            <h1 className="text-2xl font-bold">{transaction.description}</h1>
-                        )}
-                        <p className={`text-3xl font-bold mt-2 ${isDebit ? 'text-orange-400' : 'text-primary'}`}>
-                            {isDebit ? '-' : '+'} {formattedAmount}
-                        </p>
+                    <div className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 rounded-full px-3 py-1">
+                        <span className="material-symbols-outlined text-green-400 text-sm">check_circle</span>
+                        <span className="text-green-400 text-xs font-medium">Transação concluída</span>
                     </div>
-                    <span className="material-symbols-outlined text-6xl text-primary opacity-50">
-                        {getTransactionIcon(transaction.type)}
-                    </span>
+                    <p className="text-xs text-white/40">{dateStr} às {timeStr}</p>
                 </div>
 
-                {/* Payment Method */}
-                <div className="bg-gray-900 rounded-lg p-4 flex items-center gap-4">
-                    <span className="material-symbols-outlined text-primary">
-                        {transaction.type === 'SHOP_DEBIT' || transaction.type === 'SHOP_CREDIT' ? 'contactless' : getTransactionIcon(transaction.type)}
-                    </span>
-                    <p className="text-white">{getPaymentMethodLabel(transaction.type)}</p>
+                {/* Origem */}
+                <div className="bg-surface-dark rounded-2xl p-4" data-testid="receipt-origin">
+                    <p className="text-xs text-white/40 uppercase tracking-wider mb-2">Origem</p>
+                    <Row label="Nome" value={originName} testid="receipt-origin-name" />
+                    <Row label="Instituição" value="FintechBank" />
+                    {user?.cpf && <Row label="CPF" value={`***.${user.cpf.slice(3,6)}.${user.cpf.slice(6,9)}-**`} testid="receipt-origin-cpf" />}
                 </div>
 
-                {/* Transaction Details */}
-                <div className="bg-gray-900 rounded-lg p-4">
-                    <InfoRow label="Tipo de operação" value={getTransactionTypeLabel(transaction.type)} />
-
-                    {isPix && (
-                        transaction.type === 'PIX_RECEIVED' ? (
-                            <InfoRow label="Enviado por" value={transaction.senderName || transaction.from || '-'} />
-                        ) : (
-                            <InfoRow label="Enviado para" value={transaction.recipientName || transaction.to || '-'} />
-                        )
-                    )}
-
-                    {(transaction as any).toKey && (
-                        <InfoRow label="Chave PIX" value={(transaction as any).toKey} />
-                    )}
-
-                    {transaction.description && transaction.type !== 'SHOP_DEBIT' && transaction.type !== 'SHOP_CREDIT' && !(transaction as any).merchant && (
-                        <InfoRow label="Descrição" value={transaction.description} />
-                    )}
-
-                    {(transaction as any).installments && (
-                        <InfoRow
-                            label="Parcelas"
-                            value={`${(transaction as any).currentInstallment || 1}/${(transaction as any).totalInstallments || 1}`}
-                        />
-                    )}
-
-                    <InfoRow label="Data e Hora" value={`${formattedDate} - ${time}`} />
-                    <InfoRow label="ID da Transação" value={<span className="font-mono text-xs">{transaction.id}</span>} />
+                {/* Destino */}
+                <div className="bg-surface-dark rounded-2xl p-4" data-testid="receipt-destination">
+                    <p className="text-xs text-white/40 uppercase tracking-wider mb-2">
+                        {transaction.type === 'PIX_RECEIVED' ? 'Remetente' : 'Destinatário'}
+                    </p>
+                    <Row label="Nome" value={destName} testid="receipt-dest-name" />
+                    {isPix && <Row label="Instituição" value={tx.institution || 'Banco Digital'} testid="receipt-dest-institution" />}
+                    {tx.toKey && <Row label="Chave PIX" value={tx.toKey} mono testid="receipt-pix-key" />}
+                    {tx.cnpj && <Row label="CNPJ" value={tx.cnpj} mono testid="receipt-cnpj" />}
+                    {tx.installments && <Row label="Parcelas" value={`${tx.currentInstallment || 1}/${tx.totalInstallments || 1}`} testid="receipt-installments" />}
+                    {transaction.description && !isPix && <Row label="Descrição" value={transaction.description} testid="receipt-description" />}
                 </div>
 
-                {/* Balance Section for Shop Debit */}
-                {transaction.type === 'SHOP_DEBIT' && (transaction as any).category && (
-                    <div>
-                        <h3 className="font-semibold mb-2">Saldo dessa transação</h3>
-                        <div className="bg-gray-900 p-4 rounded-lg flex justify-between items-center">
-                            <div className="flex items-center gap-3">
-                                <div className="bg-black p-2 rounded-full">
-                                    <span className="material-symbols-outlined text-yellow-400">
-                                        {(transaction as any).category === 'food' ? 'restaurant' :
-                                         (transaction as any).category === 'transport' ? 'directions_car' :
-                                         'shopping_cart'}
-                                    </span>
-                                </div>
-                                <p className="font-semibold">{(transaction as any).category}</p>
-                            </div>
-                            <p className={`font-bold ${isDebit ? 'text-orange-400' : 'text-primary'}`}>
-                                {isDebit ? '-' : '+'} {formattedAmount}
-                            </p>
+                {/* ID da transação */}
+                <div className="bg-surface-dark rounded-2xl p-4 space-y-1" data-testid="receipt-id-section">
+                    <div className="flex justify-between items-start gap-2 pb-3 border-b border-white/5">
+                        <div className="min-w-0">
+                            <p className="text-xs text-white/40 uppercase tracking-wider mb-1">ID da transação</p>
+                            <p className="font-mono text-xs text-white/70 break-all" data-testid="receipt-tx-id">{shortId}</p>
                         </div>
+                        <button onClick={copyId} className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/20 text-primary text-xs font-medium" data-testid="receipt-copy-id">
+                            <span className="material-symbols-outlined text-sm">{idCopied ? 'check' : 'content_copy'}</span>
+                            {idCopied ? 'Copiado' : 'Copiar'}
+                        </button>
                     </div>
-                )}
+                    <Row label="Data e Hora" value={`${dateStr}, ${timeStr}`} testid="receipt-datetime" />
+                </div>
 
-                {/* Help Section */}
-                <button className="w-full flex justify-between items-center p-4 rounded-lg hover:bg-gray-900 transition-colors">
-                    <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined">forum</span>
-                        <p>Peça ajuda caso tenha problema com esta transação</p>
-                    </div>
-                    <span className="material-symbols-outlined">chevron_right</span>
+                {/* Ajuda */}
+                <button className="w-full flex items-center gap-3 p-4 bg-surface-dark rounded-2xl hover:bg-white/5 transition-colors" data-testid="receipt-help">
+                    <span className="material-symbols-outlined text-white/50">forum</span>
+                    <span className="text-sm text-white/70 text-left flex-1">Problema com esta transação?</span>
+                    <span className="material-symbols-outlined text-white/30">chevron_right</span>
                 </button>
             </main>
 
-            <footer className="mt-4 pt-4 flex-shrink-0">
-                <button onClick={handleShare} className="w-full py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500">
+            <footer className="px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 flex-shrink-0">
+                <button onClick={handleShare} className="w-full py-3.5 font-semibold rounded-2xl bg-primary text-white" data-testid="receipt-share-button">
                     Compartilhar Comprovante
                 </button>
             </footer>

@@ -1,4 +1,6 @@
 import React from 'react';
+import { Shield, Key, Smartphone, ChevronRight } from 'lucide-react';
+import { useDialog } from '../contexts/GlobalDialogContext';
 
 interface SecurityProps {
     onBack: () => void;
@@ -6,6 +8,7 @@ interface SecurityProps {
 }
 
 const Security: React.FC<SecurityProps> = ({ onBack, onNavigateToLimits }) => {
+    const { showDialog } = useDialog();
     
     const SettingButton: React.FC<{label: string, description: string, onClick: () => void}> = ({ label, description, onClick }) => (
         <button onClick={onClick} className="w-full text-left p-4 bg-surface-dark rounded-lg hover:bg-white/10 flex justify-between items-center transition-colors">
@@ -18,7 +21,7 @@ const Security: React.FC<SecurityProps> = ({ onBack, onNavigateToLimits }) => {
     );
 
     return (
-        <div className="bg-background-dark text-white p-4 min-h-full">
+        <div className="bg-background-dark text-white p-4 min-h-full w-full max-w-md mx-auto pb-28">
             <header className="flex items-center mb-6">
                 <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-white/10">
                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
@@ -34,7 +37,7 @@ const Security: React.FC<SecurityProps> = ({ onBack, onNavigateToLimits }) => {
                  <SettingButton 
                     label="Alterar Senha"
                     description="Mantenha sua conta segura trocando sua senha."
-                    onClick={() => alert('Em desenvolvimento')}
+                    onClick={() => showDialog({ title: 'Aviso', message: 'Em desenvolvimento' })}
                 />
             </main>
         </div>

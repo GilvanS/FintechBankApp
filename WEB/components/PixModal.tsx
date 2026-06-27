@@ -169,7 +169,7 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.95, y: 20, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="bg-[#0a0a0a] text-white flex flex-col relative w-full max-w-5xl h-[90vh] rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden z-10"
+            className="bg-[#0a0a0a] text-white flex flex-col relative w-full h-[85vh] rounded-3xl border border-white/10 shadow-2xl overflow-hidden z-10"
           >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02] shrink-0">

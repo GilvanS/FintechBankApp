@@ -131,7 +131,7 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
     };
     
     return (
-        <div className="bg-background-dark text-white min-h-full flex flex-col">
+        <div className="bg-background-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28">
             {renderContent()}
         </div>
     );

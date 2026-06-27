@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { PixContact } from '../types';
@@ -6,6 +5,7 @@ import { getPixContacts, addPixContact, deletePixContact, getPixRecipientInfo } 
 import { formatCPF } from '../utils/formatters';
 import InfoPopupBottom from './InfoPopupBottom';
 import { useToast, ToastContainer } from './Toast';
+import { useDialog } from '../contexts/GlobalDialogContext';
 
 interface ContactsProps {
     onBack?: () => void;
@@ -15,6 +15,7 @@ interface ContactsProps {
 
 const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
     const { user } = useAuth();
+    const { showDialog } = useDialog();
     const [contacts, setContacts] = useState<PixContact[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -99,14 +100,22 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
     };
 
     const handleDeleteContact = async (key: string) => {
-        if (user && window.confirm('Tem certeza que deseja remover este contato?')) {
-            const res = await deletePixContact(user.cpf, key);
-            if (res.success) {
-                showSuccess('Contato removido com sucesso');
-                fetchContacts();
-            } else {
-                showError(res.message || 'Falha ao remover contato');
-            }
+        if (user) {
+            showDialog({
+                title: 'Remover Contato',
+                message: 'Tem certeza que deseja remover este contato?',
+                confirmText: 'Sim, remover',
+                cancelText: 'Cancelar',
+                onConfirm: async () => {
+                    const res = await deletePixContact(user.cpf, key);
+                    if (res.success) {
+                        showSuccess('Contato removido com sucesso');
+                        fetchContacts();
+                    } else {
+                        showError(res.message || 'Falha ao remover contato');
+                    }
+                }
+            });
         }
     };
     

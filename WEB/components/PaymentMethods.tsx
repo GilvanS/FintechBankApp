@@ -26,7 +26,7 @@ const PaymentMethods: React.FC<PaymentMethodsProps> = ({ user, item, onBack, onS
 
     return (
         <div
-            className="bg-background-dark text-white min-h-full flex flex-col test-payment-methods"
+            className="bg-background-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto test-payment-methods"
             id="payment-methods"
             data-testid="payment-methods"
             data-cy="payment-methods"

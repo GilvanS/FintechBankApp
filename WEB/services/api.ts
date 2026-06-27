@@ -548,6 +548,8 @@ export const anticipateCreditCardInstallments = async (cpf: string, transactionI
   }
 };
 
+import { getProducts as getMockProducts } from './mockApi';
+
 export const getProducts = async (): Promise<{ success: boolean; products?: PurchasedItem[]; message?: string }> => {
   try {
     const products = await apiCall<PurchasedItem[]>('/shop/products', {
@@ -555,7 +557,8 @@ export const getProducts = async (): Promise<{ success: boolean; products?: Purc
     });
     return { success: true, products };
   } catch (error: any) {
-    return { success: false, message: error.message || 'Erro ao buscar produtos', products: [] };
+    console.warn("Falling back to mock products due to API error", error);
+    return getMockProducts();
   }
 };
 

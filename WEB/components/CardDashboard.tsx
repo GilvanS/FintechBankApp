@@ -64,15 +64,15 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
         const usedLimit = creditCard.totalLimit - creditCard.availableLimit;
         const usedPct = creditCard.totalLimit > 0 ? Math.round((usedLimit / creditCard.totalLimit) * 100) : 0;
         return (
-            <div className="bg-[#0a0a0a] text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28" data-testid="limits-screen">
-                <header className="flex items-center gap-2 p-4 border-b border-white/10">
+            <div className="bg-[#0a0a0a] text-white min-h-full flex flex-col w-full max-w-2xl mx-auto pb-8" data-testid="limits-screen">
+                <header className="flex items-center gap-2 p-4 border-b border-white/10 shrink-0">
                     <button onClick={() => setSubView(null)} className="p-2 -ml-2 rounded-full hover:bg-white/10" data-testid="limits-back">
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
                     <h1 className="text-xl font-bold">Meus Limites</h1>
                 </header>
                 <main className="flex-1 overflow-y-auto p-4 space-y-4">
-                    <div className="bg-white/5 rounded-2xl p-5 space-y-3">
+                    <div className="bg-volt-surface rounded-2xl p-5 space-y-3">
                         <p className="text-sm text-white/60">Limite total do cartão</p>
                         <p className="text-3xl font-bold" data-testid="total-limit">{creditCard.totalLimit.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</p>
                         <div className="w-full bg-white/10 rounded-full h-2">
@@ -89,7 +89,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                         {label:'Fatura atual',      val:creditCard.currentInvoice, icon:'receipt_long', color:'text-blue-400',   testid:'current-invoice-limit'},
                         {label:'Fatura fechada',    val:creditCard.closedInvoice,  icon:'lock',         color:'text-red-400',    testid:'closed-invoice-limit'},
                     ].map(r => (
-                        <div key={r.label} className="flex items-center gap-3 bg-white/5 rounded-xl p-4">
+                        <div key={r.label} className="flex items-center gap-3 bg-volt-surface rounded-xl p-4">
                             <span className={`material-symbols-outlined ${r.color}`}>{r.icon}</span>
                             <div className="flex-1">
                                 <p className="text-xs text-white/50">{r.label}</p>
@@ -117,8 +117,8 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
             {icon:'contactless',       label:'Compras por Aproximação',testid:'service-contactless'},
         ];
         return (
-            <div className="bg-[#0a0a0a] text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28" data-testid="services-screen">
-                <header className="flex items-center gap-2 p-4 border-b border-white/10">
+            <div className="bg-[#0a0a0a] text-white min-h-full flex flex-col w-full max-w-2xl mx-auto pb-8" data-testid="services-screen">
+                <header className="flex items-center gap-2 p-4 border-b border-white/10 shrink-0">
                     <button onClick={() => setSubView(null)} className="p-2 -ml-2 rounded-full hover:bg-white/10" data-testid="services-back">
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
@@ -129,7 +129,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                         {services.map(s => (
                             <button key={s.label}
                                 onClick={s.label === 'Ver senha' ? () => { setSubView(null); setShowPin(true); setPinRevealed(false); } : undefined}
-                                className="flex flex-col items-center gap-2 p-5 bg-white/5 rounded-2xl hover:bg-white/10 transition-colors"
+                                className="flex flex-col items-center gap-2 p-5 bg-volt-surface rounded-2xl hover:bg-white/10 transition-colors"
                                 data-testid={s.testid}>
                                 <span className="material-symbols-outlined text-volt-primary text-3xl">{s.icon}</span>
                                 <span className="text-sm text-white/80 text-center leading-tight">{s.label}</span>
@@ -145,7 +145,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
         <>
         {showPin && (
             <div className="fixed inset-0 z-50 bg-black/70 flex items-end justify-center" data-testid="pin-modal-overlay" onClick={() => setShowPin(false)}>
-                <div className="bg-white w-full max-w-md rounded-t-3xl p-8 space-y-6 border-t-4 border-black" onClick={e => e.stopPropagation()}>
+                <div className="bg-white w-full max-w-2xl rounded-t-3xl p-8 space-y-6 border-t-4 border-black" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center">
                         <h2 className="text-lg font-bold text-black">Visualizar senha</h2>
                         <button onClick={() => setShowPin(false)} className="text-black/60 hover:text-black"><span className="material-symbols-outlined">close</span></button>
@@ -164,43 +164,15 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
             </div>
         )}
         <div
-            className="bg-[#0a0a0a] text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28 test-card-dashboard"
+            className="bg-[#0a0a0a] text-white min-h-full flex flex-col w-full max-w-2xl mx-auto pb-8 test-card-dashboard"
             id="card-dashboard"
             data-testid="card-dashboard"
             data-cy="card-dashboard"
             data-playwright="card-dashboard"
         >
-            <header 
-                className="flex items-center p-4 test-card-header"
-                id="card-header"
-                data-testid="card-header"
-                data-cy="card-header"
-            >
-                <button 
-                    onClick={onBack} 
-                    className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10 test-card-back-button"
-                    id="btn-card-back"
-                    name="card-back-button"
-                    data-testid="card-back-button"
-                    data-cy="card-back-button"
-                    data-playwright="card-back-button"
-                    aria-label="Voltar"
-                    type="button"
-                >
-                    <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-                </button>
-                <h2 
-                    className="text-2xl font-bold text-white test-card-title"
-                    id="card-title"
-                    data-testid="card-title"
-                    data-cy="card-title"
-                    data-playwright="card-title"
-                >
-                    Meu Cartão
-                </h2>
-            </header>
+
             {/* Tabs Físico / Virtual */}
-            <div className="flex mx-4 mt-3 bg-white/5 border border-white/5 rounded-xl p-1" data-testid="card-type-tabs">
+            <div className="flex mx-4 mt-3 bg-volt-surface border border-white/5 rounded-xl p-1" data-testid="card-type-tabs">
                 {(['fisico', 'virtual'] as const).map(t => (
                     <button key={t} onClick={() => setCardType(t)}
                         className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all cursor-pointer ${cardType === t ? 'bg-white/10 text-volt-primary shadow-md' : 'text-white/50 hover:text-white'}`}
@@ -295,7 +267,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                         { label: 'Ver senha', icon: 'password', action: () => { setShowPin(true); setPinRevealed(false); } },
                     ].map(a => (
                         <button key={a.label} onClick={a.action}
-                            className="flex flex-col items-center gap-1.5 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
+                            className="flex flex-col items-center gap-1.5 p-3 bg-volt-surface rounded-xl hover:bg-white/10 transition-colors"
                             data-testid={`card-action-${a.label.replace(/\s/g,'').toLowerCase()}`}>
                             <span className="material-symbols-outlined text-volt-primary">{a.icon}</span>
                             <span className="text-xs text-white/70 text-center leading-tight">{a.label}</span>
@@ -306,7 +278,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 {/* Configurações */}
                 <div className="space-y-3">
                     {/* NFC Toggle */}
-                    <div className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl">
+                    <div className="flex items-center justify-between p-4 bg-volt-surface border border-white/5 rounded-2xl">
                         <div className="flex items-center gap-3">
                             <span className="p-2 bg-volt-primary/10 text-volt-primary rounded-xl">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -328,9 +300,9 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     </div>
 
                     {/* Block Toggle */}
-                    <div className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl">
+                    <div className="flex items-center justify-between p-4 bg-volt-surface border border-white/5 rounded-2xl">
                         <div className="flex items-center gap-3">
-                            <span className={`p-2 rounded-xl ${creditCard.isBlocked ? 'bg-red-500/10 text-red-500' : 'bg-white/5 text-white/50'}`}>
+                            <span className={`p-2 rounded-xl ${creditCard.isBlocked ? 'bg-red-500/10 text-red-500' : 'bg-volt-surface text-white/50'}`}>
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                 </svg>
@@ -359,7 +331,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
 
                 {/* Outros Serviços */}
                 <button onClick={() => setSubView('services')}
-                    className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
+                    className="w-full flex items-center gap-3 p-4 bg-volt-surface rounded-xl hover:bg-white/10 transition-colors"
                     data-testid="other-services-button">
                     <span className="material-symbols-outlined text-volt-primary">grid_view</span>
                     <span className="font-medium">Outros Serviços</span>
@@ -402,7 +374,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 )}
                 <button 
                     onClick={() => onNavigate('currentInvoice')} 
-                    className="bg-white/5 border border-white/5 rounded-2xl p-5 space-y-4 w-full text-left hover:border-volt-primary/50 transition-all test-current-invoice-card"
+                    className="bg-volt-surface border border-white/5 rounded-2xl p-5 space-y-4 w-full text-left hover:border-volt-primary/50 transition-all test-current-invoice-card"
                     id="btn-current-invoice"
                     name="current-invoice-button"
                     data-testid="card-current-invoice-button"
@@ -457,7 +429,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                 >
                     <button 
                         onClick={() => onNavigate('closedInvoice')} 
-                        className={`p-4 bg-white/5 border border-white/5 rounded-2xl text-center hover:border-volt-primary/50 transition-all test-closed-invoice-button ${(isOverdue || creditCard.isBlocked) ? 'border-2 border-red-500 animate-pulse' : ''}`}
+                        className={`p-4 bg-volt-surface border border-white/5 rounded-2xl text-center hover:border-volt-primary/50 transition-all test-closed-invoice-button ${(isOverdue || creditCard.isBlocked) ? 'border-2 border-red-500 animate-pulse' : ''}`}
                         id="btn-closed-invoice"
                         name="closed-invoice-button"
                         data-testid="card-closed-invoice-button"
@@ -478,7 +450,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     </button>
                     <button 
                         onClick={() => onNavigate('anticipateInstallments')} 
-                        className="p-4 bg-white/5 border border-white/5 rounded-2xl text-center hover:border-volt-primary/50 transition-all test-anticipate-button"
+                        className="p-4 bg-volt-surface border border-white/5 rounded-2xl text-center hover:border-volt-primary/50 transition-all test-anticipate-button"
                         id="btn-anticipate"
                         name="anticipate-button"
                         data-testid="card-anticipate-button"
@@ -494,7 +466,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
 
                 <button 
                     onClick={() => onNavigate('points')} 
-                    className="w-full flex items-center p-4 bg-white/5 border border-white/5 rounded-2xl hover:border-volt-primary/50 transition-colors text-left space-x-4 test-points-button"
+                    className="w-full flex items-center p-4 bg-volt-surface border border-white/5 rounded-2xl hover:border-volt-primary/50 transition-colors text-left space-x-4 test-points-button"
                     id="btn-points"
                     name="points-button"
                     data-testid="card-points-button"
@@ -577,7 +549,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                                 <div 
                                     key={tx.id} 
                                     onClick={() => activeTab === 'future' ? onNavigate('anticipateInstallments') : null}
-                                    className={`w-full p-3 bg-white/5 border border-white/5 rounded-xl flex items-center space-x-3 test-transaction-item ${activeTab === 'future' ? 'cursor-pointer hover:border-volt-primary/50' : ''}`}
+                                    className={`w-full p-3 bg-volt-surface border border-white/5 rounded-xl flex items-center space-x-3 test-transaction-item ${activeTab === 'future' ? 'cursor-pointer hover:border-volt-primary/50' : ''}`}
                                     id={`transaction-${tx.id}`}
                                     data-testid={`card-transaction-${tx.id}`}
                                     data-cy={`card-transaction-${tx.id}`}
@@ -586,7 +558,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                                     aria-label={`Transação ${tx.merchant}`}
                                     tabIndex={activeTab === 'future' ? 0 : undefined}
                                 >
-                                    <div className="p-2 bg-white/5 rounded-full test-transaction-icon">
+                                    <div className="p-2 bg-volt-surface rounded-full test-transaction-icon">
                                         <span className={`material-symbols-outlined ${tx.type === 'PAYMENT' ? 'text-green-400' : 'text-volt-primary'}`} aria-hidden="true">{getIconForTx(tx.merchant)}</span>
                                     </div>
                                     <div className="flex-grow text-left test-transaction-details">

@@ -6,7 +6,7 @@ interface WalletProps {
 
 const Wallet: React.FC<WalletProps> = ({ onBack }) => {
     return (
-        <div className="bg-black text-white p-4 min-h-full">
+        <div className="bg-black text-white p-4 min-h-full w-full max-w-md mx-auto pb-28">
             <div className="flex items-center mb-6">
                 <button onClick={onBack} className="mr-4 p-2 rounded-full hover:bg-gray-800">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>

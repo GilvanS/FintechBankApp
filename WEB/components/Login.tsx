@@ -85,7 +85,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                 }
             })();
         } else {
-            const msg = result.message || mapLoginError(result.code);
+            const msg = result.message || 'Erro ao fazer login. Tente novamente.';
             setError(msg);
             // Não mostrar toast para erros de validação, apenas para erros de API
         }

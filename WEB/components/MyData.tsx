@@ -20,7 +20,7 @@ const InfoRow: React.FC<{ label: string; value: string | undefined; testId?: str
 const MyData: React.FC<MyDataProps> = ({ user, onBack, onNavigateToEdit }) => {
     return (
         <div
-            className="bg-background-dark text-white p-4 min-h-full test-my-data"
+            className="bg-background-dark text-white p-4 min-h-full w-full max-w-md mx-auto pb-28 test-my-data"
             id="my-data"
             data-testid="my-data"
             data-cy="my-data"

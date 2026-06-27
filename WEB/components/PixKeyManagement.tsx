@@ -3,16 +3,19 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 // FIX: Corrected import path for types from parent directory.
 import { PixKey } from '../types';
-import { getPixKeys, registerPixKey, deletePixKey } from '../services/api';
+import { getPixKeys, registerPixKey, deletePixKey, getUserByCpf } from '../services/api';
+import { useDialog } from '../contexts/GlobalDialogContext';
 import { useToast, ToastContainer } from './Toast';
 import PixKeySuccessModal from './PixKeySuccessModal';
 
 interface PixKeyManagementProps {
     onBack: () => void;
+    updateUser: (user: any) => void;
 }
 
-const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
+const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack, updateUser }) => {
     const { user } = useAuth();
+    const { showDialog } = useDialog();
     const [keys, setKeys] = useState<PixKey[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -26,8 +29,8 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     const fetchKeys = async () => {
         if (user) {
             setIsLoading(true);
-            const result = await getPixKeys();
-            if (result.success) setKeys(result.keys!);
+            const result = await getPixKeys(user.cpf);
+            if (Array.isArray(result)) setKeys(result);
             setIsLoading(false);
         }
     };
@@ -42,7 +45,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
         setError('');
         setSuccess('');
         const key = newKeyType === 'CPF' ? user.cpf : user.email;
-        const result = await registerPixKey(newKeyType, key);
+        const result = await registerPixKey(user.cpf, newKeyType, key);
         if (result.success) {
             // Salvar dados da chave cadastrada para o modal
             setRegisteredKeyData({
@@ -66,27 +69,41 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     };
 
     const handleDeleteKey = async (key: string) => {
-        if(user && window.confirm('Tem certeza que deseja remover esta chave PIX?')){
-            const res = await deletePixKey(key);
-            if (res.success) {
-                showSuccess('Chave PIX removida com sucesso');
-                fetchKeys();
-            } else {
-                showError(res.message || 'Falha ao remover chave PIX');
-            }
+        if(user) {
+            showDialog({
+                title: 'Remover Chave PIX',
+                message: 'Tem certeza que deseja remover esta chave PIX?',
+                confirmText: 'Sim, remover',
+                cancelText: 'Cancelar',
+                onConfirm: async () => {
+                    setIsLoading(true);
+                    const res = await deletePixKey(user.cpf, key);
+                    if (res.success) {
+                        showSuccess('Chave PIX removida com sucesso');
+                        const refreshed = await getUserByCpf(user.cpf);
+                        if(refreshed.success && refreshed.user) {
+                            updateUser(refreshed.user);
+                        }
+                        fetchKeys();
+                    } else {
+                        showError(res.message || 'Falha ao remover chave PIX');
+                        setIsLoading(false);
+                    }
+                }
+            });
         }
     };
 
     return (
-        <div className="bg-background-dark text-white min-h-full">
-             <header className="flex items-center mb-6 px-4 pt-4">
-                <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-white/10">
-                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
+        <div className="text-white">
+             <header className="flex items-center mb-6">
+                <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-white/10 transition-colors">
+                     <svg className="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
-                <h2 className="text-2xl font-bold text-white">Minhas Chaves</h2>
+                <h2 className="text-lg font-bold text-white">Minhas Chaves</h2>
             </header>
-            <main className="px-4">
-                <button onClick={() => setShowAddModal(true)} className="w-full py-3 mb-6 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90">
+            <main>
+                <button onClick={() => setShowAddModal(true)} className="w-full py-3 mb-6 font-bold text-black bg-[#00E38B] rounded-xl hover:opacity-90 transition-all shadow-[0_0_20px_rgba(0,227,139,0.25)]">
                     Cadastrar Chave
                 </button>
 
@@ -94,12 +111,12 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                     keys.length > 0 ? (
                         <ul className="space-y-2">
                             {keys.map(k => (
-                                <li key={k.key} className="p-3 bg-surface-dark rounded-lg flex justify-between items-center">
+                                <li key={k.key} className="p-4 bg-white/5 border border-white/10 rounded-xl flex justify-between items-center hover:bg-white/10 transition-colors">
                                     <div>
-                                        <p className="font-semibold text-white">{k.type}</p>
-                                        <p className="text-sm text-gray-400 font-mono">{k.key}</p>
+                                        <p className="font-bold text-white">{k.type}</p>
+                                        <p className="text-xs text-white/60 font-mono mt-0.5">{k.key}</p>
                                     </div>
-                                    <button onClick={() => handleDeleteKey(k.key)} className="p-2 text-gray-500 hover:text-red-400">
+                                    <button onClick={() => handleDeleteKey(k.key)} className="p-2 text-white/40 hover:text-red-400 transition-colors">
                                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                     </button>
                                 </li>
@@ -110,31 +127,37 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
             </main>
 
             {showAddModal && user && (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-                    <div className="bg-surface-dark p-8 rounded-lg shadow-xl w-full max-w-md">
-                        <h2 className="text-2xl font-bold mb-4">Cadastrar Chave</h2>
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
+                    <div className="bg-[#111111] border border-white/10 p-6 rounded-2xl shadow-2xl w-full max-w-sm">
+                        <h2 className="text-xl font-bold mb-6 text-white">Cadastrar Chave</h2>
                         <form onSubmit={handleRegisterKey}>
-                           <div className="space-y-2">
-                                <label className={`p-4 rounded-lg border-2 flex items-center space-x-3 cursor-pointer ${newKeyType === 'CPF' ? 'border-primary bg-primary/20' : 'border-subtle-dark bg-background-dark'}`}>
-                                    <input type="radio" name="keyType" value="CPF" checked={newKeyType === 'CPF'} onChange={() => setNewKeyType('CPF')} className="h-4 w-4 text-primary bg-subtle-dark border-subtle-dark focus:ring-primary" />
+                           <div className="space-y-3">
+                                <label className={`p-4 rounded-xl border-2 flex items-center space-x-3 cursor-pointer transition-all ${newKeyType === 'CPF' ? 'border-[#00E38B] bg-[#00E38B]/10' : 'border-white/10 bg-white/5'}`}>
+                                    <input type="radio" name="keyType" value="CPF" checked={newKeyType === 'CPF'} onChange={() => setNewKeyType('CPF')} className="hidden" />
+                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${newKeyType === 'CPF' ? 'border-[#00E38B]' : 'border-white/40'}`}>
+                                        {newKeyType === 'CPF' && <div className="w-2 h-2 bg-[#00E38B] rounded-full" />}
+                                    </div>
                                     <div>
-                                        <p className="font-semibold">CPF</p>
-                                        <p className="text-sm text-gray-400">{user.cpf}</p>
+                                        <p className="font-bold text-sm text-white">CPF</p>
+                                        <p className="text-xs text-white/60">{user.cpf}</p>
                                     </div>
                                 </label>
-                                <label className={`p-4 rounded-lg border-2 flex items-center space-x-3 cursor-pointer ${newKeyType === 'EMAIL' ? 'border-primary bg-primary/20' : 'border-subtle-dark bg-background-dark'}`}>
-                                     <input type="radio" name="keyType" value="EMAIL" checked={newKeyType === 'EMAIL'} onChange={() => setNewKeyType('EMAIL')} className="h-4 w-4 text-primary bg-subtle-dark border-subtle-dark focus:ring-primary" />
+                                <label className={`p-4 rounded-xl border-2 flex items-center space-x-3 cursor-pointer transition-all ${newKeyType === 'EMAIL' ? 'border-[#00E38B] bg-[#00E38B]/10' : 'border-white/10 bg-white/5'}`}>
+                                     <input type="radio" name="keyType" value="EMAIL" checked={newKeyType === 'EMAIL'} onChange={() => setNewKeyType('EMAIL')} className="hidden" />
+                                     <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${newKeyType === 'EMAIL' ? 'border-[#00E38B]' : 'border-white/40'}`}>
+                                        {newKeyType === 'EMAIL' && <div className="w-2 h-2 bg-[#00E38B] rounded-full" />}
+                                    </div>
                                     <div>
-                                        <p className="font-semibold">E-mail</p>
-                                        <p className="text-sm text-gray-400">{user.email}</p>
+                                        <p className="font-bold text-sm text-white">E-mail</p>
+                                        <p className="text-xs text-white/60">{user.email}</p>
                                     </div>
                                 </label>
                             </div>
-                            {error && <p className="text-sm text-red-400 mt-4">{error}</p>}
-                            {success && <p className="text-sm text-primary mt-4">{success}</p>}
-                            <div className="flex justify-end space-x-4 mt-6">
-                                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-gray-200 bg-white/10 rounded-md hover:bg-white/20">Cancelar</button>
-                                <button type="submit" className="px-4 py-2 text-background-dark bg-primary font-semibold rounded-md hover:opacity-90">Cadastrar</button>
+                            {error && <p className="text-xs text-red-400 mt-4">{error}</p>}
+                            {success && <p className="text-xs text-[#00E38B] mt-4">{success}</p>}
+                            <div className="flex gap-3 mt-6">
+                                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-3 text-white/60 font-bold bg-white/5 rounded-xl hover:bg-white/10 transition-colors text-sm">Cancelar</button>
+                                <button type="submit" className="flex-1 py-3 text-black bg-[#00E38B] font-bold rounded-xl hover:opacity-90 transition-all text-sm shadow-[0_0_20px_rgba(0,227,139,0.25)]">Cadastrar</button>
                             </div>
                         </form>
                     </div>

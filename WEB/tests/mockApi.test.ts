@@ -5,12 +5,12 @@ import { initializeMockUsers, login, signUp } from '../services/mockApi';
 beforeEach(() => localStorage.clear());
 
 describe('mockApi — login', () => {
-    it('autentica com credenciais demo validas (CPF 11111111111 / senha 1234)', async () => {
+    it('autentica com credenciais demo validas (CPF 11111111111 / senha admin999)', async () => {
         await initializeMockUsers();
-        const result = await login('11111111111', '1234');
+        const result = await login('11111111111', 'admin999');
         expect(result.success).toBe(true);
         expect(result.user?.cpf).toBe('11111111111');
-        expect(result.user?.role).toBe('admin');
+        expect(result.user?.role).toBe('user');
     });
 
     it('rejeita senha incorreta', async () => {
@@ -28,7 +28,7 @@ describe('mockApi — login', () => {
 
     it('nao retorna campo password no objeto user', async () => {
         await initializeMockUsers();
-        const result = await login('11111111111', '1234');
+        const result = await login('11111111111', 'admin999');
         expect(result.success).toBe(true);
         expect((result.user as any)?.password).toBeUndefined();
     });

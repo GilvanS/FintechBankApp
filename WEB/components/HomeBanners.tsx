@@ -59,7 +59,7 @@ const HomeBanners: React.FC<HomeBannersProps> = ({ onNavigate }) => {
                         className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${index === currentIndex ? 'opacity-100' : 'opacity-0'}`}
                         onClick={() => onNavigate(banner.navigateTo)}
                     >
-                        <div className={`w-full h-48 rounded-2xl p-6 flex flex-col justify-between cursor-pointer ${banner.bgClass}`}>
+                        <div className={`w-full h-48 rounded-[2rem] p-6 flex flex-col justify-between cursor-pointer border border-white/10 ${banner.bgClass}`}>
                             <div className="text-4xl">{banner.icon}</div>
                             <div>
                                 <h3 className="text-lg font-bold text-white">{banner.title}</h3>

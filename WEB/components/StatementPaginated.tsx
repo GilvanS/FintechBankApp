@@ -127,42 +127,21 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
 
     return (
         <main
-            className="flex-1 p-4 md:p-6 lg:p-8 space-y-6 bg-volt-yellow test-statement-paginated"
+            className="flex-1 p-4 md:p-6 space-y-6 bg-[#0a0a0a] text-white w-full test-statement-paginated"
             id="statement-paginated"
             data-testid="statement-paginated"
             data-cy="statement-paginated"
             data-playwright="statement-paginated"
             role="main"
         >
-            <header className="flex items-center gap-3">
-                <button
-                    onClick={onBack}
-                    className="w-10 h-10 rounded-full bg-black flex items-center justify-center text-volt-yellow border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:opacity-80 transition-opacity test-statement-paginated-back-button"
-                    id="btn-statement-paginated-back"
-                    name="statement-paginated-back"
-                    data-testid="statement-paginated-back-button"
-                    data-cy="statement-paginated-back-button"
-                    data-playwright="statement-paginated-back-button"
-                    aria-label="Voltar"
-                    type="button"
-                >
-                    <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-                </button>
-                <h1
-                    className="text-black text-3xl font-black leading-tight test-statement-paginated-title"
-                    style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-                    id="statement-paginated-title"
-                    data-testid="statement-paginated-title"
-                >Extrato da Conta</h1>
-            </header>
 
             {/* Saldo */}
-            <div className="volt-card p-5">
+            <div className="bg-volt-surface border border-white/10 rounded-2xl p-5">
                 <div className="flex items-center justify-between">
-                    <p className="text-black/60 text-xs font-bold uppercase tracking-widest">Saldo atual</p>
+                    <p className="text-white/60 text-xs font-bold uppercase tracking-widest">Saldo atual</p>
                 </div>
                 <p
-                    className="text-black text-4xl font-black mt-1 test-statement-paginated-balance"
+                    className="text-white text-4xl font-black mt-1 test-statement-paginated-balance"
                     style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                     id="statement-paginated-balance"
                     data-testid="statement-paginated-balance"
@@ -172,12 +151,9 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
             </div>
 
             {/* Filtros por categoria — estilo volt */}
-            <div
-                className="flex gap-2 overflow-x-auto no-scrollbar test-statement-paginated-tabs"
+            <div className="flex overflow-x-auto no-scrollbar gap-2 pb-2"
                 id="statement-paginated-tabs"
                 data-testid="statement-paginated-tabs"
-                role="tablist"
-                aria-label="Filtros de transações"
             >
                 {([
                     { key: 'all',       label: 'Todos'          },
@@ -186,12 +162,14 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                     { key: 'transfers', label: 'Transferências' },
                     { key: 'payments',  label: 'Pagamentos'     },
                 ] as const).map(tab => (
-                    <button key={tab.key} onClick={() => handleTabChange(tab.key)}
-                        className={`flex-shrink-0 py-2 px-4 font-black text-xs uppercase tracking-wider transition-all whitespace-nowrap rounded-full border-2 border-black test-tab-${tab.key} ${
+                    <button
+                        key={tab.key}
+                        onClick={() => handleTabChange(tab.key)}
+                        className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
                             activeTab === tab.key
-                                ? 'bg-black text-volt-yellow shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-                                : 'bg-volt-cream text-black hover:bg-volt-yellow'
-                        }`}
+                                ? 'bg-white/10 text-volt-primary border-white/10'
+                                : 'bg-transparent text-white/50 border-white/5 hover:bg-volt-surface hover:text-white'
+                        } test-statement-tab-${tab.key}`}
                         id={`tab-${tab.key}`}
                         data-testid={`tab-${tab.key}`}
                         data-cy={`tab-${tab.key}`}
@@ -202,9 +180,20 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                 ))}
             </div>
 
+            {/* Buscador */}
+            <div className="relative">
+                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-white/40">search</span>
+                <input
+                    type="text"
+                    placeholder="Buscar transação..."
+                    className="w-full bg-volt-surface border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder-white/40 focus:outline-none focus:border-volt-primary transition-colors"
+                    id="statement-search-input"
+                    data-testid="statement-search-input"
+                />
+            </div>
+
             {/* Lista de transações */}
             <div className="space-y-4">
-                <h2 className="text-black text-xs font-black uppercase tracking-widest px-1">Transações</h2>
                 <div
                     className="flex flex-col gap-2 test-statement-paginated-list"
                     id="statement-paginated-list"
@@ -221,7 +210,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                             role="status"
                             aria-live="polite"
                         >
-                            <p className="text-black/60 font-semibold">Carregando transações...</p>
+                            <p className="text-white/60 font-semibold">Carregando transações...</p>
                         </div>
                     ) : transactions.length === 0 ? (
                         <div
@@ -231,7 +220,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                             role="status"
                             aria-live="polite"
                         >
-                            <p className="text-black/60 font-semibold">Nenhuma transação encontrada</p>
+                            <p className="text-white/60 font-semibold">Nenhuma transação encontrada</p>
                         </div>
                     ) : (
                         transactions.map((tx) => {
@@ -242,7 +231,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                                 <button
                                     key={tx.id}
                                     onClick={() => setSelectedTransaction(tx)}
-                                    className="w-full flex items-center gap-4 volt-card p-4 mb-2 transition-all duration-200 text-left cursor-pointer hover:bg-volt-cream active:scale-[0.99] test-statement-paginated-item"
+                                    className="w-full flex items-center gap-4 bg-transparent border-b border-white/5 p-4 mb-2 transition-all duration-200 text-left cursor-pointer hover:bg-volt-surface active:scale-[0.99] test-statement-paginated-item"
                                     data-testid="statement-paginated-item"
                                     data-cy="statement-paginated-item"
                                     data-playwright="statement-paginated-item"
@@ -252,16 +241,16 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                                     type="button"
                                     role="listitem"
                                 >
-                                    <div className="flex items-center justify-center rounded-full bg-black shrink-0 size-10 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                        <span className="material-symbols-outlined text-volt-yellow" aria-hidden="true" style={{ fontSize: '18px' }}>{getIconForType(tx.type)}</span>
+                                    <div className="flex items-center justify-center rounded-full bg-volt-surface shrink-0 size-10 border border-white/10 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]">
+                                        <span className="material-symbols-outlined text-volt-primary" aria-hidden="true" style={{ fontSize: '18px' }}>{getIconForType(tx.type)}</span>
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-black/50 text-xs mb-0.5 font-semibold test-statement-paginated-item-date" data-testid="statement-paginated-item-date">{date} • {time} • {typeLabel}</p>
-                                        <p className="text-black text-sm font-black leading-normal truncate test-statement-paginated-item-description" data-testid="statement-paginated-item-description">{tx.description}</p>
+                                        <p className="text-white/50 text-xs mb-0.5 font-semibold test-statement-paginated-item-date" data-testid="statement-paginated-item-date">{date} • {time} • {typeLabel}</p>
+                                        <p className="text-white text-sm font-black leading-normal truncate test-statement-paginated-item-description" data-testid="statement-paginated-item-description">{tx.description}</p>
                                     </div>
                                     <div className="text-right flex-shrink-0">
                                         <p
-                                            className={`text-base font-black test-statement-paginated-item-amount ${tx.amount < 0 ? 'text-red-600' : 'text-green-700'}`}
+                                            className={`text-base font-black test-statement-paginated-item-amount ${tx.amount < 0 ? 'text-red-500' : 'text-green-500'}`}
                                             data-testid="statement-paginated-item-amount"
                                             style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                                         >
@@ -290,7 +279,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                         className={`px-6 py-3 rounded-lg font-medium transition-colors test-prev-page ${
                             pagination.hasPrev
                                 ? 'bg-primary/20 text-white hover:bg-primary/30'
-                                : 'bg-white/5 text-white/30 cursor-not-allowed'
+                                : 'bg-volt-surface text-white/30 cursor-not-allowed'
                         }`}
                         id="btn-prev-page"
                         name="prev-page"
@@ -319,7 +308,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                         className={`px-6 py-3 rounded-lg font-medium transition-colors test-next-page ${
                             pagination.hasNext
                                 ? 'bg-primary/20 text-white hover:bg-primary/30'
-                                : 'bg-white/5 text-white/30 cursor-not-allowed'
+                                : 'bg-volt-surface text-white/30 cursor-not-allowed'
                         }`}
                         id="btn-next-page"
                         name="next-page"

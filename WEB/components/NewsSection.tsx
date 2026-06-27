@@ -83,7 +83,7 @@ const NewsSection: React.FC = () => {
                 <h3 className="text-white text-lg font-bold leading-tight tracking-[-0.015em] px-4 pb-4 pt-4">Últimas Notícias</h3>
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8">
                     {[...Array(3)].map((_, i) => (
-                        <div key={i} className="flex flex-col gap-4 rounded-xl bg-surface-dark p-4 animate-pulse">
+                        <div key={i} className="flex flex-col gap-4 rounded-[2rem] bg-white/5 border border-white/10 p-4 animate-pulse">
                             <div className="aspect-video w-full rounded-lg bg-white/10"></div>
                             <div className="flex flex-col gap-2">
                                 <div className="h-4 bg-white/10 rounded w-3/4"></div>
@@ -98,14 +98,14 @@ const NewsSection: React.FC = () => {
 
     return (
         <section>
-            <h3 className="text-white text-lg font-bold leading-tight tracking-[-0.015em] px-4 pb-4 pt-4">Últimas Notícias</h3>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8">
+            <h3 className="text-white text-sm font-black uppercase tracking-wider px-4 pb-4 pt-4">Últimas Notícias</h3>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8 px-4">
                 {articles.map((article, index) => (
-                    <a key={index} href={article.url} target="_blank" rel="noopener noreferrer" className="flex cursor-pointer flex-col gap-4 rounded-xl bg-surface-dark p-4 transition-transform hover:scale-[1.02]">
+                    <a key={index} href={article.url} target="_blank" rel="noopener noreferrer" className="flex cursor-pointer flex-col gap-4 rounded-[2rem] bg-[#0a0a0a] border border-white/10 p-5 shadow-lg transition-all hover:bg-white/5">
                         <div className="aspect-video w-full rounded-lg bg-cover bg-center" style={{ backgroundImage: `url(${article.urlToImage})` }}></div>
                         <div className="flex flex-col">
-                            <h4 className="font-bold text-white">{article.title}</h4>
-                            <p className="text-sm text-white/70 line-clamp-3">{article.description}</p>
+                            <h4 className="font-bold text-white mb-2">{article.title}</h4>
+                            <p className="text-xs text-white/50 line-clamp-3">{article.description}</p>
                         </div>
                     </a>
                 ))}

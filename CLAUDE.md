@@ -1,8 +1,4 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
----
+# Ruflo — Claude Code Configuration
 
 ## Rules
 
@@ -12,196 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - NEVER save working files or tests to root — use `/src`, `/tests`, `/docs`, `/config`, `/scripts`
 - ALWAYS read a file before editing it
 - NEVER commit secrets, credentials, or .env files
-- NEVER add a `Co-Authored-By` trailer to commits
+- NEVER add a `Co-Authored-By` trailer to user commits unless this project's `.claude/settings.json` has `attribution.commit` set (#2078). The Claude Code Bash tool may suggest one in its default commit-message template — ignore it. `Co-Authored-By` is semantic authorship attribution under git/GitHub convention; the tool is the facilitator, not a co-author.
 - Keep files under 500 lines
 - Validate input at system boundaries
-
----
-
-## Project Structure
-
-Monorepo with three independent modules, each with their own `package.json`:
-
-```
-FintechBankApp/
-├── API/        — Node.js + Express backend (port 3001)
-├── MOBILE/     — Capacitor + React + Vite (Android APK)
-├── WEB/        — React + Vite frontend (port 5173)
-└── docker-compose.yml  — PostgreSQL via Docker (port 5432, db: fintech, schema: fintech)
-```
-
----
-
-## Commands
-
-### API (Node.js + Express)
-```bash
-cd API
-npm run dev           # node --watch index.cjs
-npm test              # Jest (all test files in tests/)
-npx jest tests/billing.test.js   # single suite
-npm run test:coverage
-```
-
-### MOBILE (Capacitor + React)
-```bash
-cd MOBILE
-npm run dev           # Vite dev server
-npm run build         # vite build → dist/
-npm test              # vitest run
-.\GERAR-APK-DO-ZERO.ps1   # full APK build + optional adb install
-```
-
-### WEB (React + Vite)
-```bash
-cd WEB
-npm run dev           # port 5173
-npm test              # vitest run
-```
-
-### Database (PostgreSQL via Docker)
-```bash
-docker compose up -d              # start pgdb container
-cd API && .\RECRIAR-BANCO.ps1    # drop + recreate fintech schema
-```
-
----
-
-## Architecture
-
-### API (`API/index.cjs`)
-Single-file entry point (~3800 lines). All routes mounted on both `/api` and `/api/v1`:
-
-```
-app.use('/api',    apiRouter);
-app.use('/api/v1', apiRouter);
-```
-
-**Key internals:**
-- `DatabaseFactory` (`services/database/`) — selects SQLite or PostgreSQL based on `DB_PROVIDER` env var. All queries go through `databricksService.executeQuery(sql)`. Table names use `databricksService.fq('table')` → `"fintech"."table"`.
-- `initializeDatabase()` — bootstraps all tables (`CREATE TABLE IF NOT EXISTS`) on startup. Add new tables here.
-- `normalizeUser(row)` — converts DB snake_case → camelCase for API responses.
-- `bearerAuth()` — JWT middleware; sets `req.user = { cpf, role }`.
-- `authenticateAdmin` — inline middleware checking `req.user.role === 'admin'`.
-- `asyncHandler(fn)` — wraps async route handlers to forward errors.
-
-**Route groups** (all under `apiRouter`):
-
-| Prefix | Purpose |
-|--------|---------|
-| `/auth` | login, signup, password reset |
-| `/users` | `/me` (full profile + billing), `/:cpf`, statement |
-| `/pix` | transfer, keys, contacts |
-| `/cards` | invoice pay/parcel/anticipate |
-| `/shop` | products, checkout |
-| `/billing` | `/invoice-status` (authenticated user) |
-| `/admin/*` | user management, billing config, stats |
-| `/debug/*` | requires admin scope |
-
-**Repositories** (`API/repositories/`) — thin SQL wrappers; no business logic. Each exposes named functions imported directly into `index.cjs`.
-
-**Billing system** (`API/utils/billing.js`):
-- `computeCurrentCycle(cfg, now?)` — returns `{ cycleStatus, invoiceRef, closeDate, dueDate, overdueDeadline }`. Status: `aberta → fechada → vencida → inadimplente`.
-- `calcCharges(invoiceAmount, daysOverdue)` — multa 2% + juros 0.0333%/dia.
-- Tables: `billing_config` (single-row global params) and `billing_charges` (per-user per-cycle charges).
-
-### MOBILE (`MOBILE/src/`)
-
-**Stack:** Capacitor 7 + React 18 + Vite + Ionic React + Tailwind CSS.
-
-**App shell** (`src/App.tsx`):
-- Manages a single `view` state string (no router).
-- `restoreSession()` on mount: tries `localStorage.getItem('authToken')` → `GET /users/me` → sets user and view.
-- Back button: `CapApp.addListener('backButton', ...)` → `minimizeApp()` if can't go back.
-- `AuthContext` exposes `{ user, login, logout, updateUser, view, navigateTo }`.
-
-**API layer** (`src/services/api.ts`):
-- `initializeApi()` — detects platform (Android/iOS/web) and sets base URL dynamically.
-- On Android APK: uses `http://10.0.2.2:3001` (emulator) or detected LAN IP.
-- All calls include `Authorization: Bearer <token>` from `localStorage.getItem('authToken')`.
-
-**Home view** (`src/components/HomeView.tsx`):
-- Displays balance, limits, billing status banner, quick actions, news, banners.
-- Account status banner: red for `inadimplente`, yellow for `suspenso`, subtle green/yellow reminders for `fechada`/`vencida` cycle status.
-
-**Capacitor Android specifics:**
-- `MOBILE/index.html` — must have `viewport-fit=cover` for safe area.
-- `src/theme/variables.css` — `html, body, #root { height: 100% }` required for layout chain.
-- `BottomNavBar` uses `paddingBottom: env(safe-area-inset-bottom)` with `height: auto`.
-- CORS: Capacitor WebView sends `Origin: http://localhost` on Android.
-
-### WEB (`WEB/`)
-React + Vite SPA. Shares some utility patterns with MOBILE but is independent.
-
----
-
-## Database
-
-**PostgreSQL schema** — canonical source: `API/schema_pg.sql`. Schema prefix: `fintech`.
-
-Key tables: `users`, `transactions`, `pix_keys`, `pix_contacts`, `notifications`, `limit_increase_requests`, `invoices`, `purchased_items`, `installment_plans`, `billing_config`, `billing_charges`.
-
-`billing_config` is a single-row table (`id=1`). Always query with `WHERE id = 1`.
-
-Users table has billing columns: `account_status` (default `'adimplente'`), `days_overdue`, `credit_card_due_day`, `invoice_last_closed_date`.
-
-**Adding a new table:** add DDL to `schema_pg.sql` AND add `CREATE TABLE IF NOT EXISTS` block inside `initializeDatabase()` in `index.cjs` (before the `🎉` log line at the end of the function).
-
----
-
-## Testing
-
-| Module | Framework | Location |
-|--------|-----------|----------|
-| API | Jest + Supertest | `API/tests/*.test.js` |
-| MOBILE | Vitest + Testing Library | `MOBILE/src/**/__tests__/` |
-| WEB | Vitest + Testing Library | `WEB/src/**/__tests__/` |
-
-API tests create isolated Express apps with mocked DB calls — they don't require a running database. See `API/tests/billing.test.js` for the pattern.
-
-Run a single API test file:
-```bash
-cd API && npx jest tests/billing.test.js --no-coverage
-```
-
----
-
-## Environment Variables (API)
-
-```env
-DB_PROVIDER=postgres          # sqlite | postgres
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=pwd123
-DB_NAME=fintech
-DB_SCHEMA=fintech
-JWT_SECRET=<long-random-string>
-PORT=3001
-```
-
-JWT secret must come from env — no hardcoded fallback.
-
----
-
-## Spec-Driven Development
-
-Specs ficam em `.spec/`. Leia o spec relevante antes de implementar qualquer feature.
-
-| Path | Conteúdo |
-|------|---------|
-| `.spec/PROJECT.md` | Arquitetura, decisões locked, convenções |
-| `.spec/api/BILLING.md` | Regras de billing, ciclo, encargos |
-| `.spec/api/AUTH.md` | Auth, JWT, middleware |
-| `.spec/api/PIX.md` | PIX, chaves, limite diário |
-| `.spec/api/CARDS.md` | Cartão, faturas, parcelamento |
-| `.spec/mobile/FATURAS.md` | UI da tela de faturas (issue #36) |
-| `.spec/mobile/HOME.md` | Home screen, billing banner |
-| `.spec/mobile/NAVIGATION.md` | State machine de views, AuthContext |
-
-Fluxo: atualizar `.spec/` → `/gsd-spec-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work`
-
----
 
 ## Agent Comms (SendMessage-First Coordination)
 
@@ -209,25 +18,163 @@ Named agents coordinate via `SendMessage`, not polling or shared state.
 
 ```
 Lead (you) ←→ architect ←→ developer ←→ tester ←→ reviewer
+              (named agents message each other directly)
 ```
 
+### Spawning a Coordinated Team
+
+```javascript
+// ALL agents in ONE message, each knows WHO to message next
+Agent({ prompt: "Research the codebase. SendMessage findings to 'architect'.",
+  subagent_type: "researcher", name: "researcher", run_in_background: true })
+Agent({ prompt: "Wait for 'researcher'. Design solution. SendMessage to 'coder'.",
+  subagent_type: "system-architect", name: "architect", run_in_background: true })
+Agent({ prompt: "Wait for 'architect'. Implement it. SendMessage to 'tester'.",
+  subagent_type: "coder", name: "coder", run_in_background: true })
+Agent({ prompt: "Wait for 'coder'. Write tests. SendMessage results to 'reviewer'.",
+  subagent_type: "tester", name: "tester", run_in_background: true })
+Agent({ prompt: "Wait for 'tester'. Review code quality and security.",
+  subagent_type: "reviewer", name: "reviewer", run_in_background: true })
+
+// Kick off the pipeline
+SendMessage({ to: "researcher", summary: "Start", message: "[task context]" })
+```
+
+### Patterns
+
+| Pattern | Flow | Use When |
+|---------|------|----------|
+| **Pipeline** | A → B → C → D | Sequential dependencies (feature dev) |
+| **Fan-out** | Lead → A, B, C → Lead | Independent parallel work (research) |
+| **Supervisor** | Lead ↔ workers | Ongoing coordination (complex refactor) |
+
 ### Rules
+
 - ALWAYS name agents — `name: "role"` makes them addressable
+- ALWAYS include comms instructions in prompts — who to message, what to send
 - Spawn ALL agents in ONE message with `run_in_background: true`
 - After spawning: STOP, tell user what's running, wait for results
 - NEVER poll status — agents message back or complete automatically
 
+## Swarm & Routing
+
+### Config
+- **Topology**: hierarchical-mesh (anti-drift)
+- **Max Agents**: 15
+- **Memory**: hybrid
+- **HNSW**: Enabled
+- **Neural**: Enabled
+
+```bash
+npx @claude-flow/cli@latest swarm init --topology hierarchical --max-agents 8 --strategy specialized
+```
+
+### Agent Routing
+
+| Task | Agents | Topology |
+|------|--------|----------|
+| Bug Fix | researcher, coder, tester | hierarchical |
+| Feature | architect, coder, tester, reviewer | hierarchical |
+| Refactor | architect, coder, reviewer | hierarchical |
+| Performance | perf-engineer, coder | hierarchical |
+| Security | security-architect, auditor | hierarchical |
+
 ### When to Swarm
-- **YES**: 3+ files, new features, cross-module refactoring, API changes, security
-- **NO**: single file edits, 1-2 line fixes, config changes, questions
+- **YES**: 3+ files, new features, cross-module refactoring, API changes, security, performance
+- **NO**: single file edits, 1-2 line fixes, docs updates, config changes, questions
 
----
+### 3-Tier Model Routing
 
-## MCP Tools (use `ToolSearch("keyword")` to discover)
+| Tier | Handler | Use Cases |
+|------|---------|-----------|
+| 1 | Agent Booster (WASM) | Simple transforms — skip LLM, use Edit directly |
+| 2 | Haiku | Simple tasks, low complexity |
+| 3 | Sonnet/Opus | Architecture, security, complex reasoning |
+
+## Memory & Learning
+
+### Before Any Task
+```bash
+npx @claude-flow/cli@latest memory search --query "[task keywords]" --namespace patterns
+npx @claude-flow/cli@latest hooks route --task "[task description]"
+```
+
+### After Success
+```bash
+npx @claude-flow/cli@latest memory store --namespace patterns --key "[name]" --value "[what worked]"
+npx @claude-flow/cli@latest hooks post-task --task-id "[id]" --success true --store-results true
+```
+
+### MCP Tools (use `ToolSearch("keyword")` to discover)
 
 | Category | Key Tools |
 |----------|-----------|
-| **Memory** | `memory_store`, `memory_search` |
-| **Swarm** | `swarm_init`, `swarm_status` |
-| **Agents** | `agent_spawn`, `agent_list` |
-| **Hooks** | `hooks_route`, `hooks_post-task` |
+| **Memory** | `memory_store`, `memory_search`, `memory_search_unified` |
+| **Bridge** | `memory_import_claude`, `memory_bridge_status` |
+| **Swarm** | `swarm_init`, `swarm_status`, `swarm_health` |
+| **Agents** | `agent_spawn`, `agent_list`, `agent_status` |
+| **Hooks** | `hooks_route`, `hooks_post-task`, `hooks_worker-dispatch` |
+| **Security** | `aidefence_scan`, `aidefence_is_safe`, `aidefence_has_pii` |
+| **Hive-Mind** | `hive-mind_init`, `hive-mind_consensus`, `hive-mind_spawn` |
+
+### Background Workers
+
+| Worker | When |
+|--------|------|
+| `audit` | After security changes |
+| `optimize` | After performance work |
+| `testgaps` | After adding features |
+| `map` | Every 5+ file changes |
+| `document` | After API changes |
+
+```bash
+npx @claude-flow/cli@latest hooks worker dispatch --trigger audit
+```
+
+## Agents
+
+**Core**: `coder`, `reviewer`, `tester`, `planner`, `researcher`
+**Architecture**: `system-architect`, `backend-dev`, `mobile-dev`
+**Security**: `security-architect`, `security-auditor`
+**Performance**: `performance-engineer`, `perf-analyzer`
+**Coordination**: `hierarchical-coordinator`, `mesh-coordinator`, `adaptive-coordinator`
+**GitHub**: `pr-manager`, `code-review-swarm`, `issue-tracker`, `release-manager`
+
+Any string works as a custom agent type.
+
+## Build & Test
+
+- ALWAYS run tests after code changes
+- ALWAYS verify build succeeds before committing
+
+```bash
+npm run build && npm test
+```
+
+## CLI Quick Reference
+
+```bash
+npx @claude-flow/cli@latest init --wizard           # Setup
+npx @claude-flow/cli@latest swarm init --v3-mode     # Start swarm
+npx @claude-flow/cli@latest memory search --query "" # Vector search
+npx @claude-flow/cli@latest hooks route --task ""    # Route to agent
+npx @claude-flow/cli@latest doctor --fix             # Diagnostics
+npx @claude-flow/cli@latest security scan            # Security scan
+npx @claude-flow/cli@latest performance benchmark    # Benchmarks
+```
+
+26 commands, 140+ subcommands. Use `--help` on any command for details.
+
+## Setup
+
+```bash
+claude mcp add claude-flow -- npx -y ruflo@latest mcp start
+npx ruflo@latest doctor --fix
+```
+
+> The background `daemon` is optional. It runs interval workers that each spawn
+> a headless `claude` session, so it consumes tokens continuously. Start it only
+> if you want those sweeps: `npx ruflo@latest daemon start` (self-stops after 12h
+> by default; `--ttl 0` to disable, `daemon status --all` to audit running daemons).
+
+**Agent tool** handles execution (agents, files, code, git). **MCP tools** handle coordination (swarm, memory, hooks). **CLI** is the same via Bash.
