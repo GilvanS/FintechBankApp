@@ -55,3 +55,6 @@ WEB/port_home_view.py
 # Pasta de imagens de exemplo para inspiracao (nao versionar)
 .exemplos/
 exemplos/
+
+# Base para melhorias (não versionar no projeto principal)
+WEB/new-base-fintechbank/
