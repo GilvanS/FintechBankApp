@@ -10,7 +10,7 @@ const PromotionalPopup: React.FC<PromotionalPopupProps> = ({ isOpen, onClose }) 
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-surface-dark w-full max-w-md rounded-3xl overflow-hidden shadow-2xl relative border border-white/10">
+            <div className="bg-surface-dark w-full max-w-xs rounded-3xl overflow-hidden shadow-2xl relative border border-white/10">
                 {/* Close Button */}
                 <button 
                     onClick={onClose}

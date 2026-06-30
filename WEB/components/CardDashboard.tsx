@@ -89,13 +89,13 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
     };
 
     return (
-        <div className={`min-h-screen relative pb-8 ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+        <div className={`min-h-screen relative pb-40 ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
             {/* Header com botão de voltar */}
-            <div className={`flex items-center gap-3 p-4 ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>
-                <button onClick={onBack} className={`p-2 -ml-2 rounded-full transition-colors cursor-pointer ${theme === 'midnight' ? 'hover:bg-white/10' : 'hover:bg-black/10'}`}>
+            <div className="flex items-center gap-3 p-4">
+                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10 text-white transition-colors cursor-pointer">
                     <ArrowLeft size={24} />
                 </button>
-                <h1 className="text-lg font-bold">Cartões</h1>
+                <h1 className="text-xl font-bold text-white">Cartões</h1>
             </div>
 
             <div className="space-y-6 pt-2 px-4 max-w-md mx-auto">

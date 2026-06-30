@@ -127,9 +127,9 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack, updateUser 
             </main>
 
             {showAddModal && user && (
-                <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
-                    <div className="bg-[#111111] border border-white/10 p-6 rounded-2xl shadow-2xl w-full max-w-sm">
-                        <h2 className="text-xl font-bold mb-6 text-white">Cadastrar Chave</h2>
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
+                    <div className="bg-volt-surface border-2 border-volt-primary p-6 rounded-3xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm">
+                        <h2 className="text-xl font-black uppercase tracking-wider mb-6 text-white text-center">Cadastrar Chave</h2>
                         <form onSubmit={handleRegisterKey}>
                            <div className="space-y-3">
                                 <label className={`p-4 rounded-xl border-2 flex items-center space-x-3 cursor-pointer transition-all ${newKeyType === 'CPF' ? 'border-[#00E38B] bg-[#00E38B]/10' : 'border-white/10 bg-white/5'}`}>

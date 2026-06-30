@@ -37,6 +37,7 @@ const Shop: React.FC<ShopProps> = ({ isOpen, onClose, onAddToCart, onInitiatePur
     };
 
     const [showPopup, setShowPopup] = useState(true);
+    const [selectedCategory, setSelectedCategory] = useState('Todos');
 
     useEffect(() => {
         const fetchProducts = async () => {
@@ -227,6 +228,24 @@ const Shop: React.FC<ShopProps> = ({ isOpen, onClose, onAddToCart, onInitiatePur
                         <p className="text-gray-400">Nenhum produto disponível</p>
                     </div>
                 ) : (
+                    <>
+                    {/* Filtros de Categoria */}
+                    <div className="flex overflow-x-auto no-scrollbar gap-2 mb-4 pb-2">
+                        {['Todos', ...Array.from(new Set(products.map(p => p.category).filter(Boolean)))].map(cat => (
+                            <button
+                                key={cat}
+                                onClick={() => setSelectedCategory(cat as string)}
+                                className={`px-3 py-1 text-[10px] font-bold rounded-full whitespace-nowrap transition-colors border ${
+                                    selectedCategory === cat 
+                                    ? 'bg-[#00ff9d] text-black border-[#00ff9d]' 
+                                    : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                                }`}
+                            >
+                                {cat}
+                            </button>
+                        ))}
+                    </div>
+
                     <div 
                         className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 test-products-grid"
                         id="products-grid"
@@ -236,7 +255,7 @@ const Shop: React.FC<ShopProps> = ({ isOpen, onClose, onAddToCart, onInitiatePur
                         role="grid"
                         aria-label="Lista de produtos"
                     >
-                        {products.map(product => (
+                        {products.filter(p => selectedCategory === 'Todos' || p.category === selectedCategory).map(product => (
                         <motion.div 
                             key={product.id} 
                             whileHover={{ scale: 1.02 }}
@@ -297,6 +316,7 @@ const Shop: React.FC<ShopProps> = ({ isOpen, onClose, onAddToCart, onInitiatePur
                         </motion.div>
                         ))}
                     </div>
+                    </>
                 )}
             </main>
                     </motion.div>

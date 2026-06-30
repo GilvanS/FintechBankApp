@@ -8,6 +8,7 @@ import Contacts from './Contacts';
 import PixKeyManagement from './PixKeyManagement';
 import PasswordModal from './PasswordModal';
 import { useAuth } from '../context/AuthContext';
+import { useAppState } from '../contexts/AppStateContext';
 
 type PixSubView = 'transfer' | 'keyManagement' | 'contacts' | 'confirmation';
 
@@ -18,6 +19,7 @@ interface PixModalProps {
 
 export default function PixModal({ isOpen, onClose }: PixModalProps) {
   const { user, updateUser } = useAuth();
+  const { triggerSmartAlertCheck } = useAppState();
   const [subView, setSubView] = useState<PixSubView>('transfer');
   const [pixKeyType, setPixKeyType] = useState<'cpf' | 'email' | 'phone' | 'random'>('cpf');
   const [pixKey, setPixKey] = useState('');
@@ -98,7 +100,10 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
                       updateUser({ ...refreshed.user, transactions: stmt.transactions });
                       // Find the new transaction to show in success
                       const newTx = stmt.transactions[0];
-                      if (newTx) setCreatedTx(newTx);
+                      if (newTx) {
+                          setCreatedTx(newTx);
+                          triggerSmartAlertCheck(newTx.title || newTx.description, newTx.amount, 'outros');
+                      }
                   } else {
                       updateUser(refreshed.user);
                   }

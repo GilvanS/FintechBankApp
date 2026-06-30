@@ -5,6 +5,7 @@ import { motion } from 'motion/react';
 interface BottomNavBarProps {
     currentView: string;
     onNavigate: (view: 'home' | 'cards' | 'shop' | 'profile' | 'limit') => void;
+    theme?: 'yellow' | 'midnight';
 }
 
 const navItems = [
@@ -15,65 +16,67 @@ const navItems = [
     { label: 'Perfil',  view: 'profile', icon: User },
 ] as const;
 
-const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate }) => {
+const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate, theme = 'midnight' }) => {
+    const isMidnight = theme === 'midnight';
+
     return (
-        /* Volt sleek dark pill navbar — dark surface, floating, glowing active state */
         <nav
             id="bottom-nav"
-            data-testid="bottom-nav"
-            data-cy="bottom-nav"
-            data-playwright="bottom-nav"
-            aria-label="Navegação principal"
-            className="flex-shrink-0 mx-auto w-[calc(100%-1.5rem)] max-w-[424px] mb-4 bg-volt-surface border border-white/10 rounded-[2rem] flex justify-around items-center h-[72px] shadow-lg z-40 backdrop-blur-md"
+            className={`fixed bottom-3 left-2 right-2 h-20 z-40 overflow-x-auto no-scrollbar rounded-[2rem] border-4 flex items-center shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-colors ${
+                isMidnight 
+                    ? 'bg-zinc-950 border-zinc-800 text-white' 
+                    : 'bg-white border-black text-black'
+            }`}
         >
-            {navItems.map(item => {
-                const Icon = item.icon;
-                const isActive = currentView === item.view;
-                
-                return (
-                    <button
-                        key={item.view}
-                        onClick={() => onNavigate(item.view)}
-                        id={`btn-nav-${item.view}`}
-                        name={`nav-${item.view}`}
-                        data-testid={`nav-${item.view}`}
-                        data-cy={`nav-${item.view}`}
-                        data-playwright={`nav-${item.view}`}
-                        aria-label={item.label}
-                        aria-current={isActive ? 'page' : undefined}
-                        type="button"
-                        className={`relative flex flex-col items-center justify-center w-16 h-14 rounded-full transition-colors cursor-pointer test-nav-${item.view} group`}
-                    >
-                        {/* Active pill highlight */}
-                        {isActive && (
-                            <motion.span
-                                layoutId="activeTabGlow"
-                                className="absolute inset-0 bg-volt-primary/10 border border-volt-primary/20 rounded-full"
-                                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                            />
-                        )}
-                        
-                        <motion.div
-                            animate={{
-                                scale: isActive ? 1.1 : 1,
-                                y: isActive ? -1 : 0,
-                            }}
-                            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                            className={`${
-                                isActive
-                                  ? 'text-volt-primary drop-shadow-[0_0_8px_rgba(0,255,157,0.5)]'
-                                  : 'text-zinc-500 group-hover:text-white'
-                            } transition-all duration-300 z-10`}
+            <div className="flex justify-around items-center min-w-max w-full px-4 gap-2">
+                {navItems.map(item => {
+                    const Icon = item.icon;
+                    const isActive = currentView === item.view;
+                    
+                    return (
+                        <button
+                            key={item.view}
+                            onClick={() => onNavigate(item.view)}
+                            className="relative flex flex-col items-center justify-center w-16 h-16 rounded-2xl transition-colors cursor-pointer group shrink-0"
                         >
-                            <Icon size={18} className={isActive ? 'stroke-[2.5]' : 'stroke-[2]'} />
-                        </motion.div>
+                            {isActive && (
+                                <motion.span
+                                    layoutId="activeTabGlow"
+                                    className={`absolute inset-0 rounded-2xl border-2 ${
+                                        isMidnight 
+                                            ? 'bg-[#A2FF00]/10 border-[#A2FF00]/30' 
+                                            : 'bg-black/5 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                                    }`}
+                                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                                />
+                            )}
+                            
+                            <motion.div
+                                animate={{
+                                    scale: isActive ? 1.1 : 1,
+                                    y: isActive ? -1 : 0,
+                                }}
+                                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                                className={`${
+                                    isActive
+                                      ? (isMidnight ? 'text-[#A2FF00]' : 'text-black')
+                                      : (isMidnight ? 'text-zinc-500 group-hover:text-white' : 'text-zinc-500 group-hover:text-black')
+                                } transition-all duration-300 z-10`}
+                            >
+                                <Icon size={20} className={isActive ? 'stroke-[2.5]' : 'stroke-[2]'} />
+                            </motion.div>
 
-                        <span className={`text-[9px] font-bold mt-0.5 tracking-wider uppercase z-10 transition-colors ${isActive ? 'text-volt-primary' : 'text-zinc-500 group-hover:text-white'}`}>
-                            {item.label}
-                        </span>
-                    </button>
-                );
-            })}
+                            <span className={`text-[9px] font-black mt-0.5 tracking-wider uppercase z-10 transition-colors ${
+                                isActive 
+                                    ? (isMidnight ? 'text-[#A2FF00]' : 'text-black') 
+                                    : (isMidnight ? 'text-zinc-500 group-hover:text-white' : 'text-zinc-500 group-hover:text-black')
+                            }`}>
+                                {item.label}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
         </nav>
     );
 };

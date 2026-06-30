@@ -19,66 +19,63 @@ export function useToast() {
     return { toast, showSuccess, showError, showInfo, hide };
 }
 
-export const ToastContainer: React.FC<{ toast: ToastMessage | null; onClose: () => void }> = ({ toast, onClose }) => {
-    if (!toast) return null;
-    const bg =
-        toast.type === 'success' ? 'bg-green-600' :
-        toast.type === 'error' ? 'bg-red-600' :
-        'bg-blue-600';
-    
-    const iconName = toast.type === 'success' ? 'check_circle' : toast.type === 'error' ? 'error' : 'info';
+import { AnimatePresence, motion } from 'motion/react';
+import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 
+export const ToastContainer: React.FC<{ toast: ToastMessage | null; onClose: () => void }> = ({ toast, onClose }) => {
     return (
-        <div 
-            className={`fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-3 rounded text-white shadow-lg ${bg} z-50 test-toast test-toast-${toast.type}`}
-            id={`toast-${toast.type}`}
-            data-testid={`toast-${toast.type}`}
-            data-cy={`toast-${toast.type}`}
-            data-playwright={`toast-${toast.type}`}
-            role="alert"
-            aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
-            aria-atomic="true"
-            aria-label={`Notificação ${toast.type === 'success' ? 'de sucesso' : toast.type === 'error' ? 'de erro' : 'informativa'}`}
-        >
-            <div 
-                className="flex items-center space-x-3 test-toast-content"
-                id="toast-content"
-                data-testid="toast-content"
-                data-cy="toast-content"
-            >
-                <span 
-                    className="material-symbols-outlined test-toast-icon"
-                    aria-hidden="true"
-                    id="toast-icon"
-                    data-testid="toast-icon"
-                    data-cy="toast-icon"
+        <AnimatePresence>
+            {toast && (
+                <motion.div 
+                    initial={{ opacity: 0, y: 50, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 50, scale: 0.95 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                    className={`fixed bottom-6 left-1/2 -translate-x-1/2 p-4 pr-12 rounded-2xl text-white shadow-2xl z-50 test-toast test-toast-${toast.type} flex items-start gap-3 backdrop-blur-xl
+                        ${toast.type === 'success' ? 'bg-[#18181b]/95 border border-volt-green/30' : 
+                          toast.type === 'error' ? 'bg-[#18181b]/95 border border-volt-red/30' : 
+                          'bg-[#18181b]/95 border border-blue-500/30'}`}
+                    id={`toast-${toast.type}`}
+                    data-testid={`toast-${toast.type}`}
+                    data-cy={`toast-${toast.type}`}
+                    data-playwright={`toast-${toast.type}`}
+                    role="alert"
+                    aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
+                    aria-atomic="true"
+                    aria-label={`Notificação ${toast.type === 'success' ? 'de sucesso' : toast.type === 'error' ? 'de erro' : 'informativa'}`}
                 >
-                    {iconName}
-                </span>
-                <span 
-                    className="test-toast-message"
-                    id="toast-message"
-                    data-testid="toast-message"
-                    data-cy="toast-message"
-                    data-playwright="toast-message"
-                >
-                    {toast.text}
-                </span>
-                <button 
-                    onClick={onClose} 
-                    className="ml-2 bg-white/20 hover:bg-white/30 rounded px-2 py-1 text-sm test-toast-close-button"
-                    id="btn-toast-close"
-                    name="toast-close-button"
-                    data-testid="toast-close-button"
-                    data-cy="toast-close-button"
-                    data-playwright="toast-close-button"
-                    aria-label="Fechar notificação"
-                    type="button"
-                    role="button"
-                >
-                    <span data-testid="toast-close-button-text">Fechar</span>
-                </button>
-            </div>
-        </div>
+                    <div className="shrink-0 mt-0.5">
+                        {toast.type === 'success' && <CheckCircle2 className="text-volt-green" size={24} />}
+                        {toast.type === 'error' && <AlertTriangle className="text-volt-red" size={24} />}
+                        {toast.type === 'info' && <Info className="text-blue-500" size={24} />}
+                    </div>
+
+                    <div 
+                        className="flex-1 text-sm font-semibold leading-tight test-toast-message"
+                        id="toast-message"
+                        data-testid="toast-message"
+                        data-cy="toast-message"
+                        data-playwright="toast-message"
+                    >
+                        {toast.text}
+                    </div>
+
+                    <button 
+                        onClick={onClose} 
+                        className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors test-toast-close-button"
+                        id="btn-toast-close"
+                        name="toast-close-button"
+                        data-testid="toast-close-button"
+                        data-cy="toast-close-button"
+                        data-playwright="toast-close-button"
+                        aria-label="Fechar notificação"
+                        type="button"
+                        role="button"
+                    >
+                        <X size={18} />
+                    </button>
+                </motion.div>
+            )}
+        </AnimatePresence>
     );
 };

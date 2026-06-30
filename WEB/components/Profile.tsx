@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, HelpCircle, Info, Settings, Palette, Check, Edit2, Sun, Moon, Fingerprint, Bell, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Shield, HelpCircle, Info, Settings, Palette, Check, Edit2, Sun, Moon, Fingerprint, Bell, AlertTriangle, ArrowLeft, Sliders, Zap, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { AppVersion } from '../utils/AppVersion';
 import { useDialog } from '../contexts/GlobalDialogContext';
@@ -34,7 +34,30 @@ export default function Profile({ onNavigate }: ProfileProps) {
     return localStorage.getItem('volt_biometric_enabled') === 'true';
   });
   
-  const [theme, setTheme] = useState<'yellow' | 'midnight'>('midnight'); // Default theme
+  const [theme, setTheme] = useState<'yellow' | 'midnight'>(() => {
+    return (localStorage.getItem('volt_theme') as 'yellow' | 'midnight') || 'midnight';
+  });
+  
+  const [smartAlertsEnabled, setSmartAlertsEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('volt_smart_alerts_enabled') === 'true';
+  });
+  const [smartAlertsMinAmount, setSmartAlertsMinAmount] = useState<number>(() => {
+    const saved = localStorage.getItem('volt_smart_alerts_min_amount');
+    return saved ? parseFloat(saved) : 100;
+  });
+  const [smartAlertsCategories, setSmartAlertsCategories] = useState<string[]>(() => {
+    const saved = localStorage.getItem('volt_smart_alerts_categories');
+    return saved ? JSON.parse(saved) : ['refeicao', 'mobilidade', 'cultura', 'saude', 'outros'];
+  });
+  const [smartAlertsTimePreset, setSmartAlertsTimePreset] = useState<string>(() => {
+    return localStorage.getItem('volt_smart_alerts_time_preset') || 'always';
+  });
+  const [smartAlertsStartTime, setSmartAlertsStartTime] = useState<string>(() => {
+    return localStorage.getItem('volt_smart_alerts_start_time') || '22:00';
+  });
+  const [smartAlertsEndTime, setSmartAlertsEndTime] = useState<string>(() => {
+    return localStorage.getItem('volt_smart_alerts_end_time') || '06:00';
+  });
   
   const [showVersionPopup, setShowVersionPopup] = useState(false);
 
@@ -56,6 +79,42 @@ export default function Profile({ onNavigate }: ProfileProps) {
   const handleSpendingLimitAmountChange = (amount: number) => {
     setSpendingLimitAmount(amount);
     localStorage.setItem('volt_spending_limit_amount', String(amount));
+  };
+
+  const handleToggleSmartAlerts = (enabled: boolean) => {
+    setSmartAlertsEnabled(enabled);
+    localStorage.setItem('volt_smart_alerts_enabled', String(enabled));
+  };
+
+  const handleSmartAlertsMinAmountChange = (amount: number) => {
+    setSmartAlertsMinAmount(amount);
+    localStorage.setItem('volt_smart_alerts_min_amount', String(amount));
+  };
+
+  const handleToggleSmartAlertCategory = (category: string) => {
+    let updated: string[];
+    if (smartAlertsCategories.includes(category)) {
+      updated = smartAlertsCategories.filter(c => c !== category);
+    } else {
+      updated = [...smartAlertsCategories, category];
+    }
+    setSmartAlertsCategories(updated);
+    localStorage.setItem('volt_smart_alerts_categories', JSON.stringify(updated));
+  };
+
+  const handleSmartAlertsTimePresetChange = (preset: string) => {
+    setSmartAlertsTimePreset(preset);
+    localStorage.setItem('volt_smart_alerts_time_preset', preset);
+  };
+
+  const handleSmartAlertsStartTimeChange = (time: string) => {
+    setSmartAlertsStartTime(time);
+    localStorage.setItem('volt_smart_alerts_start_time', time);
+  };
+
+  const handleSmartAlertsEndTimeChange = (time: string) => {
+    setSmartAlertsEndTime(time);
+    localStorage.setItem('volt_smart_alerts_end_time', time);
   };
 
   const onThemeToggle = (newTheme: 'yellow' | 'midnight') => {
@@ -323,6 +382,210 @@ export default function Profile({ onNavigate }: ProfileProps) {
                 <p className="text-[9px] text-black/60 dark:text-white/50 italic leading-relaxed font-bold">
                   * Você verá um aviso em destaque na aba inicial sempre que o total de despesas exceder <strong className="text-black dark:text-white">R$ {(spendingLimitAmount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>.
                 </p>
+              </motion.div>
+            )}
+          </div>
+        </section>
+
+        {/* Smart Alerts (Alertas Inteligentes) Section */}
+        <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center justify-between text-black dark:text-white">
+            <div className="flex items-center gap-2">
+              <Sliders size={15} className="text-[#00ff9d] shrink-0" />
+              <h4 className="text-xs font-black uppercase tracking-wider">Smart Alerts (Alertas Inteligentes)</h4>
+            </div>
+            <span className="bg-[#00ff9d] text-black text-[9px] font-black uppercase px-2 py-0.5 rounded-full border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              Premium
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-[#00ff9d]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#00ff9d]/20 flex items-center justify-center shrink-0 text-[#00ff9d] border-2 border-[#00ff9d]/30">
+                  <Zap size={18} />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-black dark:text-white block">Ativar Alertas Inteligentes</span>
+                  <span className="text-[10px] text-black/60 dark:text-white/50 block mt-0.5 leading-tight font-bold">
+                    Disparar alertas push filtrados por valor, categoria ou hora
+                  </span>
+                </div>
+              </div>
+
+              {/* iOS Toggle Switch */}
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+                <input 
+                  type="checkbox" 
+                  checked={smartAlertsEnabled} 
+                  onChange={(e) => handleToggleSmartAlerts(e.target.checked)}
+                  className="sr-only peer" 
+                />
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+              </label>
+            </div>
+
+            {smartAlertsEnabled && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="space-y-4 pl-1"
+              >
+                {/* 1. Minimum Amount Threshold */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-black/60 dark:text-white/50 block">
+                    Valor de Alerta Mínimo (R$)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-black/40 dark:text-white/40">R$</span>
+                    <input
+                      type="number"
+                      value={smartAlertsMinAmount === 0 ? '' : smartAlertsMinAmount}
+                      onChange={(e) => handleSmartAlertsMinAmountChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                      placeholder="Ex: 100"
+                      className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-xs text-black dark:text-white focus:outline-none focus:border-[#00ff9d] transition-all font-mono font-bold"
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Category selection */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-black/60 dark:text-white/50 block">
+                    Categorias Monitoradas
+                  </label>
+                  <p className="text-[9px] text-black/60 dark:text-white/50 leading-none mb-1.5 font-bold">
+                    Selecione as categorias que devem disparar os alertas push:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { id: 'refeicao', label: 'Refeição' },
+                      { id: 'mobilidade', label: 'Mobilidade' },
+                      { id: 'cultura', label: 'Cultura' },
+                      { id: 'saude', label: 'Saúde' },
+                      { id: 'outros', label: 'Outros' }
+                    ].map((cat) => {
+                      const isSelected = smartAlertsCategories.includes(cat.id);
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => handleToggleSmartAlertCategory(cat.id)}
+                          className={`px-3 py-1.5 rounded-full text-[10px] font-black border-2 transition-all cursor-pointer flex items-center gap-1 ${
+                            isSelected
+                              ? 'bg-[#00ff9d] text-black border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                              : 'bg-white dark:bg-zinc-800 text-black/60 dark:text-white/60 border-black/10 dark:border-zinc-700 hover:border-black'
+                          }`}
+                        >
+                          {isSelected && <Check size={10} className="stroke-[3]" />}
+                          {cat.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. Time of day constraint */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-black/60 dark:text-white/50 block">
+                    Janela de Horário
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: 'always', label: 'Qualquer hora' },
+                      { id: 'night', label: 'Noite (22h-6h)' },
+                      { id: 'business', label: 'Comercial (8h-18h)' },
+                      { id: 'custom', label: 'Personalizado' }
+                    ].map((preset) => {
+                      const isSelected = smartAlertsTimePreset === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleSmartAlertsTimePresetChange(preset.id)}
+                          className={`p-2.5 rounded-xl text-[10px] font-black border-2 transition-all cursor-pointer text-center ${
+                            isSelected
+                              ? 'bg-[#00ff9d] text-black border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                              : 'bg-white dark:bg-zinc-800 text-black/60 dark:text-white/60 border-black/10 dark:border-zinc-700 hover:border-black'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {smartAlertsTimePreset === 'custom' && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="grid grid-cols-2 gap-3 mt-2 pt-1"
+                    >
+                      <div className="space-y-1">
+                        <span className="text-[9px] font-black text-black/60 dark:text-white/50 uppercase">Início</span>
+                        <div className="relative">
+                          <Clock size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-black/40 dark:text-white/40" />
+                          <input
+                            type="text"
+                            value={smartAlertsStartTime}
+                            onChange={(e) => handleSmartAlertsStartTimeChange(e.target.value)}
+                            placeholder="Ex: 08:00"
+                            className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-8 pr-3 py-2 text-[11px] text-black dark:text-white focus:outline-none focus:border-[#00ff9d] transition-all font-mono font-bold"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[9px] font-black text-black/60 dark:text-white/50 uppercase">Fim</span>
+                        <div className="relative">
+                          <Clock size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-black/40 dark:text-white/40" />
+                          <input
+                            type="text"
+                            value={smartAlertsEndTime}
+                            onChange={(e) => handleSmartAlertsEndTimeChange(e.target.value)}
+                            placeholder="Ex: 18:00"
+                            className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-8 pr-3 py-2 text-[11px] text-black dark:text-white focus:outline-none focus:border-[#00ff9d] transition-all font-mono font-bold"
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </div>
+
+                {/* DEDICATED SUMMARY SECTION (PREFERENCES DISPLAY) */}
+                <div className="mt-3.5 p-3 rounded-xl border-2 border-dashed border-black/30 dark:border-[#00ff9d]/30 bg-gray-50 dark:bg-zinc-950 text-left flex flex-col gap-2">
+                  <div className="flex items-center gap-1 text-black dark:text-[#00ff9d]">
+                    <Sliders size={12} />
+                    <span className="text-[10px] font-black uppercase tracking-wider">
+                      Filtros de Alertas Ativos
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 text-[10px] font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-black/60 dark:text-zinc-400">Limite Mínimo:</span>
+                      <span className="font-black text-black dark:text-white">
+                        R$ {smartAlertsMinAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-black/60 dark:text-zinc-400">Categorias:</span>
+                      <span className="font-black text-black dark:text-white text-right max-w-[160px] truncate">
+                        {smartAlertsCategories.length === 5 
+                          ? 'Todas as 5' 
+                          : smartAlertsCategories.length === 0 
+                          ? 'Nenhuma (Sem alertas)' 
+                          : smartAlertsCategories.map(c => c === 'refeicao' ? 'Refeição' : c === 'mobilidade' ? 'Mobilidade' : c === 'cultura' ? 'Cultura' : c === 'saude' ? 'Saúde' : 'Outros').join(', ')}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-black/60 dark:text-zinc-400">Janela de Horário:</span>
+                      <span className="font-black text-black dark:text-white text-right">
+                        {smartAlertsTimePreset === 'always' && 'Qualquer horário'}
+                        {smartAlertsTimePreset === 'night' && 'Noite (22:00 às 06:00)'}
+                        {smartAlertsTimePreset === 'business' && 'Comercial (08:00 às 18:00)'}
+                        {smartAlertsTimePreset === 'custom' && `Personalizada (${smartAlertsStartTime} - ${smartAlertsEndTime})`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </motion.div>
             )}
           </div>

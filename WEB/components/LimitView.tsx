@@ -229,7 +229,7 @@ export default function LimitView({
                 ? 'bg-volt-surface border-white/10'
                 : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
             }`}>
-              <CreditCard size={12} className={isMidnight ? 'text-[#00ff9d]' : 'text-black'} />
+              <CreditCard size={12} className={isMidnight ? 'text-volt-primary' : 'text-black'} />
               <span className="text-[9px] font-black uppercase tracking-wider">FINAL 0030</span>
             </div>
           </section>

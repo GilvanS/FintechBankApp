@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { PurchasedItem, Transaction, User } from '../types';
 import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement } from '../services/api';
 import { useDialog } from '../contexts/GlobalDialogContext';
+import { useAppState } from '../contexts/AppStateContext';
 
 import HomeView from './HomeView';
 import Profile from './Profile';
@@ -10,7 +11,7 @@ import PixModal from './PixModal';
 import Statement from './Statement';
 import StatementPaginated from './StatementPaginated';
 import CardDashboard from './CardDashboard';
-import Shop from './Shop';
+import ShopView from './ShopView';
 import ShoppingCart from './ShoppingCart';
 import PaymentMethods from './PaymentMethods';
 import DepositModal from './DepositModal';
@@ -28,9 +29,15 @@ import Products from './Products';
 import ClosedInvoice from './ClosedInvoice';
 import InstallmentOptions from './InstallmentOptions';
 import CurrentInvoice from './CurrentInvoice';
+import InvoiceView from './InvoiceView';
 import Header from './Header';
 import LimitView from './LimitView';
+import FinancialHealthModal from './FinancialHealthModal';
+import AiRecurringBillModal from './AiRecurringBillModal';
+import AiAssistantModal from './AiAssistantModal';
+import SmartAlerts from './SmartAlerts';
 import { AnimatePresence, motion } from 'motion/react';
+import { LayoutGrid } from 'lucide-react';
 
 const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; onClose: () => void; }> = ({ isOpen, onGoToPayment, onClose }) => {
     if (!isOpen) return null;
@@ -74,34 +81,49 @@ const Dashboard: React.FC = () => {
     const { showDialog } = useDialog();
     const [currentView, setCurrentView] = useState<View>('home');
     const [previousView, setPreviousView] = useState<View>('home');
+    const [invoiceSubView, setInvoiceSubView] = useState(false);
+    const [statementSubView, setStatementSubView] = useState(false);
 
     const [cart, setCart] = useState<PurchasedItem[]>([]);
     const [currentItem, setCurrentItem] = useState<PurchasedItem | null>(null);
     const [isPixModalOpen, setIsPixModalOpen] = useState(false);
     const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-    const [isShopModalOpen, setIsShopModalOpen] = useState(false);
-    const [isCardsModalOpen, setIsCardsModalOpen] = useState(false);
+    // Shop is now full-page
     const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
     const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+    const [isHeaderHidden, setIsHeaderHidden] = useState(false);
 
-    const [theme, setTheme] = useState<'yellow' | 'midnight'>('midnight');
-    useEffect(() => {
-        const isDark = document.documentElement.classList.contains('dark');
-        setTheme('midnight');
-        
-        const observer = new MutationObserver(() => {
-            setTheme('midnight');
-        });
-        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-        return () => observer.disconnect();
-    }, []);
+    const {
+        theme,
+        setTheme,
+        isFinancialHealthOpen,
+        setFinancialHealthOpen,
+        isAiRecurringModalOpen,
+        setAiRecurringModalOpen,
+        isAiModalOpen,
+        setAiModalOpen,
+        isCentralHubOpen,
+        setCentralHubOpen,
+        activeDrawer,
+        setActiveDrawer,
+        triggerSmartAlertCheck,
+        notifications,
+        clearNotification,
+        clearAllNotifications,
+    } = useAppState();
+
+    const handleThemeToggle = useCallback((newTheme: 'yellow' | 'midnight') => {
+        setTheme(newTheme);
+    }, [setTheme]);
+
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [passwordAction, setPasswordAction] = useState<(() => void) | null>(null);
     const passwordActionPayload = useRef<any>(null); // Ref to hold payload for password actions
     const [passwordModalInfo, setPasswordModalInfo] = useState({ title: '', description: '' });
     const [isProcessing, setIsProcessing] = useState(false);
     const [isBlockedModalOpen, setIsBlockedModalOpen] = useState(false);
+    const [toast, setToast] = useState<{ title: string, message: string } | null>(null);
     
     // States for various flows
     const [purchaseDetails, setPurchaseDetails] = useState<{ items: PurchasedItem[], cashbackUsed: number, method: 'debit' | 'credit', installments: number } | null>(null);
@@ -112,12 +134,12 @@ const Dashboard: React.FC = () => {
     const [invoicePaymentDetails, setInvoicePaymentDetails] = useState<any>(null);
     
     useEffect(() => {
-        if (isCardsModalOpen && user?.creditCard.isBlocked) {
+        if (currentView === 'cards' && user?.creditCard.isBlocked) {
             setIsBlockedModalOpen(true);
-        } else if (!isCardsModalOpen) {
+        } else if (currentView !== 'cards') {
             setIsBlockedModalOpen(false);
         }
-    }, [isCardsModalOpen, user]);
+    }, [currentView, user]);
 
     // Refresh automatico ao entrar em telas de cartoes
     useEffect(() => {
@@ -148,13 +170,13 @@ const Dashboard: React.FC = () => {
 
     // Refresh quando modal de cards abre
     useEffect(() => {
-        if (!isCardsModalOpen || !user) return;
+        if (currentView !== 'cards' || !user) return;
         let cancelled = false;
         getUserByCpf(user.cpf).then(r => {
             if (r.success && r.user && !cancelled) updateUser(r.user);
         });
         return () => { cancelled = true; };
-    }, [isCardsModalOpen]);
+    }, [currentView, user]);
 
     // Refresh extrato quando modal de statement abre
     useEffect(() => {
@@ -174,7 +196,6 @@ const Dashboard: React.FC = () => {
     
     const handleCloseBlockedModal = () => {
         setIsBlockedModalOpen(false);
-        setIsCardsModalOpen(false);
     };
 
     const handleNavigate = useCallback((newView: View, item?: any) => {
@@ -191,22 +212,19 @@ const Dashboard: React.FC = () => {
             return;
         }
         if (newView === 'shop') {
-            setIsShopModalOpen(true);
+            if (currentView !== 'shop') setPreviousView(currentView);
+            setCurrentView('shop');
             return;
         }
-        if (newView === 'cards') {
-            setCurrentView('home');
-            setIsCardsModalOpen(true);
-            return;
-        }
+
         if (newView === 'statement') {
             setCurrentView('home');
             setIsStatementModalOpen(true);
             return;
         }
         if (newView === 'limit') {
-            setCurrentView('home');
-            setIsLimitModalOpen(true);
+            setPreviousView(currentView);
+            setCurrentView('limit' as View);
             return;
         }
         if (newView === currentView) return;
@@ -227,6 +245,7 @@ const Dashboard: React.FC = () => {
             transactions: [newTx, ...user.transactions],
         };
         updateUser(updatedUser);
+        triggerSmartAlertCheck(newTx.title || newTx.description, amount, 'outros');
     };
 
     const handleDepositComplete = (newTx: Transaction, amount: number) => {
@@ -267,7 +286,6 @@ const Dashboard: React.FC = () => {
             }
             return [...prevCart, { ...item, quantity: 1 }];
         });
-        setIsShopModalOpen(false);
         handleNavigate('shoppingCart');
     };
 
@@ -352,6 +370,12 @@ const Dashboard: React.FC = () => {
 
             const totalAmount = details.items.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
             const finalAmount = totalAmount - details.cashbackUsed;
+
+            triggerSmartAlertCheck(
+                details.items[0].name + (details.items.length > 1 ? ` (+${details.items.length - 1} itens)` : ''),
+                -finalAmount,
+                'outros'
+            );
 
             const confirmationProduct: PurchasedItem = {
                 id: 'purchase-confirm',
@@ -507,17 +531,48 @@ const Dashboard: React.FC = () => {
 
         switch (currentView) {
             case 'home':
-                return <HomeView user={user!} onNavigate={handleNavigate} />;
+                return <HomeView user={user!} onNavigate={handleNavigate} theme={theme} />;
+            case 'cards':
+                return (
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar flex justify-center ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <div className="w-full max-w-6xl min-h-full flex flex-col">
+                            <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />
+                        </div>
+                    </div>
+                );
             case 'profile':
-                return <Profile onNavigate={navigateTo} />;
+                return (
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto flex justify-center ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <div className="w-full max-w-md bg-transparent">
+                            <Profile onNavigate={handleNavigate} />
+                        </div>
+                    </div>
+                );
             case 'shoppingCart':
-                return <ShoppingCart cart={cart} onBack={() => setIsShopModalOpen(true)} onCheckout={handleCheckout} onUpdateQuantity={handleUpdateCartQuantity} />;
+                return <ShoppingCart cart={cart} onBack={() => handleNavigate('shop')} onCheckout={handleCheckout} onUpdateQuantity={handleUpdateCartQuantity} />;
             case 'paymentMethods':
                 return <PaymentMethods user={user!} item={currentItem} onBack={() => cart.length > 0 ? handleNavigate('shoppingCart') : handleNavigate('shop')} onSelectMethod={handleSelectPaymentMethod} />;
             case 'purchaseConfirmation':
                 return <PurchaseConfirmation details={confirmationDetails} onClose={() => handleNavigate('home')} />;
             case 'investments':
                 return <Investments onBack={() => handleNavigate('home')} />;
+            case 'shop':
+                if (!user) return null;
+                return (
+                    <div className={`min-h-full pb-20 w-full max-w-4xl mx-auto ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-[#fafafa]'}`}>
+                        <div className={`flex items-center gap-3 p-4 border-b sticky top-0 z-50 ${theme === 'midnight' ? 'border-white/5 bg-[#0f0f0f]' : 'border-black/5 bg-[#fafafa]'}`}>
+                            <button onClick={handleBack} className={`p-2 -ml-2 rounded-full transition-colors cursor-pointer ${theme === 'midnight' ? 'hover:bg-white/10 text-white' : 'hover:bg-black/10 text-black'}`}>
+                                <span className={`text-xl ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>←</span>
+                            </button>
+                            <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Shopping Volt</h1>
+                        </div>
+                        <ShopView 
+                            accountBalance={user.balance} 
+                            onPurchaseComplete={handleTransactionCompleteLimit} 
+                            theme={theme} 
+                        />
+                    </div>
+                );
             case 'points':
                 return <PointsDashboard user={user!} onBack={() => handleNavigate('cards')} />;
             case 'anticipateInstallments':
@@ -538,9 +593,40 @@ const Dashboard: React.FC = () => {
                 return <InstallmentOptions user={user} onBack={() => handleNavigate('closedInvoice')} onSelectOption={handleSelectInstallmentOption} />;
             case 'currentInvoice':
                 if (!user) return null;
-                return <CurrentInvoice user={user} onBack={handleBack} />;
-            default:
-                return <HomeView user={user!} onNavigate={handleNavigate} />;
+                return (
+                    <div className={`min-h-full pb-20 ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
+                        <div className={`flex items-center gap-3 p-4 border-b ${theme === 'midnight' ? 'border-white/5' : 'border-black/5'}`}>
+                            <button onClick={handleBack} className={`p-2 -ml-2 rounded-full transition-colors cursor-pointer ${theme === 'midnight' ? 'hover:bg-white/10 text-white' : 'hover:bg-black/10 text-black'}`}>
+                                <span className={`text-xl ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>←</span>
+                            </button>
+                            <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Fatura</h1>
+                        </div>
+                        <InvoiceView invoiceAmount={user.creditCard.closedInvoice > 0 ? user.creditCard.closedInvoice : user.creditCard.currentInvoice} />
+                    </div>
+                );
+            case 'limit':
+                return (
+                    <div className={`min-h-full pb-20 ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
+                        <div className={`flex items-center gap-3 p-4 border-b ${theme === 'midnight' ? 'border-white/5' : 'border-black/5'}`}>
+                            <button onClick={handleBack} className={`p-2 -ml-2 rounded-full transition-colors cursor-pointer ${theme === 'midnight' ? 'hover:bg-white/10 text-white' : 'hover:bg-black/10 text-black'}`}>
+                                <span className={`text-xl ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>←</span>
+                            </button>
+                            <div>
+                                <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Limites e Contas</h1>
+                                <p className={`text-xs uppercase tracking-widest ${theme === 'midnight' ? 'text-white/50' : 'text-black/50'}`}>Gestão de Limite</p>
+                            </div>
+                        </div>
+                        <div className="overflow-y-auto overflow-x-hidden">
+                            <LimitView
+                                accountBalance={user!.balance}
+                                userProfile={user! as any}
+                                onTransactionComplete={handleTransactionCompleteLimit}
+                                theme={theme}
+                            />
+                        </div>
+                    </div>
+                );
+                return <HomeView user={user!} onNavigate={handleNavigate} theme={theme} />;
         }
     };
 
@@ -555,21 +641,58 @@ const Dashboard: React.FC = () => {
             data-cy="dashboard"
             data-playwright="dashboard"
             data-current-view={currentView}
-            className="h-full w-full flex flex-col bg-volt-yellow overflow-hidden"
+            className="h-[100dvh] w-full flex flex-col bg-volt-dark overflow-hidden"
         >
-            {topLevelView !== 'admin' && (
-                <Header currentView={currentView} onNavigate={handleNavigate} user={user} />
+            <SmartAlerts />
+            {topLevelView !== 'admin' && !isHeaderHidden && (
+                <Header 
+                    activeTab={currentView as any}
+                    setActiveTab={(tab: any) => handleNavigate(tab)}
+                    userProfile={user as any}
+                    invoiceSubView={invoiceSubView}
+                    setInvoiceSubView={setInvoiceSubView}
+                    statementSubView={statementSubView}
+                    setStatementSubView={setStatementSubView}
+                    notifications={notifications || []}
+                    onClearNotification={clearNotification}
+                    onClearAllNotifications={clearAllNotifications}
+                    theme={theme}
+                    onThemeToggle={handleThemeToggle}
+                    transactions={user?.transactions || []}
+                    isCentralHubOpen={isCentralHubOpen}
+                    setIsCentralHubOpen={setCentralHubOpen}
+                    isAiModalOpen={isAiModalOpen}
+                    setIsAiModalOpen={setAiModalOpen}
+                    isFinancialHealthOpen={isFinancialHealthOpen}
+                    setIsFinancialHealthOpen={setFinancialHealthOpen}
+                    isAiRecurringModalOpen={isAiRecurringModalOpen}
+                    setIsAiRecurringModalOpen={setAiRecurringModalOpen}
+                    activeDrawer={activeDrawer}
+                    setActiveDrawer={setActiveDrawer}
+                    onHide={() => setIsHeaderHidden(true)}
+                />
+            )}
+            
+            {topLevelView !== 'admin' && isHeaderHidden && (
+                <button
+                    onClick={() => setIsHeaderHidden(false)}
+                    className="fixed top-4 left-4 z-50 px-3 py-2 rounded-full text-black bg-[#A2FF00] hover:bg-[#8ee500] border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all active:scale-90 cursor-pointer flex items-center gap-1.5 font-black text-[11px] uppercase tracking-wider group animate-pulse"
+                    title="Mostrar Menu Superior"
+                >
+                    <LayoutGrid size={14} className="text-black group-hover:rotate-45 transition-transform duration-300" />
+                    <span>Menu</span>
+                </button>
             )}
             <div
                 id="dashboard-content"
                 data-testid="dashboard-content"
                 data-cy="dashboard-content"
-                className="flex-grow overflow-y-auto no-scrollbar pt-20"
+                className={`flex-grow overflow-y-auto no-scrollbar ${isHeaderHidden ? 'pt-4' : 'pt-20'}`}
             >
                 {renderContent()}
             </div>
-            {topLevelView !== 'admin' && ['home', 'products', 'profile'].includes(currentView) && !isCardsModalOpen && !isStatementModalOpen && !isLimitModalOpen && (
-                 <BottomNavBar currentView={currentView} onNavigate={(view) => handleNavigate(view)} />
+            {topLevelView !== 'admin' && ['home', 'products', 'profile', 'cards', 'limit'].includes(currentView) && !isStatementModalOpen && (
+                 <BottomNavBar currentView={currentView} onNavigate={(view) => handleNavigate(view)} theme={theme} />
             )}
             
             <BlockedCardModal isOpen={isBlockedModalOpen} onGoToPayment={handleGoToPaymentFromModal} onClose={handleCloseBlockedModal} />
@@ -615,63 +738,30 @@ const Dashboard: React.FC = () => {
                     setIsAdminModalOpen(false);
                 }} 
             />
-            <Shop
-                isOpen={isShopModalOpen}
-                onClose={() => setIsShopModalOpen(false)}
-                onAddToCart={handleAddToCart}
-                onInitiatePurchase={handleInitiatePurchase}
-                cartItemCount={cart.length}
-                onNavigate={handleNavigate}
-            />
+            {isFinancialHealthOpen && (
+                <FinancialHealthModal 
+                    isOpen={isFinancialHealthOpen} 
+                    onClose={() => setFinancialHealthOpen(false)} 
+                    transactions={user.transactions} 
+                />
+            )}
+            {isAiRecurringModalOpen && (
+                <AiRecurringBillModal 
+                    isOpen={isAiRecurringModalOpen} 
+                    onClose={() => setAiRecurringModalOpen(false)} 
+                    transactions={user.transactions} 
+                />
+            )}
+            {isAiModalOpen && (
+                <AiAssistantModal 
+                    isOpen={isAiModalOpen} 
+                    onClose={() => setAiModalOpen(false)} 
+                    transactions={user?.transactions || []}
+                    theme={theme}
+                />
+            )}
 
-            {/* ── Cards Modal ──────────────────────────── */}
-            <AnimatePresence>
-                {isCardsModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 pt-16">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-                            onClick={() => setIsCardsModalOpen(false)}
-                        />
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full h-fit max-h-[85vh] bg-[#131313] border border-white/10 shadow-2xl rounded-3xl flex flex-col overflow-hidden"
-                        >
-                            {/* Modal Header */}
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02] shrink-0">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
-                                        <span className="material-symbols-outlined text-white/80">credit_card</span>
-                                    </div>
-                                    <div>
-                                        <h2 className="text-xl font-black text-white uppercase tracking-wider">Meus Cartões</h2>
-                                        <p className="text-xs text-white/50 uppercase tracking-widest">Gestão de Cartões</p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setIsCardsModalOpen(false)}
-                                    className="p-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
-                                >
-                                    <span className="material-symbols-outlined text-xl">close</span>
-                                </button>
-                            </div>
-                            <div className="flex-1 overflow-y-auto no-scrollbar relative bg-[#131313]">
-                                <CardDashboard
-                                    onBack={() => setIsCardsModalOpen(false)}
-                                    onNavigate={(view) => {
-                                        setIsCardsModalOpen(false);
-                                        if (view !== 'home' && view !== 'cards') handleNavigate(view as View);
-                                    }}
-                                />
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
+
 
             {/* ── Statement Modal ───────────────────────── */}
             <AnimatePresence>
@@ -688,7 +778,7 @@ const Dashboard: React.FC = () => {
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full h-fit max-h-[85vh] bg-[#131313] border border-white/10 shadow-2xl rounded-3xl flex flex-col overflow-hidden"
+                            className="relative w-full h-fit max-h-[85vh] bg-volt-surface border-2 border-volt-primary shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] rounded-3xl flex flex-col overflow-hidden"
                         >
                             {/* Modal Header */}
                             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
@@ -738,7 +828,7 @@ const Dashboard: React.FC = () => {
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full h-fit max-h-[85vh] bg-[#131313] border border-white/10 shadow-2xl rounded-3xl flex flex-col overflow-hidden"
+                            className="relative w-full h-fit max-h-[85vh] bg-volt-surface border-2 border-volt-primary shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] rounded-3xl flex flex-col overflow-hidden"
                         >
                             {/* Modal Header */}
                             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
@@ -771,6 +861,56 @@ const Dashboard: React.FC = () => {
                     </div>
                 )}
             </AnimatePresence>
+
+            {/* Real-time Push Notification Toast */}
+            <AnimatePresence>
+                {toast && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -80, x: '-50%' }}
+                        animate={{ opacity: 1, y: 0, x: '-50%' }}
+                        exit={{ opacity: 0, y: -80, x: '-50%' }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                        className="fixed top-6 left-1/2 z-50 w-full max-w-sm px-4"
+                    >
+                        <div className="bg-volt-surface border-2 border-volt-primary text-white p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex gap-3 items-start backdrop-blur-md">
+                            <div className="bg-volt-primary/10 text-volt-primary p-2 rounded-xl shrink-0 border border-volt-primary/15 flex items-center justify-center">
+                                <span className="text-sm font-bold">🔔</span>
+                            </div>
+                            <div className="flex-1 space-y-0.5">
+                                <h5 className="text-[10px] font-black uppercase tracking-wider text-volt-primary">{toast.title}</h5>
+                                <p className="text-[11px] text-white font-black leading-snug">{toast.message}</p>
+                            </div>
+                            <button
+                                onClick={() => setToast(null)}
+                                className="text-white/40 hover:text-white text-[10px] font-bold font-mono cursor-pointer px-1.5 py-0.5 rounded-lg hover:bg-white/5 transition-colors shrink-0"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <FinancialHealthModal
+                isOpen={isFinancialHealthOpen}
+                onClose={() => setFinancialHealthOpen(false)}
+                transactions={user.transactions || []}
+                theme={theme}
+            />
+
+            <AiRecurringBillModal
+                isOpen={isAiRecurringModalOpen}
+                onClose={() => setAiRecurringModalOpen(false)}
+                transactions={user.transactions || []}
+                recurringBills={JSON.parse(localStorage.getItem('volt_recurring_bills') || '[]')}
+                onAddRecurringBill={(title, amount, category, dueDate) => {
+                    const bills = JSON.parse(localStorage.getItem('volt_recurring_bills') || '[]');
+                    bills.push({ id: `rec_${Date.now()}`, title, amount: -Math.abs(amount), category, dueDate, status: 'pending' });
+                    localStorage.setItem('volt_recurring_bills', JSON.stringify(bills));
+                }}
+                theme={theme}
+            />
+
         </div>
     );
 };

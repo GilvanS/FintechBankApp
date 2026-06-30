@@ -15,7 +15,14 @@ export const MOCK_USERS: User[] = [
         email: 'gilvan@example.co',
         password: 'admin999',
         balance: 5000,
-        transactions: [],
+        transactions: [
+            { id: 'rec-1-1', type: 'PAYMENT', amount: -45.90, date: pastDate(5), description: 'Netflix' },
+            { id: 'rec-1-2', type: 'PAYMENT', amount: -45.90, date: pastDate(35), description: 'Netflix' },
+            { id: 'rec-1-3', type: 'PAYMENT', amount: -45.90, date: pastDate(65), description: 'Netflix' },
+            { id: 'rec-2-1', type: 'PAYMENT', amount: -21.90, date: pastDate(10), description: 'Spotify' },
+            { id: 'rec-2-2', type: 'PAYMENT', amount: -21.90, date: pastDate(40), description: 'Spotify' },
+            { id: 'rec-2-3', type: 'PAYMENT', amount: -21.90, date: pastDate(70), description: 'Spotify' },
+        ],
         isBlocked: false,
         role: 'user',
         pixDailyLimit: 2000,
@@ -49,6 +56,10 @@ export const MOCK_USERS: User[] = [
         transactions: [
              { id: 'tx-1', type: 'PIX_RECEIVED', amount: 50, date: new Date().toISOString(), description: 'Presente', from: '33333333333', senderName: 'Carlos Souza' },
              { id: 'tx-2', type: 'PAYMENT', amount: -35.90, date: new Date(Date.now() - 86400000 * 2).toISOString(), description: 'Cafeteria' },
+             { id: 'rec-3-1', type: 'PAYMENT', amount: -55.90, date: pastDate(3), description: 'Netflix Premium' },
+             { id: 'rec-3-2', type: 'PAYMENT', amount: -55.90, date: pastDate(33), description: 'Netflix Premium' },
+             { id: 'rec-4-1', type: 'PAYMENT', amount: -39.90, date: pastDate(15), description: 'Amazon Prime' },
+             { id: 'rec-4-2', type: 'PAYMENT', amount: -39.90, date: pastDate(45), description: 'Amazon Prime' },
         ],
         isBlocked: false,
         role: 'user',
@@ -124,7 +135,13 @@ export const MOCK_USERS: User[] = [
         email: 'admin@test.com',
         password: 'admin999',
         balance: 5000,
-        transactions: [],
+        transactions: [
+            { id: 'rec-5-1', type: 'PAYMENT', amount: -27.90, date: pastDate(2), description: 'HBO Max' },
+            { id: 'rec-5-2', type: 'PAYMENT', amount: -27.90, date: pastDate(32), description: 'HBO Max' },
+            { id: 'rec-5-3', type: 'PAYMENT', amount: -27.90, date: pastDate(62), description: 'HBO Max' },
+            { id: 'rec-6-1', type: 'PAYMENT', amount: -19.90, date: pastDate(12), description: 'Spotify' },
+            { id: 'rec-6-2', type: 'PAYMENT', amount: -19.90, date: pastDate(42), description: 'Spotify' },
+        ],
         isBlocked: false,
         role: 'admin',
         pixDailyLimit: 10000,
@@ -183,11 +200,22 @@ export const MOCK_STORIES: Story[] = [
 
 export const MOCK_PRODUCTS: PurchasedItem[] = [
     {
+        id: 'prod-pet',
+        name: 'Plano Pet Premium',
+        description: 'Cobertura completa para o seu pet. Consultas, exames, vacinas e emergências 24h em toda a rede credenciada.',
+        price: 99.90,
+        imageUrl: 'https://images.pexels.com/photos/245035/pexels-photo-245035.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Planos',
+        cashback: '20% de Cashback'
+    },
+    {
         id: 'prod-1',
         name: 'Smartphone Fintech X',
         description: 'O mais novo smartphone com integração total ao nosso ecossistema. Câmera de 108MP, 256GB de armazenamento e tela Super AMOLED.',
         price: 3999.90,
         imageUrl: 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Eletrônicos',
+        cashback: '10% de Cashback'
     },
     {
         id: 'prod-2',
@@ -195,6 +223,8 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         description: 'Cancelamento de ruído ativo, 30 horas de bateria e som de alta fidelidade para você curtir suas músicas e podcasts.',
         price: 799.00,
         imageUrl: 'https://images.pexels.com/photos/3587478/pexels-photo-3587478.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Áudio',
+        cashback: '5% de Cashback'
     },
     {
         id: 'prod-3',

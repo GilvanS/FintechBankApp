@@ -46,7 +46,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
 
     return (
         <div
-            className="bg-background-dark text-white p-4 min-h-full flex flex-col w-full max-w-md mx-auto pb-28 test-edit-profile"
+            className="bg-volt-dark text-white p-4 min-h-full flex flex-col w-full max-w-md mx-auto pb-28 test-edit-profile"
             id="edit-profile"
             data-testid="edit-profile"
             data-cy="edit-profile"
@@ -55,7 +55,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
             <header className="flex items-center mb-6">
                 <button
                     onClick={onBack}
-                    className="mr-2 p-2 rounded-full hover:bg-white/10 test-cancel-edit"
+                    className="mr-2 p-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors test-cancel-edit"
                     id="btn-cancel-edit"
                     name="cancel-edit"
                     data-testid="cancel-edit-button"
@@ -81,7 +81,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
             >
                 <div className="space-y-4">
                     <div>
-                        <label htmlFor="edit-fullname" className="text-sm font-medium text-gray-400">Nome do perfil</label>
+                        <label htmlFor="edit-fullname" className="text-sm font-medium text-on-surface-variant">Nome do perfil</label>
                         <input
                             id="edit-fullname"
                             name="fullname"
@@ -89,7 +89,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
                             value={fullName}
                             onChange={(e) => setFullName(e.target.value)}
                             required
-                            className="w-full px-4 py-3 mt-1 bg-surface-dark border-transparent rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary test-input-fullname"
+                            className="w-full px-4 py-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-volt-green transition-all font-bold test-input-fullname"
                             data-testid="edit-input-fullname"
                             data-cy="edit-input-fullname"
                             data-playwright="edit-input-fullname"
@@ -97,7 +97,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
                         />
                     </div>
                     <div>
-                        <label htmlFor="edit-username" className="text-sm font-medium text-gray-400">Nome do usuário</label>
+                        <label htmlFor="edit-username" className="text-sm font-medium text-on-surface-variant">Nome do usuário</label>
                         <input
                             id="edit-username"
                             name="username"
@@ -105,7 +105,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
-                            className="w-full px-4 py-3 mt-1 bg-surface-dark border-transparent rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary test-input-username"
+                            className="w-full px-4 py-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-volt-green transition-all font-bold test-input-username"
                             data-testid="edit-input-username"
                             data-cy="edit-input-username"
                             data-playwright="edit-input-username"
@@ -113,7 +113,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
                         />
                     </div>
                     <div>
-                        <label htmlFor="edit-description" className="text-sm font-medium text-gray-400">Descrição do perfil</label>
+                        <label htmlFor="edit-description" className="text-sm font-medium text-on-surface-variant">Descrição do perfil</label>
                         <textarea
                             id="edit-description"
                             name="description"
@@ -121,22 +121,22 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
                             onChange={(e) => setDescription(e.target.value)}
                             maxLength={100}
                             rows={3}
-                            className="w-full px-4 py-3 mt-1 bg-surface-dark border-transparent rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary resize-none test-input-description"
+                            className="w-full px-4 py-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-volt-green transition-all font-bold resize-none test-input-description"
                             data-testid="edit-input-description"
                             data-cy="edit-input-description"
                             data-playwright="edit-input-description"
                             aria-label="Descrição do perfil"
                         />
-                        <p className="text-right text-xs text-gray-500 mt-1">{description.length}/100 caracteres</p>
+                        <p className="text-right text-xs text-on-surface-variant mt-1">{description.length}/100 caracteres</p>
                     </div>
                 </div>
 
-                <div className="border-t border-subtle-dark/50 pt-6">
+                <div className="border-t border-white/10 pt-6">
                     <h3 className="text-lg font-semibold text-white mb-2">Privacidade</h3>
-                    <div className="bg-surface-dark p-4 rounded-lg flex items-center justify-between">
+                    <div className="bg-volt-surface border border-white/5 p-4 rounded-2xl shadow-2xl flex items-center justify-between">
                         <div>
                             <p className="font-medium text-white">Novidades e Dicas</p>
-                            <p className="text-sm text-gray-400">Receber stories com novidades após o login.</p>
+                            <p className="text-sm text-on-surface-variant">Receber stories com novidades após o login.</p>
                         </div>
                          <label htmlFor="toggle-show-popup" className="relative inline-flex items-center cursor-pointer">
                             <input
@@ -151,7 +151,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
                                 data-playwright="edit-toggle-show-popup"
                                 aria-label="Receber stories com novidades após o login"
                             />
-                            <div className="w-11 h-6 bg-gray-700 rounded-full peer peer-focus:ring-2 peer-focus:ring-primary peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                            <div className="w-10 h-6 rounded-full transition-colors bg-white/10 border-white/5 peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border after:border-transparent after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-white"></div>
                         </label>
                     </div>
                 </div>
@@ -171,7 +171,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
                      <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 disabled:opacity-50 test-save-profile"
+                        className="w-full py-4 text-xs tracking-widest uppercase font-black text-black bg-volt-green border border-transparent rounded-2xl hover:bg-volt-green/90 transition-all shadow-lg test-save-profile"
                         id="btn-save-profile"
                         name="save-profile"
                         data-testid="save-profile-button"
@@ -184,7 +184,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
                     <button
                         type="button"
                         onClick={onBack}
-                        className="w-full py-3 font-semibold text-primary bg-transparent rounded-lg hover:bg-surface-dark test-cancel-edit-footer"
+                        className="w-full py-4 text-xs tracking-widest uppercase font-black text-volt-green bg-transparent border border-transparent hover:border-white/10 hover:bg-white/5 rounded-2xl transition-all test-cancel-edit-footer"
                         id="btn-cancel-edit-footer"
                         name="cancel-edit-footer"
                         data-testid="cancel-edit-footer-button"

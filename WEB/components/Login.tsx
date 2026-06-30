@@ -10,6 +10,8 @@ import { getUserByCpf } from '../services/api';
 // Substituir o import acima por getUserMe
 import { getUserMe } from '../services/api';
 import { getUserStatement } from '../services/api';
+import { useAppState } from '../contexts/AppStateContext';
+import { ArrowLeft, ShieldCheck, AlertCircle, Shield } from 'lucide-react';
 
 interface LoginProps {
     onNavigateToSignUp: () => void;
@@ -26,6 +28,19 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
     const [fieldErrors, setFieldErrors] = useState<{ cpf?: string; password?: string }>({});
     const [resetPasswordMessage, setResetPasswordMessage] = useState('');
     const { toast, showSuccess, showError, showInfo, hide } = useToast();
+    const { theme, setTheme } = useAppState();
+    const [logoClicks, setLogoClicks] = useState(0);
+
+    const handleLogoClick = () => {
+        setLogoClicks(c => {
+            const newCount = c + 1;
+            if (newCount >= 3) {
+                setTheme(theme === 'yellow' ? 'midnight' : 'yellow');
+                return 0;
+            }
+            return newCount;
+        });
+    };
 
     function mapLoginError(code?: string): string {
         switch (code) {
@@ -68,8 +83,13 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
         setIsLoading(false);
 
         if (result.success && result.user) {
+            // Salvar token JWT para uso nas chamadas autenticadas
+            if ((result as any).token) {
+                localStorage.setItem('authToken', (result as any).token);
+            }
             auth.login(result.user);
             showSuccess('Login efetuado com sucesso');
+
 
             // Pré-carregamento imediato
             (async () => {
@@ -132,7 +152,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                     aria-label="Voltar"
                     type="button"
                 >
-                    <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                    <ArrowLeft className="text-text-dark" size={24} aria-hidden="true" />
                 </button>
             </header>
 
@@ -145,14 +165,15 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                 <div className="w-full max-w-sm mx-auto">
                     <div className="text-center mb-10" id="login-header-content" data-testid="login-header-content" data-cy="login-header-content">
                          <div className="flex items-center justify-center space-x-2 mb-4">
-                            <span className="material-symbols-outlined text-primary text-3xl" aria-hidden="true">verified_user</span>
+                            <ShieldCheck className="text-primary" size={32} aria-hidden="true" />
                             <h1 
-                                className="text-3xl font-bold text-text-dark test-brand" 
+                                className="text-3xl font-bold text-text-dark test-brand cursor-pointer select-none" 
                                 id="login-brand"
                                 data-testid="login-brand"
                                 data-cy="login-brand"
+                                onClick={handleLogoClick}
                             >
-                                Fintech
+                                VOLT
                             </h1>
                         </div>
                         <h2 
@@ -217,7 +238,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                     role="alert"
                                     aria-live="polite"
                                 >
-                                    <span className="material-symbols-outlined text-sm" aria-hidden="true">error</span>
+                                    <AlertCircle size={16} aria-hidden="true" />
                                     {fieldErrors.cpf}
                                 </span>
                             )}
@@ -276,7 +297,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                     role="alert"
                                     aria-live="polite"
                                 >
-                                    <span className="material-symbols-outlined text-sm" aria-hidden="true">error</span>
+                                    <AlertCircle size={16} aria-hidden="true" />
                                     {fieldErrors.password}
                                 </span>
                             )}
@@ -289,7 +310,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                 role="alert"
                                 aria-live="assertive"
                             >
-                                <span className="material-symbols-outlined text-sm" aria-hidden="true">error</span>
+                                <AlertCircle size={16} aria-hidden="true" />
                                 {error}
                             </span>
                         )}
@@ -365,7 +386,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                     data-testid="login-security-banner"
                     data-cy="login-security-banner"
                 >
-                    <span className="material-symbols-outlined text-sm" aria-hidden="true">shield</span>
+                    <Shield size={16} aria-hidden="true" />
                     <span>Sua segurança em primeiro lugar.</span>
                 </div>
             </footer>

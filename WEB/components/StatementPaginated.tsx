@@ -3,6 +3,8 @@ import { Transaction, User } from '../types';
 import { getUserStatementPaginated } from '../services/api';
 import TransactionReceipt from './TransactionReceipt';
 import { formatDateBR, formatTimeBR } from '../utils/formatters';
+import { useAppState } from '../contexts/AppStateContext';
+import D3Heatmap from './charts/D3Heatmap';
 
 interface StatementPaginatedProps {
     user: User;
@@ -15,6 +17,7 @@ type TabType = 'all' | 'purchases' | 'pix' | 'transfers' | 'payments';
 function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProps) {
     const [activeTab, setActiveTab] = useState<TabType>('all');
     const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const { theme } = useAppState();
     const [isLoading, setIsLoading] = useState(true);
     const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
     const [currentPage, setCurrentPage] = useState(1);

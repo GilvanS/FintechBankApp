@@ -5,11 +5,13 @@ const API_BASE = '/api'; // Vite proxy will forward to http://localhost:3001
 
 // Helper function to make API calls
 async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem('authToken');
   const response = await fetch(`${API_BASE}${endpoint}`, {
     credentials: 'include',
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });

@@ -1,16 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw } from 'lucide-react';
+import { UserCircle2 as UserIcon, Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw } from 'lucide-react';
 
-import { User } from '../types';
+import type { User } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
 import HomeBanners from './HomeBanners';
 import NewsSection from './NewsSection';
 import ShopOffersBanner from './ShopOffersBanner';
 import BiometricModal from './BiometricModal';
+import WeeklyStreak from './WeeklyStreak';
 
 import { motion, AnimatePresence } from 'motion/react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie, LineChart, Line } from 'recharts';
-
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie } from 'recharts';
+import D3SparkLine from './charts/D3SparkLine';
+import D3RadialProgress from './charts/D3RadialProgress';
 interface RecurringBill {
   id: string;
   title: string;
@@ -25,10 +27,10 @@ interface RecurringBill {
 interface HomeViewProps {
     user: User;
     onNavigate: (view: string) => void;
+    theme?: 'midnight' | 'yellow';
 }
 
-
-const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
+const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, theme = 'midnight' }) => {
   const { showDialog } = useDialog();
   const biometricEnabled = localStorage.getItem('volt_biometric_enabled') === 'true';
   const [balanceIsVisible, setIsBalanceVisible] = useState(!biometricEnabled);
@@ -44,28 +46,363 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
   
   const accountBalance = user.balance;
   const transactions = user.transactions || [];
-  const theme = 'midnight';
+  const isMidnight = theme === 'midnight';
 
-  const [monthlyGoal, setMonthlyGoal] = useState<number>(() => {
-    const saved = localStorage.getItem('volt_monthly_goal');
-    return saved ? parseFloat(saved) : 1500;
+  // Estados de orçamentos de categoria (Task 3)
+  const [budgets, setBudgets] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('volt_category_budgets');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return {
+      refeicao: 500,
+      mobilidade: 300,
+      cultura: 200,
+      saude: 150,
+      outros: 400
+    };
   });
-  const [isEditingGoal, setIsEditingGoal] = useState(false);
-  const [tempGoal, setTempGoal] = useState(monthlyGoal.toString());
+
+  const [isAddingBill, setIsAddingBill] = useState(false);
+  const [newBillTitle, setNewBillTitle] = useState('');
+  const [newBillAmount, setNewBillAmount] = useState('');
+  const [newBillCategory, setNewBillCategory] = useState<'refeicao' | 'mobilidade' | 'cultura' | 'saude' | 'outros'>('outros');
+  const [newBillDueDate, setNewBillDueDate] = useState('');
+
+  const handleAddRecurringBill = () => {
+    if (!newBillTitle.trim()) {
+      showDialog({ title: 'Atenção', message: 'Por favor, informe o nome da conta.' });
+      return;
+    }
+    const parsedAmount = parseFloat(newBillAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      showDialog({ title: 'Atenção', message: 'Por favor, informe um valor válido.' });
+      return;
+    }
+    if (!newBillDueDate) {
+      showDialog({ title: 'Atenção', message: 'Por favor, informe a data de vencimento.' });
+      return;
+    }
+    let formattedDueDate = newBillDueDate;
+    if (newBillDueDate.includes('-')) {
+      const [year, month, day] = newBillDueDate.split('-');
+      formattedDueDate = `${day}/${month}/${year}`;
+    }
+
+    const newBill: RecurringBill = {
+      id: `rec_${Date.now()}`,
+      title: newBillTitle,
+      amount: -parsedAmount,
+      category: newBillCategory,
+      dueDate: formattedDueDate,
+      status: 'pending'
+    };
+    const updatedBills = [...recurringBills, newBill];
+    setRecurringBills(updatedBills);
+    localStorage.setItem('volt_recurring_bills', JSON.stringify(updatedBills));
+    setIsAddingBill(false);
+    setNewBillTitle('');
+    setNewBillAmount('');
+    setNewBillCategory('outros');
+    setNewBillDueDate('');
+    showDialog({ title: 'Sucesso', message: 'Nova conta adicionada com sucesso!' });
+  };
+  const [savingsTarget, setSavingsTarget] = useState<number>(() => {
+    const saved = localStorage.getItem('volt_savings_stretch_goal');
+    return saved ? parseFloat(saved) || 500 : 500;
+  });
+
+  const [celebrationMilestone, setCelebrationMilestone] = useState<number | null>(null);
+  const [lastCelebrated, setLastCelebrated] = useState<number>(() => {
+    try {
+      const val = localStorage.getItem('volt_last_celebrated_milestone');
+      return val ? parseInt(val, 10) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const [isEditingBudgets, setIsEditingBudgets] = useState(false);
+  const [editingBudgets, setEditingBudgets] = useState<Record<string, string>>({
+    refeicao: '500',
+    mobilidade: '300',
+    cultura: '200',
+    saude: '150',
+    outros: '400'
+  });
+  const [editingSavingsTarget, setEditingSavingsTarget] = useState<string>('500');
+
+  const startEditingBudgets = () => {
+    setEditingBudgets({
+      refeicao: budgets.refeicao.toString(),
+      mobilidade: budgets.mobilidade.toString(),
+      cultura: budgets.cultura.toString(),
+      saude: budgets.saude.toString(),
+      outros: budgets.outros.toString()
+    });
+    setEditingSavingsTarget(savingsTarget.toString());
+    setIsEditingBudgets(true);
+  };
+
+  const handleSaveBudgets = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated: Record<string, number> = {};
+    const keys = ['refeicao', 'mobilidade', 'cultura', 'saude', 'outros'];
+    for (const key of keys) {
+      const val = parseFloat(editingBudgets[key]);
+      if (isNaN(val) || val < 0) {
+        alert('Por favor, insira valores válidos maior ou igual a zero.');
+        return;
+      }
+      updated[key] = val;
+    }
+    const sTarget = parseFloat(editingSavingsTarget);
+    if (isNaN(sTarget) || sTarget < 0) {
+      alert('Por favor, insira uma meta de economia válida.');
+      return;
+    }
+    setBudgets(updated);
+    setSavingsTarget(sTarget);
+    localStorage.setItem('volt_category_budgets', JSON.stringify(updated));
+    localStorage.setItem('volt_savings_stretch_goal', sTarget.toString());
+    setIsEditingBudgets(false);
+  };
+
+  const handleBudgetInputChange = (key: string, value: string) => {
+    setEditingBudgets(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  // Obter despesas reais do mês atual (Junho/2026) por categoria
+  const categorySpendingCurrentMonth = useMemo(() => {
+    const sums: Record<string, number> = {
+      refeicao: 0,
+      mobilidade: 0,
+      cultura: 0,
+      saude: 0,
+      outros: 0
+    };
+
+    transactions.forEach((tx) => {
+      const txDate = new Date(tx.date);
+      if (
+        txDate.getMonth() === 5 &&
+        txDate.getFullYear() === 2026 &&
+        (tx.type === 'expense' || tx.amount < 0)
+      ) {
+        const cat = tx.category || 'outros';
+        sums[cat] = (sums[cat] || 0) + Math.abs(tx.amount);
+      }
+    });
+
+    return sums;
+  }, [transactions]);
+
+  // Cálculo de metas de economia
+  const savingsCalculation = useMemo(() => {
+    let income = 0;
+    let expenses = 0;
+    transactions.forEach((tx) => {
+      const txDate = new Date(tx.date);
+      if (txDate.getMonth() === 5 && txDate.getFullYear() === 2026) {
+        if (tx.amount > 0) {
+          income += tx.amount;
+        } else {
+          expenses += Math.abs(tx.amount);
+        }
+      }
+    });
+
+    const savedSoFar = Math.max(0, income - expenses);
+    const today = new Date();
+    const isJune2026 = today.getFullYear() === 2026 && today.getMonth() === 5;
+    const currentDay = isJune2026 ? today.getDate() : 26;
+    const daysInMonth = 30;
+    const daysRemaining = Math.max(1, daysInMonth - currentDay);
+
+    const remainingToSave = Math.max(0, savingsTarget - savedSoFar);
+    const dailySavingsNeeded = parseFloat((remainingToSave / daysRemaining).toFixed(2));
+    const percentReached = savingsTarget > 0 ? Math.min(100, Math.round((savedSoFar / savingsTarget) * 100)) : 0;
+
+    return {
+      income,
+      expenses,
+      savedSoFar,
+      daysRemaining,
+      remainingToSave,
+      dailySavingsNeeded,
+      percentReached
+    };
+  }, [transactions, savingsTarget]);
+
+  // Cálculo da ofensiva semanal
+  const weeklyStreakCalculation = useMemo(() => {
+    const weeksList = [
+      { id: 1, name: 'Semana 1', start: new Date('2026-06-01T00:00:00.000Z'), end: new Date('2026-06-07T23:59:59.999Z'), label: '01/06 - 07/06' },
+      { id: 2, name: 'Semana 2', start: new Date('2026-06-08T00:00:00.000Z'), end: new Date('2026-06-14T23:59:59.999Z'), label: '08/06 - 14/06' },
+      { id: 3, name: 'Semana 3', start: new Date('2026-06-15T00:00:00.000Z'), end: new Date('2026-06-21T23:59:59.999Z'), label: '15/06 - 21/06' },
+      { id: 4, name: 'Semana 4', start: new Date('2026-06-22T00:00:00.000Z'), end: new Date('2026-06-28T23:59:59.999Z'), label: '22/06 - 28/06' },
+    ];
+
+    const results = weeksList.map((wk) => {
+      const spending: Record<string, number> = {
+        refeicao: 0,
+        mobilidade: 0,
+        cultura: 0,
+        saude: 0,
+        outros: 0
+      };
+
+      transactions.forEach((tx) => {
+        const txDate = new Date(tx.date);
+        if (
+          txDate >= wk.start && 
+          txDate <= wk.end && 
+          (tx.type === 'expense' || tx.amount < 0)
+        ) {
+          const cat = tx.category || 'outros';
+          spending[cat] = (spending[cat] || 0) + Math.abs(tx.amount);
+        }
+      });
+
+      let underLimit = true;
+      let totalWeeklyLimit = 0;
+      let totalWeeklySpent = 0;
+      const details: Array<{ category: string; spent: number; limit: number; ok: boolean }> = [];
+
+      Object.keys(budgets).forEach((cat) => {
+        const limit = budgets[cat] || 0;
+        const spent = spending[cat] || 0;
+        const weeklyLimit = limit / 4;
+        totalWeeklySpent += spent;
+        totalWeeklyLimit += weeklyLimit;
+
+        if (limit > 0) {
+          const isOk = spent <= weeklyLimit;
+          if (!isOk) underLimit = false;
+          details.push({ category: cat, spent, limit: weeklyLimit, ok: isOk });
+        }
+      });
+
+      const hasBudgets = details.length > 0;
+
+      return {
+        ...wk,
+        spending,
+        underLimit: hasBudgets ? underLimit : true,
+        hasBudgets,
+        totalWeeklySpent,
+        totalWeeklyLimit,
+        details
+      };
+    });
+
+    let streakCount = 0;
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].underLimit) {
+        streakCount++;
+      } else {
+        break;
+      }
+    }
+
+    return {
+      weeks: results,
+      streakCount
+    };
+  }, [transactions, budgets]);
+
+  // Alerta de orçamento diário
+  const dailyBudgetAlert = useMemo(() => {
+    const totalBudgetLimit: number = (Object.values(budgets) as number[]).reduce((sum: number, val: number) => sum + (Number(val) || 0), 0);
+    const totalBudgetSpent: number = Object.keys(budgets).reduce((sum: number, cat: string) => sum + (Number(categorySpendingCurrentMonth[cat]) || 0), 0);
+    const remainingAllowance: number = Math.max(0, totalBudgetLimit - totalBudgetSpent);
+    
+    const today = new Date();
+    const isJune2026 = today.getFullYear() === 2026 && today.getMonth() === 5;
+    const currentDay = isJune2026 ? today.getDate() : 26;
+    const daysInMonth = 30;
+    const daysRemaining = Math.max(1, daysInMonth - currentDay);
+    
+    const dailyAllowed = parseFloat((remainingAllowance / daysRemaining).toFixed(2));
+    
+    if (totalBudgetLimit === 0) {
+      return { status: 'inactive', dailyAllowed: 0, daysRemaining, remainingAllowance, message: '' };
+    }
+    
+    const percentSpent = (totalBudgetSpent / totalBudgetLimit) * 100;
+    
+    let status: 'ok' | 'warning' | 'critical' = 'ok';
+    let message = 'Seu ritmo de gastos diários está super equilibrado.';
+    
+    if (percentSpent >= 90 || dailyAllowed <= 10) {
+      status = 'critical';
+      message = 'Atenção extrema! Quase todo o seu teto mensal foi consumido.';
+    } else if (percentSpent >= 70 || dailyAllowed <= 25) {
+      status = 'warning';
+      message = 'Seus gastos aceleraram. Considere reduzir despesas supérfluas.';
+    }
+    
+    return {
+      status,
+      dailyAllowed,
+      daysRemaining,
+      remainingAllowance,
+      message
+    };
+  }, [budgets, categorySpendingCurrentMonth]);
+
+  const currentPercent = savingsCalculation.percentReached;
+  const targetMilestone = useMemo(() => {
+    if (currentPercent >= 100) return 100;
+    if (currentPercent >= 75) return 75;
+    if (currentPercent >= 50) return 50;
+    if (currentPercent >= 25) return 25;
+    return 0;
+  }, [currentPercent]);
+
+  React.useEffect(() => {
+    if (targetMilestone > 0 && targetMilestone > lastCelebrated) {
+      setCelebrationMilestone(targetMilestone);
+      setLastCelebrated(targetMilestone);
+      try {
+        localStorage.setItem('volt_last_celebrated_milestone', targetMilestone.toString());
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [targetMilestone, lastCelebrated]);
+
+  const confettiParticles = useMemo(() => {
+    if (!celebrationMilestone) return [];
+    const colors = ['#A2FF00', '#00E5FF', '#FF5C8D', '#FFAA00', '#B026FF', '#FFED86'];
+    const shapes = ['circle', 'square', 'star', 'triangle'];
+    const list = [];
+    for (let i = 0; i < 75; i++) {
+      list.push({
+        id: i,
+        color: colors[i % colors.length],
+        shape: shapes[i % shapes.length],
+        size: Math.random() * 8 + 6,
+        delay: Math.random() * 0.4,
+        x: Math.random() * 100 - 50,
+        y: Math.random() * -120 - 50,
+        rotation: Math.random() * 360,
+        duration: Math.random() * 1.5 + 2.0
+      });
+    }
+    return list;
+  }, [celebrationMilestone]);
 
   const spendingLimitEnabled = localStorage.getItem('volt_spending_limit_enabled') === 'true';
   const spendingLimitAmount = parseFloat(localStorage.getItem('volt_spending_limit_amount') || '2500');
 
-  const handleSaveGoal = () => {
-    const num = parseFloat(tempGoal);
-    if (!isNaN(num) && num > 0) {
-      setMonthlyGoal(num);
-      localStorage.setItem('volt_monthly_goal', num.toString());
-      setIsEditingGoal(false);
-    } else {
-      showDialog({ title: 'Atenção', message: 'Por favor, insira um valor válido maior que zero.' });
-    }
-  };
 
   const [recurringBills, setRecurringBills] = useState<RecurringBill[]>(() => {
     const saved = localStorage.getItem('volt_recurring_bills');
@@ -222,7 +559,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
 
       data.push({
         month: label,
-        spending: totalSpending > 0 ? parseFloat(totalSpending.toFixed(2)) : defaultVal,
+        spending: totalSpending > 0 ? parseFloat(Number(totalSpending || 0).toFixed(2)) : defaultVal,
       });
     }
     return data;
@@ -295,7 +632,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
           key,
           name: meta.label,
           emoji: meta.emoji,
-          value: parseFloat(value.toFixed(2)),
+          value: parseFloat(Number(value || 0).toFixed(2)),
           color: theme === 'midnight' ? meta.colorDark : meta.colorLight
         };
       })
@@ -315,17 +652,14 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
     })
     .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
 
-  const goalConsumptionPercent = Math.min(
-    Math.round((currentMonthSpending / monthlyGoal) * 100),
-    100
-  );
+
 
   return (
     <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="space-y-6 pb-28 pt-4 px-4 max-w-md mx-auto"
+      className="space-y-6 pb-24 pt-4 px-4 max-w-md mx-auto"
     >
       {/* Visual Spending Limit Warning Banner */}
       {spendingLimitEnabled && currentMonthSpending > spendingLimitAmount && (
@@ -353,128 +687,128 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
         </motion.div>
       )}
 
+      {/* Top Quick Actions Card (Match Image) */}
+      <motion.section variants={itemVariants} className={`rounded-2xl p-4 flex justify-between items-center ${
+        isMidnight 
+          ? 'bg-[#18181b] border border-white/5' 
+          : 'bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
+      }`}>
+        {[
+          { label: 'SIMULAR LOGIN', icon: React.forwardRef((props, ref) => <div className="relative"><UserIcon size={20} className={isMidnight ? 'text-[#8b5cf6]' : 'text-[#8b5cf6]'} /><div className="absolute -bottom-1 -right-1 bg-[#00ff9d] rounded-full w-3.5 h-3.5 flex items-center justify-center text-black text-[10px] font-bold border border-black">+</div></div>) },
+          { label: 'APP VOLT', icon: Bolt, bg: isMidnight ? 'bg-[#ff5c8d]/10 border-[#ff5c8d]/30' : 'bg-black text-[#ff5c8d]', iconColor: isMidnight ? 'text-[#ff5c8d]' : 'text-[#ff5c8d]' },
+          { label: 'FAZER PIX', icon: React.forwardRef((props, ref) => <div className="w-3 h-3 bg-[#3b82f6] rotate-45 rounded-[2px]" />), bg: isMidnight ? 'bg-[#3b82f6]/10 border-[#3b82f6]/30' : 'bg-black' },
+          { label: 'PAGAR CONTAS', icon: Receipt, bg: isMidnight ? 'bg-[#00ff9d]/10 border-[#00ff9d]/30' : 'bg-black text-[#00ff9d]', iconColor: isMidnight ? 'text-[#00ff9d]' : 'text-[#00ff9d]' }
+        ].map((item, index) => (
+          <div key={index} className="flex flex-col items-center gap-2 cursor-pointer active:scale-95 transition-transform" onClick={() => item.label === 'FAZER PIX' ? onNavigate('pix') : null}>
+            <div className={`w-[52px] h-[52px] rounded-full flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+              item.bg ? item.bg : (isMidnight ? 'bg-zinc-900 border-zinc-700' : 'bg-white')
+            }`}>
+              {/* @ts-ignore */}
+              <item.icon size={22} className={item.iconColor} />
+            </div>
+            <span className={`text-[9px] font-black tracking-wider uppercase text-center w-16 leading-tight ${
+              isMidnight ? 'text-gray-400' : 'text-black'
+            }`}>
+              {item.label}
+            </span>
+          </div>
+        ))}
+      </motion.section>
+
+      {/* Dashboard Title & Personalize Button */}
+      <motion.div variants={itemVariants} className="flex justify-between items-center">
+        <h2 className={`text-[11px] font-black tracking-wider uppercase ${isMidnight ? 'text-white' : 'text-black'}`}>
+          SEU DASHBOARD
+        </h2>
+        <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 border-black font-black text-[9px] uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform active:scale-95 ${
+          isMidnight ? 'bg-[#003d25] text-[#00ff9d]' : 'bg-[#00ff9d] text-black'
+        }`}>
+          <div className="w-1.5 h-1.5 rounded-full bg-current" />
+          PERSONALIZAR PAINEL
+        </button>
+      </motion.div>
+
       {/* Account Balance Card */}
       <motion.section
         variants={itemVariants}
-        className="bg-volt-surface border border-white/5 rounded-2xl p-5 flex flex-col gap-2 relative overflow-hidden neon-glow active:scale-[0.99] transition-transform"
+        className={`rounded-2xl p-6 flex flex-col gap-2 relative overflow-hidden transition-all ${
+          isMidnight 
+            ? 'bg-volt-surface border border-white/5 neon-glow' 
+            : 'bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
+        }`}
       >
         <div className="flex justify-between items-center w-full">
-          <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-volt-green animate-ping"></span>
-            Saldo em conta
+          <span className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${
+            isMidnight ? 'text-gray-400' : 'text-black'
+          }`}>
+            <span className={`w-3 h-3 rounded-full flex items-center justify-center ${
+              isMidnight ? 'bg-zinc-800' : 'bg-gray-200'
+            }`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${isMidnight ? 'bg-volt-green' : 'bg-black'}`}></div>
+            </span>
+            SALDO EM CONTA
           </span>
           <button
             onClick={toggleBalanceVisibility}
-            className="text-on-surface-variant hover:text-volt-green transition-colors p-1 rounded-full hover:bg-white/5"
+            className={`transition-colors p-1.5 rounded-full border-2 border-transparent hover:border-black active:scale-90 ${
+              isMidnight ? 'text-gray-400 hover:text-white' : 'text-black'
+            }`}
           >
-            {balanceIsVisible ? <Eye size={18} /> : <EyeOff size={18} />}
+            {balanceIsVisible ? <Eye size={18} className="stroke-[2.5]" /> : <EyeOff size={18} className="stroke-[2.5]" />}
           </button>
         </div>
 
-        <div className="flex items-baseline gap-2 mt-1">
-          <span className="text-xl font-bold text-volt-green">R$</span>
+        <div className="flex items-baseline gap-2 mt-2">
+          <span className={`text-xl font-black ${isMidnight ? 'text-volt-green' : 'text-black'}`}>R$</span>
           {balanceIsVisible ? (
-            <span className="text-3xl font-black text-white tracking-tight">
+            <span className={`text-[40px] leading-none font-black tracking-tighter ${isMidnight ? 'text-white' : 'text-black'}`}>
               {accountBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
           ) : (
-            <span className="text-3xl font-black text-white/50 tracking-widest">••••••</span>
+            <span className={`text-[40px] leading-none font-black tracking-widest ${isMidnight ? 'text-white/30' : 'text-black/30'}`}>
+              ••••••
+            </span>
           )}
         </div>
 
-        <div className="mt-2 flex items-center gap-1.5 text-volt-green/80 text-[11px] font-semibold">
-          <TrendingUp size={14} />
+        <div className={`mt-2 flex items-center gap-1.5 text-[10px] font-black tracking-wider ${
+          isMidnight ? 'text-volt-green' : 'text-[#00c97b]'
+        }`}>
+          <TrendingUp size={14} className="stroke-[3]" />
           <span>+2.5% este mês (Rendimento 110% CDI)</span>
         </div>
-
-        {/* Floating action buttons directly on the card to Pix & deposit */}
-        <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
-          <button
-            onClick={() => onNavigate('pix')}
-            className="py-2.5 px-3 bg-volt-green text-black rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-transform cursor-pointer"
-          >
-            <Bolt size={14} className="fill-current" />
-            Enviar Pix
-          </button>
-          <button
-            onClick={() => onNavigate('deposit')}
-            className="py-2.5 px-3 bg-white/5 border border-white/10 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-white/10 active:scale-95 transition-transform cursor-pointer"
-          >
-            <Sparkles size={14} className="text-volt-green" />
-            Depositar
-          </button>
-        </div>
       </motion.section>
+
+
 
       {/* Account Balance History (Last 30 Days Line Chart) */}
       <motion.section
         variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-4"
+        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
+          isMidnight ? 'bg-volt-surface text-white' : 'bg-white text-black'
+        }`}
       >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-volt-green border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs">
+            <div className="w-8 h-8 rounded-xl bg-volt-green border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs text-black">
               📈
             </div>
             <div>
-              <h3 className="font-black text-xs uppercase tracking-wider text-black">Evolução do Saldo</h3>
-              <p className="text-[10px] font-bold text-gray-700">Histórico de saldo da conta (30d)</p>
+              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Evolução do Saldo</h3>
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-gray-400' : 'text-gray-700'}`}>Histórico de saldo da conta (30d)</p>
             </div>
           </div>
-          <span className="text-[9px] font-black uppercase tracking-wider bg-[#00E5FF] text-black border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+          <span className={`text-[9px] font-black uppercase tracking-wider text-black border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
+            isMidnight ? 'bg-volt-green' : 'bg-[#00E5FF]'
+          }`}>
             30 Dias
           </span>
         </div>
 
-        {/* Recharts LineChart container */}
+        {/* D3 SparkLine container */}
         <div className="w-full h-40 mt-2">
           {balanceIsVisible ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={balanceHistoryData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
-                <XAxis
-                  dataKey="date"
-                  tickLine={false}
-                  axisLine={{ stroke: '#000000', strokeWidth: 3 }}
-                  tick={{ fill: '#000000', fontSize: 9, fontWeight: '900' }}
-                  // Only show 5 tick labels to avoid overcrowding
-                  interval={6}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={{ stroke: '#000000', strokeWidth: 3 }}
-                  tick={{ fill: '#000000', fontSize: 8, fontWeight: '900' }}
-                  domain={['auto', 'auto']}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: theme === 'midnight' ? '#18181b' : '#FFFFFF',
-                    border: '3px solid #000000',
-                    borderRadius: '12px',
-                    boxShadow: '4px 4px 0px 0px rgba(0,0,0,1)',
-                    fontFamily: 'Inter, sans-serif',
-                    fontSize: '11px',
-                    color: theme === 'midnight' ? '#FFFFFF' : '#000000',
-                    fontWeight: 'bold',
-                  }}
-                  itemStyle={{ color: theme === 'midnight' ? '#FFFFFF' : '#000000' }}
-                  labelStyle={{ color: theme === 'midnight' ? '#FFFFFF' : '#000000' }}
-                  formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Saldo']}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="balance"
-                  stroke={theme === 'midnight' ? '#00ff9d' : '#000000'}
-                  strokeWidth={3}
-                  dot={false}
-                  activeDot={{
-                    r: 5,
-                    stroke: '#000000',
-                    strokeWidth: 2,
-                    fill: theme === 'midnight' ? '#00ff9d' : '#A2FF00',
-                  }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+             <D3SparkLine data={balanceHistoryData} theme={theme} />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center border-2 border-dashed border-black/20 rounded-xl bg-black/5 p-4 text-center">
               <span className="text-xl block mb-1">🔒</span>
@@ -485,178 +819,395 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
         </div>
       </motion.section>
 
-      {/* Quick Access Grid */}
-      <motion.section variants={itemVariants} className="space-y-3">
-        <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest pl-1">
-          Acesso Rápido
-        </h3>
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            {
-              label: 'PIX',
-              icon: Bolt,
-              action: () => onNavigate('pix'),
-              highlight: true,
-            },
-            {
-              label: 'Shop',
-              icon: ShoppingBag,
-              action: () => onNavigate('shop'),
-              highlight: false,
-            },
-            {
-              label: 'Cartões',
-              icon: CreditCard,
-              action: () => onNavigate('cards'),
-              highlight: false,
-            },
-            {
-              label: 'Contas',
-              icon: Receipt,
-              action: () => showDialog({ title: 'Aviso', message: 'Contas e boletos para pagamento serão importados automaticamente pelo seu DDA.' }),
-              highlight: false,
-            },
-          ].map((item, index) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={index}
-                onClick={item.action}
-                className="flex flex-col items-center gap-2 group active:scale-90 transition-transform cursor-pointer"
-              >
-                <div
-                  className={`w-14 h-14 rounded-2xl flex items-center justify-center border transition-all ${
-                    item.highlight
-                      ? 'bg-volt-green/10 border-volt-green/20 text-volt-green neon-glow'
-                      : 'bg-volt-surface border-white/5 text-on-surface-variant group-hover:border-volt-green/30 group-hover:text-white'
-                  }`}
-                >
-                  <Icon size={20} className={item.highlight ? 'stroke-[2.5]' : 'stroke-[2]'} />
-                </div>
-                <span className="text-[11px] font-bold text-on-surface-variant group-hover:text-white transition-colors">
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Second Row Extra Item - Detailed Statement */}
-        <div className="flex justify-start">
-          <button
-            onClick={() => onNavigate('statement')}
-            className="flex flex-col items-center gap-2 group active:scale-90 transition-transform cursor-pointer w-14"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-volt-surface border border-white/5 flex items-center justify-center text-on-surface-variant group-hover:border-volt-green/30 group-hover:text-white transition-all">
-              <FileText size={20} />
-            </div>
-            <span className="text-[11px] font-bold text-on-surface-variant group-hover:text-white transition-colors text-center truncate">
-              Extrato
-            </span>
-          </button>
-        </div>
-      </motion.section>
-
-      {/* Monthly spending goal tracker card */}
+      {/* Visão Geral de Orçamentos (Bento Box brutalista - Task 3) */}
       <motion.section
         variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-4"
+        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
+          isMidnight ? 'bg-volt-surface text-white' : 'bg-white text-black'
+        }`}
       >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#00E5FF] border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs">
+            <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
+              isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#00E5FF] text-black'
+            }`}>
               🎯
             </div>
             <div>
-              <h3 className="font-black text-xs uppercase tracking-wider text-black">Meta de Gastos</h3>
-              <p className="text-[10px] font-bold text-gray-700">Controle de orçamento mensal</p>
+              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Visão Geral de Orçamentos</h3>
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Controle de limites mensais por categoria (Junho/2026)</p>
             </div>
           </div>
           <button
-            onClick={() => {
-              setTempGoal(monthlyGoal.toString());
-              setIsEditingGoal(!isEditingGoal);
-            }}
-            className={`text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl transition-all ${
-              isEditingGoal ? 'btn-secondary' : 'btn-primary'
+            onClick={() => isEditingBudgets ? setIsEditingBudgets(false) : startEditingBudgets()}
+            className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+              isMidnight
+                ? 'bg-zinc-900 text-white hover:bg-zinc-800 border-zinc-700'
+                : 'bg-[#FFED86] text-black hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
             }`}
           >
-            {isEditingGoal ? 'Cancelar' : 'Ajustar'}
+            {isEditingBudgets ? 'Fechar' : 'Definir Limites'}
           </button>
         </div>
 
-        {isEditingGoal ? (
-          <div className="space-y-2 bg-[#FFED86] border-2 border-black rounded-xl p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-            <span className="text-[10px] font-black uppercase tracking-wider text-black">Nova Meta Mensal (R$)</span>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={tempGoal}
-                onChange={(e) => setTempGoal(e.target.value)}
-                placeholder="Ex: 1500"
-                className="flex-1 bg-white border-2 border-black rounded-lg px-3 py-1.5 text-xs font-bold text-black focus:outline-none"
-              />
-              <button
-                onClick={handleSaveGoal}
-                className="btn-primary font-black text-xs px-3.5 py-1.5 rounded-xl transition-all"
-              >
-                Salvar
-              </button>
+        {isEditingBudgets ? (
+          <form onSubmit={handleSaveBudgets} className="flex flex-col gap-3">
+            <div className="grid grid-cols-1 gap-2.5">
+              {[
+                { key: 'refeicao', label: 'Refeição 🍔', color: '#FF5C8D' },
+                { key: 'mobilidade', label: 'Mobilidade 🚗', color: '#00E5FF' },
+                { key: 'cultura', label: 'Cultura 🎬', color: '#FFAA00' },
+                { key: 'saude', label: 'Saúde 💖', color: '#B026FF' },
+                { key: 'outros', label: 'Outros / Serviços 📦', color: '#A2FF00' },
+              ].map((cat) => (
+                <div key={cat.key} className="flex items-center justify-between gap-3 p-1">
+                  <span className={`text-[11px] font-black uppercase flex items-center gap-1.5 ${isMidnight ? 'text-zinc-200' : 'text-gray-800'}`}>
+                    <span className="w-2.5 h-2.5 rounded-full border border-black" style={{ backgroundColor: cat.color }}></span>
+                    {cat.label}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-black ${isMidnight ? 'text-white' : 'text-black'}`}>R$</span>
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={editingBudgets[cat.key] || '0'}
+                      onChange={(e) => handleBudgetInputChange(cat.key, e.target.value)}
+                      className={`border-2 border-black rounded-lg px-2 py-1 text-xs font-bold w-24 text-right ${
+                        isMidnight ? 'bg-zinc-900 text-white border-zinc-700' : 'bg-white text-black'
+                      }`}
+                      required
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex justify-between items-end">
-              <div>
-                <span className="text-[9px] font-black uppercase tracking-wider text-gray-600 block">Gasto este mês</span>
-                <span className="text-xl font-black text-black">
-                  R$ {currentMonthSpending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+
+            <div className={`mt-2 pt-3 border-t-2 border-dashed border-black ${isMidnight ? 'border-zinc-800' : 'border-black'}`}>
+              <div className="flex items-center justify-between gap-3 p-1">
+                <span className={`text-[11px] font-black uppercase flex items-center gap-1.5 ${isMidnight ? 'text-zinc-200' : 'text-gray-800'}`}>
+                  <span>🚀</span> Meta de Economia (Stretch Goal)
                 </span>
-              </div>
-              <div className="text-right">
-                <span className="text-[9px] font-black uppercase tracking-wider text-gray-600 block">Meta Definida</span>
-                <span className="text-xs font-black text-gray-900">
-                  R$ {monthlyGoal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-[10px] font-black ${isMidnight ? 'text-white' : 'text-black'}`}>R$</span>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={editingSavingsTarget}
+                    onChange={(e) => setEditingSavingsTarget(e.target.value)}
+                    className={`border-2 border-black rounded-lg px-2 py-1 text-xs font-bold w-24 text-right ${
+                      isMidnight ? 'bg-zinc-900 text-white border-zinc-700' : 'bg-white text-black'
+                    }`}
+                    required
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Progress Bar */}
-            <div className="space-y-1">
-              <div className="w-full h-6 bg-white border-3 border-black rounded-full overflow-hidden p-0.5 relative">
-                <motion.div
-                  initial={{ width: '0%' }}
-                  animate={{
-                    width: `${goalConsumptionPercent}%`,
-                  }}
-                  transition={{ duration: 0.8, ease: 'easeOut' }}
-                  style={{
-                    backgroundColor:
-                      currentMonthSpending >= monthlyGoal
-                        ? '#FF5C8D'
-                        : currentMonthSpending >= monthlyGoal * 0.75
-                        ? '#FFD700'
-                        : '#A2FF00',
-                  }}
-                  className="h-full rounded-full border-r border-black"
-                />
-                <div className="absolute inset-0 flex items-center justify-center font-black text-[10px] text-black">
-                  {goalConsumptionPercent}% Consumido
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => setIsEditingBudgets(false)}
+                className={`text-xs font-black uppercase tracking-wider py-1.5 rounded-xl transition-all border-2 border-black ${
+                  isMidnight ? 'bg-zinc-900 text-[#00ff9d] hover:bg-zinc-800 border-zinc-800' : 'btn-secondary'
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className={`text-xs font-black uppercase tracking-wider py-1.5 rounded-xl transition-all border-2 border-black ${
+                  isMidnight ? 'bg-[#00ff9d] text-zinc-950 hover:bg-[#00e38b]' : 'btn-primary'
+                }`}
+              >
+                Salvar Limites
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-4">
+            {/* Daily Budget Alert */}
+            {dailyBudgetAlert.status === 'inactive' ? (
+              <div className={`p-3 rounded-xl border-2 border-dashed flex flex-col gap-1 text-left ${
+                isMidnight ? 'bg-zinc-950 border-zinc-800 text-zinc-400' : 'bg-gray-50 border-gray-300 text-gray-500'
+              }`}>
+                <div className="flex items-center gap-1.5 font-black text-[10px] uppercase tracking-wide">
+                  <span>💡</span> Alerta de Orçamento Diário
+                </div>
+                <span className="text-[10px] font-medium leading-relaxed">
+                  Defina limites de gastos nas categorias abaixo para calcular sua média diária disponível para o restante do mês.
+                </span>
+              </div>
+            ) : dailyBudgetAlert.status === 'critical' ? (
+              <div className={`p-3.5 rounded-xl border-2 border-black flex flex-col gap-2 text-left transition-all ${
+                isMidnight ? 'bg-red-950/20 text-red-200 border-red-500/50' : 'bg-red-50 text-red-900 border-red-500 shadow-[3px_3px_0px_0px_rgba(239,68,68,1)]'
+              }`}>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">🚨</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-red-500">
+                      Alerta de Orçamento Crítico
+                    </span>
+                  </div>
+                  <span className="bg-red-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-black animate-pulse">
+                    Crítico
+                  </span>
+                </div>
+                
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-xl font-black tracking-tight text-red-500">
+                    R$ {dailyBudgetAlert.dailyAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[10px] font-bold text-zinc-500">
+                    / dia restante
+                  </span>
+                </div>
+                
+                <p className={`text-[10px] font-medium leading-normal ${isMidnight ? 'text-zinc-400' : 'text-red-800/90'}`}>
+                  {dailyBudgetAlert.message} Restam <strong>{dailyBudgetAlert.daysRemaining} dias</strong> no mês com um saldo total disponível de R$ {dailyBudgetAlert.remainingAllowance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
+                </p>
+              </div>
+            ) : dailyBudgetAlert.status === 'warning' ? (
+              <div className={`p-3.5 rounded-xl border-2 border-black flex flex-col gap-2 text-left transition-all ${
+                isMidnight ? 'bg-amber-950/20 text-amber-200 border-amber-500/50' : 'bg-amber-50 text-amber-900 border-amber-500 shadow-[3px_3px_0px_0px_rgba(245,158,11,1)]'
+              }`}>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">⚠️</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-500">
+                      Orçamento em Atenção
+                    </span>
+                  </div>
+                  <span className="bg-amber-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-black">
+                    Atenção
+                  </span>
+                </div>
+                
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-xl font-black tracking-tight text-amber-600 dark:text-amber-400">
+                    R$ {dailyBudgetAlert.dailyAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[10px] font-bold text-zinc-500">
+                    / dia restante
+                  </span>
+                </div>
+                
+                <p className={`text-[10px] font-medium leading-normal ${isMidnight ? 'text-zinc-400' : 'text-amber-800/95'}`}>
+                  {dailyBudgetAlert.message} Restam <strong>{dailyBudgetAlert.daysRemaining} dias</strong> de Junho. Seu limite total disponível é de R$ {dailyBudgetAlert.remainingAllowance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
+                </p>
+              </div>
+            ) : (
+              <div className={`p-3.5 rounded-xl border-2 border-black flex flex-col gap-2 text-left transition-all ${
+                isMidnight ? 'bg-zinc-950/80 text-white border-zinc-800' : 'bg-green-50/50 text-black border-black shadow-[3px_3px_0px_0px_rgba(0,229,255,1)]'
+              }`}>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">💵</span>
+                    <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-[#00ff9d]' : 'text-green-600'}`}>
+                      Orçamento Diário Disponível
+                    </span>
+                  </div>
+                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-black ${
+                    isMidnight ? 'bg-[#00ff9d] text-zinc-950' : 'bg-[#A2FF00] text-black'
+                  }`}>
+                    Sob Controle
+                  </span>
+                </div>
+                
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className={`text-xl font-black tracking-tight ${isMidnight ? 'text-[#00ff9d]' : 'text-green-600'}`}>
+                    R$ {dailyBudgetAlert.dailyAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[10px] font-bold text-zinc-500">
+                    / dia restante
+                  </span>
+                </div>
+                
+                <p className={`text-[10px] font-medium leading-normal ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
+                  {dailyBudgetAlert.message} Você tem <strong>{dailyBudgetAlert.daysRemaining} dias</strong> para usufruir de R$ {dailyBudgetAlert.remainingAllowance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} sem estourar o limite planejado.
+                </p>
+              </div>
+            )}
+
+            {[
+              { key: 'refeicao', label: 'Refeição', emoji: '🍔', color: isMidnight ? '#FF5E5E' : '#FF5C8D' },
+              { key: 'mobilidade', label: 'Mobilidade', emoji: '🚗', color: isMidnight ? '#0084FF' : '#00E5FF' },
+              { key: 'cultura', label: 'Cultura', emoji: '🎬', color: isMidnight ? '#FFB800' : '#FFAA00' },
+              { key: 'saude', label: 'Saúde', emoji: '💖', color: isMidnight ? '#C278FF' : '#B026FF' },
+              { key: 'outros', label: 'Outros / Serviços', emoji: '📦', color: isMidnight ? '#00DF89' : '#A2FF00' },
+            ].map((cat) => {
+              const spent = categorySpendingCurrentMonth[cat.key] || 0;
+              const limit = budgets[cat.key] || 0;
+              const percent = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+              const isOverBudget = spent > limit && limit > 0;
+
+              return (
+                <div key={cat.key} className="flex items-center gap-4 py-2 border-b border-dashed border-zinc-300 dark:border-zinc-800 last:border-0">
+                  <div>
+                    <D3RadialProgress value={spent} total={limit} theme={theme} size={40} />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex justify-between items-center text-[10px] font-black uppercase">
+                      <span className="flex items-center gap-1.5">
+                        <span>{cat.emoji}</span>
+                        <span>{cat.label}</span>
+                      </span>
+                      <span className={isOverBudget ? 'text-red-500 font-extrabold' : 'text-zinc-500'}>
+                        R$ {spent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} /{' '}
+                        <span className="text-[9px] font-medium text-zinc-400">R$ {limit.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span>
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[9px] font-bold text-on-surface-variant">
+                      <span className={isMidnight ? 'text-zinc-400' : 'text-gray-600'}>{percent}% utilizado</span>
+                      {limit > 0 ? (
+                        isOverBudget ? (
+                          <span className="text-red-500 font-extrabold">Excedeu R$ {(spent - limit).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        ) : (
+                          <span className={isMidnight ? 'text-[#00ff9d]' : 'text-green-600'}>R$ {(limit - spent).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} restantes</span>
+                        )
+                      ) : (
+                        <span className="text-gray-400">Sem limite configurado</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Weekly Streak Section */}
+            <hr className={`border-t-2 border-dashed my-4 ${isMidnight ? 'border-zinc-800' : 'border-black'}`} />
+            <WeeklyStreak
+              streakCount={weeklyStreakCalculation.streakCount}
+              weeks={weeklyStreakCalculation.weeks}
+              theme={theme}
+            />
+
+            {/* Savings Stretch Goal Section */}
+            <hr className={`border-t-2 border-dashed my-4 ${isMidnight ? 'border-zinc-800' : 'border-black'}`} />
+            
+            <div className={`p-4 rounded-xl border-2 border-black text-left flex flex-col gap-3 transition-all ${
+              isMidnight
+                ? 'bg-zinc-950/60 text-white shadow-[2px_2px_0px_0px_rgba(0,255,157,0.15)]'
+                : 'bg-green-50/40 text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+            }`}>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs">🚀</span>
+                  <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>
+                    Meta de Economia (Stretch Goal)
+                  </span>
+                </div>
+                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border border-black ${
+                  isMidnight ? 'bg-[#00ff9d] text-black border-zinc-800' : 'bg-[#FFED86] text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                }`}>
+                  {savingsCalculation.percentReached}% Concluída
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="space-y-1">
+                <div className={`w-full h-3.5 border-2 border-black rounded-full overflow-hidden ${
+                  isMidnight ? 'bg-zinc-950' : 'bg-gray-100'
+                }`}>
+                  <motion.div
+                    className="h-full rounded-full border-r border-black bg-[#00DF89]"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${savingsCalculation.percentReached}%` }}
+                    transition={{ duration: 0.6, ease: 'easeOut' }}
+                  />
+                </div>
+                <div className="flex justify-between text-[9px] font-bold text-gray-500">
+                  <span>R$ {savingsCalculation.savedSoFar.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} economizados</span>
+                  <span>Meta: R$ {savingsTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
 
-              <div className="flex justify-between items-center text-[10px] font-bold text-gray-700 pl-1">
-                {currentMonthSpending >= monthlyGoal ? (
-                  <span className="text-[#FF5C8D] font-black uppercase">⚠️ Meta Excedida!</span>
+              {/* Checkpoints timeline */}
+              <div className="mt-1 mb-1">
+                <span className={`text-[9px] font-black uppercase tracking-wider block mb-2 ${
+                  isMidnight ? 'text-zinc-400' : 'text-gray-600'
+                }`}>
+                  Marcos de Conquista (Toque para Celebrar)
+                </span>
+                <div className="flex justify-between items-center relative px-2 py-1">
+                  {/* Connective line behind */}
+                  <div className={`absolute left-4 right-4 h-0.5 border-b-2 border-dashed z-0 ${
+                    isMidnight ? 'border-zinc-800' : 'border-black/20'
+                  }`} />
+                  
+                  {[
+                    { percent: 25, label: '25%', emoji: '🥉', name: 'Bronze', color: 'bg-[#CD7F32]' },
+                    { percent: 50, label: '50%', emoji: '🥈', name: 'Prata', color: 'bg-[#C0C0C0]' },
+                    { percent: 75, label: '75%', emoji: '🥇', name: 'Ouro', color: 'bg-[#FFD700]' },
+                    { percent: 100, label: '100%', emoji: '🏆', name: 'Meta', color: 'bg-[#FFED86]' }
+                  ].map((m) => {
+                    const isReached = savingsCalculation.percentReached >= m.percent;
+                    return (
+                      <motion.button
+                        key={m.percent}
+                        whileHover={isReached ? { scale: 1.12, y: -2 } : {}}
+                        whileTap={isReached ? { scale: 0.95 } : {}}
+                        type="button"
+                        onClick={() => {
+                          if (isReached) {
+                            setCelebrationMilestone(null); // reset first to force rerun
+                            setTimeout(() => setCelebrationMilestone(m.percent), 50);
+                          }
+                        }}
+                        className={`relative z-10 w-11 h-11 rounded-full border-2 border-black flex flex-col items-center justify-center transition-all shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] ${
+                          isReached 
+                            ? `${m.color} text-black cursor-pointer` 
+                            : 'bg-zinc-200 text-zinc-400 opacity-40 cursor-not-allowed'
+                        }`}
+                      >
+                        <span className="text-sm -mt-0.5">{m.emoji}</span>
+                        <span className="text-[8px] font-black -mt-0.5">{m.label}</span>
+                        
+                        {/* Reached tiny indicator */}
+                        {isReached && (
+                          <span className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full p-0.5 border border-black text-[6px] font-extrabold flex items-center justify-center w-3.5 h-3.5">
+                            ✓
+                          </span>
+                        )}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Daily dynamic requirement card */}
+              <div className={`p-3 rounded-lg border-2 border-black flex flex-col gap-1 ${
+                isMidnight ? 'bg-zinc-900/80 text-white' : 'bg-white text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+              }`}>
+                <span className={`text-[9px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>
+                  Meta Diária de Economia Necessária
+                </span>
+                {savingsCalculation.remainingToSave > 0 ? (
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-sm font-black text-red-500">
+                        R$ {savingsCalculation.dailySavingsNeeded.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / dia
+                      </span>
+                      <span className={`text-[9px] font-bold ${isMidnight ? 'text-zinc-500' : 'text-gray-500'}`}>
+                        durante os próximos {savingsCalculation.daysRemaining} dias
+                      </span>
+                    </div>
+                    <p className={`text-[8px] font-bold leading-normal ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
+                      Faltam guardar R$ {savingsCalculation.remainingToSave.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para cumprir seu objetivo do mês.
+                    </p>
+                  </div>
                 ) : (
-                  <span>
-                    Disponível: R${' '}
-                    {(monthlyGoal - currentMonthSpending).toLocaleString('pt-BR', {
-                      minimumFractionDigits: 2,
-                    })}
-                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-black text-[#00DF89]">
+                      ✨ R$ 0,00 / dia
+                    </span>
+                    <p className={`text-[8px] font-bold leading-normal ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
+                      Parabéns! Você já bateu sua meta de economia mensal! Continue assim.
+                    </p>
+                  </div>
                 )}
-                <span>Junho/2026</span>
               </div>
             </div>
           </div>
@@ -666,16 +1217,18 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
       {/* Recurring Payments Section */}
       <motion.section
         variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-4"
+        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
+          isMidnight ? 'bg-volt-surface' : 'bg-white'
+        }`}
       >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#00E5FF] border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs">
+            <div className="w-8 h-8 rounded-xl bg-[#00E5FF] border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs text-black">
               📅
             </div>
             <div>
-              <h3 className="font-black text-xs uppercase tracking-wider text-black">Contas Recorrentes</h3>
-              <p className="text-[10px] font-bold text-gray-700">Pagamentos mensais de assinaturas</p>
+              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Contas Recorrentes</h3>
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-gray-400' : 'text-gray-700'}`}>Pagamentos mensais de assinaturas</p>
             </div>
           </div>
           {theme === 'midnight' ? (
@@ -693,7 +1246,6 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
           {recurringBills.map((bill) => {
             const isPaid = bill.status === 'paid';
             const billAmountAbs = Math.abs(bill.amount);
-            const isMidnight = true; // Forced Dark Mode
             const iconColorClass = isMidnight ? "text-[#00DF89]" : "text-black";
             
             const getBillIcon = (cat: string) => {
@@ -1029,7 +1581,7 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
         </div>
 
         {/* Filtered Transactions list */}
-        <div className="space-y-2 max-h-60 overflow-y-auto hide-scrollbar">
+        <div className="space-y-2 max-h-60 overflow-y-auto no-scrollbar">
           <AnimatePresence>
             {filteredHomeTransactions.length > 0 ? (
               filteredHomeTransactions.map((tx) => {
@@ -1105,6 +1657,102 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
         </div>
       </motion.section>
 
+      {/* Quick Access Grid */}
+      <motion.section variants={itemVariants} className="space-y-3 mb-6">
+        <div className="flex justify-between items-center px-1">
+          <h3 className={`text-xs font-black uppercase tracking-widest ${isMidnight ? 'text-white' : 'text-black'}`}>
+            Acesso Rápido
+          </h3>
+          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider animate-pulse">
+            Deslize para ver mais ➔
+          </span>
+        </div>
+        <div 
+          className="flex overflow-x-auto gap-4 py-2.5 scrollbar-none -mx-4 px-4 scroll-smooth cursor-grab active:cursor-grabbing select-none"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+          onMouseDown={(e) => {
+            const container = e.currentTarget;
+            container.dataset.isDown = 'true';
+            container.dataset.startX = String(e.pageX - container.offsetLeft);
+            container.dataset.scrollLeft = String(container.scrollLeft);
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.dataset.isDown = 'false';
+          }}
+          onMouseUp={(e) => {
+            e.currentTarget.dataset.isDown = 'false';
+          }}
+          onMouseMove={(e) => {
+            const container = e.currentTarget;
+            if (container.dataset.isDown !== 'true') return;
+            e.preventDefault();
+            const x = e.pageX - container.offsetLeft;
+            const startX = Number(container.dataset.startX || 0);
+            const scrollLeft = Number(container.dataset.scrollLeft || 0);
+            const walk = (x - startX) * 1.5;
+            container.scrollLeft = scrollLeft - walk;
+          }}
+        >
+          {[
+            {
+              label: 'PIX',
+              icon: Bolt,
+              action: () => onNavigate('pix'),
+              highlight: true,
+            },
+            {
+              label: 'Shop',
+              icon: ShoppingBag,
+              action: () => onNavigate('shop'),
+              highlight: false,
+            },
+            {
+              label: 'Cartões',
+              icon: CreditCard,
+              action: () => onNavigate('cards'),
+              highlight: false,
+            },
+            {
+              label: 'Contas',
+              icon: Receipt,
+              action: () => alert('Contas e boletos para pagamento serão importados automaticamente pelo seu DDA.'),
+              highlight: false,
+            },
+            {
+              label: 'Extrato',
+              icon: FileText,
+              action: () => onNavigate('statement'),
+              highlight: false,
+            },
+          ].map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={index}
+                onClick={item.action}
+                className="flex flex-col items-center gap-2 group active:scale-90 transition-transform cursor-pointer shrink-0 w-[72px]"
+                onDragStart={(e) => e.preventDefault()}
+              >
+                <div
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 border-black transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                    item.highlight
+                      ? 'bg-[#00ff9d] text-black'
+                      : isMidnight
+                        ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                        : 'bg-white text-black hover:bg-gray-50'
+                  }`}
+                >
+                  <Icon size={20} className={item.highlight ? 'stroke-[2.5]' : 'stroke-[2]'} />
+                </div>
+                <span className={`text-[11px] font-black transition-colors text-center truncate w-full ${isMidnight ? 'text-zinc-400 group-hover:text-white' : 'text-gray-800'}`}>
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </motion.section>
+
       {/* ── Banners & News ──────────────────────────────── */}
       <div className="flex flex-col gap-6 mb-8 mt-6">
           <HomeBanners onNavigate={onNavigate} />
@@ -1118,6 +1766,156 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate }) => {
           onSuccess={() => setIsBalanceVisible(true)}
           theme="midnight"
       />
+
+      {/* Progress Celebration Overlay (Task 3) */}
+      <AnimatePresence>
+        {celebrationMilestone !== null && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-hidden pointer-events-auto">
+            {/* Backdrop */}
+            <motion.div
+              key="celebration-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.7 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setCelebrationMilestone(null)}
+              className="absolute inset-0 bg-black backdrop-blur-sm"
+            />
+
+            {/* Confetti Spawner */}
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              {confettiParticles.map((p) => (
+                <motion.div
+                  key={p.id}
+                  initial={{ x: 0, y: 0, scale: 0, opacity: 1, rotate: 0 }}
+                  animate={{
+                    x: p.x * 7,
+                    y: [0, p.y * 1.5, p.y + 500],
+                    scale: [0, 1.2, 1.0, 0.6, 0],
+                    opacity: [0, 1, 1, 0.8, 0],
+                    rotate: p.rotation + 1080
+                  }}
+                  transition={{
+                    duration: p.duration,
+                    delay: p.delay,
+                    ease: "easeOut"
+                  }}
+                  className="absolute pointer-events-none"
+                  style={{
+                    backgroundColor: p.shape !== 'star' ? p.color : undefined,
+                    width: p.size,
+                    height: p.size,
+                    borderRadius: p.shape === 'circle' ? '50%' : p.shape === 'triangle' ? '0' : '2px',
+                    borderLeft: p.shape === 'triangle' ? `${p.size/2}px solid transparent` : undefined,
+                    borderRight: p.shape === 'triangle' ? `${p.size/2}px solid transparent` : undefined,
+                    borderBottom: p.shape === 'triangle' ? `${p.size}px solid ${p.color}` : undefined,
+                  }}
+                >
+                  {p.shape === 'star' && (
+                    <svg viewBox="0 0 24 24" width={p.size * 1.6} height={p.size * 1.6} fill={p.color}>
+                      <path d="M12 .587l3.668 7.431 8.2 1.192-5.934 5.787 1.4 8.168L12 18.896l-7.334 3.857 1.4-8.168L.132 9.21l8.2-1.192z" />
+                    </svg>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Celebration Card */}
+            <motion.div
+              key="celebration-card"
+              initial={{ scale: 0.3, y: 100, opacity: 0 }}
+              animate={{ 
+                scale: 1, 
+                y: 0, 
+                opacity: 1 
+              }}
+              exit={{ scale: 0.5, y: 50, opacity: 0 }}
+              transition={{ type: "spring", damping: 15, stiffness: 200 }}
+              className={`relative max-w-sm w-full border-4 border-black p-6 rounded-[24px] text-center shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] z-10 flex flex-col items-center gap-4 ${
+                isMidnight ? 'bg-zinc-950 text-white border-zinc-800 shadow-[8px_8px_0px_0px_#00ff9d]' : 'bg-[#FFED86] text-black border-black'
+              }`}
+            >
+              {/* Badge Icon Element */}
+              <motion.div
+                animate={{ 
+                  scale: [1, 1.25, 1],
+                  rotate: [0, -10, 10, -10, 10, 0]
+                }}
+                transition={{ 
+                  duration: 1.2, 
+                  repeat: Infinity, 
+                  repeatDelay: 2,
+                  ease: "easeInOut"
+                }}
+                className={`w-20 h-20 rounded-full border-4 border-black flex items-center justify-center text-4xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] ${
+                  celebrationMilestone === 25 ? 'bg-[#CD7F32]' :
+                  celebrationMilestone === 50 ? 'bg-[#C0C0C0]' :
+                  celebrationMilestone === 75 ? 'bg-[#FFD700]' : 'bg-[#00E5FF]'
+                }`}
+              >
+                {celebrationMilestone === 25 && '🥉'}
+                {celebrationMilestone === 50 && '🥈'}
+                {celebrationMilestone === 75 && '🥇'}
+                {celebrationMilestone === 100 && '🏆'}
+              </motion.div>
+
+              {/* Texts */}
+              <div className="space-y-1">
+                <span className={`text-[10px] font-black tracking-widest uppercase block ${
+                  isMidnight ? 'text-[#00ff9d]' : 'text-gray-700'
+                }`}>
+                  Conquista de Poupança!
+                </span>
+                <h3 className="text-xl font-black uppercase tracking-tight leading-none">
+                  {celebrationMilestone === 25 && 'Marco Bronze Desbloqueado!'}
+                  {celebrationMilestone === 50 && 'Metade do Caminho Concluído!'}
+                  {celebrationMilestone === 75 && 'Nível de Ouro Alcançado!'}
+                  {celebrationMilestone === 100 && 'META DE ECONOMIA CONCLUÍDA!'}
+                </h3>
+                <span className="text-sm font-black block mt-1">
+                  {celebrationMilestone}% Economizado ({savingsCalculation.savedSoFar.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})
+                </span>
+              </div>
+
+              <p className={`text-xs font-bold leading-relaxed ${
+                isMidnight ? 'text-zinc-300' : 'text-gray-800'
+              }`}>
+                {celebrationMilestone === 25 && 'Você deu o pontapé inicial na sua jornada financeira do mês! Continue poupando com consistência!'}
+                {celebrationMilestone === 50 && 'Incrível! 50% de sua meta alcançada. Seu orçamento está forte e suas finanças sob total controle.'}
+                {celebrationMilestone === 75 && 'Fantástico! Você já vê a linha de chegada de sua meta financeira! Falta muito pouco.'}
+                {celebrationMilestone === 100 && 'Parabéns lendário! Você cumpriu 100% do seu Stretch Goal de economia! Seu autocontrole financeiro é um exemplo!'}
+              </p>
+
+              {/* Sparkle badge lines */}
+              <div className="flex gap-1 justify-center py-1">
+                {['⚡', '🔥', '🚀', '⭐', '💎'].map((emoji, index) => (
+                  <motion.span
+                    key={index}
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 0.5, delay: index * 0.1, repeat: Infinity }}
+                    className="text-lg"
+                  >
+                    {emoji}
+                  </motion.span>
+                ))}
+              </div>
+
+              {/* Continue button */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setCelebrationMilestone(null)}
+                className={`w-full py-3 px-4 rounded-xl font-black text-sm border-2 border-black uppercase tracking-wider shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-colors cursor-pointer ${
+                  isMidnight
+                    ? 'bg-[#00ff9d] text-black border-black hover:bg-[#00e38b]'
+                    : 'bg-white text-black border-black hover:bg-gray-50'
+                }`}
+              >
+                Continuar Poupando! 🚀
+              </motion.button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

@@ -106,7 +106,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ user, dailyUsage, onTransfe
                 aria-label="Formulário de transferência PIX"
             >
                 <div className="test-pix-key-field" id="pix-key-field" data-testid="pix-key-field" data-cy="pix-key-field">
-                    <label htmlFor="pix-key-input" className="text-sm font-medium text-gray-400">Para quem você quer transferir?</label>
+                    <label htmlFor="pix-key-input" className="text-xs uppercase tracking-wider font-bold text-on-surface-variant mb-1 block">Para quem você quer transferir?</label>
                     <input
                         id="pix-key-input"
                         name="pix-key"
@@ -115,7 +115,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ user, dailyUsage, onTransfe
                         onChange={(e) => setPixKey(e.target.value)}
                         placeholder="Digite a chave PIX"
                         required
-                        className="w-full px-4 py-3 mt-1 bg-gray-900 border-2 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 test-pix-key-input"
+                        className="w-full px-4 py-4 bg-[#0a0a0a] border-2 border-white/10 rounded-xl text-white placeholder-on-surface-variant focus:outline-none focus:border-volt-primary focus:ring-2 focus:ring-volt-primary/20 focus:shadow-[0_0_12px_rgba(0,255,157,0.3)] transition-all font-bold test-pix-key-input"
                         data-testid="pix-key-input"
                         data-cy="pix-key-input"
                         data-playwright="pix-key-input"
@@ -124,7 +124,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ user, dailyUsage, onTransfe
                     />
                 </div>
                 <div className="test-pix-amount-field" id="pix-amount-field" data-testid="pix-amount-field" data-cy="pix-amount-field">
-                    <label htmlFor="pix-amount-input" className="text-sm font-medium text-gray-400">Valor</label>
+                    <label htmlFor="pix-amount-input" className="text-xs uppercase tracking-wider font-bold text-on-surface-variant mb-1 block">Valor</label>
                      <input
                         id="pix-amount-input"
                         name="pix-amount"
@@ -134,7 +134,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ user, dailyUsage, onTransfe
                         onChange={handleAmountChange}
                         placeholder="R$ 0,00"
                         required
-                        className="w-full px-4 py-3 mt-1 bg-gray-900 border-2 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 text-2xl font-bold test-pix-amount-input"
+                        className="w-full px-4 py-4 bg-[#0a0a0a] border-2 border-white/10 rounded-xl text-volt-primary placeholder-on-surface-variant focus:outline-none focus:border-volt-primary focus:ring-2 focus:ring-volt-primary/20 focus:shadow-[0_0_12px_rgba(0,255,157,0.3)] transition-all text-2xl font-black test-pix-amount-input"
                         data-testid="pix-amount-input"
                         data-cy="pix-amount-input"
                         data-playwright="pix-amount-input"
@@ -143,7 +143,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ user, dailyUsage, onTransfe
                     />
                 </div>
                  <div className="test-pix-description-field" id="pix-description-field" data-testid="pix-description-field" data-cy="pix-description-field">
-                    <label htmlFor="pix-description-input" className="text-sm font-medium text-gray-400">Descrição (opcional)</label>
+                    <label htmlFor="pix-description-input" className="text-xs uppercase tracking-wider font-bold text-on-surface-variant mb-1 block">Descrição (opcional)</label>
                     <input
                         id="pix-description-input"
                         name="pix-description"
@@ -151,7 +151,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ user, dailyUsage, onTransfe
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         placeholder="Ex: Aluguel"
-                        className="w-full px-4 py-3 mt-1 bg-gray-900 border-2 border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 test-pix-description-input"
+                        className="w-full px-4 py-4 bg-[#0a0a0a] border-2 border-white/10 rounded-xl text-white placeholder-on-surface-variant focus:outline-none focus:border-volt-primary focus:ring-2 focus:ring-volt-primary/20 focus:shadow-[0_0_12px_rgba(0,255,157,0.3)] transition-all font-bold test-pix-description-input"
                         data-testid="pix-description-input"
                         data-cy="pix-description-input"
                         data-playwright="pix-description-input"
@@ -177,7 +177,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ user, dailyUsage, onTransfe
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full py-3 font-semibold text-black bg-green-400 rounded-lg hover:bg-green-500 disabled:bg-green-700 test-pix-submit-button"
+                        className="w-full py-4 font-black text-xs uppercase tracking-wider text-black bg-volt-green rounded-xl hover:opacity-90 disabled:bg-white/5 disabled:text-white/30 disabled:cursor-not-allowed test-pix-submit-button transition-all"
                         id="btn-pix-submit"
                         name="pix-submit"
                         data-testid="pix-submit-button"
@@ -189,14 +189,14 @@ const TransferForm: React.FC<TransferFormProps> = ({ user, dailyUsage, onTransfe
                     </button>
                 </div>
             </form>
-            <div className="mt-4 p-4 bg-orange-900/50 border border-orange-400/30 rounded-lg flex items-center justify-between">
+            <div className="mt-6 p-4 bg-[#0a0a0a] border-2 border-volt-yellow rounded-xl flex items-center justify-between">
                 <div>
-                    <p className="font-bold text-orange-400">Sem saldo? Use o limite do cartão!</p>
-                    <p className="text-xs text-orange-200">Faça um PIX e parcele em até 12x.</p>
+                    <p className="font-black uppercase tracking-wider text-xs text-volt-yellow">Sem saldo? Use o crédito!</p>
+                    <p className="text-xs text-on-surface-variant font-bold mt-1">Faça um PIX e parcele em até 12x.</p>
                 </div>
                 <button
                     onClick={handleProposePixCredit}
-                    className="px-3 py-1.5 text-sm font-bold bg-orange-400 text-black rounded-lg hover:bg-orange-500 test-pix-credit-button"
+                    className="px-4 py-2 text-xs font-black uppercase tracking-wider bg-volt-yellow text-black rounded-lg hover:opacity-90 test-pix-credit-button transition-all"
                     id="btn-pix-credit"
                     name="pix-credit"
                     data-testid="pix-credit-button"

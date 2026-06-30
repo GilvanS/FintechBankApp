@@ -15,17 +15,17 @@ interface PixConfirmationProps {
 
 const InfoRow: React.FC<{ label: string; value: string | React.ReactNode; testId?: string }> = ({ label, value, testId }) => (
     <div 
-        className="py-4 border-b border-subtle-dark/50 flex justify-between items-center text-sm test-info-row"
+        className="py-4 border-b border-white/10 flex justify-between items-center text-sm test-info-row"
         data-testid={testId}
     >
         <span 
-            className="text-white/60 test-info-label"
+            className="text-on-surface-variant font-bold text-xs uppercase tracking-wider test-info-label"
             data-testid={testId ? `${testId}-label` : undefined}
         >
             {label}
         </span>
         <span 
-            className="font-semibold text-white text-right break-all test-info-value"
+            className="font-black text-white text-right break-all test-info-value"
             data-testid={testId ? `${testId}-value` : undefined}
         >
             {value}
@@ -60,7 +60,7 @@ const PixConfirmation: React.FC<PixConfirmationProps> = ({ details, onConfirm, o
             aria-label="Confirmação de transferência PIX"
         >
             <div 
-                className="bg-surface-dark rounded-xl p-6 test-pix-confirmation-modal"
+                className="bg-volt-surface border-2 border-volt-primary rounded-3xl p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] test-pix-confirmation-modal"
                 id="pix-confirmation-modal"
                 data-testid="pix-confirmation-modal"
                 data-cy="pix-confirmation-modal"
@@ -70,7 +70,7 @@ const PixConfirmation: React.FC<PixConfirmationProps> = ({ details, onConfirm, o
             >
                  <div className="flex justify-between items-center mb-4">
                     <h1 
-                        className="text-white text-2xl font-bold leading-tight test-pix-confirmation-title"
+                        className="text-white text-xl font-black uppercase tracking-wider leading-tight test-pix-confirmation-title"
                         id="pix-confirmation-title"
                         data-testid="pix-confirmation-title"
                         data-cy="pix-confirmation-title"
@@ -133,7 +133,7 @@ const PixConfirmation: React.FC<PixConfirmationProps> = ({ details, onConfirm, o
                         data-testid="pix-confirmation-amount-section"
                     >
                         <p 
-                            className="text-white/60 text-sm test-pix-confirmation-amount-label"
+                            className="text-on-surface-variant font-bold text-xs uppercase tracking-wider test-pix-confirmation-amount-label"
                             data-testid="pix-confirmation-amount-label"
                             data-cy="pix-confirmation-amount-label"
                             role="text"
@@ -142,7 +142,7 @@ const PixConfirmation: React.FC<PixConfirmationProps> = ({ details, onConfirm, o
                             Você está transferindo
                         </p>
                         <p 
-                            className="text-primary text-4xl font-bold test-pix-confirmation-amount-value"
+                            className="text-volt-primary text-4xl font-black mt-2 test-pix-confirmation-amount-value"
                             id="pix-confirmation-amount-value"
                             data-testid="pix-confirmation-amount-value"
                             data-cy="pix-confirmation-amount-value"
@@ -155,7 +155,7 @@ const PixConfirmation: React.FC<PixConfirmationProps> = ({ details, onConfirm, o
                         </p>
                     </div>
                     <div 
-                        className="bg-background-dark rounded-lg p-4 test-pix-confirmation-details"
+                        className="bg-[#0a0a0a] border border-white/10 rounded-xl p-4 test-pix-confirmation-details"
                         id="pix-confirmation-details"
                         data-testid="pix-confirmation-details"
                         data-cy="pix-confirmation-details"
@@ -169,7 +169,7 @@ const PixConfirmation: React.FC<PixConfirmationProps> = ({ details, onConfirm, o
                 </div>
                 <button 
                     onClick={onConfirm}
-                    className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-background-dark font-bold py-3 px-8 rounded-lg transition-colors test-pix-confirmation-button"
+                    className="w-full flex items-center justify-center gap-2 bg-volt-green hover:opacity-90 text-black font-black uppercase tracking-wider text-xs py-4 px-8 rounded-xl transition-all test-pix-confirmation-button"
                     id="btn-pix-confirmation-confirm"
                     name="pix-confirmation-confirm"
                     data-testid="pix-confirmation-confirm-button"

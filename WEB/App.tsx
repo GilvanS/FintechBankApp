@@ -11,6 +11,8 @@ import { AuthContext } from './context/AuthContext';
 import DemoBanner from './components/DemoBanner';
 import { initializeMockUsers } from './services/api';
 import { DialogProvider } from './contexts/GlobalDialogContext';
+import { AppStateProvider } from './contexts/AppStateContext';
+import Onboarding from './components/Onboarding';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 
@@ -87,19 +89,15 @@ function App() {
     // 'view' kept only for Dashboard's internal admin sub-view check (topLevelView === 'admin')
     const [view, setView] = useState('');
     const navigate = useNavigate();
+    const [showOnboarding, setShowOnboarding] = useState(!localStorage.getItem('has_seen_onboarding'));
+
+    const handleOnboardingComplete = () => {
+        localStorage.setItem('has_seen_onboarding', 'true');
+        setShowOnboarding(false);
+    };
 
     useEffect(() => {
         initializeMockUsers();
-    }, []);
-
-    // Aplicar tema no boot — padrao midnight, respeita preferencia salva
-    useEffect(() => {
-        const savedTheme = localStorage.getItem('volt_theme') || 'midnight';
-        if (savedTheme === 'midnight') {
-            document.body.classList.add('theme-midnight');
-        } else {
-            document.body.classList.remove('theme-midnight');
-        }
     }, []);
 
 
@@ -114,6 +112,8 @@ function App() {
         setUser(null);
         navigate('/');
     };
+
+
 
     const handleUpdateUser = useCallback((updatedUserData: Partial<Omit<User, 'password'>>) => {
         setUser(prevUser => {
@@ -146,48 +146,54 @@ function App() {
 
     return (
         <AuthContext.Provider value={authContextValue}>
-            <DialogProvider>
-                <div className="h-screen w-screen bg-[#0a0a0a] font-sans overflow-hidden flex items-center justify-center">
-                <div className="w-full h-full md:max-w-md md:h-[90vh] md:max-h-[850px] md:border-8 md:border-[#1a1a1a] md:rounded-[2.5rem] overflow-hidden relative shadow-2xl bg-volt-yellow transform">
-                    <DemoBanner />
-                    <Routes>
-                        <Route path="/" element={
-                            <PreLoginDashboard
-                                onNavigateToLogin={() => navigate('/login')}
-                                onNavigateToSignUp={() => navigate('/signup')}
-                            />
-                        } />
-                        <Route path="/login" element={
-                            <Login
-                                onNavigateToSignUp={() => navigate('/signup')}
-                                onNavigateToPreLogin={() => navigate('/')}
-                                onNavigateToResetPassword={() => navigate('/reset-password')}
-                            />
-                        } />
-                        <Route path="/signup" element={
-                            <SignUp
-                                onSignUpSuccess={() => navigate('/login')}
-                                onNavigateToLogin={() => navigate('/login')}
-                            />
-                        } />
-                        <Route path="/reset-password" element={
-                            <ResetPassword
-                                onResetSuccess={() => navigate('/login')}
-                                onNavigateToLogin={() => navigate('/login')}
-                            />
-                        } />
-                        <Route path="/dashboard" element={
-                            <ProtectedRoute>
-                                <Suspense fallback={<div className="h-full bg-volt-yellow flex items-center justify-center"><span className="text-volt-black text-xl font-black">Carregando...</span></div>}>
-                                    <Dashboard />
-                                </Suspense>
-                            </ProtectedRoute>
-                        } />
-                        <Route path="*" element={<Navigate to="/" replace />} />
-                    </Routes>
-                </div>
-                </div>
-            </DialogProvider>
+            <AppStateProvider>
+                <DialogProvider>
+                    <div className="h-screen w-screen bg-volt-dark font-sans overflow-hidden flex items-center justify-center">
+                    <div className="w-full h-full md:max-w-md md:border-x-8 md:border-[#1a1a1a] overflow-hidden relative shadow-2xl bg-volt-dark">
+                        <DemoBanner />
+                        {showOnboarding ? (
+                            <Onboarding onComplete={handleOnboardingComplete} />
+                        ) : (
+                            <Routes>
+                                <Route path="/" element={
+                                    <PreLoginDashboard
+                                        onNavigateToLogin={() => navigate('/login')}
+                                        onNavigateToSignUp={() => navigate('/signup')}
+                                    />
+                                } />
+                            <Route path="/login" element={
+                                <Login
+                                    onNavigateToSignUp={() => navigate('/signup')}
+                                    onNavigateToPreLogin={() => navigate('/')}
+                                    onNavigateToResetPassword={() => navigate('/reset-password')}
+                                />
+                            } />
+                            <Route path="/signup" element={
+                                <SignUp
+                                    onSignUpSuccess={() => navigate('/login')}
+                                    onNavigateToLogin={() => navigate('/login')}
+                                />
+                            } />
+                            <Route path="/reset-password" element={
+                                <ResetPassword
+                                    onResetSuccess={() => navigate('/login')}
+                                    onNavigateToLogin={() => navigate('/login')}
+                                />
+                            } />
+                            <Route path="/dashboard" element={
+                                <ProtectedRoute>
+                                    <Suspense fallback={<div className="h-full bg-volt-yellow flex items-center justify-center"><span className="text-volt-black text-xl font-black">Carregando...</span></div>}>
+                                        <Dashboard />
+                                    </Suspense>
+                                </ProtectedRoute>
+                            } />
+                            <Route path="*" element={<Navigate to="/" replace />} />
+                        </Routes>
+                        )}
+                    </div>
+                    </div>
+                </DialogProvider>
+            </AppStateProvider>
         </AuthContext.Provider>
     );
 };

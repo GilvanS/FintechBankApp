@@ -282,6 +282,13 @@ body.theme-midnight .bg-volt-surface-high {
     border-radius: 0.75rem !important;
 }
 
+/* Override bg pastel amarelo → superfície escura no midnight */
+body.theme-midnight .bg-\[\#FFED86\] {
+    background-color: #201f1f !important;
+    color: #e5e2e1 !important;
+    border-color: #2a2a2a !important;
+}
+
 /* Overrides de classes padrão HTML no midnight */
 body.theme-midnight .bg-white        { background-color: #1c1b1b !important; border-color: #2a2a2a !important; }
 body.theme-midnight .bg-gray-100     { background-color: #131313 !important; border-color: #201f1f !important; }
@@ -349,11 +356,20 @@ body.theme-midnight nav {
 }
 body.theme-midnight nav button * { color: #b9cbbc !important; }
 
-/* Tab ativa midnight */
+/* Tab ativa midnight — pill sólido neon */
 body.theme-midnight nav span.absolute {
-    background-color: rgba(0, 255, 157, 0.1) !important;
-    border: 1px solid rgba(0, 255, 157, 0.2) !important;
-    box-shadow: none !important;
+    background-color: #00ff9d !important;
+    border: none !important;
+    box-shadow: 0 0 15px rgba(0, 255, 157, 0.3) !important;
+}
+
+/* Texto/ícone dentro da tab ativa = preto (contraste no fundo verde) */
+body.theme-midnight nav span.absolute ~ div,
+body.theme-midnight nav span.absolute ~ div *,
+body.theme-midnight nav span.absolute ~ span {
+    color: #0c0c0c !important;
+    text-shadow: none !important;
+    filter: none !important;
 }
 
 /* Inputs — midnight */
@@ -380,14 +396,7 @@ body.theme-midnight textarea:focus {
     background-color: #2a2a2a !important;
 }
 
-/* Input geral midnight */
-body.theme-midnight input:focus,
-body.theme-midnight select:focus,
-body.theme-midnight textarea:focus {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(0, 255, 157, 0.25);
-    border-color: #00ff9d;
-}
+
 
 body.theme-midnight ::placeholder {
     color: #6b7280 !important;
