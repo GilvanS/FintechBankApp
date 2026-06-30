@@ -745,13 +745,6 @@ const Dashboard: React.FC = () => {
                     transactions={user.transactions} 
                 />
             )}
-            {isAiRecurringModalOpen && (
-                <AiRecurringBillModal 
-                    isOpen={isAiRecurringModalOpen} 
-                    onClose={() => setAiRecurringModalOpen(false)} 
-                    transactions={user.transactions} 
-                />
-            )}
             {isAiModalOpen && (
                 <AiAssistantModal 
                     isOpen={isAiModalOpen} 
