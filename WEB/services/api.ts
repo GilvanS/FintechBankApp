@@ -564,6 +564,27 @@ export const getProducts = async (): Promise<{ success: boolean; products?: Purc
   }
 };
 
+export interface CheckoutPayload {
+  items: { productId: string; quantity: number }[];
+  paymentMethod: 'debit' | 'credit';
+  cashbackUsed?: number;
+  installments?: number;
+  pin: string;
+  interestRate?: number;
+}
+
+export const checkout = async (payload: CheckoutPayload): Promise<{ success: boolean; message: string; purchase?: any }> => {
+  try {
+    const result = await apiCall<{ success: boolean; message: string; purchase?: any }>('/shop/checkout', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao realizar checkout' };
+  }
+};
+
 // ── Admin Billing Mock (issue #42) ──────────────────────────────────────────
 
 export const adminSeedTestScenario = async (

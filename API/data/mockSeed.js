@@ -45,6 +45,7 @@ const fallback = {
     }
   ],
   products: [
+    { id: 'prod-pet', name: 'Plano Pet Premium', description: 'Cobertura completa para o seu pet. Consultas, exames, vacinas e emergencias 24h em toda a rede credenciada.', price: 99.90, imageUrl: 'https://images.pexels.com/photos/245035/pexels-photo-245035.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
     { id: 'prod-1',  name: 'Smartphone Fintech X', description: 'O mais novo smartphone com integracao total ao nosso ecossistema. Camera de 108MP, 256GB de armazenamento e tela Super AMOLED.', price: 3999.90, imageUrl: 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
     { id: 'prod-2',  name: 'Fone de Ouvido Bass+', description: 'Cancelamento de ruido ativo, 30 horas de bateria e som de alta fidelidade para voce curtir suas musicas e podcasts.', price: 799.00, imageUrl: 'https://images.pexels.com/photos/3587478/pexels-photo-3587478.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
     { id: 'prod-3',  name: 'Smartwatch Connect', description: 'Monitore sua saude, receba notificacoes e pague por aproximacao com seu novo smartwatch. Bateria para 7 dias.', price: 1499.90, imageUrl: 'https://images.pexels.com/photos/110471/pexels-photo-110471.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },

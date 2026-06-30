@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShoppingBag, Sparkles, Tag, ChevronRight, X, CheckCircle2, 
@@ -6,6 +6,7 @@ import {
   Layers, ShoppingCart, Sparkle
 } from 'lucide-react';
 import { Transaction } from '../types';
+import { getProducts, checkout } from '../services/api';
 
 interface ShopViewProps {
   accountBalance: number;
@@ -61,91 +62,44 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
     return valInBRL.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
-  const products: Product[] = [
-    {
-      id: 'prod_1',
-      name: 'Smartphone Fintech X',
-      price: 3999.90,
-      cashback: '8%',
-      category: 'Eletrônicos',
-      image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&q=80&w=600',
-      description: 'O smartphone mais inteligente para suas finanças. Tela OLED de 120Hz, processador de última geração e segurança bancária por hardware integrada.',
-    },
-    {
-      id: 'prod_2',
-      name: 'Momentum Pro Camera',
-      price: 1299.00,
-      cashback: '6%',
-      category: 'Fotografia',
-      image: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&q=80&w=600',
-      description: 'Capture todos os seus momentos inesquecíveis em resolução 4K com o sensor ultra-sensível e autofoco inteligente baseado em inteligência artificial.',
-    },
-    {
-      id: 'prod_3',
-      name: 'AeroView 4K Drone',
-      price: 799.00,
-      cashback: '10%',
-      category: 'Drones',
-      image: 'https://images.unsplash.com/photo-1527977966376-1c8408f9f108?auto=format&fit=crop&q=80&w=600',
-      description: 'Estabilidade perfeita e transmissão em tempo real. Voe alto e grave takes cinemáticos incríveis com facilidade de controle automático.',
-    },
-    {
-      id: 'prod_4',
-      name: 'ErgoFlex Office Chair',
-      price: 350.00,
-      cashback: '5%',
-      category: 'Móveis',
-      image: 'https://images.unsplash.com/photo-1505797149-43b0069ec26b?auto=format&fit=crop&q=80&w=600',
-      description: 'Design ergonômico premiado para longas horas de produtividade ou jogos. Ajuste lombar dinâmico e materiais respiráveis de alta qualidade.',
-    },
-    {
-      id: 'prod_5',
-      name: 'Audeze Pro Headphones',
-      price: 499.00,
-      cashback: '12%',
-      category: 'Áudio',
-      image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600',
-      description: 'Áudio de estúdio de alta fidelidade e cancelamento de ruído ativo inteligente. Experimente cada nota com perfeição e imersão completa.',
-    },
-    {
-      id: 'prod_6',
-      name: 'Minimalist Desk Lamp',
-      price: 75.00,
-      cashback: '4%',
-      category: 'Iluminação',
-      image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&q=80&w=600',
-      description: 'Luminária minimalista com ajuste de temperatura de cor inteligente e base de carregamento rápido sem fio integrada para seu smartphone.',
-    },
-    {
-      id: 'prod_7',
-      name: 'Fone de Ouvido Bass+',
-      price: 199.00,
-      cashback: '10%',
-      category: 'Áudio',
-      image: 'https://images.unsplash.com/photo-1484704849700-f032a568e944?auto=format&fit=crop&q=80&w=600',
-      description: 'Graves profundos e bateria que dura a semana toda. Ideal para treinos intensos com proteção IPX7 contra água e suor.',
-    },
-    {
-      id: 'prod_8',
-      name: 'Apex Smartwatch Gen 2',
-      price: 279.00,
-      cashback: '7%',
-      category: 'Acessórios',
-      image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600',
-      description: 'Monitore seus batimentos, sono e exercícios diários. Notificações do celular diretamente no seu pulso em uma tela de alta definição.',
-    },
-    {
-      id: 'prod_9',
-      name: 'Jetset Carry-On Luggage',
-      price: 180.00,
-      cashback: '5%',
-      category: 'Viagem',
-      image: 'https://images.unsplash.com/photo-1565026057447-bc90a3dceb87?auto=format&fit=crop&q=80&w=600',
-      description: 'Mala de bordo ultraleve e extremamente resistente. Rodinhas 360 graus ultra-silenciosas e compartimento inteligente de fácil acesso.',
-    },
-  ];
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pin, setPin] = useState('');
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
-  const categories = ['Todos', 'Eletrônicos', 'Áudio', 'Fotografia', 'Acessórios', 'Viagem', 'Móveis'];
+  useEffect(() => {
+    let active = true;
+    const loadProducts = async () => {
+      try {
+        const result = await getProducts();
+        if (result.success && result.products && active) {
+          const mapped: Product[] = result.products.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            cashback: p.cashback || '5%',
+            category: p.category || 'Geral',
+            image: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600',
+            description: p.description || '',
+          }));
+          setProducts(mapped);
+        }
+      } catch (err) {
+        console.error("Error fetching products:", err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    loadProducts();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const categories = useMemo(() => {
+    const cats = new Set(products.map(p => p.category));
+    return ['Todos', ...Array.from(cats)];
+  }, [products]);
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -154,51 +108,68 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
     return matchesSearch && matchesCategory;
   });
 
-  const handleBuyProduct = (e: React.FormEvent) => {
+  const handleBuyProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct) return;
 
+    if (pin.length !== 4) {
+      setCheckoutError('A senha do cartão deve ter exatamente 4 dígitos.');
+      return;
+    }
+
     if (paymentMethod === 'balance' && accountBalance < selectedProduct.price) {
-      alert('Saldo insuficiente para efetuar esta compra.');
+      setCheckoutError('Saldo insuficiente para efetuar esta compra.');
       return;
     }
 
     setCheckoutLoading(true);
+    setCheckoutError(null);
 
-    setTimeout(() => {
-      const now = new Date();
-      const formatNumber = (num: number) => String(num).padStart(2, '0');
-      const formattedDate = `${formatNumber(now.getDate())}/${formatNumber(now.getMonth() + 1)}/${now.getFullYear()}`;
-      
-      const weekdays = [
-        'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'
-      ];
+    try {
+      const response = await checkout({
+        items: [{ productId: selectedProduct.id, quantity: 1 }],
+        paymentMethod: paymentMethod === 'balance' ? 'debit' : 'credit',
+        cashbackUsed: 0,
+        installments: paymentMethod === 'credit' ? installments : 1,
+        pin: pin,
+      });
 
-      const percentVal = parseFloat(selectedProduct.cashback) / 100;
-      const cashbackEarned = selectedProduct.price * percentVal;
+      if (response.success && response.purchase) {
+        const now = new Date();
+        const formatNumber = (num: number) => String(num).padStart(2, '0');
+        const formattedDate = `${formatNumber(now.getDate())}/${formatNumber(now.getMonth() + 1)}/${now.getFullYear()}`;
+        const weekdays = [
+          'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'
+        ];
 
-      let txTitle = `${selectedProduct.name} adquirido`;
-      if (paymentMethod === 'credit') {
-        txTitle = `${selectedProduct.name} (Crédito ${installments}x)`;
+        const percentVal = parseFloat(selectedProduct.cashback) / 100 || 0.05;
+        const cashbackEarned = selectedProduct.price * percentVal;
+
+        const serverTx = response.purchase.transaction || {};
+        const newTx: Transaction = {
+          id: serverTx.id || Math.random().toString(36).substring(2, 11),
+          title: serverTx.description || response.purchase.productsDescription || `${selectedProduct.name} adquirido`,
+          amount: -response.purchase.totalAmount,
+          type: 'expense',
+          category: 'outros',
+          date: serverTx.date || now.toISOString(),
+          formattedDate: `${weekdays[now.getDay()]} • ${formattedDate}`,
+          time: `${formatNumber(now.getHours())}:${formatNumber(now.getMinutes())}`
+        };
+
+        // Complete purchase
+        onPurchaseComplete(newTx, -response.purchase.totalAmount);
+        setCashbackBalance(prev => prev + cashbackEarned);
+        setPurchaseSuccess(true);
+        setPin(''); // Limpa a senha inserida
+      } else {
+        setCheckoutError(response.message || 'Falha ao processar checkout.');
       }
-
-      const newTx: Transaction = {
-        id: Math.random().toString(36).substring(2, 11),
-        title: txTitle,
-        amount: -selectedProduct.price,
-        type: 'expense',
-        category: 'outros',
-        date: now.toISOString(),
-        formattedDate: `${weekdays[now.getDay()]} • ${formattedDate}`,
-        time: `${formatNumber(now.getHours())}:${formatNumber(now.getMinutes())}`
-      };
-
-      // Complete purchase
-      onPurchaseComplete(newTx, -selectedProduct.price);
-      setCashbackBalance(prev => prev + cashbackEarned);
+    } catch (err: any) {
+      setCheckoutError(err.message || 'Erro ao efetuar checkout.');
+    } finally {
       setCheckoutLoading(false);
-      setPurchaseSuccess(true);
-    }, 1500);
+    }
   };
 
   const handlePetSubscribe = () => {
@@ -287,6 +258,15 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
     setCashbackBalance(0);
     alert(`Sucesso! ${formatCurrency(redeemAmount)} de cashback foi transferido e creditado no seu saldo principal.`);
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 space-y-4">
+        <div className="w-8 h-8 border-4 border-[#00ff9d] border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">Carregando ofertas...</p>
+      </div>
+    );
+  }
 
   const isMidnight = theme === 'midnight';
 
@@ -641,6 +621,35 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                             </option>
                           ))}
                         </select>
+                      </div>
+                    )}
+
+                    {/* PIN input field */}
+                    <div className="space-y-1.5 mt-3">
+                      <label className="text-[10px] font-extrabold uppercase text-on-surface-variant block tracking-wider pl-1">
+                        Senha de 4 dígitos do Cartão
+                      </label>
+                      <input
+                        type="password"
+                        maxLength={4}
+                        value={pin}
+                        onChange={(e) => {
+                          setPin(e.target.value.replace(/\D/g, ''));
+                          setCheckoutError(null);
+                        }}
+                        required
+                        placeholder="••••"
+                        className={`w-full p-2.5 text-center text-lg rounded-xl border focus:outline-none focus:border-[#00ff9d] tracking-[0.5em] ${
+                          isMidnight ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-black/10'
+                        }`}
+                      />
+                    </div>
+
+                    {/* Error display */}
+                    {checkoutError && (
+                      <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs mt-2">
+                        <AlertTriangle size={14} className="shrink-0" />
+                        <span className="font-semibold">{checkoutError}</span>
                       </div>
                     )}
 
