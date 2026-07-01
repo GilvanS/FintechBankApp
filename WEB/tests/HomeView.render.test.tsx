@@ -9,6 +9,14 @@ vi.mock('../contexts/GlobalDialogContext', () => ({
     }),
 }));
 
+vi.mock('../properties.json', () => ({
+    default: {
+        volt_show_onboarding_welcome: true,
+        volt_show_home_welcome_message: true,
+        volt_show_home_stories_status: true
+    }
+}));
+
 import HomeView from '../components/HomeView';
 import { User } from '../types';
 
