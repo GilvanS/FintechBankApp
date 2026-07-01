@@ -1754,21 +1754,19 @@ const HomeView: React.FC<HomeViewProps> = ({
           </button>
           <button
             onClick={() => showDialog({ title: 'Tendências e Previsões', message: 'Role a tela para ver as Tendências de Gastos dos últimos 6 meses com inteligência preditiva Volt.' })}
-            className={`col-span-2 p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-20 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
+            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
               isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,255,157,0.2)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
             }`}
           >
-            <div className="flex justify-between items-center w-full">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🔮</span>
-                <div>
-                  <span className="text-[11px] font-black uppercase tracking-tight block">Tendências e Previsões</span>
-                  <span className={`text-[9px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Inteligência Preditiva</span>
-                </div>
-              </div>
-              <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+            <div className="flex justify-between items-start w-full">
+              <span className="text-lg">🔮</span>
+              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
                 isMidnight ? 'text-[#00ff9d] bg-[#00ff9d]/10' : 'text-[#00c97b] bg-[#00c97b]/10'
               }`}>Volt Forecast™</span>
+            </div>
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-tight block">Tendências e Previsões</span>
+              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Inteligência Preditiva</span>
             </div>
           </button>
         </div>
