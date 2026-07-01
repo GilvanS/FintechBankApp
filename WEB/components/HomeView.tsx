@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus } from 'lucide-react';
+import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus, Mic } from 'lucide-react';
 
 import type { User, Story } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
@@ -819,6 +819,46 @@ const HomeView: React.FC<HomeViewProps> = ({
         }`}>
           <TrendingUp size={14} className="stroke-[3]" />
           <span>+2.5% este mês (Rendimento 110% CDI)</span>
+        </div>
+
+        <div className={`grid grid-cols-3 gap-1.5 mt-4 pt-4 ${isMidnight ? 'border-t border-white/5' : 'border-t-2 border-black'}`}>
+          <button
+            onClick={() => onNavigate('pix')}
+            className={`py-2 px-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer ${
+              isMidnight
+                ? 'bg-volt-green text-black'
+                : 'bg-[#A2FF00] text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
+            }`}
+          >
+            <Bolt size={12} className="fill-current shrink-0" />
+            Enviar Pix
+          </button>
+          <button
+            onClick={() => showDialog({ title: 'Depositar', message: 'Depósito via boleto ou TED estará disponível em breve.' })}
+            className={`py-2 px-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer ${
+              isMidnight
+                ? 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
+                : 'bg-[#FFED86] text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
+            }`}
+          >
+            <Sparkles size={12} className={isMidnight ? 'text-volt-green shrink-0' : 'shrink-0'} />
+            Depositar
+          </button>
+          <button
+            onClick={() => showDialog({ title: 'Lançar por Voz', message: 'Lançamento de transações com IA por voz está em desenvolvimento.' })}
+            className={`relative py-2 px-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer ${
+              isMidnight
+                ? 'bg-white/5 border border-white/10 text-volt-green hover:bg-white/10'
+                : 'bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
+            }`}
+          >
+            <span className="absolute -top-1 -right-1 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-volt-green opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-volt-green"></span>
+            </span>
+            <Mic size={12} className={`shrink-0 ${isMidnight ? 'text-volt-green' : 'text-[#00c97b]'}`} />
+            Voz
+          </button>
         </div>
       </motion.section>
 
