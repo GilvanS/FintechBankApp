@@ -4,6 +4,7 @@ import { Shield, HelpCircle, Info, Settings, Palette, Check, Edit2, Sun, Moon, F
 import { useAuth } from '../context/AuthContext';
 import { AppVersion } from '../utils/AppVersion';
 import { useDialog } from '../contexts/GlobalDialogContext';
+import properties from '../properties.json';
 
 interface ProfileProps {
     onNavigate: (view: string) => void;
@@ -60,13 +61,16 @@ export default function Profile({ onNavigate }: ProfileProps) {
   });
 
   const [showOnboardingWelcome, setShowOnboardingWelcome] = useState<boolean>(() => {
-    return localStorage.getItem('volt_show_onboarding_welcome') !== 'false';
+    const localVal = localStorage.getItem('volt_show_onboarding_welcome');
+    return localVal !== null ? localVal !== 'false' : properties.volt_show_onboarding_welcome !== false;
   });
   const [showHomeWelcomeMessage, setShowHomeWelcomeMessage] = useState<boolean>(() => {
-    return localStorage.getItem('volt_show_home_welcome_message') !== 'false';
+    const localVal = localStorage.getItem('volt_show_home_welcome_message');
+    return localVal !== null ? localVal !== 'false' : properties.volt_show_home_welcome_message !== false;
   });
   const [showHomeStoriesStatus, setShowHomeStoriesStatus] = useState<boolean>(() => {
-    return localStorage.getItem('volt_show_home_stories_status') !== 'false';
+    const localVal = localStorage.getItem('volt_show_home_stories_status');
+    return localVal !== null ? localVal !== 'false' : properties.volt_show_home_stories_status !== false;
   });
   
   const [showVersionPopup, setShowVersionPopup] = useState(false);

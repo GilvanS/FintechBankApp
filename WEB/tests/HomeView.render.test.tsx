@@ -3,6 +3,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
+vi.mock('../contexts/GlobalDialogContext', () => ({
+    useDialog: () => ({
+        showDialog: vi.fn(),
+    }),
+}));
+
 import HomeView from '../components/HomeView';
 import { User } from '../types';
 

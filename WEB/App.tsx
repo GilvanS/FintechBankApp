@@ -13,6 +13,7 @@ import { initializeMockUsers } from './services/api';
 import { DialogProvider } from './contexts/GlobalDialogContext';
 import { AppStateProvider } from './contexts/AppStateContext';
 import Onboarding from './components/Onboarding';
+import properties from './properties.json';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 
@@ -90,7 +91,10 @@ function App() {
     const [view, setView] = useState('');
     const navigate = useNavigate();
     const [showOnboarding, setShowOnboarding] = useState(() => {
-        const showProp = localStorage.getItem('volt_show_onboarding_welcome') !== 'false';
+        const localProp = localStorage.getItem('volt_show_onboarding_welcome');
+        const showProp = localProp !== null 
+            ? localProp !== 'false' 
+            : (properties.volt_show_onboarding_welcome !== false);
         const seen = localStorage.getItem('has_seen_onboarding') === 'true';
         return showProp && !seen;
     });

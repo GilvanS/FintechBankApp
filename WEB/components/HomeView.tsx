@@ -10,6 +10,7 @@ import BiometricModal from './BiometricModal';
 import WeeklyStreak from './WeeklyStreak';
 import StoryHighlights from './StoryHighlights';
 import StoryViewer from './StoryViewer';
+import properties from '../properties.json';
 
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -73,8 +74,15 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [isIntelligenceMenuOpen, setIsIntelligenceMenuOpen] = useState(false);
   const [isViewingStories, setIsViewingStories] = useState(false);
 
-  const showWelcomeMessage = localStorage.getItem('volt_show_home_welcome_message') !== 'false';
-  const showStoriesStatus = localStorage.getItem('volt_show_home_stories_status') !== 'false';
+  const showWelcomeMessage = (() => {
+    const localVal = localStorage.getItem('volt_show_home_welcome_message');
+    return localVal !== null ? localVal !== 'false' : properties.volt_show_home_welcome_message !== false;
+  })();
+
+  const showStoriesStatus = (() => {
+    const localVal = localStorage.getItem('volt_show_home_stories_status');
+    return localVal !== null ? localVal !== 'false' : properties.volt_show_home_stories_status !== false;
+  })();
   
   const toggleBalanceVisibility = () => {
       if (biometricEnabled && !balanceIsVisible) {

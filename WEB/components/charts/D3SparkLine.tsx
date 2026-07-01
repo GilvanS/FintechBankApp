@@ -97,7 +97,8 @@ export default function D3SparkLine({ data, theme, width = '100%', height = '100
       .attr("d", line);
 
     // Animate line
-    const totalLength = (pathLine.node() as SVGPathElement).getTotalLength();
+    const pathNode = pathLine.node() as SVGPathElement;
+    const totalLength = typeof pathNode.getTotalLength === 'function' ? pathNode.getTotalLength() : 100;
 
     pathLine
       .attr("stroke-dasharray", `${totalLength} ${totalLength}`)
