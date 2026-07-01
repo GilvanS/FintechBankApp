@@ -649,6 +649,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   checked={showOnboardingWelcome} 
                   onChange={(e) => handleToggleOnboardingWelcome(e.target.checked)}
                   className="sr-only peer" 
+                  data-testid="toggle-onboarding"
                 />
                 <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
               </label>
@@ -674,6 +675,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   checked={showHomeWelcomeMessage} 
                   onChange={(e) => handleToggleHomeWelcomeMessage(e.target.checked)}
                   className="sr-only peer" 
+                  data-testid="toggle-welcome"
                 />
                 <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
               </label>
@@ -699,6 +701,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   checked={showHomeStoriesStatus} 
                   onChange={(e) => handleToggleHomeStoriesStatus(e.target.checked)}
                   className="sr-only peer" 
+                  data-testid="toggle-stories"
                 />
                 <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
               </label>
