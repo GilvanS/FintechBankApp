@@ -531,7 +531,16 @@ const Dashboard: React.FC = () => {
 
         switch (currentView) {
             case 'home':
-                return <HomeView user={user!} onNavigate={handleNavigate} theme={theme} />;
+                return (
+                    <HomeView 
+                        user={user!} 
+                        onNavigate={handleNavigate} 
+                        theme={theme} 
+                        setIsFinancialHealthOpen={setFinancialHealthOpen}
+                        setIsAiRecurringModalOpen={setAiRecurringModalOpen}
+                        setActiveDrawer={setActiveDrawer}
+                    />
+                );
             case 'cards':
                 return (
                     <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar flex justify-center ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>

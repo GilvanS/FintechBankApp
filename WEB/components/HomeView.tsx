@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { UserCircle2 as UserIcon, Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw } from 'lucide-react';
+import { UserCircle2 as UserIcon, Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X } from 'lucide-react';
 
 import type { User } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
@@ -28,13 +28,24 @@ interface HomeViewProps {
     user: User;
     onNavigate: (view: string) => void;
     theme?: 'midnight' | 'yellow';
+    setIsFinancialHealthOpen?: (open: boolean) => void;
+    setIsAiRecurringModalOpen?: (open: boolean) => void;
+    setActiveDrawer?: (drawer: 'balance' | 'analytics' | 'insights' | 'trends' | null) => void;
 }
 
-const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, theme = 'midnight' }) => {
+const HomeView: React.FC<HomeViewProps> = ({ 
+  user, 
+  onNavigate, 
+  theme = 'midnight',
+  setIsFinancialHealthOpen,
+  setIsAiRecurringModalOpen,
+  setActiveDrawer
+}) => {
   const { showDialog } = useDialog();
   const biometricEnabled = localStorage.getItem('volt_biometric_enabled') === 'true';
   const [balanceIsVisible, setIsBalanceVisible] = useState(!biometricEnabled);
   const [isBiometricOpen, setIsBiometricOpen] = useState(false);
+  const [isIntelligenceMenuOpen, setIsIntelligenceMenuOpen] = useState(false);
   
   const toggleBalanceVisibility = () => {
       if (biometricEnabled && !balanceIsVisible) {
@@ -1916,6 +1927,181 @@ const HomeView: React.FC<HomeViewProps> = ({ user, onNavigate, theme = 'midnight
           </div>
         )}
       </AnimatePresence>
+
+      {/* Floating Action Menu for Intelligence Hub & Modals */}
+      <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-3 pointer-events-none">
+        <AnimatePresence>
+          {isIntelligenceMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 10 }}
+              className={`p-4 rounded-3xl border-4 border-black text-white w-72 flex flex-col gap-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] pointer-events-auto ${
+                isMidnight
+                  ? 'bg-zinc-950/95 text-white border-zinc-800'
+                  : 'bg-white text-black border-black'
+              }`}
+            >
+              <div className="flex justify-between items-center pb-2 border-b-2 border-dashed border-black/10 dark:border-white/10">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">🔮</span>
+                  <span className={`text-[11px] font-black uppercase tracking-wider ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>
+                    Central de Painéis Volt
+                  </span>
+                </div>
+                <button
+                  onClick={() => setIsIntelligenceMenuOpen(false)}
+                  className={`p-1 rounded-full border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer text-xs ${
+                    isMidnight ? 'text-zinc-400' : 'text-zinc-700'
+                  }`}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-2 max-h-[320px] overflow-y-auto pr-1 scrollbar-none">
+                {/* 1. Saúde Financeira IA */}
+                {setIsFinancialHealthOpen && (
+                  <button
+                    onClick={() => {
+                      setIsFinancialHealthOpen(true);
+                      setIsIntelligenceMenuOpen(false);
+                    }}
+                    className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-emerald-50 hover:bg-emerald-100 text-black'
+                    }`}
+                  >
+                    <span className="text-xl shrink-0">🏥</span>
+                    <div className="min-w-0 flex-1">
+                      <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Saúde Financeira IA</h5>
+                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Diagnóstico inteligente Volt IA</p>
+                    </div>
+                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                  </button>
+                )}
+
+                {/* 2. Otimizador de Contas IA */}
+                {setIsAiRecurringModalOpen && (
+                  <button
+                    onClick={() => {
+                      setIsAiRecurringModalOpen(true);
+                      setIsIntelligenceMenuOpen(false);
+                    }}
+                    className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-indigo-50 hover:bg-indigo-100 text-black'
+                    }`}
+                  >
+                    <span className="text-xl shrink-0">🔄</span>
+                    <div className="min-w-0 flex-1">
+                      <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Assinaturas IA</h5>
+                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Detecção automática de contas</p>
+                    </div>
+                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                  </button>
+                )}
+
+                {/* 3. Evolução do Saldo */}
+                {setActiveDrawer && (
+                  <button
+                    onClick={() => {
+                      setActiveDrawer('balance');
+                      setIsIntelligenceMenuOpen(false);
+                    }}
+                    className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-white hover:bg-gray-50 text-black'
+                    }`}
+                  >
+                    <span className="text-xl shrink-0">📈</span>
+                    <div className="min-w-0 flex-1">
+                      <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Evolução do Saldo</h5>
+                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Histórico financeiro (30 dias)</p>
+                    </div>
+                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                  </button>
+                )}
+
+                {/* 4. Análise de Gastos */}
+                {setActiveDrawer && (
+                  <button
+                    onClick={() => {
+                      setActiveDrawer('analytics');
+                      setIsIntelligenceMenuOpen(false);
+                    }}
+                    className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-white hover:bg-gray-50 text-black'
+                    }`}
+                  >
+                    <span className="text-xl shrink-0">📊</span>
+                    <div className="min-w-0 flex-1">
+                      <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Análise de Gastos</h5>
+                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Consolidado semestral de despesas</p>
+                    </div>
+                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                  </button>
+                )}
+
+                {/* 5. Insights de Gastos */}
+                {setActiveDrawer && (
+                  <button
+                    onClick={() => {
+                      setActiveDrawer('insights');
+                      setIsIntelligenceMenuOpen(false);
+                    }}
+                    className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-white hover:bg-gray-50 text-black'
+                    }`}
+                  >
+                    <span className="text-xl shrink-0">💡</span>
+                    <div className="min-w-0 flex-1">
+                      <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Insights de Gastos</h5>
+                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Uso por categoria e alertas</p>
+                    </div>
+                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                  </button>
+                )}
+
+                {/* 6. Tendências de Gastos */}
+                {setActiveDrawer && (
+                  <button
+                    onClick={() => {
+                      setActiveDrawer('trends');
+                      setIsIntelligenceMenuOpen(false);
+                    }}
+                    className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-white hover:bg-gray-50 text-black'
+                    }`}
+                  >
+                    <span className="text-xl shrink-0">🔮</span>
+                    <div className="min-w-0 flex-1">
+                      <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Tendências e Previsões</h5>
+                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Volt Forecast™ Inteligência Preditiva</p>
+                    </div>
+                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Pulsing Toggle Button */}
+        <motion.button
+          onClick={() => setIsIntelligenceMenuOpen(prev => !prev)}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          className="w-14 h-14 rounded-full border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer pointer-events-auto bg-[#00ff9d] text-black relative group"
+        >
+          {/* Pulsing aura */}
+          <span className="absolute inset-0 rounded-full bg-[#00ff9d] opacity-20 group-hover:animate-ping pointer-events-none" />
+          
+          <motion.div
+            animate={{ rotate: isIntelligenceMenuOpen ? 45 : 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+          >
+            {isIntelligenceMenuOpen ? <X size={22} className="stroke-[3]" /> : <Brain size={22} className="stroke-[2.5]" />}
+          </motion.div>
+        </motion.button>
+      </div>
     </motion.div>
   );
 };
