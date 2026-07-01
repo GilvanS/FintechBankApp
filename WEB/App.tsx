@@ -89,7 +89,11 @@ function App() {
     // 'view' kept only for Dashboard's internal admin sub-view check (topLevelView === 'admin')
     const [view, setView] = useState('');
     const navigate = useNavigate();
-    const [showOnboarding, setShowOnboarding] = useState(!localStorage.getItem('has_seen_onboarding'));
+    const [showOnboarding, setShowOnboarding] = useState(() => {
+        const showProp = localStorage.getItem('volt_show_onboarding_welcome') !== 'false';
+        const seen = localStorage.getItem('has_seen_onboarding') === 'true';
+        return showProp && !seen;
+    });
 
     const handleOnboardingComplete = () => {
         localStorage.setItem('has_seen_onboarding', 'true');

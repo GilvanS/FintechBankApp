@@ -58,6 +58,16 @@ export default function Profile({ onNavigate }: ProfileProps) {
   const [smartAlertsEndTime, setSmartAlertsEndTime] = useState<string>(() => {
     return localStorage.getItem('volt_smart_alerts_end_time') || '06:00';
   });
+
+  const [showOnboardingWelcome, setShowOnboardingWelcome] = useState<boolean>(() => {
+    return localStorage.getItem('volt_show_onboarding_welcome') !== 'false';
+  });
+  const [showHomeWelcomeMessage, setShowHomeWelcomeMessage] = useState<boolean>(() => {
+    return localStorage.getItem('volt_show_home_welcome_message') !== 'false';
+  });
+  const [showHomeStoriesStatus, setShowHomeStoriesStatus] = useState<boolean>(() => {
+    return localStorage.getItem('volt_show_home_stories_status') !== 'false';
+  });
   
   const [showVersionPopup, setShowVersionPopup] = useState(false);
 
@@ -132,6 +142,26 @@ export default function Profile({ onNavigate }: ProfileProps) {
     setBiometricEnabled(enabled);
     localStorage.setItem('volt_biometric_enabled', String(enabled));
   }
+
+  const handleToggleOnboardingWelcome = (enabled: boolean) => {
+    setShowOnboardingWelcome(enabled);
+    localStorage.setItem('volt_show_onboarding_welcome', String(enabled));
+    if (enabled) {
+      localStorage.removeItem('has_seen_onboarding');
+    } else {
+      localStorage.setItem('has_seen_onboarding', 'true');
+    }
+  };
+
+  const handleToggleHomeWelcomeMessage = (enabled: boolean) => {
+    setShowHomeWelcomeMessage(enabled);
+    localStorage.setItem('volt_show_home_welcome_message', String(enabled));
+  };
+
+  const handleToggleHomeStoriesStatus = (enabled: boolean) => {
+    setShowHomeStoriesStatus(enabled);
+    localStorage.setItem('volt_show_home_stories_status', String(enabled));
+  };
 
   const settingsList = [
     { title: 'Segurança e Biometria', icon: Shield, desc: 'Configurar senha de app, biometria facial' },
@@ -588,6 +618,91 @@ export default function Profile({ onNavigate }: ProfileProps) {
                 </div>
               </motion.div>
             )}
+          </div>
+        </section>
+
+        {/* Preferências da Tela Inicial (Properties) */}
+        <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center gap-2 text-black dark:text-white">
+            <Sliders size={15} className="text-[#00ff9d] shrink-0" />
+            <h4 className="text-xs font-black uppercase tracking-wider">Preferências da Tela Inicial</h4>
+          </div>
+
+          <div className="space-y-4">
+            {/* Onboarding Welcome Toggle */}
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-[#00ff9d]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#00ff9d]/20 flex items-center justify-center shrink-0 text-[#00ff9d] border-2 border-[#00ff9d]/30">
+                  <Info size={18} />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-black dark:text-white block">Mostrar Onboarding</span>
+                  <span className="text-[10px] text-black/60 dark:text-white/50 block mt-0.5 leading-tight font-bold">
+                    Exibir introdução "Bem-vindo ao Fintech" na inicialização
+                  </span>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+                <input 
+                  type="checkbox" 
+                  checked={showOnboardingWelcome} 
+                  onChange={(e) => handleToggleOnboardingWelcome(e.target.checked)}
+                  className="sr-only peer" 
+                />
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+              </label>
+            </div>
+
+            {/* Home Welcome Message Toggle */}
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-[#00ff9d]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#00ff9d]/20 flex items-center justify-center shrink-0 text-[#00ff9d] border-2 border-[#00ff9d]/30">
+                  <Sliders size={18} />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-black dark:text-white block">Mensagem de Boas-Vindas</span>
+                  <span className="text-[10px] text-black/60 dark:text-white/50 block mt-0.5 leading-tight font-bold">
+                    Exibir saudação "Olá, [Nome]" na aba inicial
+                  </span>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+                <input 
+                  type="checkbox" 
+                  checked={showHomeWelcomeMessage} 
+                  onChange={(e) => handleToggleHomeWelcomeMessage(e.target.checked)}
+                  className="sr-only peer" 
+                />
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+              </label>
+            </div>
+
+            {/* Home Stories/Status Toggle */}
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-[#00ff9d]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#00ff9d]/20 flex items-center justify-center shrink-0 text-[#00ff9d] border-2 border-[#00ff9d]/30">
+                  <Palette size={18} />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-black dark:text-white block">Stories/Status do Home</span>
+                  <span className="text-[10px] text-black/60 dark:text-white/50 block mt-0.5 leading-tight font-bold">
+                    Exibir carrossel de Stories e novidades do Volt Hub
+                  </span>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+                <input 
+                  type="checkbox" 
+                  checked={showHomeStoriesStatus} 
+                  onChange={(e) => handleToggleHomeStoriesStatus(e.target.checked)}
+                  className="sr-only peer" 
+                />
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+              </label>
+            </div>
           </div>
         </section>
 

@@ -1,15 +1,40 @@
 import React, { useState, useMemo } from 'react';
 import { UserCircle2 as UserIcon, Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X } from 'lucide-react';
 
-import type { User } from '../types';
+import type { User, Story } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
 import HomeBanners from './HomeBanners';
 import NewsSection from './NewsSection';
 import ShopOffersBanner from './ShopOffersBanner';
 import BiometricModal from './BiometricModal';
 import WeeklyStreak from './WeeklyStreak';
+import StoryHighlights from './StoryHighlights';
+import StoryViewer from './StoryViewer';
 
 import { motion, AnimatePresence } from 'motion/react';
+
+const MOCK_STORIES: Story[] = [
+  {
+    title: 'App Volt',
+    description: 'Explore uma carteira digital com superpoderes: comandos de voz inteligentes, biometria facial, e análise de gastos para você nunca estourar o orçamento.',
+    icon: '⚡'
+  },
+  {
+    title: 'Chave Pix',
+    description: 'Toque em "Fazer Pix", informe uma chave CPF, E-mail ou celular para enviar dinheiro em segundos, com toda segurança.',
+    icon: '💠'
+  },
+  {
+    title: 'Área Pix',
+    description: 'Cadastre suas chaves Pix Volt e receba transferências instantâneas de qualquer banco de forma gratuita.',
+    icon: '🔑'
+  },
+  {
+    title: 'Pagar Contas',
+    description: 'Automatize o pagamento de boletos e assinaturas mensais sem estresse utilizando o Volt IA Assistant.',
+    icon: '💵'
+  }
+];
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie } from 'recharts';
 import D3SparkLine from './charts/D3SparkLine';
 import D3RadialProgress from './charts/D3RadialProgress';
@@ -46,6 +71,10 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [balanceIsVisible, setIsBalanceVisible] = useState(!biometricEnabled);
   const [isBiometricOpen, setIsBiometricOpen] = useState(false);
   const [isIntelligenceMenuOpen, setIsIntelligenceMenuOpen] = useState(false);
+  const [isViewingStories, setIsViewingStories] = useState(false);
+
+  const showWelcomeMessage = localStorage.getItem('volt_show_home_welcome_message') !== 'false';
+  const showStoriesStatus = localStorage.getItem('volt_show_home_stories_status') !== 'false';
   
   const toggleBalanceVisibility = () => {
       if (biometricEnabled && !balanceIsVisible) {
@@ -672,6 +701,38 @@ const HomeView: React.FC<HomeViewProps> = ({
       animate="show"
       className="space-y-6 pb-24 pt-4 px-4 max-w-md mx-auto"
     >
+      {/* Welcome Message Section */}
+      {showWelcomeMessage && (
+        <motion.div
+          variants={itemVariants}
+          className={`p-4 rounded-2xl border-2 border-black flex items-center justify-between shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${
+            isMidnight ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white text-black border-black'
+          }`}
+        >
+          <div className="space-y-0.5">
+            <h3 className="text-sm font-black uppercase tracking-wider">
+              Olá, {user?.fullName ? user.fullName.split(' ')[0] : 'Cliente'} 👋
+            </h3>
+            <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
+              Seja bem-vindo ao seu Volt Hub!
+            </p>
+          </div>
+          <div className="w-9 h-9 rounded-full bg-[#00ff9d] border-2 border-black flex items-center justify-center font-black text-black text-sm shrink-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            ⚡
+          </div>
+        </motion.div>
+      )}
+
+      {/* Stories/Status Bar Section */}
+      {showStoriesStatus && (
+        <motion.div variants={itemVariants} className="my-1">
+          <StoryHighlights
+            stories={MOCK_STORIES}
+            onSeeAll={() => setIsViewingStories(true)}
+          />
+        </motion.div>
+      )}
+
       {/* Visual Spending Limit Warning Banner */}
       {spendingLimitEnabled && currentMonthSpending > spendingLimitAmount && (
         <motion.div
@@ -2102,6 +2163,12 @@ const HomeView: React.FC<HomeViewProps> = ({
           </motion.div>
         </motion.button>
       </div>
+
+      <AnimatePresence>
+        {isViewingStories && (
+          <StoryViewer stories={MOCK_STORIES} onClose={() => setIsViewingStories(false)} />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
