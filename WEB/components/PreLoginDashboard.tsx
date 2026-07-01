@@ -16,7 +16,7 @@ const features = [
 
 export default function PreLoginDashboard({ onNavigateToLogin, onNavigateToSignUp }: PreLoginDashboardProps) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 gap-8 text-white bg-black">
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 gap-8">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -33,9 +33,9 @@ export default function PreLoginDashboard({ onNavigateToLogin, onNavigateToSignU
         className="grid grid-cols-2 gap-3 w-full max-w-xs"
       >
         {features.map(({ icon: Icon, label }) => (
-          <div key={label} className="bg-zinc-900 border border-white/10 rounded-2xl p-4 flex flex-col items-center gap-2 text-center">
-            <Icon size={20} className="text-[#00ff9d]" />
-            <span className="text-xs font-bold text-gray-300">{label}</span>
+          <div key={label} className="bg-volt-surface rounded-2xl p-4 flex flex-col items-center gap-2 text-center">
+            <Icon size={20} className="text-volt-green" />
+            <span className="text-xs font-bold">{label}</span>
           </div>
         ))}
       </motion.div>
@@ -48,13 +48,13 @@ export default function PreLoginDashboard({ onNavigateToLogin, onNavigateToSignU
       >
         <button 
           onClick={onNavigateToLogin}
-          className="w-full py-3 rounded-xl text-sm font-bold text-center block bg-[#00ff9d] text-black hover:bg-[#00cc7d] transition-colors"
+          className="w-full py-3 rounded-xl text-sm font-bold text-center block bg-volt-green text-black"
         >
           ENTRAR
         </button>
         <button 
           onClick={onNavigateToSignUp}
-          className="w-full py-3 rounded-xl text-sm text-center block border border-white/20 text-white font-bold hover:bg-white/5 transition-colors"
+          className="w-full py-3 rounded-xl text-sm font-bold text-center block btn-secondary"
         >
           CRIAR CONTA
         </button>

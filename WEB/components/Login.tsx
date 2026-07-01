@@ -133,7 +133,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
 
     return (
         <div 
-            className="bg-background-dark text-text-dark h-full flex flex-col justify-between p-6 sm:p-8 test-login-page"
+            className="bg-volt-dark text-white h-full flex flex-col justify-between p-6 sm:p-8 test-login-page"
             id="login-page"
             data-testid="login-page"
             data-cy="login-page"
@@ -143,7 +143,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
             <header id="login-header" data-testid="login-header" data-cy="login-header">
                 <button 
                     onClick={onNavigateToPreLogin} 
-                    className="flex items-center space-x-2 text-subtle-dark hover:text-text-dark test-back-button"
+                    className="flex items-center space-x-2 text-gray-400 hover:text-white test-back-button"
                     id="btn-back"
                     name="back-button"
                     data-testid="login-back-button"
@@ -152,7 +152,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                     aria-label="Voltar"
                     type="button"
                 >
-                    <ArrowLeft className="text-text-dark" size={24} aria-hidden="true" />
+                    <ArrowLeft className="text-white" size={24} aria-hidden="true" />
                 </button>
             </header>
 
@@ -165,9 +165,9 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                 <div className="w-full max-w-sm mx-auto">
                     <div className="text-center mb-10" id="login-header-content" data-testid="login-header-content" data-cy="login-header-content">
                          <div className="flex items-center justify-center space-x-2 mb-4">
-                            <ShieldCheck className="text-primary" size={32} aria-hidden="true" />
+                            <ShieldCheck className="text-volt-green" size={32} aria-hidden="true" />
                             <h1 
-                                className="text-3xl font-bold text-text-dark test-brand cursor-pointer select-none" 
+                                className="text-3xl font-bold text-white test-brand cursor-pointer select-none" 
                                 id="login-brand"
                                 data-testid="login-brand"
                                 data-cy="login-brand"
@@ -176,8 +176,8 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                 VOLT
                             </h1>
                         </div>
-                        <h2 
-                            className="text-2xl font-semibold test-login-title" 
+                        <h2
+                            className="text-2xl font-semibold text-white test-login-title"
                             id="login-title"
                             data-testid="login-title"
                             data-cy="login-title"
@@ -203,7 +203,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                             data-testid="login-field-cpf"
                             data-cy="login-field-cpf"
                         >
-                            <label htmlFor="login-cpf" className="block text-sm font-medium text-subtle-dark mb-1">CPF</label>
+                            <label htmlFor="login-cpf" className="block text-sm font-medium text-gray-400 mb-1">CPF</label>
                             <input
                                 id="login-cpf"
                                 name="cpf"
@@ -217,8 +217,8 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                 }}
                                 placeholder="000.000.000-00"
                                 maxLength={14}
-                                className={`w-full px-4 py-3 bg-surface-dark border-2 rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent test-input-cpf ${
-                                    fieldErrors.cpf ? 'border-red-500 focus:ring-red-500' : 'border-surface-dark'
+                                className={`w-full px-4 py-3 bg-volt-surface border-2 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-cpf ${
+                                    fieldErrors.cpf ? 'border-red-500 focus:ring-red-500' : 'border-volt-surface'
                                 }`}
                                 data-testid="login-input-cpf"
                                 data-cy="login-input-cpf"
@@ -250,11 +250,11 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                             data-cy="login-field-password"
                         >
                             <div className="flex justify-between items-center mb-1">
-                                <label htmlFor="login-password" className="block text-sm font-medium text-subtle-dark">Senha</label>
+                                <label htmlFor="login-password" className="block text-sm font-medium text-gray-400">Senha</label>
                                  <button 
                                     type="button" 
                                     onClick={handlePasswordReset} 
-                                    className="text-sm font-medium text-primary hover:underline test-forgot-password"
+                                    className="text-sm font-medium text-volt-green hover:underline test-forgot-password"
                                     id="btn-forgot-password"
                                     name="forgot-password"
                                     data-testid="login-forgot-password-button"
@@ -277,8 +277,8 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                     }
                                 }}
                                 placeholder="Digite sua senha"
-                                className={`w-full px-4 py-3 bg-surface-dark border-2 rounded-lg text-text-dark placeholder-subtle-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent test-input-password ${
-                                    fieldErrors.password ? 'border-red-500 focus:ring-red-500' : 'border-surface-dark'
+                                className={`w-full px-4 py-3 bg-volt-surface border-2 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-password ${
+                                    fieldErrors.password ? 'border-red-500 focus:ring-red-500' : 'border-volt-surface'
                                 }`}
                                 data-testid="login-input-password"
                                 data-cy="login-input-password"
@@ -316,16 +316,16 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                         )}
                         {resetPasswordMessage && (
                             <div 
-                                className="p-3 bg-primary/10 rounded-lg text-center"
+                                className="p-3 bg-volt-green/10 rounded-lg text-center"
                                 data-testid="login-reset-password-message"
                                 role="status"
                                 aria-live="polite"
                             >
-                                <p className="text-sm text-primary">{resetPasswordMessage}</p>
+                                <p className="text-sm text-volt-green">{resetPasswordMessage}</p>
                                 <button 
                                     type="button" 
                                     onClick={onNavigateToResetPassword} 
-                                    className="mt-2 text-sm font-bold text-primary hover:underline"
+                                    className="mt-2 text-sm font-bold text-volt-green hover:underline"
                                     data-testid="login-reset-password-link"
                                     aria-label="Redefinir senha"
                                 >
@@ -343,7 +343,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                             <button 
                                 type="submit" 
                                 disabled={isLoading} 
-                                className="w-full mt-4 py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity test-submit-button"
+                                className="w-full mt-4 py-3 font-semibold text-volt-black bg-volt-green rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity test-submit-button"
                                 id="btn-login-submit"
                                 name="login-submit"
                                 data-testid="login-submit-button"
@@ -364,11 +364,11 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                 data-testid="login-footer"
                 data-cy="login-footer"
             >
-                <p className="text-sm text-subtle-dark">
+                <p className="text-sm text-gray-400">
                     Não tem uma conta?{' '}
                     <button 
                         onClick={onNavigateToSignUp} 
-                        className="font-semibold text-primary hover:underline test-signup-link"
+                        className="font-semibold text-volt-green hover:underline test-signup-link"
                         id="btn-signup-link"
                         name="signup-link"
                         data-testid="login-signup-link"
@@ -381,7 +381,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                     </button>
                 </p>
                 <div 
-                    className="mt-4 p-3 bg-surface-dark rounded-lg flex items-center justify-center space-x-2 text-xs text-subtle-dark test-security-banner" 
+                    className="mt-4 p-3 bg-volt-surface rounded-lg flex items-center justify-center space-x-2 text-xs text-gray-400 test-security-banner" 
                     id="login-security-banner"
                     data-testid="login-security-banner"
                     data-cy="login-security-banner"
