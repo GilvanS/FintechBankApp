@@ -20,7 +20,7 @@ const NewsSection: React.FC = () => {
         },
         {
             title: 'Novidade: Invista em Cripto Diretamente',
-            description: 'Lançamos uma nova funcionalidade que permite comprar e vender criptomoedas de forma transparente.',
+            description: 'Lançamos uma nova funcionalidade que permite comprar e vender criptomoedas de forma transparente e segura.',
             url: '#',
             urlToImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD6V3DJzUOeSiH8Clg77UKq3Su-RnAd8k6SYAszHMLQdD3q1lgGRJv5XeeyRPuGZX4A1j1P9KffQab1JwkkYGKMOmSkkqR6tKPFuufkklhvrYRdhD4IrXs_tbqBqQaiE1J0CQjuZDWnkX8kl4mdtV8r-8shIW1cHd48aVXMOvpN_FCbsjcfL1XxAKUZE5_ZvmVsEP6V60pBsyoWFmctZ4QGZOJe9iQUHe9-8aEhBHBgO2LD1IsjWXZaNO_24GGaN-82KQKlzSdfTI-a'
         },
@@ -35,59 +35,50 @@ const NewsSection: React.FC = () => {
     useEffect(() => {
         const fetchNews = async () => {
             setLoading(true);
-            // Using IBGE Notícias API which is public and has open CORS
             const url = 'https://servicodados.ibge.gov.br/api/v3/noticias/?qtd=3&busca=economia';
-            
             try {
                 const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error('API request to IBGE failed');
-                }
+                if (!response.ok) throw new Error('API request to IBGE failed');
                 const data = await response.json();
-                
                 const formattedArticles = data.items.map((item: any) => {
                     let imageUrl = '';
                     if (item.imagens) {
                         try {
                             const images = JSON.parse(item.imagens);
-                            // The path in the API response is relative, so we build the full URL
                             imageUrl = `https://agenciadenoticias.ibge.gov.br/${images.image_fulltext}`;
                         } catch (e) {
-                            // In case of parsing error, imageUrl remains empty
-                            console.error("Failed to parse image JSON from IBGE API", e);
+                            console.error('Failed to parse image JSON from IBGE API', e);
                         }
                     }
-                    return {
-                        title: item.titulo,
-                        description: item.introducao,
-                        url: item.link,
-                        urlToImage: imageUrl,
-                    };
-                }).filter((article: Article) => article.urlToImage); // Only keep articles with an image
-
+                    return { title: item.titulo, description: item.introducao, url: item.link, urlToImage: imageUrl };
+                }).filter((a: Article) => a.urlToImage);
                 setArticles(formattedArticles.length > 0 ? formattedArticles : fallbackNews);
-            } catch (error) {
-                console.error("Failed to fetch news, using fallback data.", error);
+            } catch {
                 setArticles(fallbackNews);
             } finally {
                 setLoading(false);
             }
         };
-
         fetchNews();
     }, []);
-    
+
     if (loading) {
         return (
-             <section>
-                <h3 className="text-white text-lg font-bold leading-tight tracking-[-0.015em] px-4 pb-4 pt-4">Últimas Notícias</h3>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8">
+            <section className="bg-volt-surface rounded-2xl p-5">
+                <div className="flex items-center gap-2 mb-4">
+                    <div className="w-7 h-7 rounded-xl bg-[#A2FF00] border-2 border-black flex items-center justify-center text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        📰
+                    </div>
+                    <h3 className="text-xs font-black uppercase tracking-wider">Últimas Notícias</h3>
+                </div>
+                <div className="flex flex-col gap-3">
                     {[...Array(3)].map((_, i) => (
-                        <div key={i} className="flex flex-col gap-4 rounded-[2rem] bg-white/5 border border-white/10 p-4 animate-pulse">
-                            <div className="aspect-video w-full rounded-lg bg-white/10"></div>
-                            <div className="flex flex-col gap-2">
-                                <div className="h-4 bg-white/10 rounded w-3/4"></div>
-                                <div className="h-4 bg-white/10 rounded w-1/2"></div>
+                        <div key={i} className="flex gap-3 p-3 rounded-xl bg-gray-100 border-2 border-black animate-pulse">
+                            <div className="w-20 h-16 rounded-lg bg-gray-300 shrink-0 border border-black" />
+                            <div className="flex flex-col gap-2 flex-1 justify-center">
+                                <div className="h-3 bg-gray-300 rounded w-3/4" />
+                                <div className="h-2 bg-gray-200 rounded w-full" />
+                                <div className="h-2 bg-gray-200 rounded w-2/3" />
                             </div>
                         </div>
                     ))}
@@ -97,20 +88,46 @@ const NewsSection: React.FC = () => {
     }
 
     return (
-        <section>
-            <h3 className="text-white text-sm font-black uppercase tracking-wider px-4 pb-4 pt-4">Últimas Notícias</h3>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8 px-4">
+        <section className="bg-volt-surface rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+                <div className="w-7 h-7 rounded-xl bg-[#A2FF00] border-2 border-black flex items-center justify-center text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    📰
+                </div>
+                <h3 className="text-xs font-black uppercase tracking-wider">Últimas Notícias</h3>
+            </div>
+
+            <div className="flex flex-col gap-3">
                 {articles.map((article, index) => (
-                    <a key={index} href={article.url} target="_blank" rel="noopener noreferrer" className="flex cursor-pointer flex-col gap-4 rounded-[2rem] bg-[#0a0a0a] border border-white/10 p-5 shadow-lg transition-all hover:bg-white/5">
-                        <div className="aspect-video w-full rounded-lg bg-cover bg-center" style={{ backgroundImage: `url(${article.urlToImage})` }}></div>
-                        <div className="flex flex-col">
-                            <h4 className="font-bold text-white mb-2">{article.title}</h4>
-                            <p className="text-xs text-white/50 line-clamp-3">{article.description}</p>
+                    <a
+                        key={index}
+                        href={article.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex gap-3 p-3 rounded-xl bg-[#FFED86] border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-px transition-all cursor-pointer"
+                    >
+                        {article.urlToImage && (
+                            <div
+                                className="w-20 h-16 rounded-lg bg-cover bg-center shrink-0 border-2 border-black"
+                                style={{ backgroundImage: `url(${article.urlToImage})` }}
+                            />
+                        )}
+                        <div className="flex flex-col justify-center min-w-0 gap-1">
+                            <h4
+                                className="font-black text-[11px] text-black leading-tight"
+                                style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden' } as React.CSSProperties}
+                            >
+                                {article.title}
+                            </h4>
+                            <p
+                                className="text-[10px] text-gray-800 font-bold leading-snug"
+                                style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 3, overflow: 'hidden' } as React.CSSProperties}
+                            >
+                                {article.description}
+                            </p>
                         </div>
                     </a>
                 ))}
             </div>
-             <style>{`.line-clamp-3 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }`}</style>
         </section>
     );
 };

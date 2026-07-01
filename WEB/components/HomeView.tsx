@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { UserCircle2 as UserIcon, Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X } from 'lucide-react';
+import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X } from 'lucide-react';
 
 import type { User, Story } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
@@ -73,11 +73,6 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [isBiometricOpen, setIsBiometricOpen] = useState(false);
   const [isIntelligenceMenuOpen, setIsIntelligenceMenuOpen] = useState(false);
   const [isViewingStories, setIsViewingStories] = useState(false);
-
-  const showWelcomeMessage = (() => {
-    const localVal = localStorage.getItem('volt_show_home_welcome_message');
-    return localVal !== null ? localVal !== 'false' : properties.volt_show_home_welcome_message !== false;
-  })();
 
   const showStoriesStatus = (() => {
     const localVal = localStorage.getItem('volt_show_home_stories_status');
@@ -709,28 +704,6 @@ const HomeView: React.FC<HomeViewProps> = ({
       animate="show"
       className="space-y-6 pb-24 pt-4 px-4 max-w-md mx-auto"
     >
-      {/* Welcome Message Section */}
-      {showWelcomeMessage && (
-        <motion.div
-          variants={itemVariants}
-          className={`p-4 rounded-2xl border-2 border-black flex items-center justify-between shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${
-            isMidnight ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white text-black border-black'
-          }`}
-        >
-          <div className="space-y-0.5">
-            <h3 className="text-sm font-black uppercase tracking-wider">
-              Olá, {user?.fullName ? user.fullName.split(' ')[0] : 'Cliente'} 👋
-            </h3>
-            <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
-              Seja bem-vindo ao seu Volt Hub!
-            </p>
-          </div>
-          <div className="w-9 h-9 rounded-full bg-[#00ff9d] border-2 border-black flex items-center justify-center font-black text-black text-sm shrink-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-            ⚡
-          </div>
-        </motion.div>
-      )}
-
       {/* Stories/Status Bar Section */}
       {showStoriesStatus && (
         <motion.div variants={itemVariants} className="my-1">
@@ -767,33 +740,6 @@ const HomeView: React.FC<HomeViewProps> = ({
         </motion.div>
       )}
 
-      {/* Top Quick Actions Card (Match Image) */}
-      <motion.section variants={itemVariants} className={`rounded-2xl p-4 flex justify-between items-center ${
-        isMidnight 
-          ? 'bg-[#18181b] border border-white/5' 
-          : 'bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
-      }`}>
-        {[
-          { label: 'SIMULAR LOGIN', icon: React.forwardRef((props, ref) => <div className="relative"><UserIcon size={20} className={isMidnight ? 'text-[#8b5cf6]' : 'text-[#8b5cf6]'} /><div className="absolute -bottom-1 -right-1 bg-[#00ff9d] rounded-full w-3.5 h-3.5 flex items-center justify-center text-black text-[10px] font-bold border border-black">+</div></div>) },
-          { label: 'APP VOLT', icon: Bolt, bg: isMidnight ? 'bg-[#ff5c8d]/10 border-[#ff5c8d]/30' : 'bg-black text-[#ff5c8d]', iconColor: isMidnight ? 'text-[#ff5c8d]' : 'text-[#ff5c8d]' },
-          { label: 'FAZER PIX', icon: React.forwardRef((props, ref) => <div className="w-3 h-3 bg-[#3b82f6] rotate-45 rounded-[2px]" />), bg: isMidnight ? 'bg-[#3b82f6]/10 border-[#3b82f6]/30' : 'bg-black' },
-          { label: 'PAGAR CONTAS', icon: Receipt, bg: isMidnight ? 'bg-[#00ff9d]/10 border-[#00ff9d]/30' : 'bg-black text-[#00ff9d]', iconColor: isMidnight ? 'text-[#00ff9d]' : 'text-[#00ff9d]' }
-        ].map((item, index) => (
-          <div key={index} className="flex flex-col items-center gap-2 cursor-pointer active:scale-95 transition-transform" onClick={() => item.label === 'FAZER PIX' ? onNavigate('pix') : null}>
-            <div className={`w-[52px] h-[52px] rounded-full flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-              item.bg ? item.bg : (isMidnight ? 'bg-zinc-900 border-zinc-700' : 'bg-white')
-            }`}>
-              {/* @ts-ignore */}
-              <item.icon size={22} className={item.iconColor} />
-            </div>
-            <span className={`text-[9px] font-black tracking-wider uppercase text-center w-16 leading-tight ${
-              isMidnight ? 'text-gray-400' : 'text-black'
-            }`}>
-              {item.label}
-            </span>
-          </div>
-        ))}
-      </motion.section>
 
       {/* Dashboard Title & Personalize Button */}
       <motion.div variants={itemVariants} className="flex justify-between items-center">
@@ -859,7 +805,188 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </motion.section>
 
+      {/* Quick Access Grid */}
+      <motion.section variants={itemVariants} className="space-y-3 mb-6">
+        <div className="flex justify-between items-center px-1">
+          <h3 className={`text-xs font-black uppercase tracking-widest ${isMidnight ? 'text-white' : 'text-black'}`}>
+            Acesso Rápido
+          </h3>
+          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider animate-pulse">
+            Deslize para ver mais ➔
+          </span>
+        </div>
+        <div
+          className="flex overflow-x-auto gap-4 py-2.5 scrollbar-none -mx-4 px-4 scroll-smooth cursor-grab active:cursor-grabbing select-none"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+          onMouseDown={(e) => {
+            const container = e.currentTarget;
+            container.dataset.isDown = 'true';
+            container.dataset.startX = String(e.pageX - container.offsetLeft);
+            container.dataset.scrollLeft = String(container.scrollLeft);
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.dataset.isDown = 'false';
+          }}
+          onMouseUp={(e) => {
+            e.currentTarget.dataset.isDown = 'false';
+          }}
+          onMouseMove={(e) => {
+            const container = e.currentTarget;
+            if (container.dataset.isDown !== 'true') return;
+            e.preventDefault();
+            const x = e.pageX - container.offsetLeft;
+            const startX = Number(container.dataset.startX || 0);
+            const scrollLeft = Number(container.dataset.scrollLeft || 0);
+            const walk = (x - startX) * 1.5;
+            container.scrollLeft = scrollLeft - walk;
+          }}
+        >
+          {[
+            { label: 'PIX', icon: Bolt, action: () => onNavigate('pix'), highlight: true },
+            { label: 'Shop', icon: ShoppingBag, action: () => onNavigate('shop'), highlight: false },
+            { label: 'Cartões', icon: CreditCard, action: () => onNavigate('cards'), highlight: false },
+            { label: 'Contas', icon: Receipt, action: () => alert('Contas e boletos para pagamento serão importados automaticamente pelo seu DDA.'), highlight: false },
+            { label: 'Extrato', icon: FileText, action: () => onNavigate('statement'), highlight: false },
+          ].map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={index}
+                onClick={item.action}
+                className="flex flex-col items-center gap-2 group active:scale-90 transition-transform cursor-pointer shrink-0 w-[72px]"
+                onDragStart={(e) => e.preventDefault()}
+              >
+                <div
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 border-black transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                    item.highlight
+                      ? 'bg-[#00ff9d] text-black'
+                      : isMidnight
+                        ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                        : 'bg-white text-black hover:bg-gray-50'
+                  }`}
+                >
+                  <Icon size={20} className={item.highlight ? 'stroke-[2.5]' : 'stroke-[2]'} />
+                </div>
+                <span className={`text-[11px] font-black transition-colors text-center truncate w-full ${isMidnight ? 'text-zinc-400 group-hover:text-white' : 'text-gray-800'}`}>
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </motion.section>
 
+      {/* Aprenda Mais Section */}
+      <motion.section variants={itemVariants} className="space-y-3">
+        <div className="flex justify-between items-center px-1">
+          <h3 className={`text-xs font-black uppercase tracking-widest ${isMidnight ? 'text-white' : 'text-black'}`}>
+            Aprenda mais
+          </h3>
+          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider animate-pulse">
+            Deslize para ver mais ➔
+          </span>
+        </div>
+
+        <div
+          className="flex overflow-x-auto gap-4 py-2 scrollbar-none -mx-4 px-4 scroll-smooth cursor-grab active:cursor-grabbing select-none"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+          onMouseDown={(e) => {
+            const container = e.currentTarget;
+            container.dataset.isDown = 'true';
+            container.dataset.startX = String(e.pageX - container.offsetLeft);
+            container.dataset.scrollLeft = String(container.scrollLeft);
+          }}
+          onMouseLeave={(e) => { e.currentTarget.dataset.isDown = 'false'; }}
+          onMouseUp={(e) => { e.currentTarget.dataset.isDown = 'false'; }}
+          onMouseMove={(e) => {
+            const container = e.currentTarget;
+            if (container.dataset.isDown !== 'true') return;
+            e.preventDefault();
+            const x = e.pageX - container.offsetLeft;
+            const startX = Number(container.dataset.startX || 0);
+            const scrollLeft = Number(container.dataset.scrollLeft || 0);
+            container.scrollLeft = scrollLeft - (x - startX) * 1.5;
+          }}
+        >
+          {/* Card 1: Aprenda a usar o seu Volt Hub */}
+          <button
+            onClick={() => setIsViewingStories(true)}
+            className="flex flex-col rounded-3xl overflow-hidden bg-white text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer shrink-0 w-[185px] text-left"
+            onDragStart={(e) => e.preventDefault()}
+          >
+            <div className="h-24 bg-gradient-to-br from-[#E11D48] to-[#9F1239] relative flex items-center justify-center overflow-hidden border-b-4 border-black p-2">
+              <div className="w-11 h-20 bg-zinc-950 rounded-xl border border-black shadow-md relative flex flex-col p-1 transform rotate-12 scale-105">
+                <div className="w-2.5 h-0.5 bg-zinc-800 rounded-full mx-auto mb-1" />
+                <div className="flex-1 bg-zinc-900 rounded-md flex flex-col justify-between p-1">
+                  <div className="w-full h-1 bg-pink-500 rounded-full" />
+                  <div className="w-2/3 h-1 bg-zinc-700 rounded-full" />
+                  <div className="w-1/2 h-1 bg-zinc-700 rounded-full" />
+                  <div className="flex justify-between items-center mt-auto">
+                    <div className="w-1.5 h-1.5 rounded-full bg-volt-green" />
+                    <div className="w-3 h-1 bg-zinc-800 rounded" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-3.5 flex flex-col justify-between h-[85px] relative">
+              <div>
+                <h4 className="text-[12px] font-black leading-tight text-gray-900">Aprenda a</h4>
+                <h4 className="text-[12px] font-black leading-tight text-gray-900">usar o seu app</h4>
+              </div>
+              <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center text-white active:scale-95 transition-transform">
+                <ChevronRight size={14} />
+              </div>
+            </div>
+          </button>
+
+          {/* Card 2: Como fazer um pix */}
+          <button
+            onClick={() => setIsViewingStories(true)}
+            className="flex flex-col rounded-3xl overflow-hidden bg-white text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer shrink-0 w-[185px] text-left"
+            onDragStart={(e) => e.preventDefault()}
+          >
+            <div className="h-24 bg-[#E8EFFF] relative flex items-center justify-center overflow-hidden border-b-4 border-black p-2">
+              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center border border-black transform -rotate-12">
+                <div className="w-6 h-6 relative flex items-center justify-center">
+                  <div className="absolute w-4 h-4 border border-indigo-600 rotate-45" />
+                  <div className="absolute w-2.5 h-2.5 border border-indigo-600 rotate-45 bg-indigo-600" />
+                </div>
+              </div>
+            </div>
+            <div className="p-3.5 flex flex-col justify-between h-[85px] relative">
+              <div>
+                <h4 className="text-[12px] font-black leading-tight text-gray-900">Como fazer</h4>
+                <h4 className="text-[12px] font-black leading-tight text-gray-900">um pix.</h4>
+              </div>
+              <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center text-white active:scale-95 transition-transform">
+                <ChevronRight size={14} />
+              </div>
+            </div>
+          </button>
+
+          {/* Card 3: Como pagar suas contas */}
+          <button
+            onClick={() => setIsViewingStories(true)}
+            className="flex flex-col rounded-3xl overflow-hidden bg-white text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer shrink-0 w-[185px] text-left"
+            onDragStart={(e) => e.preventDefault()}
+          >
+            <div className="h-24 bg-[#EEF2F6] relative flex items-center justify-center overflow-hidden border-b-4 border-black p-2">
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center border border-black transform rotate-12">
+                <Wallet size={18} className="text-blue-600" />
+              </div>
+            </div>
+            <div className="p-3.5 flex flex-col justify-between h-[85px] relative">
+              <div>
+                <h4 className="text-[12px] font-black leading-tight text-gray-900">Como pagar</h4>
+                <h4 className="text-[12px] font-black leading-tight text-gray-900">suas contas.</h4>
+              </div>
+              <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center text-white active:scale-95 transition-transform">
+                <ChevronRight size={14} />
+              </div>
+            </div>
+          </button>
+        </div>
+      </motion.section>
 
       {/* Account Balance History (Last 30 Days Line Chart) */}
       <motion.section
@@ -1737,101 +1864,6 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </motion.section>
 
-      {/* Quick Access Grid */}
-      <motion.section variants={itemVariants} className="space-y-3 mb-6">
-        <div className="flex justify-between items-center px-1">
-          <h3 className={`text-xs font-black uppercase tracking-widest ${isMidnight ? 'text-white' : 'text-black'}`}>
-            Acesso Rápido
-          </h3>
-          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider animate-pulse">
-            Deslize para ver mais ➔
-          </span>
-        </div>
-        <div 
-          className="flex overflow-x-auto gap-4 py-2.5 scrollbar-none -mx-4 px-4 scroll-smooth cursor-grab active:cursor-grabbing select-none"
-          style={{ WebkitOverflowScrolling: 'touch' }}
-          onMouseDown={(e) => {
-            const container = e.currentTarget;
-            container.dataset.isDown = 'true';
-            container.dataset.startX = String(e.pageX - container.offsetLeft);
-            container.dataset.scrollLeft = String(container.scrollLeft);
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.dataset.isDown = 'false';
-          }}
-          onMouseUp={(e) => {
-            e.currentTarget.dataset.isDown = 'false';
-          }}
-          onMouseMove={(e) => {
-            const container = e.currentTarget;
-            if (container.dataset.isDown !== 'true') return;
-            e.preventDefault();
-            const x = e.pageX - container.offsetLeft;
-            const startX = Number(container.dataset.startX || 0);
-            const scrollLeft = Number(container.dataset.scrollLeft || 0);
-            const walk = (x - startX) * 1.5;
-            container.scrollLeft = scrollLeft - walk;
-          }}
-        >
-          {[
-            {
-              label: 'PIX',
-              icon: Bolt,
-              action: () => onNavigate('pix'),
-              highlight: true,
-            },
-            {
-              label: 'Shop',
-              icon: ShoppingBag,
-              action: () => onNavigate('shop'),
-              highlight: false,
-            },
-            {
-              label: 'Cartões',
-              icon: CreditCard,
-              action: () => onNavigate('cards'),
-              highlight: false,
-            },
-            {
-              label: 'Contas',
-              icon: Receipt,
-              action: () => alert('Contas e boletos para pagamento serão importados automaticamente pelo seu DDA.'),
-              highlight: false,
-            },
-            {
-              label: 'Extrato',
-              icon: FileText,
-              action: () => onNavigate('statement'),
-              highlight: false,
-            },
-          ].map((item, index) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={index}
-                onClick={item.action}
-                className="flex flex-col items-center gap-2 group active:scale-90 transition-transform cursor-pointer shrink-0 w-[72px]"
-                onDragStart={(e) => e.preventDefault()}
-              >
-                <div
-                  className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 border-black transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-                    item.highlight
-                      ? 'bg-[#00ff9d] text-black'
-                      : isMidnight
-                        ? 'bg-zinc-900 text-white hover:bg-zinc-800'
-                        : 'bg-white text-black hover:bg-gray-50'
-                  }`}
-                >
-                  <Icon size={20} className={item.highlight ? 'stroke-[2.5]' : 'stroke-[2]'} />
-                </div>
-                <span className={`text-[11px] font-black transition-colors text-center truncate w-full ${isMidnight ? 'text-zinc-400 group-hover:text-white' : 'text-gray-800'}`}>
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </motion.section>
 
       {/* ── Banners & News ──────────────────────────────── */}
       <div className="flex flex-col gap-6 mb-8 mt-6">
