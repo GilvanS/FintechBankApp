@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X } from 'lucide-react';
+import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus } from 'lucide-react';
 
 import type { User, Story } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
@@ -111,6 +111,17 @@ const HomeView: React.FC<HomeViewProps> = ({
   });
 
   const [isAddingBill, setIsAddingBill] = useState(false);
+  const [monthlyGoal, setMonthlyGoal] = useState<number>(() => parseFloat(localStorage.getItem('volt_monthly_goal') || '2000'));
+  const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [tempGoal, setTempGoal] = useState('');
+  const handleSaveGoal = () => {
+    const val = parseFloat(tempGoal);
+    if (!isNaN(val) && val > 0) {
+      setMonthlyGoal(val);
+      localStorage.setItem('volt_monthly_goal', val.toString());
+      setIsEditingGoal(false);
+    }
+  };
   const [newBillTitle, setNewBillTitle] = useState('');
   const [newBillAmount, setNewBillAmount] = useState('');
   const [newBillCategory, setNewBillCategory] = useState<'refeicao' | 'mobilidade' | 'cultura' | 'saude' | 'outros'>('outros');
@@ -694,6 +705,12 @@ const HomeView: React.FC<HomeViewProps> = ({
       );
     })
     .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
+  const goalConsumptionPercent = monthlyGoal > 0 ? Math.min(100, Math.round((currentMonthSpending / monthlyGoal) * 100)) : 0;
+
+  const juneIncome = useMemo(() => transactions.filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0), [transactions]);
+  const juneExpenses = currentMonthSpending;
+  const juneSavingsRate = juneIncome > 0 ? Math.round(((juneIncome - juneExpenses) / juneIncome) * 100) : 0;
 
 
 
@@ -1421,7 +1438,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         )}
       </motion.section>
 
-      {/* Recurring Payments Section */}
+      {/* Meta de Gastos Section */}
       <motion.section
         variants={itemVariants}
         className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
@@ -1430,23 +1447,224 @@ const HomeView: React.FC<HomeViewProps> = ({
       >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#00E5FF] border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs text-black">
-              📅
+            <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
+              isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#FFD700] text-black'
+            }`}>
+              🎯
             </div>
             <div>
-              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Contas Recorrentes</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-gray-400' : 'text-gray-700'}`}>Pagamentos mensais de assinaturas</p>
+              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Meta de Gastos</h3>
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Limite mensal de despesas</p>
             </div>
           </div>
-          {theme === 'midnight' ? (
-            <span className="text-[10px] font-black uppercase tracking-wider bg-zinc-900 text-white border border-zinc-800 px-3 py-1 rounded-full shadow-none">
-              {recurringBills.filter((b) => b.status === 'pending').length} PENDENTES
-            </span>
-          ) : (
-            <span className="text-[9px] font-black uppercase tracking-wider bg-[#FFED86] text-black border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-              {recurringBills.filter((b) => b.status === 'pending').length} Pendentes
-            </span>
-          )}
+          <button
+            onClick={() => { setIsEditingGoal(!isEditingGoal); setTempGoal(String(monthlyGoal)); }}
+            className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+              isMidnight ? 'bg-zinc-900 text-white hover:bg-zinc-800 border-zinc-700' : 'bg-[#FFED86] text-black hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+            }`}
+          >
+            {isEditingGoal ? 'Cancelar' : 'Editar'}
+          </button>
+        </div>
+
+        {isEditingGoal ? (
+          <div className="flex gap-2 items-center">
+            <span className={`text-xs font-black ${isMidnight ? 'text-white' : 'text-black'}`}>R$</span>
+            <input
+              type="number"
+              step="1"
+              min="0"
+              value={tempGoal}
+              onChange={(e) => setTempGoal(e.target.value)}
+              className={`flex-1 border-2 border-black rounded-xl px-3 py-2 text-sm font-bold ${
+                isMidnight ? 'bg-zinc-900 text-white border-zinc-700' : 'bg-white text-black'
+              }`}
+              autoFocus
+            />
+            <button
+              onClick={handleSaveGoal}
+              className={`text-xs font-black uppercase tracking-wider border-2 border-black px-3 py-2 rounded-xl transition-all cursor-pointer ${
+                isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#A2FF00] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+              }`}
+            >
+              Salvar
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div className="flex justify-between items-end">
+              <div>
+                <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>Gasto atual</p>
+                <p className={`text-xl font-black ${
+                  goalConsumptionPercent > 100 ? 'text-[#FF5C8D]' : goalConsumptionPercent > 75 ? 'text-[#FFD700]' : isMidnight ? 'text-white' : 'text-black'
+                }`}>
+                  R$ {currentMonthSpending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>Meta</p>
+                <p className={`text-sm font-black ${isMidnight ? 'text-zinc-300' : 'text-gray-700'}`}>
+                  R$ {monthlyGoal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+
+            <div className={`w-full h-5 rounded-full overflow-hidden border-2 border-black ${isMidnight ? 'bg-zinc-800' : 'bg-gray-200'}`}>
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${Math.min(100, goalConsumptionPercent)}%`,
+                  backgroundColor: goalConsumptionPercent > 100 ? '#FF5C8D' : goalConsumptionPercent > 75 ? '#FFD700' : '#A2FF00'
+                }}
+              />
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className={`text-xs font-black ${
+                goalConsumptionPercent > 100 ? 'text-[#FF5C8D]' : goalConsumptionPercent > 75 ? 'text-[#FFD700]' : 'text-[#00CC7A]'
+              }`}>
+                {goalConsumptionPercent}% da meta usada
+              </span>
+              {goalConsumptionPercent <= 100 ? (
+                <span className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
+                  R$ {(monthlyGoal - currentMonthSpending).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} restam
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold text-[#FF5C8D]">
+                  +R$ {(currentMonthSpending - monthlyGoal).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} acima
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </motion.section>
+
+      {/* Saúde Financeira Section */}
+      <motion.section
+        variants={itemVariants}
+        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
+          isMidnight ? 'bg-volt-surface' : 'bg-white'
+        }`}
+      >
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
+              isMidnight ? 'bg-[#B026FF] text-white' : 'bg-[#FF5C8D] text-white'
+            }`}>
+              💖
+            </div>
+            <div>
+              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Saúde Financeira</h3>
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Resumo financeiro de Junho/2026</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsFinancialHealthOpen?.(true)}
+            className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+              isMidnight ? 'bg-zinc-900 text-white hover:bg-zinc-800 border-zinc-700' : 'bg-[#FFED86] text-black hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+            }`}
+          >
+            Ver Detalhes
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'Entradas', value: juneIncome, color: '#00CC7A', icon: '📈' },
+            { label: 'Saídas', value: juneExpenses, color: '#FF5C8D', icon: '📉' },
+            { label: 'Poupança', value: Math.max(0, juneIncome - juneExpenses), color: isMidnight ? '#00ff9d' : '#A2FF00', icon: '💰' },
+          ].map(({ label, value, color, icon }) => (
+            <div key={label} className={`p-3 rounded-xl text-center ${
+              isMidnight ? 'bg-zinc-900 border border-zinc-800' : 'bg-[#FFED86] border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+            }`}>
+              <span className="text-base block mb-1">{icon}</span>
+              <p className={`text-[8px] font-black uppercase tracking-wider mb-1 ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>{label}</p>
+              <p className="text-[10px] font-black" style={{ color }}>R$ {value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className={`p-3 rounded-xl flex items-center justify-between ${
+          isMidnight ? 'bg-zinc-900 border border-zinc-800' : 'bg-gray-50 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+        }`}>
+          <div>
+            <p className={`text-[9px] font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>Taxa de poupança</p>
+            <p className={`text-lg font-black ${
+              juneSavingsRate >= 20 ? 'text-[#00CC7A]' : juneSavingsRate >= 10 ? 'text-[#FFD700]' : 'text-[#FF5C8D]'
+            }`}>{juneSavingsRate}%</p>
+          </div>
+          <span className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full ${
+            juneSavingsRate >= 20
+              ? isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#A2FF00] text-black'
+              : juneSavingsRate >= 10
+              ? 'bg-[#FFD700] text-black'
+              : 'bg-[#FF5C8D] text-white'
+          }`}>
+            {juneSavingsRate >= 20 ? 'Excelente' : juneSavingsRate >= 10 ? 'Saudável' : juneSavingsRate >= 0 ? 'Equilibrado' : 'Atenção'}
+          </span>
+        </div>
+      </motion.section>
+
+      {/* Recurring Payments Section */}
+      <motion.section
+        variants={itemVariants}
+        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
+          isMidnight ? 'bg-volt-surface' : 'bg-white'
+        }`}
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-[#00E5FF] border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs text-black">
+                📅
+              </div>
+              <div>
+                <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Contas Recorrentes</h3>
+                <p className={`text-[10px] font-bold ${isMidnight ? 'text-gray-400' : 'text-gray-700'}`}>Pagamentos mensais de assinaturas</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setIsAiRecurringModalOpen?.(true)}
+                className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-wider border-2 border-black px-2 py-1 rounded-full transition-all cursor-pointer ${
+                  isMidnight ? 'bg-zinc-900 text-[#00ff9d] border-zinc-700 hover:bg-zinc-800' : 'bg-[#A2FF00] text-black hover:bg-[#8fff00] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                }`}
+              >
+                <Sparkles size={9} /> IA
+              </button>
+              <button
+                onClick={() => setIsAddingBill(!isAddingBill)}
+                className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-wider border-2 border-black px-2 py-1 rounded-full transition-all cursor-pointer ${
+                  isMidnight ? 'bg-zinc-900 text-white border-zinc-700 hover:bg-zinc-800' : 'bg-[#FFED86] text-black hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                }`}
+              >
+                <Plus size={9} /> {isAddingBill ? 'Fechar' : 'Nova'}
+              </button>
+              {isMidnight ? (
+                <span className="text-[10px] font-black uppercase tracking-wider bg-zinc-900 text-white border border-zinc-800 px-2 py-1 rounded-full">
+                  {recurringBills.filter((b) => b.status === 'pending').length} PEND
+                </span>
+              ) : (
+                <span className="text-[9px] font-black uppercase tracking-wider bg-[#FFED86] text-black border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                  {recurringBills.filter((b) => b.status === 'pending').length} Pend
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'Estimado', value: recurringBills.reduce((a, b) => a + Math.abs(b.amount), 0), textColor: isMidnight ? 'text-white' : 'text-black' },
+              { label: 'Pago', value: recurringBills.filter(b => b.status === 'paid').reduce((a, b) => a + Math.abs(b.amount), 0), textColor: 'text-[#00CC7A]' },
+              { label: 'Pendente', value: recurringBills.filter(b => b.status === 'pending').reduce((a, b) => a + Math.abs(b.amount), 0), textColor: 'text-[#FF5C8D]' },
+            ].map(({ label, value, textColor }) => (
+              <div key={label} className={`p-2.5 rounded-xl text-center ${
+                isMidnight ? 'bg-zinc-900 border border-zinc-800' : 'bg-[#FFED86] border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+              }`}>
+                <p className={`text-[8px] font-black uppercase tracking-wider mb-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>{label}</p>
+                <p className={`text-[10px] font-black ${textColor}`}>R$ {value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-3">
