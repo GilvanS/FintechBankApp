@@ -316,4 +316,85 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         category: 'Móveis',
         cashback: '5% de Cashback'
     },
+    {
+        id: 'prod_1',
+        name: 'Smartphone Fintech X',
+        description: 'O smartphone mais inteligente para suas finanças. Tela OLED de 120Hz, processador de última geração e segurança bancária por hardware integrada.',
+        price: 3999.90,
+        imageUrl: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&q=80&w=600',
+        category: 'Eletrônicos',
+        cashback: '8% de Cashback'
+    },
+    {
+        id: 'prod_2',
+        name: 'Momentum Pro Camera',
+        description: 'Capture todos os seus momentos inesquecíveis em resolução 4K com o sensor ultra-sensível e autofoco inteligente baseado em inteligência artificial.',
+        price: 1299.00,
+        imageUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&q=80&w=600',
+        category: 'Fotografia',
+        cashback: '6% de Cashback'
+    },
+    {
+        id: 'prod_3',
+        name: 'AeroView 4K Drone',
+        description: 'Estabilidade perfeita e transmissão em tempo real. Voe alto e grave takes cinemáticos incríveis com facilidade de controle automático.',
+        price: 799.00,
+        imageUrl: 'https://images.unsplash.com/photo-1527977966376-1c8408f9f108?auto=format&fit=crop&q=80&w=600',
+        category: 'Drones',
+        cashback: '10% de Cashback'
+    },
+    {
+        id: 'prod_4',
+        name: 'ErgoFlex Office Chair',
+        description: 'Design ergonômico premiado para longas horas de produtividade ou jogos. Ajuste lombar dinâmico e materiais respiráveis de alta qualidade.',
+        price: 350.00,
+        imageUrl: 'https://images.unsplash.com/photo-1505797149-43b0069ec26b?auto=format&fit=crop&q=80&w=600',
+        category: 'Móveis',
+        cashback: '5% de Cashback'
+    },
+    {
+        id: 'prod_5',
+        name: 'Audeze Pro Headphones',
+        description: 'Áudio de estúdio de alta fidelidade e cancelamento de ruído ativo inteligente. Experimente cada nota com perfeição e imersão completa.',
+        price: 499.00,
+        imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600',
+        category: 'Áudio',
+        cashback: '12% de Cashback'
+    },
+    {
+        id: 'prod_6',
+        name: 'Minimalist Desk Lamp',
+        description: 'Luminária minimalista com ajuste de temperatura de cor inteligente e base de carregamento rápido sem fio integrada para seu smartphone.',
+        price: 75.00,
+        imageUrl: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&q=80&w=600',
+        category: 'Iluminação',
+        cashback: '4% de Cashback'
+    },
+    {
+        id: 'prod_7',
+        name: 'Fone de Ouvido Bass+',
+        description: 'Graves profundos e bateria que dura a semana toda. Ideal para treinos intensos com proteção IPX7 contra água e suor.',
+        price: 199.00,
+        imageUrl: 'https://images.unsplash.com/photo-1484704849700-f032a568e944?auto=format&fit=crop&q=80&w=600',
+        category: 'Áudio',
+        cashback: '10% de Cashback'
+    },
+    {
+        id: 'prod_8',
+        name: 'Apex Smartwatch Gen 2',
+        description: 'Monitore seus batimentos, sono e exercícios diários. Notificações do celular diretamente no seu pulso em uma tela de alta definição.',
+        price: 279.00,
+        imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600',
+        category: 'Acessórios',
+        cashback: '7% de Cashback'
+    },
+    {
+        id: 'prod_9',
+        name: 'Jetset Carry-On Luggage',
+        description: 'Mala de bordo ultraleve e extremamente resistente. Rodinhas 360 graus ultra-silenciosas e compartimento inteligente de fácil acesso.',
+        price: 180.00,
+        imageUrl: 'https://images.unsplash.com/photo-1565026057447-bc90a3dceb87?auto=format&fit=crop&q=80&w=600',
+        category: 'Viagem',
+        cashback: '5% de Cashback'
+    },
 ];
