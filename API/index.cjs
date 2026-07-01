@@ -3500,6 +3500,34 @@ async function initializeDatabase() {
     if (provider === 'postgres') {
         console.log('ℹ️  Usando PostgreSQL. Verificando estrutura das tabelas...');
         
+        // Verificar se as colunas category e cashback existem na tabela de produtos
+        try {
+            const productColumns = await databricksService.executeQuery(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'fintech' 
+                AND table_name = 'products' 
+                AND column_name IN ('category', 'cashback')
+            `);
+            const existingProductCols = productColumns.map(c => c.column_name);
+            if (!existingProductCols.includes('category')) {
+                console.log('🔧 Adicionando coluna category na tabela products...');
+                await databricksService.executeQuery(`
+                    ALTER TABLE ${databricksService.fq('products')}
+                    ADD COLUMN category VARCHAR(255) DEFAULT 'Geral'
+                `);
+            }
+            if (!existingProductCols.includes('cashback')) {
+                console.log('🔧 Adicionando coluna cashback na tabela products...');
+                await databricksService.executeQuery(`
+                    ALTER TABLE ${databricksService.fq('products')}
+                    ADD COLUMN cashback VARCHAR(255) DEFAULT '5%'
+                `);
+            }
+        } catch (err) {
+            console.warn('⚠️  Erro ao verificar/adicionar colunas de produtos:', err.message);
+        }
+        
         // =====================================================
         // Verificar e atualizar valores padrão de signup
         // =====================================================
@@ -3905,7 +3933,9 @@ async function initializeDatabase() {
                     name VARCHAR(255) NOT NULL,
                     description TEXT,
                     price DECIMAL(15,2) NOT NULL,
-                    image_url TEXT
+                    image_url TEXT,
+                    category VARCHAR(255) DEFAULT 'Geral',
+                    cashback VARCHAR(255) DEFAULT '5%'
                 )
             `);
         } else {
@@ -3915,7 +3945,9 @@ async function initializeDatabase() {
                     name STRING NOT NULL,
                     description STRING,
                     price DECIMAL(15,2) NOT NULL,
-                    image_url STRING
+                    image_url STRING,
+                    category STRING,
+                    cashback STRING
                 ) USING DELTA
             `);
         }
@@ -4064,19 +4096,29 @@ async function seedDatabase() {
     const SEED_NON_ADMIN_USERS = false; // manter apenas admin
     
     // Seed de produtos permanece
-    const existingProducts = await databricksService.executeQuery(`SELECT id, image_url FROM ${databricksService.fq('products')}`);
-    const existingMap = new Map(existingProducts.map(p => [p.id, p.image_url]));
+    const existingProducts = await databricksService.executeQuery(`SELECT id, image_url, category, cashback FROM ${databricksService.fq('products')}`);
+    const existingMap = new Map(existingProducts.map(p => [p.id, p]));
     for (const p of products) {
-        if (!existingMap.has(p.id)) {
+        const existing = existingMap.get(p.id);
+        if (!existing) {
             await databricksService.executeQuery(`
                 INSERT INTO ${databricksService.fq('products')}
-                (id, name, description, price, image_url)
-                VALUES ('${p.id}', '${p.name.replace(/'/g,"''")}', '${p.description.replace(/'/g,"''")}', ${p.price}, '${p.imageUrl}')
+                (id, name, description, price, image_url, category, cashback)
+                VALUES ('${p.id}', '${p.name.replace(/'/g,"''")}', '${(p.description || '').replace(/'/g,"''")}', ${p.price}, '${p.imageUrl || ''}', '${p.category || 'Geral'}', '${p.cashback || '5%'}')
             `);
-        } else if (existingMap.get(p.id) !== p.imageUrl) {
-            await databricksService.executeQuery(`
-                UPDATE ${databricksService.fq('products')} SET image_url='${p.imageUrl}' WHERE id='${p.id}'
-            `);
+        } else {
+            const categoryDiff = existing.category !== p.category;
+            const cashbackDiff = existing.cashback !== p.cashback;
+            const imgDiff = existing.image_url !== p.imageUrl;
+            if (imgDiff || categoryDiff || cashbackDiff) {
+                await databricksService.executeQuery(`
+                    UPDATE ${databricksService.fq('products')} 
+                    SET image_url='${p.imageUrl || ''}', 
+                        category='${p.category || 'Geral'}', 
+                        cashback='${p.cashback || '5%'}' 
+                    WHERE id='${p.id}'
+                `);
+            }
         }
     }
 

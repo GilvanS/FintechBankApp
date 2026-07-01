@@ -3,7 +3,7 @@ const { getDb, esc } = require('./context');
 async function listProducts() {
     const db = getDb();
     const rows = await db.executeQuery(`
-        SELECT id, name, description, price, image_url
+        SELECT id, name, description, price, image_url, category, cashback
         FROM ${db.fq('products')}
         ORDER BY id ASC
     `);
@@ -12,7 +12,9 @@ async function listProducts() {
         name: r.name,
         description: r.description,
         price: parseFloat(r.price),
-        imageUrl: r.image_url
+        imageUrl: r.image_url,
+        category: r.category,
+        cashback: r.cashback
     }));
 }
 

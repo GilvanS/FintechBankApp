@@ -232,6 +232,8 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         description: 'Monitore sua saúde, receba notificações e pague por aproximação com seu novo smartwatch. Bateria para 7 dias.',
         price: 1499.90,
         imageUrl: 'https://images.pexels.com/photos/110471/pexels-photo-110471.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Acessórios',
+        cashback: '7% de Cashback'
     },
     {
         id: 'prod-4',
@@ -239,6 +241,8 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         description: 'Nunca mais fique sem bateria. Carregue até 3 dispositivos ao mesmo tempo com alta velocidade.',
         price: 250.00,
         imageUrl: 'https://images.pexels.com/photos/133505/pexels-photo-133505.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Acessórios',
+        cashback: '5% de Cashback'
     },
     {
         id: 'prod-5',
@@ -246,6 +250,8 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         description: 'Fones de ouvido com qualidade de estúdio para audiófilos. Clareza e graves incomparáveis.',
         price: 499.00,
         imageUrl: 'https://images.pexels.com/photos/1649771/pexels-photo-1649771.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Áudio',
+        cashback: '12% de Cashback'
     },
     {
         id: 'prod-6',
@@ -253,6 +259,8 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         description: 'Monitore sua saúde e conecte-se com estilo. GPS integrado e bateria de longa duração.',
         price: 279.00,
         imageUrl: 'https://images.pexels.com/photos/277406/pexels-photo-277406.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Acessórios',
+        cashback: '7% de Cashback'
     },
     {
         id: 'prod-7',
@@ -260,6 +268,8 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         description: 'Capture momentos com qualidade profissional. Sensor full-frame de 42MP e vídeo em 4K.',
         price: 1299.00,
         imageUrl: 'https://images.pexels.com/photos/90946/pexels-photo-90946.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Fotografia',
+        cashback: '6% de Cashback'
     },
     {
         id: 'prod-8',
@@ -267,6 +277,8 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         description: 'Seu café expresso perfeito em casa. Moedor integrado e controle de temperatura preciso.',
         price: 189.00,
         imageUrl: 'https://images.pexels.com/photos/324028/pexels-photo-324028.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Eletroportáteis',
+        cashback: '5% de Cashback'
     },
     {
         id: 'prod-9',
@@ -274,6 +286,8 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         description: 'Design elegante e iluminação ajustável para seu espaço de trabalho. Baixo consumo de energia.',
         price: 75.00,
         imageUrl: 'https://images.pexels.com/photos/1112598/pexels-photo-1112598.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Iluminação',
+        cashback: '4% de Cashback'
     },
     {
         id: 'prod-10',
@@ -281,6 +295,8 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         description: 'Viaje com estilo e praticidade. Leve, resistente e com compartimentos inteligentes.',
         price: 150.00,
         imageUrl: 'https://images.pexels.com/photos/5945559/pexels-photo-5945559.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Viagem',
+        cashback: '5% de Cashback'
     },
     {
         id: 'prod-11',
@@ -288,6 +304,8 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         description: 'Explore o mundo de cima com imagens incríveis. Compacto, seguro e fácil de pilotar.',
         price: 799.00,
         imageUrl: 'https://images.pexels.com/photos/1034608/pexels-photo-1034608.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Drones',
+        cashback: '10% de Cashback'
     },
     {
         id: 'prod-12',
@@ -295,5 +313,7 @@ export const MOCK_PRODUCTS: PurchasedItem[] = [
         description: 'Conforto e ergonomia para longas horas de trabalho. Múltiplos ajustes para sua postura.',
         price: 350.00,
         imageUrl: 'https://images.pexels.com/photos/2762247/pexels-photo-2762247.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        category: 'Móveis',
+        cashback: '5% de Cashback'
     },
 ];
