@@ -6,6 +6,8 @@ import { useDialog } from '../contexts/GlobalDialogContext';
 import HomeBanners from './HomeBanners';
 import NewsSection from './NewsSection';
 import ShopOffersBanner from './ShopOffersBanner';
+import SpendingTrendsSection from './SpendingTrendsSection';
+import SpendingHeatmapSection from './SpendingHeatmapSection';
 import BiometricModal from './BiometricModal';
 import WeeklyStreak from './WeeklyStreak';
 import StoryHighlights from './StoryHighlights';
@@ -1645,6 +1647,95 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </motion.section>
 
+      {/* Painel de Análise e Insights */}
+      <motion.section
+        variants={itemVariants}
+        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-3 ${
+          isMidnight ? 'bg-volt-surface' : 'bg-white'
+        }`}
+      >
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
+              isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black'
+            }`}>
+              ⚡
+            </div>
+            <div>
+              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Painel de Análise e Insights</h3>
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Dados interativos e inteligência preditiva</p>
+            </div>
+          </div>
+          <span className={`text-[8px] font-black uppercase tracking-wider border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
+            isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#A2FF00] text-black'
+          }`}>Análises</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setIsFinancialHealthOpen?.(true)}
+            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
+              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,200,120,0.2)]' : 'bg-emerald-50 hover:bg-emerald-100 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+            }`}
+          >
+            <div className="flex justify-between items-start w-full">
+              <span className="text-lg">🏥</span>
+              <span className="text-[8px] font-black uppercase tracking-wider text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">Inteligência IA</span>
+            </div>
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-tight block">Saúde Financeira</span>
+              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Diagnóstico IA Volt</span>
+            </div>
+          </button>
+          <button
+            onClick={() => setIsAiRecurringModalOpen?.(true)}
+            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
+              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(100,100,255,0.2)]' : 'bg-indigo-50 hover:bg-indigo-100 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+            }`}
+          >
+            <div className="flex justify-between items-start w-full">
+              <span className="text-lg">🔄</span>
+              <span className="text-[8px] font-black uppercase tracking-wider text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded-md">Otimizador IA</span>
+            </div>
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-tight block">Assinaturas IA</span>
+              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Detecção automática</span>
+            </div>
+          </button>
+          <button
+            onClick={() => onNavigate('statement')}
+            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
+              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+            }`}
+          >
+            <div className="flex justify-between items-start w-full">
+              <span className="text-lg">📈</span>
+              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
+                isMidnight ? 'text-zinc-400 bg-zinc-800' : 'text-zinc-500 bg-zinc-100'
+              }`}>30d</span>
+            </div>
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-tight block">Evolução do Saldo</span>
+              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Histórico financeiro</span>
+            </div>
+          </button>
+          <button
+            onClick={() => onNavigate('pix')}
+            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
+              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,255,100,0.2)]' : 'bg-[#f0fdf4] hover:bg-[#dcfce7] text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+            }`}
+          >
+            <div className="flex justify-between items-start w-full">
+              <span className="text-lg">⚡</span>
+              <span className="text-[8px] font-black uppercase tracking-wider text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded-md">Instant</span>
+            </div>
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-tight block">Enviar Pix</span>
+              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Transferência imediata</span>
+            </div>
+          </button>
+        </div>
+      </motion.section>
+
       {/* Recurring Payments Section */}
       <motion.section
         variants={itemVariants}
@@ -2126,6 +2217,8 @@ const HomeView: React.FC<HomeViewProps> = ({
       {/* ── Banners & News ──────────────────────────────── */}
       <div className="flex flex-col gap-6 mb-8 mt-6">
           <HomeBanners onNavigate={onNavigate} />
+          <SpendingTrendsSection transactions={transactions} theme={theme} />
+          <SpendingHeatmapSection transactions={transactions} theme={theme} />
           <NewsSection />
           <ShopOffersBanner onNavigate={onNavigate} />
       </div>
