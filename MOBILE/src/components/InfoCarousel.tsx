@@ -14,8 +14,8 @@ const InfoCard: React.FC<InfoCardProps> = ({ type, data }) => {
                 <div className="flex items-start space-x-3">
                     <span className="text-2xl">📰</span>
                     <div>
-                        <h4 className="font-bold text-white text-sm">Notícias</h4>
-                        <p className="text-xs text-gray-300 mt-1">{data.headline}</p>
+                        <h4 className="font-bold text-black text-sm">Notícias</h4>
+                        <p className="text-xs text-black/70 mt-1">{data.headline}</p>
                     </div>
                 </div>
             );
@@ -25,27 +25,27 @@ const InfoCard: React.FC<InfoCardProps> = ({ type, data }) => {
                     <div className="flex items-center space-x-3">
                         <span className="text-2xl">{data.icon}</span>
                         <div>
-                            <h4 className="font-bold text-white text-sm">São Paulo, SP</h4>
-                            <p className="text-xs text-gray-300">{data.condition}</p>
+                            <h4 className="font-bold text-black text-sm">São Paulo, SP</h4>
+                            <p className="text-xs text-black/70">{data.condition}</p>
                         </div>
                     </div>
-                    <span className="text-xl font-bold text-white">{data.temp}°C</span>
+                    <span className="text-xl font-bold text-black">{data.temp}°C</span>
                 </div>
             );
         case 'market':
             return (
                 <div className="w-full">
-                    <h4 className="font-bold text-white text-sm mb-2 flex items-center gap-2">
+                    <h4 className="font-bold text-black text-sm mb-2 flex items-center gap-2">
                         <span>📈</span> Mercado Financeiro
                     </h4>
                     <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="bg-white/5 p-2 rounded">
-                            <span className="text-gray-400">USD/BRL</span>
-                            <p className="text-green-400 font-bold">R$ {data.usd}</p>
+                        <div className="bg-black/5 p-2 rounded">
+                            <span className="text-black/60">USD/BRL</span>
+                            <p className="text-green-700 font-bold">R$ {data.usd}</p>
                         </div>
-                        <div className="bg-white/5 p-2 rounded">
-                            <span className="text-gray-400">IBOVESPA</span>
-                            <p className="text-blue-400 font-bold">{data.ibov} pts</p>
+                        <div className="bg-black/5 p-2 rounded">
+                            <span className="text-black/60">IBOVESPA</span>
+                            <p className="text-blue-700 font-bold">{data.ibov} pts</p>
                         </div>
                     </div>
                 </div>
@@ -91,7 +91,7 @@ const InfoCarousel: React.FC = () => {
     }, [items.length]);
 
     return (
-        <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-4 w-full max-w-md mx-auto mt-6 overflow-hidden relative min-h-[100px] flex items-center">
+        <div className="bg-white/80 backdrop-blur-sm border border-black/30 rounded-xl p-4 w-full max-w-md mx-auto mt-6 overflow-hidden relative min-h-[100px] flex items-center">
             <div className={`w-full transition-opacity duration-300 ${fade ? 'opacity-100' : 'opacity-0'}`}>
                 <InfoCard type={items[currentIndex].type} data={items[currentIndex].data} />
             </div>
@@ -100,7 +100,7 @@ const InfoCarousel: React.FC = () => {
                 {items.map((_, idx) => (
                     <div 
                         key={idx} 
-                        className={`w-1.5 h-1.5 rounded-full transition-colors ${idx === currentIndex ? 'bg-primary' : 'bg-gray-600'}`}
+                        className={`w-1.5 h-1.5 rounded-full transition-colors ${idx === currentIndex ? 'bg-black' : 'bg-black/30'}`}
                     />
                 ))}
             </div>
