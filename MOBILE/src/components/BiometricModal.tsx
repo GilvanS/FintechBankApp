@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Fingerprint, ScanFace, Check, AlertCircle, X, ShieldCheck } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { BiometricAuth } from '@aparajita/capacitor-biometric-auth';
 
 interface BiometricModalProps {
   isOpen: boolean;
@@ -24,18 +26,37 @@ export default function BiometricModal({
   const isMidnight = true; // Forced Dark Mode
   const accentColor = isMidnight ? '#00DF89' : '#A2FF00';
 
-  // Automatically start the scan simulation when opened
+  // Automatically start the scan when opened.
+  // Em plataforma nativa (APK) usa biometria real via Capacitor;
+  // no navegador mantém a simulação visual do WEB.
   useEffect(() => {
     if (isOpen) {
       setScanStatus('scanning');
       setProgress(0);
+      if (Capacitor.isNativePlatform()) {
+        BiometricAuth.authenticate({
+          reason: 'Confirme sua identidade para continuar',
+          cancelTitle: 'Cancelar',
+          allowDeviceCredential: true,
+          androidTitle: 'Autenticação biométrica',
+          androidSubtitle: 'Use sua digital ou rosto cadastrado',
+        })
+          .then(() => {
+            setProgress(100);
+            setScanStatus('success');
+          })
+          .catch(() => {
+            setScanStatus('failed');
+          });
+      }
     } else {
       setScanStatus('idle');
       setProgress(0);
     }
   }, [isOpen, scanType]);
 
-  // Handle the scanning progress bar/laser timer
+  // Handle the scanning progress bar/laser timer (simulação web;
+  // no nativo a barra apenas acompanha até o resultado do plugin)
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (scanStatus === 'scanning') {
@@ -43,7 +64,9 @@ export default function BiometricModal({
         setProgress((prev) => {
           if (prev >= 100) {
             clearInterval(interval);
-            setScanStatus('success');
+            if (!Capacitor.isNativePlatform()) {
+              setScanStatus('success');
+            }
             return 100;
           }
           return prev + 5;
@@ -67,6 +90,22 @@ export default function BiometricModal({
   const handleRetry = () => {
     setScanStatus('scanning');
     setProgress(0);
+    if (Capacitor.isNativePlatform()) {
+      BiometricAuth.authenticate({
+        reason: 'Confirme sua identidade para continuar',
+        cancelTitle: 'Cancelar',
+        allowDeviceCredential: true,
+        androidTitle: 'Autenticação biométrica',
+        androidSubtitle: 'Use sua digital ou rosto cadastrado',
+      })
+        .then(() => {
+          setProgress(100);
+          setScanStatus('success');
+        })
+        .catch(() => {
+          setScanStatus('failed');
+        });
+    }
   };
 
   const simulateFailure = () => {

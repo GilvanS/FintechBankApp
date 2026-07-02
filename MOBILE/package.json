@@ -15,6 +15,7 @@
     "adb:wifi": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\adb-keep-reverse.ps1 -Device"
   },
   "dependencies": {
+    "@aparajita/capacitor-biometric-auth": "^10.0.0",
     "@capacitor/android": "^7.4.4",
     "@capacitor/app": "^7.1.2",
     "@capacitor/preferences": "^7.0.2",
