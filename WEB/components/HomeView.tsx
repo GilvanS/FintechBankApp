@@ -721,7 +721,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="space-y-6 pb-24 pt-4 px-4 max-w-md mx-auto"
+      className="space-y-6 pb-24 pt-4 px-5 max-w-xl mx-auto"
     >
       {/* Stories/Status Bar Section */}
       {showStoriesStatus && (
