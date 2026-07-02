@@ -28,6 +28,16 @@ h1, h2, h3, h5, .font-display-lg {
 
 code, pre, .font-mono { font-family: 'JetBrains Mono', monospace; }
 
+/* ─── Safe area (notch / status bar / gesture bar) ──────────── */
+/* index.html usa viewport-fit=cover; compensa nas barras fixas. */
+header {
+  padding-top: env(safe-area-inset-top, 0px) !important;
+}
+
+nav#bottom-nav {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)) !important;
+}
+
 /* ─── Ionic integration ─────────────────────────────────────── */
 /* O tema (Yellow/Midnight) é controlado pelas classes no body;
    ion-app fica transparente para o body aparecer. */
