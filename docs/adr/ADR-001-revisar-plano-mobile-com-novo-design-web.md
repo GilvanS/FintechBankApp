@@ -48,3 +48,5 @@ Nenhuma execução de código foi feita como parte deste ADR — é um registro 
 - A ordem das tasks (T1–T12) é sequencial mas pode ser reordenada/paralelizada conforme prioridade do usuário.
 
 ## Links
+
+- **Superseded (parcial)** pela [ADR-002](ADR-002-fonte-de-verdade-de-design-apos-remocao-do-web-new-base.md): a cláusula "fonte única de verdade de design = `WEB/new-base-fintechbank`" foi revista após a pasta ser removida do versionamento (commit `239e9c0c`). O restante deste ADR permanece válido.
