@@ -83,7 +83,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
 
     return (
         <div 
-            className="bg-background-dark text-text-dark h-full flex flex-col p-6 sm:p-8 test-signup-page"
+            className="bg-volt-dark text-white h-full flex flex-col p-6 sm:p-8 test-signup-page"
             id="signup-page"
             data-testid="signup-page"
             data-cy="signup-page"
@@ -93,7 +93,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
             <header className="mb-8 test-signup-header" id="signup-header" data-testid="signup-header" data-cy="signup-header">
                  <button 
                     onClick={onNavigateToLogin} 
-                    className="flex items-center space-x-2 text-subtle-dark hover:text-text-dark mb-4 test-back-button"
+                    className="flex items-center space-x-2 text-gray-400 hover:text-white mb-4 test-back-button"
                     id="btn-signup-back"
                     name="signup-back-button"
                     data-testid="signup-back-button"
@@ -145,7 +145,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                         data-testid="signup-field-fullname"
                         data-cy="signup-field-fullname"
                     >
-                        <label htmlFor="signup-fullname" className="block text-sm font-medium text-gray-300">Nome Completo</label>
+                        <label htmlFor="signup-fullname" className="block text-sm font-medium text-gray-400 mb-1">Nome Completo</label>
                         <input 
                             id="signup-fullname"
                             name="fullname"
@@ -153,7 +153,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                             value={fullName} 
                             onChange={(e) => setFullName(e.target.value)} 
                             required 
-                            className="w-full input-style test-input-fullname"
+                            className="w-full px-4 py-3 bg-volt-surface border-2 border-volt-surface rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-fullname"
                             data-testid="signup-input-fullname"
                             data-cy="signup-input-fullname"
                             data-playwright="signup-input-fullname"
@@ -169,7 +169,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                         data-testid="signup-field-email"
                         data-cy="signup-field-email"
                     >
-                        <label htmlFor="signup-email" className="block text-sm font-medium text-gray-300">E-mail</label>
+                        <label htmlFor="signup-email" className="block text-sm font-medium text-gray-400 mb-1">E-mail</label>
                         <input 
                             id="signup-email"
                             name="email"
@@ -177,7 +177,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                             value={email} 
                             onChange={(e) => setEmail(e.target.value)} 
                             required 
-                            className="w-full input-style test-input-email"
+                            className="w-full px-4 py-3 bg-volt-surface border-2 border-volt-surface rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-email"
                             data-testid="signup-input-email"
                             data-cy="signup-input-email"
                             data-playwright="signup-input-email"
@@ -193,7 +193,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                         data-testid="signup-field-cpf"
                         data-cy="signup-field-cpf"
                     >
-                        <label htmlFor="signup-cpf" className="block text-sm font-medium text-gray-300">CPF</label>
+                        <label htmlFor="signup-cpf" className="block text-sm font-medium text-gray-400 mb-1">CPF</label>
                         <input 
                             id="signup-cpf"
                             name="cpf"
@@ -202,7 +202,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                             onChange={(e) => setCpf(e.target.value)} 
                             required 
                             maxLength={14} 
-                            className="w-full input-style test-input-cpf"
+                            className="w-full px-4 py-3 bg-volt-surface border-2 border-volt-surface rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-cpf"
                             data-testid="signup-input-cpf"
                             data-cy="signup-input-cpf"
                             data-playwright="signup-input-cpf"
@@ -219,7 +219,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                         data-testid="signup-field-password"
                         data-cy="signup-field-password"
                     >
-                        <label htmlFor="signup-password" className="block text-sm font-medium text-gray-300">Senha</label>
+                        <label htmlFor="signup-password" className="block text-sm font-medium text-gray-400 mb-1">Senha</label>
                         <input 
                             id="signup-password"
                             name="password"
@@ -227,7 +227,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                             value={password} 
                             onChange={(e) => setPassword(e.target.value)} 
                             required 
-                            className="w-full input-style test-input-password"
+                            className="w-full px-4 py-3 bg-volt-surface border-2 border-volt-surface rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-password"
                             data-testid="signup-input-password"
                             data-cy="signup-input-password"
                             data-playwright="signup-input-password"
@@ -243,7 +243,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                         data-testid="signup-field-confirm-password"
                         data-cy="signup-field-confirm-password"
                     >
-                        <label htmlFor="signup-confirm-password" className="block text-sm font-medium text-gray-300">Confirme a Senha</label>
+                        <label htmlFor="signup-confirm-password" className="block text-sm font-medium text-gray-400 mb-1">Confirme a Senha</label>
                         <input 
                             id="signup-confirm-password"
                             name="confirm-password"
@@ -251,7 +251,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                             value={confirmPassword} 
                             onChange={(e) => setConfirmPassword(e.target.value)} 
                             required 
-                            className="w-full input-style test-input-confirm-password"
+                            className="w-full px-4 py-3 bg-volt-surface border-2 border-volt-surface rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-confirm-password"
                             data-testid="signup-input-confirm-password"
                             data-cy="signup-input-confirm-password"
                             data-playwright="signup-input-confirm-password"
@@ -282,7 +282,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                         <button 
                             type="submit" 
                             disabled={isLoading} 
-                            className="w-full py-3 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 disabled:opacity-50 test-submit-button"
+                            className="w-full py-3 font-semibold text-volt-black bg-volt-green rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity test-submit-button"
                             id="btn-signup-submit"
                             name="signup-submit"
                             data-testid="signup-submit-button"
@@ -295,7 +295,6 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                     </div>
                 </form>
             </main>
-            <style>{`.input-style { background-color: #1A2C1F; border: 2px solid #1A2C1F; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-top: 0.25rem; color: #E5E7EB; } .input-style:focus { outline: none; box-shadow: 0 0 0 2px #13ec5b; border-color: transparent; }`}</style>
             <ToastContainer toast={toast} onClose={hide} />
             <SignUpSuccessModal 
                 isOpen={showSuccessModal}
