@@ -28,7 +28,7 @@ const InstallmentOptions: React.FC<InstallmentOptionsProps> = ({ user, onBack, o
     const plans = calculateInstallmentPlans(invoiceAmount);
 
     return (
-        <div className="bg-background-dark text-white min-h-full flex flex-col">
+        <div className="bg-background-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28">
             <header className="flex items-center p-4">
                 <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10">
                     <span className="material-symbols-outlined">arrow_back</span>

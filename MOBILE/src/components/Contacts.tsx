@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { PixContact } from '../types';
@@ -6,6 +5,7 @@ import { getPixContacts, addPixContact, deletePixContact, getPixRecipientInfo } 
 import { formatCPF } from '../utils/formatters';
 import InfoPopupBottom from './InfoPopupBottom';
 import { useToast, ToastContainer } from './Toast';
+import { useDialog } from '../contexts/GlobalDialogContext';
 
 interface ContactsProps {
     onBack?: () => void;
@@ -15,6 +15,7 @@ interface ContactsProps {
 
 const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
     const { user } = useAuth();
+    const { showDialog } = useDialog();
     const [contacts, setContacts] = useState<PixContact[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -30,8 +31,8 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
     const fetchContacts = async () => {
         if (user) {
             setIsLoading(true);
-            const result = await getPixContacts(user.cpf);
-            if (result.success) setContacts(result.contacts!);
+            const res = await getPixContacts(user.cpf);
+            setContacts(res?.contacts ?? []);
             setIsLoading(false);
         }
     };
@@ -39,11 +40,12 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
     useEffect(() => {
         fetchContacts();
     }, [user]);
-
+    
     const handleConfirmBenefits = () => {
         setShowBenefitsPopup(false);
         setShowAddModal(true);
     };
+
 
     const handleSearchKey = async () => {
         if (!user) return;
@@ -74,7 +76,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
 
     const handleAddContact = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !recipientInfo) return; // Exige recipientInfo como no WEB
+        if (!user || !recipientInfo) return;
         setError('');
 
         const onlyDigits = newContactKey.replace(/\D/g, '');
@@ -98,14 +100,22 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
     };
 
     const handleDeleteContact = async (key: string) => {
-        if (user && window.confirm('Tem certeza que deseja remover este contato?')) {
-            const res = await deletePixContact(user.cpf, key);
-            if (res.success) {
-                showSuccess('Contato removido com sucesso');
-                fetchContacts();
-            } else {
-                showError(res.message || 'Falha ao remover contato');
-            }
+        if (user) {
+            showDialog({
+                title: 'Remover Contato',
+                message: 'Tem certeza que deseja remover este contato?',
+                confirmText: 'Sim, remover',
+                cancelText: 'Cancelar',
+                onConfirm: async () => {
+                    const res = await deletePixContact(user.cpf, key);
+                    if (res.success) {
+                        showSuccess('Contato removido com sucesso');
+                        fetchContacts();
+                    } else {
+                        showError(res.message || 'Falha ao remover contato');
+                    }
+                }
+            });
         }
     };
     
@@ -154,6 +164,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
                     <p>Cadastre um contato para fazer transferências futuras de forma mais rápida e segura, sem precisar digitar a chave PIX toda vez.</p>
                 </InfoPopupBottom>
             )}
+
 
             {showAddModal && (
                  <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">

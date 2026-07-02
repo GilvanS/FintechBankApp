@@ -1,126 +1,50 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction, User } from '../types';
-import { useAuth } from '../context/AuthContext';
 import { getUserStatement } from '../services/api';
 import TransactionReceipt from './TransactionReceipt';
-import LoadingSpinner from './LoadingSpinner';
-import ErrorState from './ErrorState';
+import { formatDateBR } from '../utils/formatters';
 
 interface StatementProps {
+    user: User;
     onNavigate: (view: string) => void;
     onBack: () => void;
 }
 
-function Statement({ onNavigate, onBack }: StatementProps) {
-    const { user } = useAuth();
+function Statement({ user, onNavigate, onBack }: StatementProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterPeriod, setFilterPeriod] = useState('all');
-    const [categoryFilter, setCategoryFilter] = useState('all');
-    const [transactions, setTransactions] = useState<Transaction[]>(user?.transactions || []);
+    const [transactions, setTransactions] = useState<Transaction[]>(user.transactions || []);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-    const [isRefreshing, setIsRefreshing] = useState(false);
 
-    // Função para buscar extrato
-    const fetchStatement = async (showLoading = true) => {
-        if (!user?.cpf) return;
-        if (showLoading) { setIsLoading(true); setError(null); }
-        try {
-            const result = await getUserStatement(user.cpf);
-            if (result.success && result.transactions) {
-                setTransactions(result.transactions);
-            } else {
-                const fallback = user.transactions ?? [];
-                if (fallback.length > 0) setTransactions(fallback);
-                else setError(result.message || 'Não foi possível carregar o extrato.');
-            }
-        } catch {
-            const fallback = user.transactions ?? [];
-            if (fallback.length > 0) setTransactions(fallback);
-            else setError('Erro de conexão. Verifique sua internet e tente novamente.');
-        } finally {
-            if (showLoading) setIsLoading(false);
-        }
-    };
-
+    // Buscar extrato quando o componente for montado
     useEffect(() => {
-        fetchStatement();
-    }, [user?.cpf]);
-
-    const handleRefresh = async () => {
-        setIsRefreshing(true);
-        await fetchStatement(false);
-        setTimeout(() => {
-            setIsRefreshing(false);
-        }, 500);
-    };
-
-    if (!user) return null;
-
-    // Categorias de filtro
-    const categories = [
-        { id: 'all', label: 'Todos', icon: '' },
-        { id: 'food', label: 'Refeição', icon: 'restaurant' },
-        { id: 'transport', label: 'Mobilidade', icon: 'directions_car' },
-        { id: 'shopping', label: 'Compras', icon: 'shopping_cart' },
-        { id: 'pix', label: 'PIX', icon: 'currency_exchange' },
-        { id: 'deposit', label: 'Depósitos', icon: 'savings' },
-        { id: 'payment', label: 'Pagamentos', icon: 'receipt_long' },
-    ];
-
-    // Determinar categoria da transação
-    const getTxCategory = (tx: Transaction): string => {
-        if ((tx as any).category) return (tx as any).category;
-        if (tx.type === 'PIX_SENT' || tx.type === 'PIX_RECEIVED' || tx.type === 'PIX_CREDIT_SENT') return 'pix';
-        if (tx.type === 'DEPOSIT') return 'deposit';
-        if (tx.type === 'PAYMENT' || tx.type === 'INVOICE_PAYMENT') return 'payment';
-        if (tx.type === 'SHOP_DEBIT' || tx.type === 'SHOP_CREDIT' || tx.type === 'INVOICE_INSTALLMENT') return 'shopping';
-        return 'other';
-    };
-
-    // Label do tipo de transação
-    const getTypeLabel = (type: Transaction['type']): string => {
-        switch (type) {
-            case 'PIX_SENT': return 'PIX Enviado';
-            case 'PIX_RECEIVED': return 'PIX Recebido';
-            case 'PIX_CREDIT_SENT': return 'PIX Parcelado';
-            case 'DEPOSIT': return 'Depósito';
-            case 'PAYMENT': return 'Pagamento';
-            case 'SHOP_DEBIT': return 'Compra';
-            case 'SHOP_CREDIT': return 'Compra no Crédito';
-            case 'INVOICE_INSTALLMENT': return 'Compra Parcelada';
-            case 'INVOICE_PAYMENT': return 'Pagamento de Fatura';
-            case 'CASHBACK_CREDIT': return 'Cashback';
-            case 'POINTS_EARNED': return 'Pontos';
-            default: return 'Transação';
-        }
-    };
-
-    const getIconForType = (type: Transaction['type'], category?: string) => {
-        if (category) {
-            switch (category) {
-                case 'food': return 'restaurant';
-                case 'transport': return 'directions_car';
-                case 'shopping': return 'shopping_cart';
+        const fetchStatement = async () => {
+            if (!user?.cpf) return;
+            setIsLoading(true);
+            try {
+                const result = await getUserStatement(user.cpf);
+                if (result.success && result.transactions) {
+                    setTransactions(result.transactions);
+                } else {
+                    // Manter transações existentes se houver erro
+                    if (user.transactions && user.transactions.length > 0) {
+                        setTransactions(user.transactions);
+                    }
+                }
+            } catch (error) {
+                // Silenciar erro - usar transações existentes se houver
+                if (user.transactions && user.transactions.length > 0) {
+                    setTransactions(user.transactions);
+                }
+            } finally {
+                setIsLoading(false);
             }
-        }
-        switch (type) {
-            case 'PIX_SENT':
-            case 'PIX_RECEIVED':
-            case 'PIX_CREDIT_SENT': return 'currency_exchange';
-            case 'PAYMENT': return 'receipt_long';
-            case 'DEPOSIT': return 'savings';
-            case 'SHOP_DEBIT':
-            case 'SHOP_CREDIT': return 'shopping_cart';
-            case 'CASHBACK_CREDIT': return 'redeem';
-            case 'POINTS_EARNED': return 'star';
-            case 'INVOICE_INSTALLMENT': return 'event_repeat';
-            default: return 'receipt_long';
-        }
-    };
+        };
 
-    // Filtrar transações
+        fetchStatement();
+    }, [user?.cpf]); // Recarregar quando o CPF mudar
+
     const filteredTransactions = transactions
         .filter(tx => {
             const txDate = new Date(tx.date);
@@ -136,12 +60,6 @@ function Statement({ onNavigate, onBack }: StatementProps) {
             }
             return true;
         })
-        .filter(tx => {
-            if (categoryFilter !== 'all') {
-                return getTxCategory(tx) === categoryFilter;
-            }
-            return true;
-        })
         .filter(tx =>
             tx.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
             tx.amount.toString().includes(searchTerm) ||
@@ -149,179 +67,215 @@ function Statement({ onNavigate, onBack }: StatementProps) {
             (tx.senderName && tx.senderName.toLowerCase().includes(searchTerm.toLowerCase()))
         );
 
-    // Agrupar por data
-    const groupedTransactions = filteredTransactions.reduce((groups, tx) => {
-        const date = new Date(tx.date);
-        const dateKey = date.toLocaleDateString('pt-BR', {
-            weekday: 'long',
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric'
-        });
-        const capitalizedKey = dateKey.charAt(0).toUpperCase() + dateKey.slice(1);
-        if (!groups[capitalizedKey]) {
-            groups[capitalizedKey] = [];
+    const getIconForType = (type: Transaction['type'], category?: string) => {
+        if (category) {
+            switch (category) {
+                case 'food': return 'restaurant';
+                case 'transport': return 'directions_car';
+                case 'shopping': return 'shopping_cart';
+            }
         }
-        groups[capitalizedKey].push(tx);
-        return groups;
-    }, {} as Record<string, Transaction[]>);
+        switch (type) {
+            case 'PIX_SENT':
+            case 'PIX_RECEIVED':
+            case 'PIX_CREDIT_SENT': return 'currency_exchange';
+            case 'PAYMENT': return 'receipt_long';
+            case 'DEPOSIT': return 'savings';
+            case 'SHOP_DEBIT': return 'shopping_cart';
+            case 'CASHBACK_CREDIT': return 'redeem';
+            case 'POINTS_EARNED': return 'star';
+            default: return 'receipt_long';
+        }
+    };
 
-    // Ordenar datas (mais recente primeiro)
-    const sortedDateKeys = Object.keys(groupedTransactions).sort((a, b) => {
-        const dateA = groupedTransactions[a][0]?.date;
-        const dateB = groupedTransactions[b][0]?.date;
-        return new Date(dateB).getTime() - new Date(dateA).getTime();
-    });
-
+    // Se uma transação foi selecionada, mostrar o comprovante
     if (selectedTransaction) {
-        return <TransactionReceipt transaction={selectedTransaction} onBack={() => setSelectedTransaction(null)} />;
+        return (
+            <TransactionReceipt 
+                transaction={selectedTransaction} 
+                onBack={() => setSelectedTransaction(null)} 
+            />
+        );
     }
 
     return (
-        <div className="bg-background-dark text-white min-h-screen flex flex-col" id="statement-page" data-testid="statement-page" aria-label="Extrato">
-            <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-subtle-dark/50 pt-[calc(1rem+env(safe-area-inset-top))] shadow-md" id="statement-header" data-testid="statement-header" aria-label="Cabeçalho do extrato">
-                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10" id="statement-back" data-testid="statement-back" aria-label="Voltar">
-                    <span className="material-symbols-outlined">arrow_back</span>
-                </button>
-                <h1 className="text-xl font-bold text-white">Extrato da Conta</h1>
+        <main
+            className="flex-1 p-4 md:p-6 lg:p-8 space-y-8 test-statement"
+            id="statement"
+            data-testid="statement"
+            data-cy="statement"
+            data-playwright="statement"
+            role="main"
+        >
+            <header className="flex items-center">
                 <button
-                    onClick={handleRefresh}
-                    disabled={isRefreshing}
-                    className={`p-2 rounded-full hover:bg-white/10 transition-all ${isRefreshing ? 'animate-spin' : ''}`}
+                    onClick={onBack}
+                    className="mr-4 text-white test-statement-back-button"
+                    id="btn-statement-back"
+                    name="statement-back"
+                    data-testid="statement-back-button"
+                    data-cy="statement-back-button"
+                    data-playwright="statement-back-button"
+                    aria-label="Voltar"
+                    type="button"
                 >
-                    <span className="material-symbols-outlined">refresh</span>
+                    <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
                 </button>
+                <h1
+                    className="text-white text-4xl font-black leading-tight tracking-[-0.033em] test-statement-title"
+                    id="statement-title"
+                    data-testid="statement-title"
+                >Extrato da Conta</h1>
             </header>
-
-            <main
-                className="flex-1 p-4 md:p-6 lg:p-8 space-y-6 overflow-y-auto no-scrollbar"
-                onTouchStart={(e) => {
-                    const startY = e.touches[0].clientY;
-                    const scrollTop = e.currentTarget.scrollTop;
-                    if (scrollTop === 0) {
-                        e.currentTarget.setAttribute('data-pull-start', startY.toString());
-                    }
-                }}
-                onTouchMove={(e) => {
-                    const startY = parseFloat(e.currentTarget.getAttribute('data-pull-start') || '0');
-                    const currentY = e.touches[0].clientY;
-                    const scrollTop = e.currentTarget.scrollTop;
-                    if (scrollTop === 0 && startY > 0 && (currentY - startY) > 80 && !isRefreshing) {
-                        e.currentTarget.removeAttribute('data-pull-start');
-                        handleRefresh();
-                    }
-                }}
-                onTouchEnd={(e) => {
-                    e.currentTarget.removeAttribute('data-pull-start');
-                }}
-            >
-                {/* Saldo */}
-                <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl p-6">
-                    <div className="flex items-center justify-between">
-                        <p className="text-white/70 text-base font-normal leading-normal">Saldo atual</p>
-                        <button className="text-white/70 hover:text-white">
-                            <span className="material-symbols-outlined">visibility</span>
-                        </button>
-                    </div>
-                    <p className="text-white text-4xl font-bold mt-2">{user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+            <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl p-6">
+                <div className="flex items-center justify-between">
+                    <p className="text-white/70 text-base font-normal leading-normal">Saldo atual</p>
+                    <button className="text-white/70 hover:text-white">
+                        <span className="material-symbols-outlined">visibility</span>
+                    </button>
                 </div>
-
-                {/* Filtros de categoria */}
-                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                    {categories.map(cat => (
-                        <button
-                            key={cat.id}
-                            onClick={() => setCategoryFilter(cat.id)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-colors ${categoryFilter === cat.id
-                                    ? 'bg-primary text-black font-semibold'
-                                    : 'bg-white/10 text-white hover:bg-white/20'
-                                }`}
-                        >
-                            {cat.icon && <span className="material-symbols-outlined text-sm">{cat.icon}</span>}
-                            <span className="text-sm">{cat.label}</span>
-                        </button>
-                    ))}
-                </div>
-
-                {/* Busca e filtros de período */}
-                <div className="space-y-4">
-                    <h2 className="text-white/90 text-lg font-semibold">Transações</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="px-3">
-                            <label className="flex flex-col min-w-40 h-12 w-full">
-                                <div className="flex w-full flex-1 items-stretch rounded-lg h-full">
-                                    <div className="text-primary/70 flex border-none bg-primary/10 items-center justify-center pl-4 rounded-l-lg border-r-0">
-                                        <span className="material-symbols-outlined">search</span>
-                                    </div>
-                                    <input
-                                        className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-lg text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border-none bg-primary/10 h-full placeholder:text-primary/70 px-4 pl-2 text-base font-normal leading-normal"
-                                        placeholder="Buscar por nome ou valor..."
-                                        value={searchTerm}
-                                        onChange={e => setSearchTerm(e.target.value)}
-                                    />
+                <p
+                    className="text-white text-4xl font-bold mt-2 test-statement-balance"
+                    id="statement-balance"
+                    data-testid="statement-balance"
+                    data-cy="statement-balance"
+                    data-playwright="statement-balance"
+                >{user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+            </div>
+            <div className="space-y-4">
+                <h2 className="text-white/90 text-lg font-semibold px-4">Transações</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="px-3">
+                        <label className="flex flex-col min-w-40 h-12 w-full">
+                            <div className="flex w-full flex-1 items-stretch rounded-lg h-full">
+                                <div className="text-primary/70 flex border-none bg-primary/10 items-center justify-center pl-4 rounded-l-lg border-r-0">
+                                    <span className="material-symbols-outlined">search</span>
                                 </div>
-                            </label>
-                        </div>
-                        <div className="flex gap-2 p-3 overflow-x-auto no-scrollbar md:justify-end">
-                            <button onClick={() => setFilterPeriod('all')} className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 ${filterPeriod === 'all' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}>
-                                <p className="text-white text-sm font-medium leading-normal">Tudo</p>
-                            </button>
-                            <button onClick={() => setFilterPeriod('7d')} className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 ${filterPeriod === '7d' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}>
-                                <p className="text-white text-sm font-medium leading-normal">7 dias</p>
-                            </button>
-                            <button onClick={() => setFilterPeriod('30d')} className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 ${filterPeriod === '30d' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}>
-                                <p className="text-white text-sm font-medium leading-normal">30 dias</p>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Lista de transações agrupadas por data */}
-                <div className="flex flex-col gap-6">
-                    {isLoading ? (
-                        <LoadingSpinner message="Carregando transações..." />
-                    ) : error ? (
-                        <ErrorState message={error} onRetry={() => fetchStatement()} />
-                    ) : sortedDateKeys.length === 0 ? (
-                        <div className="flex items-center justify-center p-8">
-                            <p className="text-white/60">Nenhuma transação encontrada</p>
-                        </div>
-                    ) : (
-                                sortedDateKeys.map(dateKey => (
-                                    <div key={dateKey} className="space-y-3">
-                                        <h3 className="text-white/70 text-sm font-medium px-2">{dateKey}</h3>
-                                        <div className="flex flex-col gap-2">
-                                            {groupedTransactions[dateKey].map((tx) => {
-                                                const time = new Date(tx.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                                                const typeLabel = getTypeLabel(tx.type);
-                                                return (
-                                                    <button
-                                                        key={tx.id}
-                                                        onClick={() => setSelectedTransaction(tx)}
-                                                        className="w-full flex items-center gap-4 hover:bg-white/5 rounded-lg p-4 transition-colors duration-200 text-left cursor-pointer"
-                                                    >
-                                                        <div className="text-white flex items-center justify-center rounded-full bg-primary/10 shrink-0 size-10">
-                                                            <span className="material-symbols-outlined text-primary">{getIconForType(tx.type, (tx as any).category)}</span>
-                                                        </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-white/50 text-xs mb-0.5">{time} • {typeLabel}</p>
-                                                    <p className="text-white text-base font-medium leading-normal truncate">{tx.description}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className={`text-base font-semibold ${tx.amount < 0 ? 'text-orange-400' : 'text-primary'}`}>
-                                                        {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                                    </p>
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+                                <input
+                                    className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-lg text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border-none bg-primary/10 h-full placeholder:text-primary/70 px-4 pl-2 text-base font-normal leading-normal test-statement-search-input"
+                                    placeholder="Buscar por nome ou valor..."
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                    id="statement-search-input"
+                                    name="statement-search"
+                                    data-testid="statement-search-input"
+                                    data-cy="statement-search-input"
+                                    data-playwright="statement-search-input"
+                                    aria-label="Buscar transações"
+                                />
                             </div>
-                        ))
-                    )}
+                        </label>
+                    </div>
+                    <div
+                        className="flex gap-2 p-3 overflow-x-auto md:justify-end test-statement-filters"
+                        id="statement-filters"
+                        data-testid="statement-filters"
+                        role="group"
+                        aria-label="Filtros de período"
+                    >
+                        <button
+                            onClick={() => setFilterPeriod('all')}
+                            className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 test-statement-filter-all ${filterPeriod === 'all' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}
+                            id="btn-statement-filter-all"
+                            data-testid="statement-filter-all"
+                            data-cy="statement-filter-all"
+                            data-playwright="statement-filter-all"
+                            aria-pressed={filterPeriod === 'all'}
+                            aria-label="Filtrar tudo"
+                            type="button"
+                        >
+                            <p className="text-white text-sm font-medium leading-normal">Tudo</p>
+                        </button>
+                        <button
+                            onClick={() => setFilterPeriod('7d')}
+                            className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 test-statement-filter-7d ${filterPeriod === '7d' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}
+                            id="btn-statement-filter-7d"
+                            data-testid="statement-filter-7d"
+                            data-cy="statement-filter-7d"
+                            data-playwright="statement-filter-7d"
+                            aria-pressed={filterPeriod === '7d'}
+                            aria-label="Filtrar últimos 7 dias"
+                            type="button"
+                        >
+                            <p className="text-white text-sm font-medium leading-normal">Últimos 7 dias</p>
+                        </button>
+                        <button
+                            onClick={() => setFilterPeriod('30d')}
+                            className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 test-statement-filter-30d ${filterPeriod === '30d' ? 'bg-primary/20' : 'bg-primary/10 hover:bg-primary/20'}`}
+                            id="btn-statement-filter-30d"
+                            data-testid="statement-filter-30d"
+                            data-cy="statement-filter-30d"
+                            data-playwright="statement-filter-30d"
+                            aria-pressed={filterPeriod === '30d'}
+                            aria-label="Filtrar este mês"
+                            type="button"
+                        >
+                            <p className="text-white text-sm font-medium leading-normal">Este mês</p>
+                        </button>
+                    </div>
                 </div>
-            </main>
-        </div>
+            </div>
+            <div
+                className="flex flex-col gap-2 test-statement-list"
+                id="statement-list"
+                data-testid="statement-list"
+                data-cy="statement-list"
+                data-playwright="statement-list"
+                role="list"
+            >
+                {isLoading ? (
+                    <div
+                        className="flex items-center justify-center p-8 test-statement-loading"
+                        id="statement-loading"
+                        data-testid="statement-loading"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <p className="text-white/60">Carregando transações...</p>
+                    </div>
+                ) : filteredTransactions.length === 0 ? (
+                    <div
+                        className="flex items-center justify-center p-8 test-statement-empty"
+                        id="statement-empty"
+                        data-testid="statement-empty"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <p className="text-white/60">Nenhuma transação encontrada</p>
+                    </div>
+                ) : (
+                    filteredTransactions.map((tx) => (
+                    <button
+                        key={tx.id}
+                        onClick={() => setSelectedTransaction(tx)}
+                        className="w-full flex items-center gap-4 hover:bg-white/5 rounded-lg p-4 transition-colors duration-200 text-left cursor-pointer test-statement-item"
+                        data-testid="statement-item"
+                        data-cy="statement-item"
+                        data-playwright="statement-item"
+                        data-transaction-id={tx.id}
+                        data-transaction-type={tx.type}
+                        aria-label={`Transação: ${tx.description}`}
+                        type="button"
+                        role="listitem"
+                    >
+                        <div className="text-white flex items-center justify-center rounded-full bg-primary/10 shrink-0 size-10">
+                            <span className="material-symbols-outlined text-primary" aria-hidden="true">{getIconForType(tx.type, (tx as any).category)}</span>
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-white text-base font-medium leading-normal test-statement-item-description" data-testid="statement-item-description">{tx.description}</p>
+                            <p className="text-white/60 text-sm test-statement-item-date" data-testid="statement-item-date">{formatDateBR(tx.date)}</p>
+                        </div>
+                        <div className="text-right">
+                            <p
+                                className={`text-base font-semibold test-statement-item-amount ${tx.amount < 0 ? 'text-orange-400' : 'text-primary'}`}
+                                data-testid="statement-item-amount"
+                            >{tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                        </div>
+                    </button>
+                    ))
+                )}
+            </div>
+        </main>
     );
 };
 

@@ -65,10 +65,10 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
                 <h1 className="text-2xl font-bold">Investimentos</h1>
             </header>
             <main className="flex-grow overflow-y-auto no-scrollbar px-4 space-y-6">
-                <div className="bg-primary/10 border border-primary/30 rounded-2xl p-6 text-white">
+                <div className="bg-orange-600/10 border border-orange-500/30 rounded-2xl p-6 text-white">
                     <div className="flex justify-between items-center">
-                        <span className="text-primary/70">Total investido</span>
-                         <button onClick={() => setIsBalanceVisible(!isBalanceVisible)} className="text-white/50 hover:text-white">
+                        <span className="text-orange-300">Total investido</span>
+                         <button onClick={() => setIsBalanceVisible(!isBalanceVisible)} className="text-orange-300 hover:text-white">
                             {isBalanceVisible ? (
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                             ) : (
@@ -109,7 +109,7 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
                 {mockFixedIncomeProducts.map(product => (
                     <div key={product.id} className="bg-surface-dark p-4 rounded-lg border border-subtle-dark/50">
                         <h3 className="font-bold text-white">{product.name}</h3>
-                        <p className="text-sm text-primary font-semibold">{product.yield}</p>
+                        <p className="text-sm text-orange-400 font-semibold">{product.yield}</p>
                         <div className="flex justify-between items-center mt-3 text-xs text-gray-400">
                             <span>Mínimo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.minInvestment)}</span>
                             <span>Liquidez: {product.liquidity}</span>
@@ -131,7 +131,7 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
     };
     
     return (
-        <div className="bg-background-dark text-white min-h-full flex flex-col">
+        <div className="bg-background-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28">
             {renderContent()}
         </div>
     );

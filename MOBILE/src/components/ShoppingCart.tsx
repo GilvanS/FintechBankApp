@@ -1,89 +1,111 @@
 import React from 'react';
 import { PurchasedItem } from '../types';
 
+// FIX: Renamed `cartItems` to `cart` and added `onUpdateQuantity` to match props from parent.
 interface ShoppingCartProps {
     cart: PurchasedItem[];
     onBack: () => void;
     onCheckout: () => void;
+    // FIX: Corrected the onUpdateQuantity prop signature to accept item ID and quantity.
     onUpdateQuantity: (itemId: string, quantity: number) => void;
 }
 
 const ShoppingCart: React.FC<ShoppingCartProps> = ({ cart, onBack, onCheckout, onUpdateQuantity }) => {
+    // FIX: Updated total calculation to account for item quantity.
     const total = cart.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
 
-    // Garantir que onUpdateQuantity existe
-    const handleUpdateQuantity = onUpdateQuantity || ((itemId: string, quantity: number) => {
-        console.warn('onUpdateQuantity não foi fornecido para ShoppingCart');
-    });
-
     return (
-        <div className="bg-background-dark text-white h-screen flex flex-col safe-top safe-bottom">
-            <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-subtle-dark/50 pt-[calc(1rem+env(safe-area-inset-top))]">
-                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
+        <div
+            className="bg-background-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28 test-shopping-cart"
+            id="shopping-cart"
+            data-testid="shopping-cart"
+            data-cy="shopping-cart"
+            data-playwright="shopping-cart"
+            role="main"
+        >
+            <header className="flex items-center p-4 border-b border-subtle-dark/50">
+                <button
+                    onClick={onBack}
+                    className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10 test-close-cart"
+                    id="btn-close-cart"
+                    name="close-cart"
+                    data-testid="close-cart"
+                    data-cy="close-cart"
+                    data-playwright="close-cart"
+                    aria-label="Voltar"
+                    type="button"
+                >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
-                <h2 className="text-2xl font-bold text-white">Carrinho</h2>
-                <div className="w-6"></div>
+                <h2 className="text-xl font-bold text-white">Meu Carrinho</h2>
             </header>
-            <main className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-4">
-                {cart.length === 0 ? (
-                    <div className="text-center text-subtle-dark py-8">
-                        <p className="text-lg">Seu carrinho está vazio.</p>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        {cart.map(item => (
-                            <div key={item.id} className="flex items-center justify-between bg-surface-dark p-4 rounded-lg">
-                                <div className="flex items-center flex-1 min-w-0">
-                                    <img src={item.imageUrl} alt={item.name} className="w-20 h-20 object-cover rounded-lg mr-4 flex-shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                        <h3 className="font-semibold text-white text-sm mb-1 truncate">{item.name}</h3>
-                                        <p className="text-base text-primary font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price)}</p>
-                                        <p className="text-xs text-subtle-dark mt-1">Qtd: {item.quantity || 1}</p>
-                                    </div>
+
+            {cart.length === 0 ? (
+                <div className="flex-grow flex flex-col items-center justify-center text-center">
+                    <svg className="w-16 h-16 text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                    <h3 className="text-lg font-semibold text-white">Seu carrinho está vazio</h3>
+                    <p className="text-gray-400">Adicione produtos para vê-los aqui.</p>
+                </div>
+            ) : (
+                <>
+                    <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-3">
+                        {cart.map((item, index) => (
+                             <div
+                                key={`${item.id}-${index}`}
+                                className="bg-surface-dark rounded-lg p-3 flex items-center space-x-4 test-cart-item"
+                                data-testid="cart-item"
+                                data-cy="cart-item"
+                                data-playwright="cart-item"
+                                data-item-id={item.id}
+                            >
+                                <img src={item.imageUrl} alt={item.name} className="w-16 h-16 object-cover rounded-md" />
+                                <div className="flex-grow">
+                                    <p className="font-semibold text-white text-sm" data-testid="cart-item-name">{item.name}</p>
+                                    <p className="text-primary font-bold" data-testid="cart-item-price">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price)}</p>
                                 </div>
-                                <div className="flex items-center ml-4">
-                                    <button 
-                                        onClick={() => handleUpdateQuantity(item.id, Math.max(1, (item.quantity || 1) - 1))}
-                                        className="w-8 h-8 flex items-center justify-center bg-background-dark text-white rounded-l-md hover:bg-surface-dark transition-colors"
-                                    >
-                                        -
-                                    </button>
-                                    <input 
-                                        type="number" 
-                                        min="1"
-                                        value={item.quantity || 1} 
-                                        onChange={(e) => {
-                                            const qty = parseInt(e.target.value, 10) || 1;
-                                            handleUpdateQuantity(item.id, Math.max(1, qty));
-                                        }} 
-                                        className="w-12 h-8 text-center bg-surface-dark text-white border-x border-background-dark focus:outline-none focus:ring-2 focus:ring-primary" 
-                                    />
-                                    <button 
-                                        onClick={() => handleUpdateQuantity(item.id, (item.quantity || 1) + 1)}
-                                        className="w-8 h-8 flex items-center justify-center bg-background-dark text-white rounded-r-md hover:bg-surface-dark transition-colors"
-                                    >
-                                        +
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={() => onUpdateQuantity(item.id, 0)}
+                                    className="p-2 text-gray-500 hover:text-red-400 test-remove-item"
+                                    name="remove-item"
+                                    data-testid="remove-item"
+                                    data-cy="remove-item"
+                                    data-playwright="remove-item"
+                                    data-item-id={item.id}
+                                    aria-label={`Remover ${item.name}`}
+                                    type="button"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
                             </div>
                         ))}
-                    </div>
-                )}
-            </main>
-            <footer className="flex-shrink-0 p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] border-t border-subtle-dark/50 bg-surface-dark">
-                <div className="flex justify-between items-center mb-4">
-                    <span className="text-lg font-semibold text-white">Total:</span>
-                    <span className="text-xl font-bold text-primary">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>
-                </div>
-                <button 
-                    onClick={onCheckout} 
-                    className="w-full py-4 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 active:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed" 
-                    disabled={cart.length === 0}
-                >
-                    Finalizar Compra
-                </button>
-            </footer>
+                    </main>
+                    <footer className="p-4 border-t border-subtle-dark/50 space-y-4">
+                        <div className="flex justify-between items-center text-lg">
+                            <span className="text-gray-300">Total</span>
+                            <span
+                                className="font-bold text-white test-cart-total"
+                                id="cart-total"
+                                data-testid="cart-total"
+                                data-cy="cart-total"
+                                data-playwright="cart-total"
+                            >{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>
+                        </div>
+                        <button
+                            onClick={onCheckout}
+                            className="w-full py-4 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90 test-checkout-button"
+                            id="btn-checkout"
+                            name="checkout"
+                            data-testid="checkout-button"
+                            data-cy="checkout-button"
+                            data-playwright="checkout-button"
+                            aria-label="Finalizar Compra"
+                            type="button"
+                        >
+                            Finalizar Compra
+                        </button>
+                    </footer>
+                </>
+            )}
         </div>
     );
 };

@@ -73,9 +73,9 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
         className="absolute inset-0 bg-black z-50 flex flex-col p-4 select-none animate-fade-in overflow-hidden"
     >
       {/* Background Image */}
-      {currentStory.imageUrl && (
+      {currentStory.image && (
           <img 
-          src={currentStory.imageUrl} 
+            src={currentStory.image} 
             alt={currentStory.title}
             className="absolute inset-0 w-full h-full object-cover animate-ken-burns"
             key={currentStoryIndex} // Re-trigger animation on change
@@ -114,7 +114,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
 
         {/* Content */}
         <div className="max-w-sm px-2 mx-auto text-center text-white pb-8">
-          {!currentStory.imageUrl && (
+          {!currentStory.image && (
             <div className="mb-4 text-6xl transition-transform duration-500 transform" key={currentStoryIndex}>{currentStory.icon}</div>
           )}
           <h2 className="mb-3 text-2xl font-bold leading-tight" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{currentStory.title}</h2>

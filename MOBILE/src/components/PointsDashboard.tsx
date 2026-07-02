@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 // FIX: Corrected import path for User type from parent directory.
 import { User } from '../types';
+import { formatDateBR } from '../utils/formatters';
 
 interface PointsDashboardProps {
   user: User;
@@ -26,16 +27,16 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
     </button>
   );
 
-  const iconClasses = "w-6 h-6 text-primary";
+  const iconClasses = "w-6 h-6 text-orange-400";
 
   return (
-    <div className="bg-background-dark text-white min-h-full flex flex-col">
+    <div className="bg-background-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28">
       <header className="flex items-center p-4">
           <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
           </button>
         <div className="text-center flex-grow">
-                  <h2 className="text-lg font-bold text-white">Fintech Cashback</h2>
+            <h2 className="text-lg font-bold text-white">Fintech Loop</h2>
         </div>
         <div className="w-10">
              <button className="p-2 rounded-full hover:bg-white/10">
@@ -50,7 +51,7 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
                 <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
             </div>
             <div>
-                <p className="font-bold text-primary">Cartão Black</p>
+                <p className="font-bold text-orange-400">Cartão Black</p>
                 <p className="text-2xl font-bold text-white">{user.creditCard.pointsBalance.toLocaleString('pt-BR')} pontos</p>
             </div>
         </div>
@@ -59,13 +60,13 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
         <div className="flex border-b border-subtle-dark">
             <button 
                 onClick={() => setView('earn')}
-                className={`flex-1 py-3 text-sm font-semibold text-center transition-colors ${view === 'earn' ? 'text-primary border-b-2 border-primary' : 'text-gray-400 hover:text-white'}`}
+                className={`flex-1 py-3 text-sm font-semibold text-center transition-colors ${view === 'earn' ? 'text-orange-400 border-b-2 border-orange-400' : 'text-gray-400 hover:text-white'}`}
             >
                 Ganhar pontos
             </button>
             <button 
                 onClick={() => setView('redeem')}
-                className={`flex-1 py-3 text-sm font-semibold text-center transition-colors ${view === 'redeem' ? 'text-primary border-b-2 border-primary' : 'text-gray-400 hover:text-white'}`}
+                className={`flex-1 py-3 text-sm font-semibold text-center transition-colors ${view === 'redeem' ? 'text-orange-400 border-b-2 border-orange-400' : 'text-gray-400 hover:text-white'}`}
             >
                 Resgatar
             </button>
@@ -82,9 +83,9 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
                     <img src="https://i.imgur.com/2sfh1cS.png" alt="Coin" className="w-16 h-16" />
                     <div className="flex-grow">
                         <p className="font-bold text-white">Débito Automático</p>
-                              <p className="text-sm text-gray-400">Ative o Débito Automático da fatura para ganhar pontos no Fintech Cashback.</p>
+                        <p className="text-sm text-gray-400">Ative o Débito Automático da fatura para ganhar pontos no Fintech Loop.</p>
                     </div>
-                    <button className="px-4 py-2 bg-primary text-background-dark font-bold text-sm rounded-lg hover:bg-primary/90">Ativar agora</button>
+                    <button className="px-4 py-2 bg-orange-500 text-background-dark font-bold text-sm rounded-lg hover:bg-orange-600">Ativar agora</button>
                 </div>
 
                 <div className="pt-4">
@@ -96,10 +97,10 @@ const PointsDashboard: React.FC<PointsDashboardProps> = ({ user, onBack }) => {
                                     <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-md flex-shrink-0" />
                                     <div className="flex-grow overflow-hidden">
                                         <p className="font-semibold text-white text-sm truncate">{item.name}</p>
-                                        <p className="text-xs text-gray-400">{item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString('pt-BR') : ''}</p>
+                                        <p className="text-xs text-gray-400">{item.purchaseDate ? formatDateBR(item.purchaseDate) : ''}</p>
                                     </div>
                                     <div className="text-right flex-shrink-0">
-                                        <p className={`font-bold text-sm ${item.pointsEarned && item.pointsEarned > 0 ? 'text-primary' : 'text-gray-500'}`}>
+                                        <p className={`font-bold text-sm ${item.pointsEarned && item.pointsEarned > 0 ? 'text-orange-400' : 'text-gray-500'}`}>
                                             +{item.pointsEarned || 0} pts
                                         </p>
                                     </div>

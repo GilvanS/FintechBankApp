@@ -68,13 +68,14 @@ export interface LimitIncreaseRequest {
 }
 
 export interface Story {
-    id: string;
+    id?: string;
     title: string;
     description: string;
     imageUrl?: string;
+    image?: string;
     icon?: string;
-    viewed: boolean;
-    expiresAt: string;
+    viewed?: boolean;
+    expiresAt?: string;
     url?: string;
 }
 
@@ -95,6 +96,22 @@ export interface PurchasedItem {
     quantity?: number;
     purchaseDate?: string;
     pointsEarned?: number;
+    originalPrice?: number;
+    category?: string;
+    cashback?: string;
+    rating?: number;
+    reviews?: number;
+    isNew?: boolean;
+}
+
+export interface BillingCycle {
+    status: 'aberta' | 'fechada' | 'vencida' | 'inadimplente';
+    invoiceRef?: string;
+    ref?: string;
+    closeDate: string;
+    dueDate: string;
+    overdueDeadline?: string;
+    isActive?: boolean;
 }
 
 export interface FixedIncomeProduct {

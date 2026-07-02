@@ -41,14 +41,14 @@ const InstallmentReview: React.FC<InstallmentReviewProps> = ({ type, user, detai
     const { totalAmount, installmentValue, firstInstallmentDate, interestRatePerInstallment, totalInterest } = calculations;
 
     return (
-        <div className="bg-black text-white h-screen flex flex-col">
-            <header className="flex-shrink-0 flex items-center px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-4">
+        <div className="bg-black text-white p-4 min-h-full flex flex-col">
+             <header className="flex items-center mb-6">
                 <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-gray-800">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
                 <h2 className="text-xl font-bold text-white">Revise as informações</h2>
             </header>
-            <main className="flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-4 px-4">
+            <main className="flex-grow overflow-y-auto no-scrollbar space-y-4">
                 <p className="text-sm text-gray-400">Essas são as condições de contratação para prosseguir com a operação.</p>
 
                 <div className="bg-gray-900 rounded-lg p-4">
@@ -79,17 +79,17 @@ const InstallmentReview: React.FC<InstallmentReviewProps> = ({ type, user, detai
                     </button>
                 </div>
 
-                <div className="pt-4 pb-4">
+                <div className="pt-4">
                     <label className="flex items-start space-x-3 cursor-pointer">
-                        <input type="checkbox" checked={termsAccepted} onChange={() => setTermsAccepted(!termsAccepted)} className="mt-1 h-5 w-5 text-primary bg-gray-700 border-gray-600 rounded focus:ring-primary" />
+                        <input type="checkbox" checked={termsAccepted} onChange={() => setTermsAccepted(!termsAccepted)} className="mt-1 h-5 w-5 text-orange-500 bg-gray-700 border-gray-600 rounded focus:ring-orange-600" />
                         <span className="text-sm text-gray-400">
                             Autorizo o débito do valor total ou parcial da(s) parcela(s) na(s) conta(s) corrente(s) indicada(s), na data de vencimento ou após o vencimento, podendo ser utilizado o limite do cheque especial.
                         </span>
                     </label>
                 </div>
             </main>
-            <footer className="flex-shrink-0 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4">
-                <button onClick={onConfirm} disabled={!termsAccepted} className="w-full py-4 font-semibold text-background-dark bg-primary rounded-lg hover:bg-primary/90 disabled:bg-gray-600 disabled:cursor-not-allowed">
+            <footer className="mt-auto pt-4">
+                <button onClick={onConfirm} disabled={!termsAccepted} className="w-full py-4 font-semibold text-black bg-orange-500 rounded-lg hover:bg-orange-600 disabled:bg-gray-600 disabled:cursor-not-allowed">
                     Continuar
                 </button>
             </footer>

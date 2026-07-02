@@ -6,10 +6,12 @@ import { User } from './types';
 import { AuthContext } from './context/AuthContext';
 import Login from './pages/Login';
 import PreLoginDashboard from './pages/PreLoginDashboard';
-import Home from './pages/Home';
+import Dashboard from './components/Dashboard';
 import SignUp from './SignUp';
 import ResetPassword from './components/ResetPassword';
 import Admin from './components/Admin';
+import { DialogProvider } from './contexts/GlobalDialogContext';
+import { AppStateProvider } from './contexts/AppStateContext';
 import { initializeApi, getUserMe as getProfile } from './services/api';
 
 /* Core CSS & Theme - OTIMIZADO: Imports agrupados para melhor performance no APK */
@@ -215,12 +217,12 @@ const App: React.FC = () => {
       case 'resetPassword':
         return <ResetPassword onNavigateToLogin={() => setView('login')} onResetSuccess={() => setView('login')} />;
       case 'admin':
-        return <Admin onBack={() => setView('home')} />;
+        return <Admin isOpen={true} onClose={() => setView('home')} />;
       case 'home':
       case 'cards':
       case 'shop':
       case 'profile':
-        return user ? <Home user={user} onLogout={handleLogout} refreshUserData={handleUpdateUser} onNavigateApp={navigateTo} /> : <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} onNavigateToSignUp={() => setView('signup')} onNavigateToResetPassword={() => setView('resetPassword')} />;
+        return user ? <Dashboard /> : <Login onLoginSuccess={handleLogin} onNavigateToPreLogin={() => setView('prelogin')} onNavigateToSignUp={() => setView('signup')} onNavigateToResetPassword={() => setView('resetPassword')} />;
       case 'prelogin':
       default:
         return <PreLoginDashboard onNavigateToLogin={() => setView('login')} onNavigateToSignUp={() => setView('signup')} />;
@@ -229,9 +231,13 @@ const App: React.FC = () => {
 
   return (
     <AuthContext.Provider value={authContextValue as any}>
-      <IonApp className="bg-background-dark" style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'visible' }}>
-        {renderView()}
-      </IonApp>
+      <AppStateProvider>
+        <DialogProvider>
+          <IonApp className="bg-volt-dark" style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'visible' }}>
+            {renderView()}
+          </IonApp>
+        </DialogProvider>
+      </AppStateProvider>
     </AuthContext.Provider>
   );
 };

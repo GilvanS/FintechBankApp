@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
-import { User, PixContact, SignUpData, PasswordResetRequest, LimitIncreaseRequest } from '../types';
+import { User, PixContact, SignUpData, PasswordResetRequest, LimitIncreaseRequest, Transaction } from '../types';
 import { API_BASE_URL, PROBE_SUBNETS, API_PORT } from '../apiConfig';
 
 // URL da API para APK - sempre usar URL absoluta
@@ -1175,6 +1175,41 @@ export async function adminResetTestData(): Promise<{ success: boolean; message?
         return { success: !!res.data?.success };
     } catch (error: any) {
         return { success: false, message: error?.response?.data?.message || 'Erro ao resetar dados.' };
+    }
+}
+
+// ── Adapters de compatibilidade com componentes portados do WEB ──────────────
+
+export async function performPix(cpf: string, key: string, amount: number, description: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> {
+    try {
+        const res = await api.post('/pix/transfer', { cpf, key, amount, description }, {
+            headers: getAuthHeaders('json'),
+        });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao realizar PIX' };
+    }
+}
+
+export async function performPixCreditInstallment(cpf: string, amount: number, installments: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> {
+    try {
+        const res = await api.post('/pix/credit-installment', { cpf, amount, installments }, {
+            headers: getAuthHeaders('json'),
+        });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao realizar PIX no crédito' };
+    }
+}
+
+export async function checkout(payload: { cpf: string; items: any[]; paymentMethod: string; cashbackUsed?: number; installments?: number; pin?: string }): Promise<{ success: boolean; message: string; purchase?: any }> {
+    try {
+        const res = await api.post('/shop/checkout', payload, {
+            headers: getAuthHeaders('json'),
+        });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao realizar checkout' };
     }
 }
 

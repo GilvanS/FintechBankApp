@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { CardTransaction } from '../types';
 
 interface AnticipateInstallmentsProps {
     onBack: () => void;
-    onConfirmAnticipation: (selectedIds: string[]) => void;
+    onConfirmAnticipation: (transactionIds: string[]) => void;
     isProcessing: boolean;
 }
 
@@ -38,7 +39,7 @@ const AnticipateInstallments: React.FC<AnticipateInstallmentsProps> = ({ onBack,
     const canAfford = user.balance >= totalFinal;
 
     return (
-        <div className="bg-background-dark text-white min-h-full flex flex-col">
+        <div className="bg-background-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28">
             <header className="flex items-center p-4">
                 <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10">
                     <span className="material-symbols-outlined">arrow_back</span>
