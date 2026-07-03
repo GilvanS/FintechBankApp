@@ -240,11 +240,11 @@ export default function LimitView({
               ? 'bg-volt-surface border-white/10 shadow-lg shadow-black/20' 
               : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
           }`}>
-            <div className="absolute -top-12 -right-12 w-32 h-32 bg-[#00ff9d]/5 blur-3xl rounded-full"></div>
+            <div className="absolute -top-12 -right-12 w-32 h-32 bg-volt-green/5 blur-3xl rounded-full"></div>
             <p className="text-[10px] uppercase tracking-wider font-extrabold text-on-surface-variant">
               Disponível para compras
             </p>
-            <p className={`text-3xl font-black mt-2 tracking-tight ${isMidnight ? 'text-[#00ff9d] drop-shadow-[0_0_15px_rgba(0,255,157,0.25)]' : 'text-black'}`}>
+            <p className={`text-3xl font-black mt-2 tracking-tight ${isMidnight ? 'text-volt-green drop-shadow-[0_0_15px_rgba(0,255,157,0.25)]' : 'text-black'}`}>
               R$ 609,43
             </p>
 
@@ -255,7 +255,7 @@ export default function LimitView({
               }`}>
                 <div 
                   className={`h-full rounded-full transition-all duration-500 ${
-                    isMidnight ? 'bg-[#00ff9d]' : 'bg-black'
+                    isMidnight ? 'bg-volt-green' : 'bg-black'
                   }`} 
                   style={{ width: '18.1%' }}
                 ></div>
@@ -282,7 +282,7 @@ export default function LimitView({
                 Meus Limites
               </h3>
               <span className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
-                isMidnight ? 'bg-[#00ff9d]/10 text-[#00ff9d]' : 'bg-[#A2FF00]/15 text-black border-2 border-black'
+                isMidnight ? 'bg-volt-green/10 text-volt-green' : 'bg-[#A2FF00]/15 text-black border-2 border-black'
               }`}>
                 Ativo
               </span>
@@ -296,7 +296,7 @@ export default function LimitView({
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                  isMidnight ? 'bg-[#00ff9d]/10 text-[#00ff9d]' : 'bg-black text-white'
+                  isMidnight ? 'bg-volt-green/10 text-volt-green' : 'bg-black text-white'
                 }`}>
                   <Sliders size={18} />
                 </div>
@@ -312,7 +312,7 @@ export default function LimitView({
               <div className={`grid grid-cols-2 gap-4 pt-2 border-t ${isMidnight ? 'border-zinc-800' : 'border-black/5'}`}>
                 <div className="space-y-0.5">
                   <span className="text-[9px] text-on-surface-variant uppercase font-bold tracking-wider">Disponível</span>
-                  <p className={`text-lg font-black ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>
+                  <p className={`text-lg font-black ${isMidnight ? 'text-volt-green' : 'text-black'}`}>
                     R$ {withdrawalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
@@ -361,7 +361,7 @@ export default function LimitView({
                   isMidnight 
                     ? 'bg-white/10 border border-white/10'
                     : 'bg-gray-200 border-2 border-black'
-                } peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black`}></div>
+                } peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black`}></div>
               </label>
             </div>
           </section>
@@ -392,17 +392,17 @@ export default function LimitView({
           </div>
 
           <section className="space-y-1">
-            <h2 className="text-xl font-black text-[#00ff9d]">Simule como preferir:</h2>
+            <h2 className="text-xl font-black text-volt-green">Simule como preferir:</h2>
             <p className="text-xs text-on-surface-variant">Configure o valor e as parcelas para o seu saque imediato.</p>
           </section>
 
           {/* Amount input box */}
           <div className={`p-4 rounded-xl border flex flex-col gap-1 transition-all ${
-            isMidnight ? 'bg-volt-surface border-white/10 focus-within:border-[#00ff9d]' : 'bg-white border-2 border-black focus-within:ring-2 focus-within:ring-black'
+            isMidnight ? 'bg-volt-surface border-white/10 focus-within:border-volt-green' : 'bg-white border-2 border-black focus-within:ring-2 focus-within:ring-black'
           }`}>
             <label className="text-[10px] uppercase tracking-wider font-extrabold text-on-surface-variant">Qual valor você precisa?</label>
-            <div className="flex items-baseline gap-1.5 border-b border-[#00ff9d] pb-1">
-              <span className="text-lg font-black text-[#00ff9d]">R$</span>
+            <div className="flex items-baseline gap-1.5 border-b border-volt-green pb-1">
+              <span className="text-lg font-black text-volt-green">R$</span>
               <input 
                 type="number"
                 value={withdrawAmount}
@@ -414,7 +414,7 @@ export default function LimitView({
               />
             </div>
             <p className="text-[10px] text-on-surface-variant pt-1">
-              Valor disponível: <span className="text-[#00ff9d] font-bold">R$ {withdrawalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+              Valor disponível: <span className="text-volt-green font-bold">R$ {withdrawalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
             </p>
           </div>
 
@@ -430,7 +430,7 @@ export default function LimitView({
                   className={`py-3 rounded-xl border text-xs font-black transition-all cursor-pointer ${
                     installments === i
                       ? isMidnight
-                        ? 'border-[#00ff9d] bg-[#00ff9d]/10 text-[#00ff9d] shadow-[0_0_12px_rgba(0,255,157,0.15)]'
+                        ? 'border-volt-green bg-volt-green/10 text-volt-green shadow-[0_0_12px_rgba(0,255,157,0.15)]'
                         : 'border-black bg-[#A2FF00] text-black font-extrabold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
                       : isMidnight
                         ? 'border-white/10 bg-[#131313] text-white/40 hover:text-white hover:border-white/20'
@@ -450,27 +450,27 @@ export default function LimitView({
             <div className="space-y-3">
               {/* Card 1: Menor Prazo */}
               <div className={`p-5 rounded-2xl border relative overflow-hidden transition-all duration-300 ${
-                isMidnight ? 'bg-volt-surface border-white/10 hover:border-[#00ff9d]/30' : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                isMidnight ? 'bg-volt-surface border-white/10 hover:border-volt-green/30' : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
               }`}>
                 {/* Green marker left border */}
-                <div className="absolute top-0 left-0 w-1 h-full bg-[#00ff9d]" />
+                <div className="absolute top-0 left-0 w-1 h-full bg-volt-green" />
 
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="px-2.5 py-0.5 bg-[#00ff9d]/10 text-[#00ff9d] text-[8px] font-black uppercase tracking-wider rounded-full mb-1 inline-block">
+                    <span className="px-2.5 py-0.5 bg-volt-green/10 text-volt-green text-[8px] font-black uppercase tracking-wider rounded-full mb-1 inline-block">
                       RECOMENDADO
                     </span>
                     <h4 className="text-sm font-black">Menor prazo</h4>
                   </div>
                   <div className="text-right">
                     <p className="text-[8px] font-black uppercase text-on-surface-variant">TOTAL SOLICITADO</p>
-                    <p className={`text-xs font-black ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>{formatBRL(withdrawAmount)}</p>
+                    <p className={`text-xs font-black ${isMidnight ? 'text-volt-green' : 'text-black'}`}>{formatBRL(withdrawAmount)}</p>
                   </div>
                 </div>
 
                 <div className="py-4 border-y border-zinc-800/10 my-3">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className={`text-2xl font-black ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>{installments}x</span>
+                    <span className={`text-2xl font-black ${isMidnight ? 'text-volt-green' : 'text-black'}`}>{installments}x</span>
                     <span className="text-xs text-on-surface-variant font-extrabold">×</span>
                     <span className={`text-2xl font-black ${isMidnight ? 'text-white' : 'text-black'}`}>
                       {formatBRL(currentValues.installmentValue)}
@@ -481,7 +481,7 @@ export default function LimitView({
                 <div className="grid grid-cols-2 gap-4 text-[10px]">
                   <div>
                     <span className="text-on-surface-variant block uppercase font-bold">Taxa de juros</span>
-                    <span className={`font-extrabold ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>17.9% ao mês</span>
+                    <span className={`font-extrabold ${isMidnight ? 'text-volt-green' : 'text-black'}`}>17.9% ao mês</span>
                   </div>
                   <div className="text-right">
                     <span className="text-on-surface-variant block uppercase font-bold">1ª Parcela vence em</span>
@@ -526,7 +526,7 @@ export default function LimitView({
                   }}
                   className={`w-full py-2 bg-transparent border font-black rounded-lg text-[10px] uppercase tracking-wider transition-all ${
                     isMidnight 
-                      ? 'hover:bg-[#00ff9d]/5 border-[#00ff9d]/25 text-[#00ff9d]/70 hover:text-[#00ff9d]' 
+                      ? 'hover:bg-volt-green/5 border-volt-green/25 text-volt-green/70 hover:text-volt-green' 
                       : 'hover:bg-black/5 border-black/20 text-black/70 hover:text-black'
                   }`}
                 >
@@ -576,7 +576,7 @@ export default function LimitView({
           </div>
 
           <section className="flex flex-col gap-1 text-center">
-            <h2 className={`text-xl font-black ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>Transferência</h2>
+            <h2 className={`text-xl font-black ${isMidnight ? 'text-volt-green' : 'text-black'}`}>Transferência</h2>
             <p className="text-xs text-on-surface-variant">Pra qual banco quer transferir?</p>
           </section>
 
@@ -584,7 +584,7 @@ export default function LimitView({
           <div className="space-y-2">
             <div className={`p-3 rounded-xl flex items-center gap-2 border transition-all ${
               isMidnight 
-                ? 'bg-volt-surface border-white/10 focus-within:border-[#00ff9d]' 
+                ? 'bg-volt-surface border-white/10 focus-within:border-volt-green' 
                 : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
             }`}>
               <Search className="text-on-surface-variant" size={16} />
@@ -613,7 +613,7 @@ export default function LimitView({
                     className={`w-full p-2.5 rounded-lg text-left text-xs font-extrabold flex items-center justify-between transition-all ${
                       isSelected
                         ? isMidnight
-                          ? 'bg-[#00ff9d]/10 text-[#00ff9d]'
+                          ? 'bg-volt-green/10 text-volt-green'
                           : 'bg-black text-white'
                         : isMidnight
                           ? 'hover:bg-white/5 text-white/80'
@@ -633,7 +633,7 @@ export default function LimitView({
 
           {/* Account Data Bento Grid */}
           <section className="space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-wider pl-1 text-[#00ff9d]">
+            <h3 className="text-xs font-black uppercase tracking-wider pl-1 text-volt-green">
               Quais os dados da sua conta?
             </h3>
 
@@ -641,7 +641,7 @@ export default function LimitView({
               {/* Agency Input */}
               <div className={`p-4 rounded-xl border flex flex-col gap-1 transition-all ${
                 isMidnight 
-                  ? 'bg-volt-surface border-white/10 focus-within:border-[#00ff9d]' 
+                  ? 'bg-volt-surface border-white/10 focus-within:border-volt-green' 
                   : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
               }`}>
                 <label className="text-[9px] uppercase tracking-wider font-extrabold text-on-surface-variant">Agência</label>
@@ -650,7 +650,7 @@ export default function LimitView({
                   value={agency}
                   onChange={(e) => setAgency(e.target.value)}
                   className={`bg-transparent border-b font-black text-sm py-1 outline-none ${
-                    isMidnight ? 'border-zinc-850 text-white focus:border-[#00ff9d]' : 'border-gray-200 text-black focus:border-black'
+                    isMidnight ? 'border-zinc-850 text-white focus:border-volt-green' : 'border-gray-200 text-black focus:border-black'
                   }`}
                 />
               </div>
@@ -658,7 +658,7 @@ export default function LimitView({
               {/* Account Input */}
               <div className={`p-4 rounded-xl border flex flex-col gap-1 transition-all ${
                 isMidnight 
-                  ? 'bg-volt-surface border-white/10 focus-within:border-[#00ff9d]' 
+                  ? 'bg-volt-surface border-white/10 focus-within:border-volt-green' 
                   : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
               }`}>
                 <label className="text-[9px] uppercase tracking-wider font-extrabold text-on-surface-variant">Conta com dígito</label>
@@ -667,7 +667,7 @@ export default function LimitView({
                   value={account}
                   onChange={(e) => setAccount(e.target.value)}
                   className={`bg-transparent border-b font-black text-sm py-1 outline-none ${
-                    isMidnight ? 'border-zinc-850 text-white focus:border-[#00ff9d]' : 'border-gray-200 text-black focus:border-black'
+                    isMidnight ? 'border-zinc-850 text-white focus:border-volt-green' : 'border-gray-200 text-black focus:border-black'
                   }`}
                 />
               </div>
@@ -685,7 +685,7 @@ export default function LimitView({
                 className={`flex-1 py-2.5 rounded-full text-xs font-black transition-all cursor-pointer ${
                   accountType === 'corrente'
                     ? isMidnight
-                      ? 'bg-[#00ff9d] text-black font-extrabold shadow-md'
+                      ? 'bg-volt-green text-black font-extrabold shadow-md'
                       : 'bg-black text-white font-extrabold'
                     : 'text-on-surface-variant'
                 }`}
@@ -697,7 +697,7 @@ export default function LimitView({
                 className={`flex-1 py-2.5 rounded-full text-xs font-black transition-all cursor-pointer ${
                   accountType === 'poupança'
                     ? isMidnight
-                      ? 'bg-[#00ff9d] text-black font-extrabold shadow-md'
+                      ? 'bg-volt-green text-black font-extrabold shadow-md'
                       : 'bg-black text-white font-extrabold'
                     : 'text-on-surface-variant'
                 }`}
@@ -708,12 +708,12 @@ export default function LimitView({
           </section>
 
           {/* Warning Information Box */}
-          <div className={`p-4 rounded-xl border-l-4 border-[#00ff9d] flex gap-3 items-start ${
+          <div className={`p-4 rounded-xl border-l-4 border-volt-green flex gap-3 items-start ${
             isMidnight ? 'bg-volt-surface border-white/10' : 'bg-green-50/50'
           }`}>
-            <Info className="text-[#00ff9d] shrink-0 mt-0.5" size={16} />
+            <Info className="text-volt-green shrink-0 mt-0.5" size={16} />
             <div className="space-y-1">
-              <p className="text-xs font-black text-[#00ff9d]">Atenção!</p>
+              <p className="text-xs font-black text-volt-green">Atenção!</p>
               <p className="text-[10px] text-on-surface-variant leading-relaxed">
                 O dinheiro será enviado com a finalidade de Empréstimo, alguns bancos podem não receber esse tipo de transferência.
               </p>
@@ -760,7 +760,7 @@ export default function LimitView({
           </div>
 
           <section className="space-y-1">
-            <h2 className="text-xl font-black text-[#00ff9d]">Resumo da Proposta</h2>
+            <h2 className="text-xl font-black text-volt-green">Resumo da Proposta</h2>
             <p className="text-xs text-on-surface-variant">Confira todos os detalhes do seu saque antes de confirmar.</p>
           </section>
 
@@ -768,14 +768,14 @@ export default function LimitView({
           <div className={`rounded-xl p-5 border relative overflow-hidden transition-all duration-300 ${
             isMidnight ? 'bg-volt-surface border-white/10' : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
           }`}>
-            <div className="absolute top-0 left-0 w-1 h-full bg-[#00ff9d] shadow-[0_0_10px_rgba(0,255,157,0.5)]" />
+            <div className="absolute top-0 left-0 w-1 h-full bg-volt-green shadow-[0_0_10px_rgba(0,255,157,0.5)]" />
             
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-sm font-black text-[#00ff9d]">Dados do Saque</h3>
+                <h3 className="text-sm font-black text-volt-green">Dados do Saque</h3>
                 <p className="text-[8px] font-black uppercase tracking-wider text-on-surface-variant">Detalhamento Financeiro</p>
               </div>
-              <Sliders className="text-[#00ff9d]" size={16} />
+              <Sliders className="text-volt-green" size={16} />
             </div>
 
             <div className="space-y-4">
@@ -800,13 +800,13 @@ export default function LimitView({
                     <span className="text-[9px] text-on-surface-variant uppercase font-bold">Titular</span>
                     <p className="font-extrabold uppercase">{userProfile.fullName}</p>
                   </div>
-                  <Shield size={14} className="text-[#00ff9d]" />
+                  <Shield size={14} className="text-volt-green" />
                 </div>
 
                 <div className="flex justify-between items-end border-b border-zinc-800/10 pb-2">
                   <div>
                     <span className="text-[9px] text-on-surface-variant uppercase font-bold">Valor solicitado</span>
-                    <p className="text-xl font-black text-[#00ff9d]">{formatBRL(withdrawAmount)}</p>
+                    <p className="text-xl font-black text-volt-green">{formatBRL(withdrawAmount)}</p>
                   </div>
                 </div>
 
@@ -817,7 +817,7 @@ export default function LimitView({
                   </div>
                   <div className="text-right">
                     <span className="text-[9px] text-on-surface-variant uppercase font-bold">Parcelas</span>
-                    <p className="font-extrabold text-[#00ff9d]">{installments}x</p>
+                    <p className="font-extrabold text-volt-green">{installments}x</p>
                   </div>
                 </div>
 
@@ -831,7 +831,7 @@ export default function LimitView({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-on-surface-variant font-medium">Taxa de juros (mês)</span>
-                    <span className="font-black text-[#00ff9d]">17,90%</span>
+                    <span className="font-black text-volt-green">17,90%</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-on-surface-variant font-medium">Valor total de juros</span>
@@ -886,16 +886,16 @@ export default function LimitView({
               onClick={() => setScreen('resumo')}
               className="text-volt-primary hover:opacity-80 transition-opacity"
             >
-              <ArrowLeft size={18} className="text-[#00ff9d]" />
+              <ArrowLeft size={18} className="text-volt-green" />
             </button>
             <h1 className="text-xs font-black uppercase tracking-wider text-on-surface-variant">Segurança</h1>
-            <div className="text-xs font-black text-[#00ff9d]">Saque com Cartão</div>
+            <div className="text-xs font-black text-volt-green">Saque com Cartão</div>
           </div>
 
           {/* Instruction */}
           <div className="space-y-1">
             <p className="text-sm text-on-surface font-semibold">Digite a chave de posição</p>
-            <p className="text-3xl font-black text-[#00ff9d] drop-shadow-[0_0_12px_rgba(0,255,157,0.4)]">44</p>
+            <p className="text-3xl font-black text-volt-green drop-shadow-[0_0_12px_rgba(0,255,157,0.4)]">44</p>
           </div>
 
           {/* Interactive PIN code inputs */}
@@ -911,8 +911,8 @@ export default function LimitView({
                     readOnly
                     onClick={() => setFocusedPinIndex(idx)}
                     placeholder={isFocused ? '|' : ''}
-                    className={`w-12 h-14 bg-zinc-900 border-b-2 text-[#00ff9d] text-center font-black text-xl rounded-lg focus:outline-none transition-all placeholder:text-zinc-700 ${
-                      isFocused ? 'border-[#00ff9d] ring-2 ring-[#00ff9d]/20 shadow-[0_0_12px_rgba(0,255,157,0.3)]' : 'border-zinc-800'
+                    className={`w-12 h-14 bg-zinc-900 border-b-2 text-volt-green text-center font-black text-xl rounded-lg focus:outline-none transition-all placeholder:text-zinc-700 ${
+                      isFocused ? 'border-volt-green ring-2 ring-volt-green/20 shadow-[0_0_12px_rgba(0,255,157,0.3)]' : 'border-zinc-800'
                     }`}
                   />
                 );
@@ -962,7 +962,7 @@ export default function LimitView({
 
           {/* Protocol Card */}
           <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 text-left space-y-1.5 shadow-xl max-w-sm mx-auto">
-            <div className="flex items-center gap-1.5 text-[#00ff9d]">
+            <div className="flex items-center gap-1.5 text-volt-green">
               <Shield size={16} />
               <span className="text-[8px] font-black uppercase tracking-widest">Protocolo Seguro</span>
             </div>
@@ -999,10 +999,10 @@ export default function LimitView({
         >
           {/* Header check icon */}
           <div className="w-full flex flex-col items-center">
-            <div className="w-20 h-20 rounded-full bg-[#00ff9d]/10 border-2 border-[#00ff9d] flex items-center justify-center shadow-[0_0_15px_rgba(0,255,157,0.2)] mb-4">
-              <CheckCircle2 size={48} className="text-[#00ff9d] stroke-[2]" />
+            <div className="w-20 h-20 rounded-full bg-volt-green/10 border-2 border-volt-green flex items-center justify-center shadow-[0_0_15px_rgba(0,255,157,0.2)] mb-4">
+              <CheckCircle2 size={48} className="text-volt-green stroke-[2]" />
             </div>
-            <h2 className="text-lg font-black text-[#00ff9d] leading-snug">
+            <h2 className="text-lg font-black text-volt-green leading-snug">
               Sua solicitação foi efetuada com sucesso!
             </h2>
             <p className="text-xs text-on-surface-variant mt-1.5">
@@ -1012,21 +1012,21 @@ export default function LimitView({
 
           {/* Details Card */}
           <div className="bg-zinc-900/60 p-5 rounded-2xl border border-zinc-800 text-left space-y-4 relative overflow-hidden">
-            <div className="absolute -top-12 -right-12 w-32 h-32 bg-[#00ff9d]/5 blur-3xl rounded-full" />
+            <div className="absolute -top-12 -right-12 w-32 h-32 bg-volt-green/5 blur-3xl rounded-full" />
             
             <div className="space-y-1">
               <span className="text-[9px] uppercase tracking-widest text-on-surface-variant block">Data e hora</span>
-              <p className="text-base font-black text-[#00ff9d]">{lastWithdrawal.date} - {lastWithdrawal.time}</p>
+              <p className="text-base font-black text-volt-green">{lastWithdrawal.date} - {lastWithdrawal.time}</p>
             </div>
 
             <div className="p-3 rounded-lg bg-zinc-950/50 border border-zinc-850 flex gap-2">
-              <Info className="text-[#00ff9d] shrink-0 mt-0.5" size={16} />
+              <Info className="text-volt-green shrink-0 mt-0.5" size={16} />
               <p className="text-[10px] text-on-surface-variant leading-relaxed">
                 Esta transação está em processamento. Por isso, o valor pode demorar um pouco para cair na sua conta.
               </p>
             </div>
 
-            <button className="w-full py-3 px-4 rounded-xl border border-zinc-800 flex items-center justify-center gap-1.5 font-black text-[10px] uppercase tracking-wider text-[#00ff9d] hover:bg-zinc-800 transition-colors">
+            <button className="w-full py-3 px-4 rounded-xl border border-zinc-800 flex items-center justify-center gap-1.5 font-black text-[10px] uppercase tracking-wider text-volt-green hover:bg-zinc-800 transition-colors">
               <Share2 size={12} /> Compartilhar resumo da proposta
             </button>
           </div>
@@ -1062,11 +1062,11 @@ export default function LimitView({
             <div className="flex items-center gap-3">
               <button 
                 onClick={() => setScreen('success')}
-                className="text-[#00ff9d] hover:opacity-80 active:scale-95 shrink-0"
+                className="text-volt-green hover:opacity-80 active:scale-95 shrink-0"
               >
                 <ArrowLeft size={18} />
               </button>
-              <h1 className="text-xs font-black uppercase tracking-wider text-[#00ff9d]">Saque com Cartão</h1>
+              <h1 className="text-xs font-black uppercase tracking-wider text-volt-green">Saque com Cartão</h1>
             </div>
             <div className="flex items-center gap-3 text-on-surface-variant">
               <button onClick={() => showDialog({ title: 'Aviso', message: 'Recibo compartilhado!' })} className="hover:text-white"><Share2 size={16} /></button>
@@ -1076,8 +1076,8 @@ export default function LimitView({
 
           {/* Success Title Header */}
           <div className="text-center space-y-1.5 py-2">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-[#00ff9d]/10 mb-2">
-              <CheckCircle2 size={36} className="text-[#00ff9d]" />
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-volt-green/10 mb-2">
+              <CheckCircle2 size={36} className="text-volt-green" />
             </div>
             <h2 className="text-base font-black text-white">Transação Concluída</h2>
             <p className="text-[10px] text-on-surface-variant">O valor será creditado em sua conta em instantes.</p>
@@ -1086,7 +1086,7 @@ export default function LimitView({
           {/* Section: Dados do Saque */}
           <div className="bg-zinc-900/60 rounded-xl overflow-hidden border border-zinc-800 shadow-xl">
             <div className="p-3 bg-zinc-950/70 border-b border-zinc-850 flex items-center gap-2">
-              <CreditCard className="text-[#00ff9d]" size={16} />
+              <CreditCard className="text-volt-green" size={16} />
               <h3 className="text-xs font-black text-white uppercase tracking-wider">Dados do Saque</h3>
             </div>
             <div className="p-4 space-y-3 text-[11px]">
@@ -1104,7 +1104,7 @@ export default function LimitView({
               <div className="h-[1px] bg-zinc-800 my-1" />
               <div className="flex justify-between items-center">
                 <span className="text-on-surface-variant font-medium">Valor solicitado</span>
-                <span className="text-base font-black text-[#00ff9d]">{formatBRL(lastWithdrawal.amount)}</span>
+                <span className="text-base font-black text-volt-green">{formatBRL(lastWithdrawal.amount)}</span>
               </div>
               <div className="flex justify-between items-start">
                 <span className="text-on-surface-variant font-medium">Opção de pagamento</span>
@@ -1123,18 +1123,18 @@ export default function LimitView({
                 <span className="font-bold">680,95%</span>
               </div>
 
-              <div className="bg-[#00ff9d]/5 p-3 rounded-lg border border-[#00ff9d]/20 flex justify-between items-center mt-3">
-                <span className="text-[9px] font-black uppercase text-[#00ff9d] tracking-wider">Total da transação</span>
-                <span className="text-base font-black text-[#00ff9d]">{formatBRL(lastWithdrawal.total)}</span>
+              <div className="bg-volt-green/5 p-3 rounded-lg border border-volt-green/20 flex justify-between items-center mt-3">
+                <span className="text-[9px] font-black uppercase text-volt-green tracking-wider">Total da transação</span>
+                <span className="text-base font-black text-volt-green">{formatBRL(lastWithdrawal.total)}</span>
               </div>
               <p className="text-[8px] text-on-surface-variant italic mt-1">*Somatório: Valor financiado + Juros</p>
             </div>
           </div>
 
           {/* Section: Dados da transferência */}
-          <div className="bg-zinc-900/60 rounded-xl overflow-hidden border-l-4 border-[#00ff9d] border-y border-r border-zinc-800 shadow-xl">
+          <div className="bg-zinc-900/60 rounded-xl overflow-hidden border-l-4 border-volt-green border-y border-r border-zinc-800 shadow-xl">
             <div className="p-3 bg-zinc-950/70 border-b border-zinc-850 flex items-center gap-2">
-              <Landmark className="text-[#00ff9d]" size={16} />
+              <Landmark className="text-volt-green" size={16} />
               <h3 className="text-xs font-black text-white uppercase tracking-wider">Dados da transferência</h3>
             </div>
             <div className="p-4 space-y-3 text-[11px]">
@@ -1150,7 +1150,7 @@ export default function LimitView({
               </div>
               <div>
                 <span className="text-[9px] text-on-surface-variant uppercase font-bold block">Banco</span>
-                <span className="font-bold text-[#00ff9d]">{selectedBank.name}</span>
+                <span className="font-bold text-volt-green">{selectedBank.name}</span>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

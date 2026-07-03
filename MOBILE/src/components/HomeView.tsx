@@ -766,7 +766,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           SEU DASHBOARD
         </h2>
         <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 border-black font-black text-[9px] uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform active:scale-95 ${
-          isMidnight ? 'bg-[#003d25] text-[#00ff9d]' : 'bg-[#00ff9d] text-black'
+          isMidnight ? 'bg-[#003d25] text-volt-green' : 'bg-volt-green text-black'
         }`}>
           <div className="w-1.5 h-1.5 rounded-full bg-current" />
           PERSONALIZAR PAINEL
@@ -918,7 +918,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 <div
                   className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 border-black transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
                     item.highlight
-                      ? 'bg-[#00ff9d] text-black'
+                      ? 'bg-volt-green text-black'
                       : isMidnight
                         ? 'bg-zinc-900 text-white hover:bg-zinc-800'
                         : 'bg-white text-black hover:bg-gray-50'
@@ -1095,7 +1095,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-              isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#00E5FF] text-black'
+              isMidnight ? 'bg-volt-green text-black' : 'bg-[#00E5FF] text-black'
             }`}>
               🎯
             </div>
@@ -1176,7 +1176,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 type="button"
                 onClick={() => setIsEditingBudgets(false)}
                 className={`text-xs font-black uppercase tracking-wider py-1.5 rounded-xl transition-all border-2 border-black ${
-                  isMidnight ? 'bg-zinc-900 text-[#00ff9d] hover:bg-zinc-800 border-zinc-800' : 'btn-secondary'
+                  isMidnight ? 'bg-zinc-900 text-volt-green hover:bg-zinc-800 border-zinc-800' : 'btn-secondary'
                 }`}
               >
                 Cancelar
@@ -1184,7 +1184,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="submit"
                 className={`text-xs font-black uppercase tracking-wider py-1.5 rounded-xl transition-all border-2 border-black ${
-                  isMidnight ? 'bg-[#00ff9d] text-zinc-950 hover:bg-[#00e38b]' : 'btn-primary'
+                  isMidnight ? 'bg-volt-green text-zinc-950 hover:bg-volt-primary-dark' : 'btn-primary'
                 }`}
               >
                 Salvar Limites
@@ -1270,19 +1270,19 @@ const HomeView: React.FC<HomeViewProps> = ({
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm">💵</span>
-                    <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-[#00ff9d]' : 'text-green-600'}`}>
+                    <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-green-600'}`}>
                       Orçamento Diário Disponível
                     </span>
                   </div>
                   <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-black ${
-                    isMidnight ? 'bg-[#00ff9d] text-zinc-950' : 'bg-[#A2FF00] text-black'
+                    isMidnight ? 'bg-volt-green text-zinc-950' : 'bg-[#A2FF00] text-black'
                   }`}>
                     Sob Controle
                   </span>
                 </div>
                 
                 <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className={`text-xl font-black tracking-tight ${isMidnight ? 'text-[#00ff9d]' : 'text-green-600'}`}>
+                  <span className={`text-xl font-black tracking-tight ${isMidnight ? 'text-volt-green' : 'text-green-600'}`}>
                     R$ {dailyBudgetAlert.dailyAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
                   <span className="text-[10px] font-bold text-zinc-500">
@@ -1331,7 +1331,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                         isOverBudget ? (
                           <span className="text-red-500 font-extrabold">Excedeu R$ {(spent - limit).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                         ) : (
-                          <span className={isMidnight ? 'text-[#00ff9d]' : 'text-green-600'}>R$ {(limit - spent).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} restantes</span>
+                          <span className={isMidnight ? 'text-volt-green' : 'text-green-600'}>R$ {(limit - spent).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} restantes</span>
                         )
                       ) : (
                         <span className="text-gray-400">Sem limite configurado</span>
@@ -1361,12 +1361,12 @@ const HomeView: React.FC<HomeViewProps> = ({
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs">🚀</span>
-                  <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>
+                  <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-black'}`}>
                     Meta de Economia (Stretch Goal)
                   </span>
                 </div>
                 <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border border-black ${
-                  isMidnight ? 'bg-[#00ff9d] text-black border-zinc-800' : 'bg-[#FFED86] text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                  isMidnight ? 'bg-volt-green text-black border-zinc-800' : 'bg-[#FFED86] text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
                 }`}>
                   {savingsCalculation.percentReached}% Concluída
                 </span>
@@ -1490,7 +1490,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-              isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#FFD700] text-black'
+              isMidnight ? 'bg-volt-green text-black' : 'bg-[#FFD700] text-black'
             }`}>
               🎯
             </div>
@@ -1526,7 +1526,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             <button
               onClick={handleSaveGoal}
               className={`text-xs font-black uppercase tracking-wider border-2 border-black px-3 py-2 rounded-xl transition-all cursor-pointer ${
-                isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#A2FF00] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
               }`}
             >
               Salvar
@@ -1637,7 +1637,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           </div>
           <span className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full ${
             juneSavingsRate >= 20
-              ? isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#A2FF00] text-black'
+              ? isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black'
               : juneSavingsRate >= 10
               ? 'bg-[#FFD700] text-black'
               : 'bg-[#FF5C8D] text-white'
@@ -1667,7 +1667,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </div>
           <span className={`text-[8px] font-black uppercase tracking-wider border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-            isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#A2FF00] text-black'
+            isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black'
           }`}>Análises</span>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -1761,7 +1761,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             <div className="flex justify-between items-start w-full">
               <span className="text-lg">🔮</span>
               <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                isMidnight ? 'text-[#00ff9d] bg-[#00ff9d]/10' : 'text-[#00c97b] bg-[#00c97b]/10'
+                isMidnight ? 'text-volt-green bg-volt-green/10' : 'text-[#00c97b] bg-[#00c97b]/10'
               }`}>Volt Forecast™</span>
             </div>
             <div>
@@ -1794,7 +1794,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               <button
                 onClick={() => setIsAiRecurringModalOpen?.(true)}
                 className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-wider border-2 border-black px-2 py-1 rounded-full transition-all cursor-pointer ${
-                  isMidnight ? 'bg-zinc-900 text-[#00ff9d] border-zinc-700 hover:bg-zinc-800' : 'bg-[#A2FF00] text-black hover:bg-[#8fff00] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                  isMidnight ? 'bg-zinc-900 text-volt-green border-zinc-700 hover:bg-zinc-800' : 'bg-[#A2FF00] text-black hover:bg-[#8fff00] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
                 }`}
               >
                 <Sparkles size={9} /> IA
@@ -2360,7 +2360,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               {/* Texts */}
               <div className="space-y-1">
                 <span className={`text-[10px] font-black tracking-widest uppercase block ${
-                  isMidnight ? 'text-[#00ff9d]' : 'text-gray-700'
+                  isMidnight ? 'text-volt-green' : 'text-gray-700'
                 }`}>
                   Conquista de Poupança!
                 </span>
@@ -2405,7 +2405,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 onClick={() => setCelebrationMilestone(null)}
                 className={`w-full py-3 px-4 rounded-xl font-black text-sm border-2 border-black uppercase tracking-wider shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-colors cursor-pointer ${
                   isMidnight
-                    ? 'bg-[#00ff9d] text-black border-black hover:bg-[#00e38b]'
+                    ? 'bg-volt-green text-black border-black hover:bg-volt-primary-dark'
                     : 'bg-white text-black border-black hover:bg-gray-50'
                 }`}
               >
@@ -2433,7 +2433,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               <div className="flex justify-between items-center pb-2 border-b-2 border-dashed border-black/10 dark:border-white/10">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm">🔮</span>
-                  <span className={`text-[11px] font-black uppercase tracking-wider ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>
+                  <span className={`text-[11px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-black'}`}>
                     Central de Painéis Volt
                   </span>
                 </div>
@@ -2577,10 +2577,10 @@ const HomeView: React.FC<HomeViewProps> = ({
           onClick={() => setIsIntelligenceMenuOpen(prev => !prev)}
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
-          className="w-14 h-14 rounded-full border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer pointer-events-auto bg-[#00ff9d] text-black relative group"
+          className="w-14 h-14 rounded-full border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer pointer-events-auto bg-volt-green text-black relative group"
         >
           {/* Pulsing aura */}
-          <span className="absolute inset-0 rounded-full bg-[#00ff9d] opacity-20 group-hover:animate-ping pointer-events-none" />
+          <span className="absolute inset-0 rounded-full bg-volt-green opacity-20 group-hover:animate-ping pointer-events-none" />
           
           <motion.div
             animate={{ rotate: isIntelligenceMenuOpen ? 45 : 0 }}

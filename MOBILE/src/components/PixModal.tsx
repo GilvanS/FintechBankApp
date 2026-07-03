@@ -173,15 +173,15 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
   const bodyBgClass = isMidnight ? 'bg-[#0a0a0a]' : 'bg-white';
   const tabRowClass = isMidnight ? 'border-b border-white/10' : 'border-b-2 border-black/10';
   const tabInactiveClass = isMidnight ? 'bg-white/5 text-white/60 hover:bg-white/10' : 'bg-black/5 text-black/60 hover:bg-black/10';
-  const tabActiveClass = isMidnight ? 'bg-[#00E38B] text-black' : 'bg-volt-lime text-black border-2 border-black';
+  const tabActiveClass = isMidnight ? 'bg-volt-primary-dark text-black' : 'bg-volt-lime text-black border-2 border-black';
   const surfaceClass = isMidnight ? 'bg-white/5' : 'bg-black/5';
   const surfaceBorderClass = isMidnight ? 'bg-white/5 border border-white/10' : 'bg-black/5 border-2 border-black/10';
   const labelClass = isMidnight ? 'text-white/60' : 'text-black/60';
   const inputClass = isMidnight
-    ? 'bg-white/5 border border-white/10 text-white placeholder:text-white/20 focus:border-[#00E38B] focus:bg-white/10'
+    ? 'bg-white/5 border border-white/10 text-white placeholder:text-white/20 focus:border-volt-primary-dark focus:bg-white/10'
     : 'bg-black/5 border-2 border-black/10 text-black placeholder:text-black/30 focus:border-black focus:bg-white';
   const primaryBtnClass = isMidnight
-    ? 'bg-[#00E38B] text-black shadow-[0_0_20px_rgba(0,227,139,0.25)]'
+    ? 'bg-volt-primary-dark text-black shadow-[0_0_20px_rgba(0,227,139,0.25)]'
     : 'bg-volt-lime text-black border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]';
   const secondaryTextClass = isMidnight ? 'text-white/60 hover:bg-white/5' : 'text-black/60 hover:bg-black/5';
   const dividerClass = isMidnight ? 'border-white/10' : 'border-black/10';
@@ -275,7 +275,7 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
                           onClick={() => setPixKeyType(item.type as any)}
                           className={`flex flex-col items-center justify-center p-2 rounded-xl text-center border transition-all ${
                             isActive
-                              ? (isMidnight ? 'border-[#00E38B] bg-[#00E38B]/10 text-[#00E38B]' : 'border-black bg-volt-lime/20 text-black')
+                              ? (isMidnight ? 'border-volt-primary-dark bg-volt-primary-dark/10 text-volt-primary-dark' : 'border-black bg-volt-lime/20 text-black')
                               : (isMidnight ? 'border-white/5 bg-white/5 text-white/60 hover:bg-white/10' : 'border-black/10 bg-black/5 text-black/60 hover:bg-black/10')
                           }`}
                         >

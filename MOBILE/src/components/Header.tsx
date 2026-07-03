@@ -475,7 +475,7 @@ export default function Header({
             className="px-2.5 py-1.5 rounded-full text-white bg-purple-600 hover:bg-purple-700 shadow-lg transition-all active:scale-90 cursor-pointer flex items-center gap-1.5 font-black text-[10px] uppercase tracking-wider group"
             title="Assistente Financeiro IA"
           >
-            <Sparkles size={12} className="animate-pulse text-[#00FF9D] group-hover:rotate-12 transition-transform" />
+            <Sparkles size={12} className="animate-pulse text-volt-green group-hover:rotate-12 transition-transform" />
             <span className="hidden sm:inline">IA Volt</span>
             <span className="sm:hidden">IA</span>
           </button>
@@ -866,12 +866,12 @@ export default function Header({
                       } ${
                         isDouble ? 'col-span-1 sm:col-span-2 p-4 flex-col sm:flex-row' : 'col-span-1 p-3.5'
                       } ${
-                        isDragged ? 'opacity-30 border-dashed border-[#00ff9d] bg-zinc-900/10' : ''
+                        isDragged ? 'opacity-30 border-dashed border-volt-green bg-zinc-900/10' : ''
                       } ${
                         isOver
                           ? simplifiedAnimations
-                            ? 'border-[#00ff9d] bg-emerald-500/5'
-                            : 'scale-[1.01] bg-emerald-500/5 border-[#00ff9d] shadow-[0_0_10px_rgba(0,255,157,0.2)]'
+                            ? 'border-volt-green bg-emerald-500/5'
+                            : 'scale-[1.01] bg-emerald-500/5 border-volt-green shadow-[0_0_10px_rgba(0,255,157,0.2)]'
                           : ''
                       } ${
                         theme === 'midnight'
@@ -1028,7 +1028,7 @@ export default function Header({
               <div className="flex gap-2 pt-2.5">
                 <button
                   onClick={() => setIsCentralHubOpen(false)}
-                  className="w-full bg-[#00ff9d] border-2 border-black text-zinc-950 font-black uppercase tracking-wider py-2.5 rounded-2xl text-[10px] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 hover:bg-[#00e38b] active:scale-95 transition-all cursor-pointer text-center"
+                  className="w-full bg-volt-green border-2 border-black text-zinc-950 font-black uppercase tracking-wider py-2.5 rounded-2xl text-[10px] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 hover:bg-volt-primary-dark active:scale-95 transition-all cursor-pointer text-center"
                 >
                   Voltar ao Aplicativo
                 </button>

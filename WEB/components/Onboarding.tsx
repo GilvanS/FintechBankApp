@@ -26,7 +26,7 @@ const steps = [
         title: 'Tudo na Velocidade da Luz',
         description: 'Pix instantâneo, investimentos e crédito na palma da sua mão em milissegundos.',
         icon: Zap,
-        color: 'text-[#00ff9d]'
+        color: 'text-volt-green'
     }
 ];
 

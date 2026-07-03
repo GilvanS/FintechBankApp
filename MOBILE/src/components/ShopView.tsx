@@ -262,7 +262,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-24 space-y-4">
-        <div className="w-8 h-8 border-4 border-[#00ff9d] border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-4 border-volt-green border-t-transparent rounded-full animate-spin"></div>
         <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">Carregando ofertas...</p>
       </div>
     );
@@ -289,7 +289,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
               className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
                 currency === 'BRL'
                   ? isMidnight
-                    ? 'bg-[#00ff9d] text-black font-extrabold shadow-sm'
+                    ? 'bg-volt-green text-black font-extrabold shadow-sm'
                     : 'bg-black text-white'
                   : 'text-zinc-500 hover:text-white'
               }`}
@@ -301,7 +301,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
               className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
                 currency === 'USD'
                   ? isMidnight
-                    ? 'bg-[#00ff9d] text-black font-extrabold shadow-sm'
+                    ? 'bg-volt-green text-black font-extrabold shadow-sm'
                     : 'bg-black text-white'
                   : 'text-zinc-500 hover:text-white'
               }`}
@@ -320,9 +320,9 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
       }`}>
         <div className="space-y-1">
           <span className="text-[9px] uppercase tracking-wider font-extrabold text-on-surface-variant flex items-center gap-1">
-            <Sparkles size={10} className="text-[#00ff9d]" /> Meu Cashback Acumulado
+            <Sparkles size={10} className="text-volt-green" /> Meu Cashback Acumulado
           </span>
-          <p className={`text-2xl font-black ${isMidnight ? 'text-[#00ff9d] drop-shadow-[0_0_12px_rgba(0,255,157,0.2)]' : 'text-black'}`}>
+          <p className={`text-2xl font-black ${isMidnight ? 'text-volt-green drop-shadow-[0_0_12px_rgba(0,255,157,0.2)]' : 'text-black'}`}>
             {formatCurrency(cashbackBalance)}
           </p>
         </div>
@@ -339,13 +339,13 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
         onClick={() => setIsPetModalOpen(true)}
         className={`relative overflow-hidden rounded-2xl p-5 flex items-center justify-between cursor-pointer border hover:scale-[1.01] transition-all duration-200 ${
           isMidnight 
-            ? 'bg-gradient-to-r from-zinc-900 to-zinc-950 border-zinc-800 shadow-xl shadow-black/20 group hover:border-[#00ff9d]/30' 
+            ? 'bg-gradient-to-r from-zinc-900 to-zinc-950 border-zinc-800 shadow-xl shadow-black/20 group hover:border-volt-green/30' 
             : 'bg-gradient-to-r from-yellow-50 to-amber-100 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
         }`}
       >
         <div className="flex items-center gap-4">
           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black shrink-0 ${
-            isMidnight ? 'bg-[#00ff9d]/15 text-[#00ff9d]' : 'bg-[#A2FF00] text-black border-2 border-black'
+            isMidnight ? 'bg-volt-green/15 text-volt-green' : 'bg-[#A2FF00] text-black border-2 border-black'
           }`}>
             🐾
           </div>
@@ -355,7 +355,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
               {!petSubscribed ? (
                 <span className="text-[8px] bg-red-500/10 text-red-400 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">PROMO</span>
               ) : (
-                <span className="text-[8px] bg-[#00ff9d]/20 text-[#00ff9d] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">ATIVO</span>
+                <span className="text-[8px] bg-volt-green/20 text-volt-green font-black px-2 py-0.5 rounded-full uppercase tracking-wider">ATIVO</span>
               )}
             </div>
             <p className="text-[10px] text-on-surface-variant mt-0.5 leading-tight">Saúde completa para seu cão ou gato a partir de R$ 11,99/mês</p>
@@ -369,7 +369,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
         {/* Search input */}
         <div className={`p-3 rounded-xl flex items-center gap-2 border transition-all ${
           isMidnight 
-            ? 'bg-zinc-900 border-zinc-850 focus-within:border-[#00ff9d]' 
+            ? 'bg-zinc-900 border-zinc-850 focus-within:border-volt-green' 
             : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
         }`}>
           <Search className="text-on-surface-variant" size={16} />
@@ -398,7 +398,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                 className={`py-1.5 px-3 rounded-xl text-[10px] font-black tracking-wide uppercase shrink-0 transition-all cursor-pointer ${
                   isSelected
                     ? isMidnight
-                      ? 'bg-[#00ff9d] text-black font-extrabold shadow-md'
+                      ? 'bg-volt-green text-black font-extrabold shadow-md'
                       : 'bg-black text-white'
                     : isMidnight
                       ? 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-850'
@@ -437,7 +437,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
             }}
             className={`relative h-44 rounded-2xl overflow-hidden cursor-pointer flex flex-col justify-end border transition-all duration-300 ${
               isMidnight 
-                ? 'bg-zinc-900 border-zinc-850 shadow-md hover:border-[#00ff9d]/30 shadow-black/10' 
+                ? 'bg-zinc-900 border-zinc-850 shadow-md hover:border-volt-green/30 shadow-black/10' 
                 : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
             }`}
           >
@@ -453,17 +453,17 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
             <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent" />
 
             {/* Cashback pill overlay at top-right */}
-            <div className="absolute top-2.5 right-2.5 bg-black/80 backdrop-blur-md text-[9px] font-black px-2 py-0.5 rounded-lg text-[#00ff9d] border border-[#00ff9d]/30 flex items-center gap-0.5">
+            <div className="absolute top-2.5 right-2.5 bg-black/80 backdrop-blur-md text-[9px] font-black px-2 py-0.5 rounded-lg text-volt-green border border-volt-green/30 flex items-center gap-0.5">
               <Percent size={8} /> {product.cashback}
             </div>
 
             {/* Product Details overlay at bottom */}
             <div className="relative p-3.5 space-y-0.5 text-left z-10">
-              <span className="text-[8px] font-extrabold uppercase text-[#00ff9d]/80 tracking-widest">{product.category}</span>
+              <span className="text-[8px] font-extrabold uppercase text-volt-green/80 tracking-widest">{product.category}</span>
               <h4 className="text-[11px] font-extrabold text-white leading-tight truncate">
                 {product.name}
               </h4>
-              <p className="text-xs font-black text-[#00ff9d]">
+              <p className="text-xs font-black text-volt-green">
                 {formatCurrency(product.price)}
               </p>
             </div>
@@ -531,7 +531,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover"
                     />
-                    <div className="absolute bottom-3 left-3 bg-[#00ff9d] text-black font-black text-[10px] px-3 py-1 rounded-full shadow-md flex items-center gap-1">
+                    <div className="absolute bottom-3 left-3 bg-volt-green text-black font-black text-[10px] px-3 py-1 rounded-full shadow-md flex items-center gap-1">
                       💝 Cashback de {selectedProduct.cashback} de volta!
                     </div>
                   </div>
@@ -549,13 +549,13 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                     }`}>
                       <div>
                         <span className="text-[9px] text-on-surface-variant uppercase block font-bold">Valor do Produto</span>
-                        <span className="text-base font-black text-[#00ff9d]">
+                        <span className="text-base font-black text-volt-green">
                           {formatCurrency(selectedProduct.price)}
                         </span>
                       </div>
                       <div className="text-right">
                         <span className="text-[9px] text-on-surface-variant uppercase block font-bold">Cashback gerado</span>
-                        <span className={`text-xs font-black px-2 py-0.5 rounded bg-[#00ff9d]/10 text-[#00ff9d] inline-block`}>
+                        <span className={`text-xs font-black px-2 py-0.5 rounded bg-volt-green/10 text-volt-green inline-block`}>
                           +{formatCurrency(selectedProduct.price * (parseFloat(selectedProduct.cashback) / 100))}
                         </span>
                       </div>
@@ -573,7 +573,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                           className={`py-2 px-3 rounded-xl border font-bold text-xs flex flex-col items-center gap-0.5 transition-all cursor-pointer ${
                             paymentMethod === 'balance'
                               ? isMidnight
-                                ? 'border-[#00ff9d] bg-[#00ff9d]/10 text-[#00ff9d]'
+                                ? 'border-volt-green bg-volt-green/10 text-volt-green'
                                 : 'border-black bg-[#A2FF00] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-extrabold'
                               : isMidnight
                                 ? 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white'
@@ -589,7 +589,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                           className={`py-2 px-3 rounded-xl border font-bold text-xs flex flex-col items-center gap-0.5 transition-all cursor-pointer ${
                             paymentMethod === 'credit'
                               ? isMidnight
-                                ? 'border-[#00ff9d] bg-[#00ff9d]/10 text-[#00ff9d]'
+                                ? 'border-volt-green bg-volt-green/10 text-volt-green'
                                 : 'border-black bg-[#00E5FF] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-extrabold'
                               : isMidnight
                                 ? 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white'
@@ -611,7 +611,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                         <select
                           value={installments}
                           onChange={(e) => setInstallments(parseInt(e.target.value))}
-                          className={`w-full p-2.5 text-xs rounded-xl border focus:outline-none focus:border-[#00ff9d] ${
+                          className={`w-full p-2.5 text-xs rounded-xl border focus:outline-none focus:border-volt-green ${
                             isMidnight ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-black/10'
                           }`}
                         >
@@ -639,7 +639,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                         }}
                         required
                         placeholder="••••"
-                        className={`w-full p-2.5 text-center text-lg rounded-xl border focus:outline-none focus:border-[#00ff9d] tracking-[0.5em] ${
+                        className={`w-full p-2.5 text-center text-lg rounded-xl border focus:outline-none focus:border-volt-green tracking-[0.5em] ${
                           isMidnight ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-black/10'
                         }`}
                       />
@@ -670,7 +670,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
               ) : (
                 <div className="text-center py-6 space-y-5">
                   <div className="flex justify-center">
-                    <div className="w-16 h-16 rounded-full bg-[#00ff9d]/15 flex items-center justify-center text-[#00ff9d]">
+                    <div className="w-16 h-16 rounded-full bg-volt-green/15 flex items-center justify-center text-volt-green">
                       <CheckCircle2 size={40} className="stroke-[2.5]" />
                     </div>
                   </div>
@@ -689,11 +689,11 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                     </div>
                     <div className="flex justify-between">
                       <span className="text-on-surface-variant font-medium">Valor debitado:</span>
-                      <span className="font-black text-[#00ff9d]">{formatCurrency(selectedProduct.price)}</span>
+                      <span className="font-black text-volt-green">{formatCurrency(selectedProduct.price)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-on-surface-variant font-medium">Cashback Recebido:</span>
-                      <span className="font-extrabold text-[#00ff9d]">+{formatCurrency(selectedProduct.price * (parseFloat(selectedProduct.cashback) / 100))}</span>
+                      <span className="font-extrabold text-volt-green">+{formatCurrency(selectedProduct.price * (parseFloat(selectedProduct.cashback) / 100))}</span>
                     </div>
                     <div className="flex justify-between border-t border-black/5 pt-2 text-[10px] text-on-surface-variant">
                       <span>Forma de Pagamento:</span>
@@ -736,7 +736,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
               className="relative w-full max-w-sm bg-zinc-900 border border-zinc-800 text-white rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col"
             >
               {/* Header Gradient Pill */}
-              <div className="bg-gradient-to-r from-[#00ff9d] to-[#00A86B] py-7 px-4 flex flex-col items-center justify-center text-center relative">
+              <div className="bg-gradient-to-r from-volt-green to-[#00A86B] py-7 px-4 flex flex-col items-center justify-center text-center relative">
                 {/* Close Button in header */}
                 <button
                   onClick={() => setIsPetModalOpen(false)}
@@ -773,8 +773,8 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                   <span className="text-[9px] text-zinc-400 block uppercase tracking-wider font-extrabold">
                     Plano mensal por apenas
                   </span>
-                  <p className="text-3xl font-black text-[#00ff9d] flex items-baseline justify-center gap-1">
-                    <span className="text-sm font-bold text-[#00ff9d]">R$</span>
+                  <p className="text-3xl font-black text-volt-green flex items-baseline justify-center gap-1">
+                    <span className="text-sm font-bold text-volt-green">R$</span>
                     11,99
                   </p>
                 </div>
@@ -792,14 +792,14 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
 
                 {/* Button actions */}
                 {petSubscribed ? (
-                  <div className="w-full bg-[#00ff9d]/10 text-[#00ff9d] font-black py-3 rounded-2xl text-xs border border-[#00ff9d]/20 flex items-center justify-center gap-1.5">
+                  <div className="w-full bg-volt-green/10 text-volt-green font-black py-3 rounded-2xl text-xs border border-volt-green/20 flex items-center justify-center gap-1.5">
                     <CheckCircle2 size={14} /> Plano Ativo & Seguro Garantido
                   </div>
                 ) : (
                   <button
                     onClick={handlePetSubscribe}
                     disabled={checkoutLoading}
-                    className="w-full bg-[#00ff9d] text-black font-extrabold py-3.5 rounded-2xl text-xs uppercase tracking-wider hover:opacity-95 active:scale-98 transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-[#00ff9d]/20 cursor-pointer"
+                    className="w-full bg-volt-green text-black font-extrabold py-3.5 rounded-2xl text-xs uppercase tracking-wider hover:opacity-95 active:scale-98 transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-volt-green/20 cursor-pointer"
                   >
                     {checkoutLoading ? (
                       <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></span>

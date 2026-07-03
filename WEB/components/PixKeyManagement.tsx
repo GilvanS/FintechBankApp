@@ -102,7 +102,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack, updateUser 
     const backBtnClass = isMidnight ? 'hover:bg-white/10' : 'hover:bg-black/10';
     const iconClass = isMidnight ? 'text-white/60' : 'text-black/50';
     const addBtnClass = isMidnight
-        ? 'text-black bg-[#00E38B] shadow-[0_0_20px_rgba(0,227,139,0.25)]'
+        ? 'text-black bg-volt-primary-dark shadow-[0_0_20px_rgba(0,227,139,0.25)]'
         : 'text-black bg-volt-lime border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]';
     const keyItemClass = isMidnight ? 'bg-white/5 border border-white/10 hover:bg-white/10' : 'bg-black/5 border border-black/10 hover:bg-black/10';
     const keyValueClass = isMidnight ? 'text-white/60' : 'text-black/50';
@@ -112,14 +112,14 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack, updateUser 
         ? 'bg-volt-surface border-2 border-volt-primary'
         : 'bg-white border-4 border-black';
     const optionCardClass = (active: boolean) => isMidnight
-        ? (active ? 'border-[#00E38B] bg-[#00E38B]/10' : 'border-white/10 bg-white/5')
+        ? (active ? 'border-volt-primary-dark bg-volt-primary-dark/10' : 'border-white/10 bg-white/5')
         : (active ? 'border-black bg-volt-lime/20' : 'border-black/10 bg-black/5');
     const radioOuterClass = (active: boolean) => isMidnight
-        ? (active ? 'border-[#00E38B]' : 'border-white/40')
+        ? (active ? 'border-volt-primary-dark' : 'border-white/40')
         : (active ? 'border-black' : 'border-black/30');
     const cancelBtnClass = isMidnight ? 'text-white/60 bg-white/5 hover:bg-white/10' : 'text-black/60 bg-black/5 hover:bg-black/10';
     const submitBtnClass = isMidnight
-        ? 'text-black bg-[#00E38B] shadow-[0_0_20px_rgba(0,227,139,0.25)]'
+        ? 'text-black bg-volt-primary-dark shadow-[0_0_20px_rgba(0,227,139,0.25)]'
         : 'text-black bg-volt-lime border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]';
 
     return (

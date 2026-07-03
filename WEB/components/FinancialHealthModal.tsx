@@ -79,8 +79,8 @@ export default function FinancialHealthModal({ isOpen, onClose, transactions, th
         level: 'Ótimo',
         description: 'Sensacional! Você está poupando mais de 30% da sua receita total. Suas finanças estão em ritmo acelerado para atingir independência financeira.',
         color: theme === 'midnight' ? '#00ff9d' : '#A2FF00',
-        colorText: theme === 'midnight' ? 'text-[#00ff9d]' : 'text-[#87d500]',
-        colorBg: theme === 'midnight' ? 'bg-[#00ff9d]/10' : 'bg-[#A2FF00]/10',
+        colorText: theme === 'midnight' ? 'text-volt-green' : 'text-[#87d500]',
+        colorBg: theme === 'midnight' ? 'bg-volt-green/10' : 'bg-[#A2FF00]/10',
         tips: [
           'Parabéns! Continue investindo essa sobra mensal para potencializar os juros compostos.',
           'Considere criar um objetivo ousado no Volt para realizar um grande sonho mais rápido.',
@@ -208,7 +208,7 @@ export default function FinancialHealthModal({ isOpen, onClose, transactions, th
             <div className="flex justify-between items-center pb-2 border-b-2 border-black/5 dark:border-white/5">
               <div className="flex items-center gap-2.5">
                 <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-                  theme === 'midnight' ? 'bg-[#00ff9d] text-zinc-950' : 'bg-[#FFAA00] text-black'
+                  theme === 'midnight' ? 'bg-volt-green text-zinc-950' : 'bg-[#FFAA00] text-black'
                 }`}>
                   🩺
                 </div>
@@ -240,7 +240,7 @@ export default function FinancialHealthModal({ isOpen, onClose, transactions, th
                     className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0 transition-all cursor-pointer border-2 ${
                       isSelected
                         ? theme === 'midnight'
-                          ? 'bg-[#00ff9d] text-zinc-950 border-[#00ff9d]'
+                          ? 'bg-volt-green text-zinc-950 border-volt-green'
                           : 'bg-[#FFED86] text-black border-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]'
                         : theme === 'midnight'
                           ? 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
@@ -292,7 +292,7 @@ export default function FinancialHealthModal({ isOpen, onClose, transactions, th
                   <TrendingUp size={11} className="text-green-500" />
                   <span className="text-[8px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400">Entradas</span>
                 </div>
-                <p className="text-xs font-black mt-1 text-green-600 dark:text-[#00ff9d] truncate">
+                <p className="text-xs font-black mt-1 text-green-600 dark:text-volt-green truncate">
                   {formatBRL(selectedMonth.income)}
                 </p>
               </div>

@@ -134,7 +134,7 @@ const SpendingTrendsSection: React.FC<Props> = ({ transactions, theme }) => {
                     className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-full shrink-0 cursor-pointer flex items-center gap-1 border-2 transition-all ${
                       isActive
                         ? isMidnight
-                          ? 'bg-[#00ff9d] text-zinc-950 border-[#00ff9d]'
+                          ? 'bg-volt-green text-zinc-950 border-volt-green'
                           : 'bg-[#FFED86] text-black border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
                         : isMidnight
                           ? 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'

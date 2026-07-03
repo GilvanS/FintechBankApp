@@ -127,7 +127,7 @@ const SpendingHeatmapSection: React.FC<Props> = ({ transactions, theme }) => {
       {/* Header */}
       <div className="flex justify-between items-start sm:items-center flex-col sm:flex-row gap-3">
         <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#FFED86] text-black'}`}>📅</div>
+          <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${isMidnight ? 'bg-volt-green text-black' : 'bg-[#FFED86] text-black'}`}>📅</div>
           <div>
             <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Mapa de Calor de Gastos</h3>
             <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>
@@ -148,7 +148,7 @@ const SpendingHeatmapSection: React.FC<Props> = ({ transactions, theme }) => {
           <div className={`flex items-center rounded-lg border-2 overflow-hidden shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] p-0.5 ${isMidnight ? 'bg-zinc-950 border-zinc-800' : 'bg-black/5 border-black'}`}>
             {([{ key: 'amount' as HeatmapMetric, label: 'Intensidade', Icon: TrendingUp }, { key: 'frequency' as HeatmapMetric, label: 'Frequência', Icon: Clock }]).map(({ key, label, Icon }) => (
               <button key={key} type="button" onClick={() => { setMetric(key); setSelectedDay(null); }}
-                className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded transition-all cursor-pointer flex items-center gap-1 ${metric === key ? (isMidnight ? 'bg-[#00ff9d] text-zinc-950' : 'bg-[#FFED86] text-black') : 'text-zinc-400 hover:text-zinc-200'}`}>
+                className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded transition-all cursor-pointer flex items-center gap-1 ${metric === key ? (isMidnight ? 'bg-volt-green text-zinc-950' : 'bg-[#FFED86] text-black') : 'text-zinc-400 hover:text-zinc-200'}`}>
                 <Icon size={10} />{label}
               </button>
             ))}
@@ -162,7 +162,7 @@ const SpendingHeatmapSection: React.FC<Props> = ({ transactions, theme }) => {
           <button key={cat.id} type="button" onClick={() => { setCategory(cat.id); setSelectedDay(null); }}
             className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-full transition-all shrink-0 cursor-pointer flex items-center gap-1.5 border-2 ${
               category === cat.id
-                ? isMidnight ? 'bg-[#00ff9d] text-zinc-950 border-[#00ff9d] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]' : 'bg-[#FFED86] text-black border-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]'
+                ? isMidnight ? 'bg-volt-green text-zinc-950 border-volt-green shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]' : 'bg-[#FFED86] text-black border-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]'
                 : isMidnight ? 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white' : 'bg-white text-gray-700 border-black/10 hover:border-black/30'
             }`}>
             {cat.color && <span className="w-1.5 h-1.5 rounded-full shrink-0 border border-black/10" style={{ backgroundColor: cat.color }} />}

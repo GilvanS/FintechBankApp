@@ -174,7 +174,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowVersionPopup(false)}>
               <div className="bg-white p-8 max-w-sm w-full text-center rounded-3xl border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]" onClick={e => e.stopPropagation()}>
                   <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center mx-auto mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                      <span className="material-symbols-outlined text-3xl text-[#00ff9d]">info</span>
+                      <span className="material-symbols-outlined text-3xl text-volt-green">info</span>
                   </div>
                   <h3 className="text-xl font-black text-black mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Informações do App</h3>
                   <div className="bg-gray-100 border-2 border-black rounded-xl p-4 mb-6 text-left space-y-2">
@@ -186,7 +186,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   </div>
                   <button
                       onClick={() => setShowVersionPopup(false)}
-                      className="w-full py-3 bg-[#00ff9d] text-black font-black rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] transition-all uppercase tracking-widest text-sm"
+                      className="w-full py-3 bg-volt-green text-black font-black rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] transition-all uppercase tracking-widest text-sm"
                   >
                       Fechar
                   </button>
@@ -215,14 +215,14 @@ export default function Profile({ onNavigate }: ProfileProps) {
         {/* Profile Info Header */}
         <div className="bg-white dark:bg-zinc-900 border-4 border-black dark:border-zinc-800 rounded-3xl p-5 flex flex-col items-center text-center space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="relative">
-            <div className="w-20 h-20 rounded-full border-4 border-[#00ff9d] bg-black p-1 overflow-hidden flex items-center justify-center text-[#00ff9d] font-black text-3xl">
+            <div className="w-20 h-20 rounded-full border-4 border-volt-green bg-black p-1 overflow-hidden flex items-center justify-center text-volt-green font-black text-3xl">
               {user.avatar ? (
                  <img src={user.avatar} alt="User Portrait" className="w-full h-full rounded-full object-cover" />
               ) : (
                  user.fullName.charAt(0)
               )}
             </div>
-            <span className="absolute bottom-0 right-0 bg-[#00ff9d] text-black p-1.5 rounded-full text-xs font-bold shadow-md border-2 border-black">
+            <span className="absolute bottom-0 right-0 bg-volt-green text-black p-1.5 rounded-full text-xs font-bold shadow-md border-2 border-black">
               <Check size={12} className="stroke-[4]" />
             </span>
           </div>
@@ -234,7 +234,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
             <p className="text-xs text-black/60 dark:text-white/60 font-bold">{user.email}</p>
           </div>
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#00ff9d] border-2 border-black text-black text-[10px] font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-volt-green border-2 border-black text-black text-[10px] font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
             Conta Volt Premium
           </div>
         </div>
@@ -242,7 +242,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
         {/* Real-Time Name Customizer Input */}
         <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center gap-2 text-black dark:text-white">
-            <Edit2 size={15} className="text-[#00ff9d]" />
+            <Edit2 size={15} className="text-volt-green" />
             <h4 className="text-xs font-black uppercase tracking-wider">Editar Nome do Titular</h4>
           </div>
           <div className="space-y-1">
@@ -251,7 +251,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
               value={user.fullName}
               onChange={(e) => updateUser({ ...user, fullName: e.target.value })}
               placeholder="Nome do Titular"
-              className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-black dark:text-white focus:outline-none focus:border-[#00ff9d] transition-all font-bold"
+              className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-black dark:text-white focus:outline-none focus:border-volt-green transition-all font-bold"
             />
             <p className="text-[10px] text-black/60 dark:text-white/50 pl-1 leading-relaxed font-bold">
               * Alterar o nome atualiza instantaneamente o titular do seu Cartão de Crédito Volt e as saudações do aplicativo!
@@ -262,7 +262,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
         {/* Theme Toggle Section */}
         <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center gap-2 text-black dark:text-white">
-            <Palette size={15} className="text-[#00ff9d] shrink-0" />
+            <Palette size={15} className="text-volt-green shrink-0" />
             <h4 className="text-xs font-black uppercase tracking-wider">Aparência do Aplicativo</h4>
           </div>
 
@@ -283,7 +283,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
               onClick={() => onThemeToggle('midnight')}
               className={`flex flex-col items-center gap-2 p-3 rounded-xl border-4 transition-all cursor-pointer ${
                 theme === 'midnight'
-                  ? 'bg-[#00ff9d] text-black border-black font-black scale-[1.02] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                  ? 'bg-volt-green text-black border-black font-black scale-[1.02] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
                   : 'bg-gray-100 text-gray-400 border-black/10 hover:border-black font-medium hover:text-black dark:bg-zinc-800 dark:border-zinc-700'
               }`}
             >
@@ -296,14 +296,14 @@ export default function Profile({ onNavigate }: ProfileProps) {
         {/* Real-Time Push Notification Settings */}
         <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center gap-2 text-black dark:text-white">
-            <Bell size={15} className="text-[#00ff9d] shrink-0" />
+            <Bell size={15} className="text-volt-green shrink-0" />
             <h4 className="text-xs font-black uppercase tracking-wider">Notificações em Tempo Real</h4>
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-[#00ff9d]">
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-volt-green">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#00ff9d]/20 flex items-center justify-center shrink-0 text-[#00ff9d] border-2 border-[#00ff9d]/30">
+                <div className="w-9 h-9 rounded-xl bg-volt-green/20 flex items-center justify-center shrink-0 text-volt-green border-2 border-volt-green/30">
                   <Bell size={18} />
                 </div>
                 <div>
@@ -322,7 +322,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   onChange={(e) => handleToggleNotifications(e.target.checked)}
                   className="sr-only peer" 
                 />
-                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
               </label>
             </div>
 
@@ -342,7 +342,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                     value={notificationAmount === 0 ? '' : notificationAmount}
                     onChange={(e) => handleAmountChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
                     placeholder="Ex: 500"
-                    className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-xs text-black dark:text-white focus:outline-none focus:border-[#00ff9d] transition-all font-mono font-bold"
+                    className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-xs text-black dark:text-white focus:outline-none focus:border-volt-green transition-all font-mono font-bold"
                   />
                 </div>
                 <p className="text-[9px] text-black/60 dark:text-white/50 italic leading-relaxed font-bold">
@@ -356,14 +356,14 @@ export default function Profile({ onNavigate }: ProfileProps) {
         {/* Monthly Spending Limit Threshold Settings */}
         <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center gap-2 text-black dark:text-white">
-            <AlertTriangle size={15} className="text-[#00ff9d] shrink-0" />
+            <AlertTriangle size={15} className="text-volt-green shrink-0" />
             <h4 className="text-xs font-black uppercase tracking-wider">Limite de Gastos Mensal</h4>
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-[#00ff9d]">
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-volt-green">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#00ff9d]/20 flex items-center justify-center shrink-0 text-[#00ff9d] border-2 border-[#00ff9d]/30">
+                <div className="w-9 h-9 rounded-xl bg-volt-green/20 flex items-center justify-center shrink-0 text-volt-green border-2 border-volt-green/30">
                   <AlertTriangle size={18} />
                 </div>
                 <div>
@@ -382,7 +382,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   onChange={(e) => handleToggleSpendingLimit(e.target.checked)}
                   className="sr-only peer" 
                 />
-                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
               </label>
             </div>
 
@@ -402,7 +402,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                     value={spendingLimitAmount === 0 ? '' : spendingLimitAmount}
                     onChange={(e) => handleSpendingLimitAmountChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
                     placeholder="Ex: 2500"
-                    className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-xs text-black dark:text-white focus:outline-none focus:border-[#00ff9d] transition-all font-mono font-bold"
+                    className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-xs text-black dark:text-white focus:outline-none focus:border-volt-green transition-all font-mono font-bold"
                   />
                 </div>
                 <p className="text-[9px] text-black/60 dark:text-white/50 italic leading-relaxed font-bold">
@@ -417,18 +417,18 @@ export default function Profile({ onNavigate }: ProfileProps) {
         <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center justify-between text-black dark:text-white">
             <div className="flex items-center gap-2">
-              <Sliders size={15} className="text-[#00ff9d] shrink-0" />
+              <Sliders size={15} className="text-volt-green shrink-0" />
               <h4 className="text-xs font-black uppercase tracking-wider">Smart Alerts (Alertas Inteligentes)</h4>
             </div>
-            <span className="bg-[#00ff9d] text-black text-[9px] font-black uppercase px-2 py-0.5 rounded-full border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            <span className="bg-volt-green text-black text-[9px] font-black uppercase px-2 py-0.5 rounded-full border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
               Premium
             </span>
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-[#00ff9d]">
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-volt-green">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#00ff9d]/20 flex items-center justify-center shrink-0 text-[#00ff9d] border-2 border-[#00ff9d]/30">
+                <div className="w-9 h-9 rounded-xl bg-volt-green/20 flex items-center justify-center shrink-0 text-volt-green border-2 border-volt-green/30">
                   <Zap size={18} />
                 </div>
                 <div>
@@ -447,7 +447,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   onChange={(e) => handleToggleSmartAlerts(e.target.checked)}
                   className="sr-only peer" 
                 />
-                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
               </label>
             </div>
 
@@ -469,7 +469,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                       value={smartAlertsMinAmount === 0 ? '' : smartAlertsMinAmount}
                       onChange={(e) => handleSmartAlertsMinAmountChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
                       placeholder="Ex: 100"
-                      className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-xs text-black dark:text-white focus:outline-none focus:border-[#00ff9d] transition-all font-mono font-bold"
+                      className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-xs text-black dark:text-white focus:outline-none focus:border-volt-green transition-all font-mono font-bold"
                     />
                   </div>
                 </div>
@@ -498,7 +498,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                           onClick={() => handleToggleSmartAlertCategory(cat.id)}
                           className={`px-3 py-1.5 rounded-full text-[10px] font-black border-2 transition-all cursor-pointer flex items-center gap-1 ${
                             isSelected
-                              ? 'bg-[#00ff9d] text-black border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                              ? 'bg-volt-green text-black border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
                               : 'bg-white dark:bg-zinc-800 text-black/60 dark:text-white/60 border-black/10 dark:border-zinc-700 hover:border-black'
                           }`}
                         >
@@ -530,7 +530,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                           onClick={() => handleSmartAlertsTimePresetChange(preset.id)}
                           className={`p-2.5 rounded-xl text-[10px] font-black border-2 transition-all cursor-pointer text-center ${
                             isSelected
-                              ? 'bg-[#00ff9d] text-black border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                              ? 'bg-volt-green text-black border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
                               : 'bg-white dark:bg-zinc-800 text-black/60 dark:text-white/60 border-black/10 dark:border-zinc-700 hover:border-black'
                           }`}
                         >
@@ -555,7 +555,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                             value={smartAlertsStartTime}
                             onChange={(e) => handleSmartAlertsStartTimeChange(e.target.value)}
                             placeholder="Ex: 08:00"
-                            className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-8 pr-3 py-2 text-[11px] text-black dark:text-white focus:outline-none focus:border-[#00ff9d] transition-all font-mono font-bold"
+                            className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-8 pr-3 py-2 text-[11px] text-black dark:text-white focus:outline-none focus:border-volt-green transition-all font-mono font-bold"
                           />
                         </div>
                       </div>
@@ -568,7 +568,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                             value={smartAlertsEndTime}
                             onChange={(e) => handleSmartAlertsEndTimeChange(e.target.value)}
                             placeholder="Ex: 18:00"
-                            className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-8 pr-3 py-2 text-[11px] text-black dark:text-white focus:outline-none focus:border-[#00ff9d] transition-all font-mono font-bold"
+                            className="w-full bg-gray-50 dark:bg-zinc-950 border-2 border-black dark:border-zinc-800 rounded-xl pl-8 pr-3 py-2 text-[11px] text-black dark:text-white focus:outline-none focus:border-volt-green transition-all font-mono font-bold"
                           />
                         </div>
                       </div>
@@ -577,8 +577,8 @@ export default function Profile({ onNavigate }: ProfileProps) {
                 </div>
 
                 {/* DEDICATED SUMMARY SECTION (PREFERENCES DISPLAY) */}
-                <div className="mt-3.5 p-3 rounded-xl border-2 border-dashed border-black/30 dark:border-[#00ff9d]/30 bg-gray-50 dark:bg-zinc-950 text-left flex flex-col gap-2">
-                  <div className="flex items-center gap-1 text-black dark:text-[#00ff9d]">
+                <div className="mt-3.5 p-3 rounded-xl border-2 border-dashed border-black/30 dark:border-volt-green/30 bg-gray-50 dark:bg-zinc-950 text-left flex flex-col gap-2">
+                  <div className="flex items-center gap-1 text-black dark:text-volt-green">
                     <Sliders size={12} />
                     <span className="text-[10px] font-black uppercase tracking-wider">
                       Filtros de Alertas Ativos
@@ -620,15 +620,15 @@ export default function Profile({ onNavigate }: ProfileProps) {
         {/* Preferências da Tela Inicial (Properties) */}
         <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center gap-2 text-black dark:text-white">
-            <Sliders size={15} className="text-[#00ff9d] shrink-0" />
+            <Sliders size={15} className="text-volt-green shrink-0" />
             <h4 className="text-xs font-black uppercase tracking-wider">Preferências da Tela Inicial</h4>
           </div>
 
           <div className="space-y-4">
             {/* Onboarding Welcome Toggle */}
-            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-[#00ff9d]">
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-volt-green">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#00ff9d]/20 flex items-center justify-center shrink-0 text-[#00ff9d] border-2 border-[#00ff9d]/30">
+                <div className="w-9 h-9 rounded-xl bg-volt-green/20 flex items-center justify-center shrink-0 text-volt-green border-2 border-volt-green/30">
                   <Info size={18} />
                 </div>
                 <div>
@@ -647,14 +647,14 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   className="sr-only peer" 
                   data-testid="toggle-onboarding"
                 />
-                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
               </label>
             </div>
 
             {/* Home Welcome Message Toggle */}
-            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-[#00ff9d]">
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-volt-green">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#00ff9d]/20 flex items-center justify-center shrink-0 text-[#00ff9d] border-2 border-[#00ff9d]/30">
+                <div className="w-9 h-9 rounded-xl bg-volt-green/20 flex items-center justify-center shrink-0 text-volt-green border-2 border-volt-green/30">
                   <Sliders size={18} />
                 </div>
                 <div>
@@ -673,14 +673,14 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   className="sr-only peer" 
                   data-testid="toggle-welcome"
                 />
-                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
               </label>
             </div>
 
             {/* Home Stories/Status Toggle */}
-            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-[#00ff9d]">
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-volt-green">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#00ff9d]/20 flex items-center justify-center shrink-0 text-[#00ff9d] border-2 border-[#00ff9d]/30">
+                <div className="w-9 h-9 rounded-xl bg-volt-green/20 flex items-center justify-center shrink-0 text-volt-green border-2 border-volt-green/30">
                   <Palette size={18} />
                 </div>
                 <div>
@@ -699,7 +699,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   className="sr-only peer" 
                   data-testid="toggle-stories"
                 />
-                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
               </label>
             </div>
           </div>
@@ -708,13 +708,13 @@ export default function Profile({ onNavigate }: ProfileProps) {
         {/* Security & Biometrics Section */}
         <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center gap-2 text-black dark:text-white">
-            <Shield size={15} className="text-[#00ff9d] shrink-0" />
+            <Shield size={15} className="text-volt-green shrink-0" />
             <h4 className="text-xs font-black uppercase tracking-wider">Segurança e Biometria</h4>
           </div>
 
-          <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-[#00ff9d]">
+          <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-volt-green">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#00ff9d]/20 flex items-center justify-center shrink-0 text-[#00ff9d] border-2 border-[#00ff9d]/30">
+              <div className="w-9 h-9 rounded-xl bg-volt-green/20 flex items-center justify-center shrink-0 text-volt-green border-2 border-volt-green/30">
                 <Fingerprint size={18} />
               </div>
               <div>
@@ -733,7 +733,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                 onChange={(e) => onBiometricToggle(e.target.checked)}
                 className="sr-only peer" 
               />
-              <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-[#00ff9d] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+              <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
             </label>
           </div>
         </section>
@@ -751,7 +751,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   onClick={() => showDialog({ title: 'Aviso', message: `Acesso à área "${item.title}" simulado com sucesso.` })}
                   className="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-zinc-950 flex items-center justify-center text-black dark:text-[#00ff9d] border-2 border-black dark:border-zinc-700">
+                  <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-zinc-950 flex items-center justify-center text-black dark:text-volt-green border-2 border-black dark:border-zinc-700">
                     <Icon size={18} />
                   </div>
                   <div className="flex-1">
@@ -768,7 +768,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
             <div className="pt-2">
                 <button
                     onClick={() => onNavigate('admin')}
-                    className="w-full text-center py-4 text-xs tracking-widest uppercase font-black text-black bg-[#00ff9d] border-4 border-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2"
+                    className="w-full text-center py-4 text-xs tracking-widest uppercase font-black text-black bg-volt-green border-4 border-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2"
                     type="button"
                 >
                     <span className="material-symbols-outlined text-black">admin_panel_settings</span>
