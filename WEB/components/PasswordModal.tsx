@@ -59,31 +59,57 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
 
     if (!isOpen) return null;
 
+    const cardClass = isMidnight
+        ? 'bg-volt-surface border-2 border-volt-primary'
+        : 'bg-white border-4 border-black';
+    const closeBtnClass = isMidnight ? 'text-white/50 hover:text-white' : 'text-black/50 hover:text-black';
+    const titleClass = isMidnight ? 'text-white' : 'text-black';
+    const descClass = isMidnight ? 'text-on-surface-variant' : 'text-black/60';
+    const iconBubbleClass = isMidnight ? 'bg-volt-primary/20' : 'bg-volt-lime/25';
+    const iconClass = isMidnight ? 'text-volt-primary' : 'text-black';
+    const pinBoxClass = isMidnight
+        ? 'bg-[#0a0a0a] text-volt-primary'
+        : 'bg-black/5 text-black';
+    const pinFocusClass = isMidnight
+        ? 'border-volt-primary ring-2 ring-volt-primary/20 shadow-[0_0_12px_rgba(0,255,157,0.3)]'
+        : 'border-black ring-2 ring-black/10';
+    const pinBlurClass = isMidnight ? 'border-white/10' : 'border-black/20';
+    const keyBtnClass = isMidnight
+        ? 'bg-white/5 hover:bg-white/10 text-white'
+        : 'bg-black/5 hover:bg-black/10 text-black';
+    const keyBtnMutedClass = isMidnight
+        ? 'bg-white/5 hover:bg-white/10 text-white/50'
+        : 'bg-black/5 hover:bg-black/10 text-black/50';
+    const submitDisabledClass = isMidnight
+        ? 'bg-white/5 text-white/30 cursor-not-allowed'
+        : 'bg-black/5 text-black/30 cursor-not-allowed';
+    const submitEnabledClass = isMidnight ? 'bg-volt-green text-black hover:opacity-90' : 'bg-volt-lime text-black border-2 border-black hover:opacity-90';
+
     return (
         <AnimatePresence>
             <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm test-modal-overlay">
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0, scale: 0.95, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: 20 }}
                     transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                    className="w-full max-w-sm rounded-3xl p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] border-2 border-volt-primary overflow-hidden relative test-modal bg-volt-surface"
+                    className={`w-full max-w-sm rounded-3xl p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] overflow-hidden relative test-modal ${cardClass}`}
                 >
-                    <button onClick={onClose} className="absolute top-5 right-5 text-white/50 hover:text-white transition-colors">
+                    <button onClick={onClose} className={`absolute top-5 right-5 transition-colors ${closeBtnClass}`}>
                         <X size={20} />
                     </button>
 
                     <div className="space-y-6 pt-2">
                         {/* Header */}
                         <div className="text-center space-y-2">
-                            <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center mb-4 bg-volt-primary/20">
-                                <Shield size={24} className="text-volt-primary" />
+                            <div className={`w-12 h-12 rounded-full mx-auto flex items-center justify-center mb-4 ${iconBubbleClass}`}>
+                                <Shield size={24} className={iconClass} />
                             </div>
-                            <h2 className="text-xl font-black uppercase tracking-wider test-modal-title text-white">
+                            <h2 className={`text-xl font-black uppercase tracking-wider test-modal-title ${titleClass}`}>
                                 {title}
                             </h2>
                             {description && (
-                                <p className="text-sm text-on-surface-variant test-modal-description">
+                                <p className={`text-sm test-modal-description ${descClass}`}>
                                     {description}
                                 </p>
                             )}
@@ -102,7 +128,7 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
                                         onClick={() => setFocusedPinIndex(idx)}
                                         placeholder={isFocused ? '|' : ''}
                                         className={`w-14 h-16 border-b-2 text-center font-black text-2xl rounded-xl focus:outline-none transition-all placeholder:opacity-50
-                                            bg-[#0a0a0a] text-volt-primary ${isFocused ? 'border-volt-primary ring-2 ring-volt-primary/20 shadow-[0_0_12px_rgba(0,255,157,0.3)]' : 'border-white/10'}
+                                            ${pinBoxClass} ${isFocused ? pinFocusClass : pinBlurClass}
                                         `}
                                     />
                                 );
@@ -116,7 +142,7 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
                                     key={num}
                                     type="button"
                                     onClick={() => handlePinChange(num.toString())}
-                                    className="h-14 rounded-xl font-black text-lg flex items-center justify-center cursor-pointer transition-all active:scale-95 bg-white/5 hover:bg-white/10 text-white"
+                                    className={`h-14 rounded-xl font-black text-lg flex items-center justify-center cursor-pointer transition-all active:scale-95 ${keyBtnClass}`}
                                 >
                                     {num}
                                 </button>
@@ -124,14 +150,14 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
                             <button
                                 type="button"
                                 onClick={handlePinBackspace}
-                                className="h-14 rounded-xl font-black text-sm flex items-center justify-center cursor-pointer transition-all active:scale-95 bg-white/5 hover:bg-white/10 text-white/50"
+                                className={`h-14 rounded-xl font-black text-sm flex items-center justify-center cursor-pointer transition-all active:scale-95 ${keyBtnMutedClass}`}
                             >
                                 ⌫
                             </button>
                             <button
                                 type="button"
                                 onClick={() => handlePinChange('0')}
-                                className="h-14 rounded-xl font-black text-lg flex items-center justify-center cursor-pointer transition-all active:scale-95 bg-white/5 hover:bg-white/10 text-white"
+                                className={`h-14 rounded-xl font-black text-lg flex items-center justify-center cursor-pointer transition-all active:scale-95 ${keyBtnClass}`}
                             >
                                 0
                             </button>
@@ -141,7 +167,7 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
                                     setPin(['3', '7', '1', '9']); // MOCK auto-fill
                                     setFocusedPinIndex(3);
                                 }}
-                                className="h-14 rounded-xl font-black text-[10px] uppercase tracking-tighter flex items-center justify-center cursor-pointer transition-all active:scale-95 bg-white/5 hover:bg-white/10 text-white/50"
+                                className={`h-14 rounded-xl font-black text-[10px] uppercase tracking-tighter flex items-center justify-center cursor-pointer transition-all active:scale-95 ${keyBtnMutedClass}`}
                             >
                                 Auto
                             </button>
@@ -154,8 +180,8 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
                                 disabled={isLoading || pin.some(d => d === '')}
                                 className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer test-confirm-button ${
                                     pin.some(d => d === '')
-                                        ? 'bg-white/5 text-white/30 cursor-not-allowed'
-                                        : 'bg-volt-green text-black hover:opacity-90'
+                                        ? submitDisabledClass
+                                        : submitEnabledClass
                                 }`}
                             >
                                 {isLoading ? (

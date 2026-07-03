@@ -4,6 +4,7 @@ import { Shield, HelpCircle, Info, Settings, Palette, Check, Edit2, Sun, Moon, F
 import { useAuth } from '../context/AuthContext';
 import { AppVersion } from '../utils/AppVersion';
 import { useDialog } from '../contexts/GlobalDialogContext';
+import { useAppState } from '../contexts/AppStateContext';
 import properties from '../properties.json';
 
 interface ProfileProps {
@@ -13,7 +14,8 @@ interface ProfileProps {
 export default function Profile({ onNavigate }: ProfileProps) {
   const { user, logout, updateUser } = useAuth();
   const { showDialog } = useDialog();
-  
+  const { theme, setTheme } = useAppState();
+
   // Local state for toggles that don't need to hit the backend directly for now
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(() => {
     return localStorage.getItem('volt_notifications_enabled') === 'true';
@@ -33,10 +35,6 @@ export default function Profile({ onNavigate }: ProfileProps) {
 
   const [biometricEnabled, setBiometricEnabled] = useState<boolean>(() => {
     return localStorage.getItem('volt_biometric_enabled') === 'true';
-  });
-  
-  const [theme, setTheme] = useState<'yellow' | 'midnight'>(() => {
-    return (localStorage.getItem('volt_theme') as 'yellow' | 'midnight') || 'midnight';
   });
   
   const [smartAlertsEnabled, setSmartAlertsEnabled] = useState<boolean>(() => {
@@ -133,12 +131,6 @@ export default function Profile({ onNavigate }: ProfileProps) {
 
   const onThemeToggle = (newTheme: 'yellow' | 'midnight') => {
     setTheme(newTheme);
-    localStorage.setItem('volt_theme', newTheme);
-    if (newTheme === 'midnight') {
-      document.body.classList.add('theme-midnight');
-    } else {
-      document.body.classList.remove('theme-midnight');
-    }
   }
 
 

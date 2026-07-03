@@ -5,6 +5,7 @@ import { PixKey } from '../types';
 import { useToast, ToastContainer } from './Toast';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import PixKeySuccessModal from './PixKeySuccessModal';
+import { useAppState } from '../contexts/AppStateContext';
 
 interface PixKeyManagementProps {
     onBack: () => void;
@@ -12,6 +13,8 @@ interface PixKeyManagementProps {
 
 const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     const { user, updateUser } = useAuth();
+    const { theme } = useAppState();
+    const isMidnight = theme === 'midnight';
     const [keys, setKeys] = useState<PixKey[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -228,20 +231,28 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
         }
     };
 
+    const pageBgClass = isMidnight ? 'bg-background-dark text-white' : 'bg-white text-black';
+    const backBtnClass = isMidnight ? 'hover:bg-white/10' : 'hover:bg-black/10';
+    const addKeyBtnClass = isMidnight ? 'text-background-dark bg-primary' : 'text-black bg-volt-lime border-2 border-black';
+    const keyItemClass = isMidnight ? 'bg-surface-dark' : 'bg-black/5';
+    const keyValueClass = isMidnight ? 'text-gray-400' : 'text-black/50';
+    const deleteIconClass = isMidnight ? 'text-gray-500 hover:text-red-400' : 'text-black/40 hover:text-red-600';
+    const emptyStateClass = isMidnight ? 'text-gray-500' : 'text-black/50';
+
     return (
-        <div 
-            className="bg-background-dark text-white min-h-full"
+        <div
+            className={`min-h-full ${pageBgClass}`}
             data-testid="pix-page"
             id="pix-page"
         >
-             <header 
+             <header
                 className="flex items-center mb-6 px-4 pt-4"
                 data-testid="pix-header"
                 id="pix-header"
             >
-                <button 
-                    onClick={onBack} 
-                    className="mr-2 p-2 rounded-full hover:bg-white/10"
+                <button
+                    onClick={onBack}
+                    className={`mr-2 p-2 rounded-full ${backBtnClass}`}
                     data-testid="pix-back-button"
                     id="pix-back-button"
                     aria-label="Voltar"
@@ -249,22 +260,22 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                 >
                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
                 </button>
-                <h2 
-                    className="text-2xl font-bold text-white"
+                <h2
+                    className="text-2xl font-bold"
                     data-testid="pix-header-title"
                     id="pix-header-title"
                 >
                     Gerenciar Minhas Chaves PIX
                 </h2>
             </header>
-            <main 
+            <main
                 className="px-4"
                 data-testid="pix-main"
                 id="pix-main"
             >
-                <button 
-                    onClick={() => setShowAddModal(true)} 
-                    className="w-full py-3 mb-6 font-semibold text-background-dark bg-primary rounded-lg hover:opacity-90"
+                <button
+                    onClick={() => setShowAddModal(true)}
+                    className={`w-full py-3 mb-6 font-semibold rounded-lg hover:opacity-90 ${addKeyBtnClass}`}
                     data-testid="pix-add-key-button"
                     id="pix-add-key-button"
                     aria-label="Cadastrar Nova Chave"
@@ -277,21 +288,21 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                     <p data-testid="pix-loading" id="pix-loading">Carregando...</p>
                 ) : (
                     keys.length > 0 ? (
-                        <ul 
+                        <ul
                             className="space-y-2"
                             data-testid="pix-keys-list"
                             id="pix-keys-list"
                         >
                             {keys.map((k, index) => (
-                                <li 
-                                    key={k.key} 
-                                    className="p-3 bg-surface-dark rounded-lg flex justify-between items-center"
+                                <li
+                                    key={k.key}
+                                    className={`p-3 rounded-lg flex justify-between items-center ${keyItemClass}`}
                                     data-testid={`pix-key-item-${index}`}
                                     id={`pix-key-item-${index}`}
                                 >
                                     <div>
-                                        <p 
-                                            className="font-semibold text-white capitalize"
+                                        <p
+                                            className="font-semibold capitalize"
                                             data-testid={`pix-key-type-${index}`}
                                             id={`pix-key-type-${index}`}
                                             aria-label={`Tipo da chave: ${k.type.toLowerCase()}`}
@@ -299,8 +310,8 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                         >
                                             {k.type.toLowerCase()}
                                         </p>
-                                        <p 
-                                            className="text-sm text-gray-400 font-mono"
+                                        <p
+                                            className={`text-sm font-mono ${keyValueClass}`}
                                             data-testid={`pix-key-value-${index}`}
                                             id={`pix-key-value-${index}`}
                                             aria-label={`Valor da chave: ${k.key}`}
@@ -309,9 +320,9 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                             {k.key}
                                         </p>
                                     </div>
-                                    <button 
-                                        onClick={() => handleDeleteClick(k)} 
-                                        className="p-2 text-gray-500 hover:text-red-400"
+                                    <button
+                                        onClick={() => handleDeleteClick(k)}
+                                        className={`p-2 ${deleteIconClass}`}
                                         data-testid={`pix-key-delete-button-${index}`}
                                         id={`pix-key-delete-button-${index}`}
                                         aria-label={`Excluir chave PIX ${k.type.toLowerCase()} ${k.key}`}
@@ -323,8 +334,8 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                             ))}
                         </ul>
                     ) : (
-                        <p 
-                            className="text-center text-gray-500"
+                        <p
+                            className={`text-center ${emptyStateClass}`}
                             data-testid="pix-no-keys"
                             id="pix-no-keys"
                         >
@@ -345,13 +356,13 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                     onClick={() => setShowAddModal(false)}
                 >
                     <div
-                        className="bg-surface-dark rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl"
+                        className={`rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl ${isMidnight ? 'bg-surface-dark text-white' : 'bg-white text-black border-2 border-black'}`}
                         data-testid="pix-add-key-modal"
                         id="pix-add-key-modal"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <h2
-                            className="text-2xl font-bold mb-6 text-white"
+                            className="text-2xl font-bold mb-6"
                             id="pix-add-key-modal-title"
                             data-testid="pix-add-key-modal-title"
                             role="heading"
@@ -364,7 +375,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                 <div className="relative">
                                     <label
                                         htmlFor="keyType"
-                                        className="text-sm font-medium text-subtle-dark mb-2 block"
+                                        className={`text-sm font-medium mb-2 block ${isMidnight ? 'text-subtle-dark' : 'text-black/60'}`}
                                         data-testid="pix-key-type-label"
                                     >
                                         Tipo de Chave
@@ -372,9 +383,9 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                     <button
                                         type="button"
                                         onClick={() => setShowKeyTypeDropdown(!showKeyTypeDropdown)}
-                                        className={`w-full px-4 py-3 bg-background-dark border-2 rounded-lg flex items-center justify-between transition-all ${showKeyTypeDropdown
-                                            ? 'border-primary'
-                                            : 'border-subtle-dark/50 hover:border-subtle-dark'
+                                        className={`w-full px-4 py-3 border-2 rounded-lg flex items-center justify-between transition-all ${isMidnight ? 'bg-background-dark' : 'bg-black/5'} ${showKeyTypeDropdown
+                                            ? (isMidnight ? 'border-primary' : 'border-black')
+                                            : (isMidnight ? 'border-subtle-dark/50 hover:border-subtle-dark' : 'border-black/20 hover:border-black/40')
                                             }`}
                                         data-testid="pix-key-type-selector"
                                         id="pix-key-type-selector"
@@ -385,14 +396,14 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                         aria-controls="pix-key-type-dropdown"
                                     >
                                         <span
-                                            className="text-white font-medium"
+                                            className="font-medium"
                                             data-testid="pix-key-type-selector-text"
                                             id="pix-key-type-selector-text"
                                         >
                                             {newKeyType === 'EMAIL' ? 'E-mail' : 'CPF'}
                                         </span>
                                         <span
-                                            className={`material-symbols-outlined text-subtle-dark transition-transform ${showKeyTypeDropdown ? 'rotate-180' : ''
+                                            className={`material-symbols-outlined transition-transform ${isMidnight ? 'text-subtle-dark' : 'text-black/50'} ${showKeyTypeDropdown ? 'rotate-180' : ''
                                                 }`}
                                             aria-hidden="true"
                                             data-testid="pix-key-type-selector-arrow"
@@ -403,7 +414,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
 
                                     {showKeyTypeDropdown && (
                                         <div
-                                            className="absolute z-10 w-full mt-2 bg-surface-dark border border-subtle-dark/50 rounded-lg shadow-2xl overflow-hidden"
+                                            className={`absolute z-10 w-full mt-2 rounded-lg shadow-2xl overflow-hidden ${isMidnight ? 'bg-surface-dark border border-subtle-dark/50' : 'bg-white border border-black/20'}`}
                                             data-testid="pix-key-type-dropdown"
                                             id="pix-key-type-dropdown"
                                             name="pix-key-type-dropdown"
@@ -420,8 +431,8 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                                     setShowKeyTypeDropdown(false);
                                                 }}
                                                 className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${newKeyType === 'EMAIL'
-                                                    ? 'bg-primary/20 text-primary'
-                                                    : 'text-white hover:bg-white/5'
+                                                    ? (isMidnight ? 'bg-primary/20 text-primary' : 'bg-volt-lime/20 text-black')
+                                                    : (isMidnight ? 'text-white hover:bg-white/5' : 'text-black hover:bg-black/5')
                                                     }`}
                                                 data-testid="pix-key-type-email"
                                                 id="pix-key-type-email"
@@ -442,7 +453,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                                 </span>
                                                 {newKeyType === 'EMAIL' && (
                                                     <span
-                                                        className="material-symbols-outlined text-primary"
+                                                        className={`material-symbols-outlined ${isMidnight ? 'text-primary' : 'text-black'}`}
                                                         aria-hidden="true"
                                                         data-testid="pix-key-type-email-check"
                                                         id="pix-key-type-email-check"
@@ -453,7 +464,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                             </button>
 
                                             <div
-                                                className="h-px bg-subtle-dark/50"
+                                                className={`h-px ${isMidnight ? 'bg-subtle-dark/50' : 'bg-black/20'}`}
                                                 role="separator"
                                                 aria-hidden="true"
                                                 id="pix-key-type-separator"
@@ -468,8 +479,8 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                                     setShowKeyTypeDropdown(false);
                                                 }}
                                                 className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${newKeyType === 'CPF'
-                                                    ? 'bg-primary/20 text-primary'
-                                                    : 'text-white hover:bg-white/5'
+                                                    ? (isMidnight ? 'bg-primary/20 text-primary' : 'bg-volt-lime/20 text-black')
+                                                    : (isMidnight ? 'text-white hover:bg-white/5' : 'text-black hover:bg-black/5')
                                                     }`}
                                                 data-testid="pix-key-type-cpf"
                                                 id="pix-key-type-cpf"
@@ -490,7 +501,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                                 </span>
                                                 {newKeyType === 'CPF' && (
                                                     <span
-                                                        className="material-symbols-outlined text-primary"
+                                                        className={`material-symbols-outlined ${isMidnight ? 'text-primary' : 'text-black'}`}
                                                         aria-hidden="true"
                                                         data-testid="pix-key-type-cpf-check"
                                                         id="pix-key-type-cpf-check"
@@ -506,15 +517,15 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                 <div>
                                     <label
                                         htmlFor="keyValue"
-                                        className="text-sm font-medium text-subtle-dark mb-2 block"
+                                        className={`text-sm font-medium mb-2 block ${isMidnight ? 'text-subtle-dark' : 'text-black/60'}`}
                                         data-testid="pix-key-value-label"
                                     >
                                         Chave
                                     </label>
-                                    <input 
+                                    <input
                                         id="keyValue"
                                         type={newKeyType === 'CPF' ? 'tel' : 'text'}
-                                        value={newKeyValue} 
+                                        value={newKeyValue}
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             if (newKeyType === 'CPF') {
@@ -531,7 +542,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                             }
                                         }}
                                         placeholder={newKeyType === 'EMAIL' ? 'Digite seu e-mail' : 'Digite apenas números (11 dígitos)'}
-                                        className="w-full px-4 py-3 bg-background-dark border border-subtle-dark/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-white placeholder-gray-500"
+                                        className={`w-full px-4 py-3 rounded-lg focus:outline-none focus:ring-2 ${isMidnight ? 'bg-background-dark border border-subtle-dark/50 focus:ring-primary text-white placeholder-gray-500' : 'bg-black/5 border border-black/20 focus:ring-black/20 text-black placeholder-black/30'}`}
                                         data-testid="pix-key-value-input"
                                         maxLength={newKeyType === 'CPF' ? 11 : 100}
                                     />
@@ -544,7 +555,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                     role="alert"
                                     aria-live="assertive"
                                 >
-                                    <p className="text-sm text-red-400">{error}</p>
+                                    <p className="text-sm text-red-500">{error}</p>
                                 </div>
                             )}
                             <div className="flex gap-3 mt-6">
@@ -556,7 +567,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                         setNewKeyValue('');
                                         setShowKeyTypeDropdown(false);
                                     }}
-                                    className="flex-1 px-4 py-3 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium"
+                                    className={`flex-1 px-4 py-3 rounded-lg transition-colors font-medium ${isMidnight ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-black/10 text-black hover:bg-black/20'}`}
                                     data-testid="pix-add-key-cancel-button"
                                     id="pix-add-key-cancel-button"
                                     aria-label="Cancelar cadastro de chave PIX"
@@ -565,7 +576,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 px-4 py-3 text-background-dark bg-primary font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                                    className={`flex-1 px-4 py-3 font-semibold rounded-lg hover:opacity-90 transition-opacity ${isMidnight ? 'text-background-dark bg-primary' : 'text-black bg-volt-lime border-2 border-black'}`}
                                     data-testid="pix-add-key-submit-button"
                                     id="pix-add-key-submit-button"
                                     aria-label="Cadastrar chave PIX"

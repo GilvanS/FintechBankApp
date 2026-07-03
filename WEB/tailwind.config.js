@@ -9,7 +9,7 @@ export default {
         './utils/**/*.{ts,tsx}',
         './hooks/**/*.{ts,tsx}',
     ],
-    darkMode: 'class',
+    darkMode: ['selector', '.theme-midnight'],
     theme: {
         extend: {
             colors: {
