@@ -65,7 +65,7 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
                 <h1 className="text-2xl font-bold">Investimentos</h1>
             </header>
             <main className="flex-grow overflow-y-auto no-scrollbar px-4 space-y-6">
-                <div className="bg-orange-600/10 border border-orange-500/30 rounded-2xl p-6 text-white">
+                <div className="bg-volt-surface rounded-2xl p-6 text-white">
                     <div className="flex justify-between items-center">
                         <span className="text-orange-300">Total investido</span>
                          <button onClick={() => setIsBalanceVisible(!isBalanceVisible)} className="text-orange-300 hover:text-white">
@@ -83,12 +83,12 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
                 <div>
                     <h2 className="text-lg font-semibold text-white mb-3">Onde investir</h2>
                     <div className="space-y-3">
-                        <button onClick={() => setView('fixedIncome')} className="w-full text-left p-4 bg-surface-dark rounded-lg flex justify-between items-center hover:bg-white/10">
+                        <button onClick={() => setView('fixedIncome')} className="w-full text-left p-4 bg-volt-surface rounded-lg flex justify-between items-center hover:bg-white/10">
                             <div>
                                 <p className="font-bold text-white">Renda Fixa</p>
-                                <p className="text-sm text-gray-400">Investimentos seguros com rentabilidade previsível.</p>
+                                <p className="text-sm text-on-surface-variant">Investimentos seguros com rentabilidade previsível.</p>
                             </div>
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
+                            <svg className="w-5 h-5 text-on-surface-variant" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
                         </button>
                         {/* More categories can be added here */}
                     </div>
@@ -107,10 +107,10 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
             </header>
             <main className="flex-grow overflow-y-auto no-scrollbar px-4 space-y-3">
                 {mockFixedIncomeProducts.map(product => (
-                    <div key={product.id} className="bg-surface-dark p-4 rounded-lg border border-subtle-dark/50">
+                    <div key={product.id} className="bg-volt-surface p-4 rounded-lg">
                         <h3 className="font-bold text-white">{product.name}</h3>
                         <p className="text-sm text-orange-400 font-semibold">{product.yield}</p>
-                        <div className="flex justify-between items-center mt-3 text-xs text-gray-400">
+                        <div className="flex justify-between items-center mt-3 text-xs text-on-surface-variant">
                             <span>Mínimo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.minInvestment)}</span>
                             <span>Liquidez: {product.liquidity}</span>
                         </div>
@@ -131,7 +131,7 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
     };
     
     return (
-        <div className="bg-background-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28">
+        <div className="bg-volt-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28">
             {renderContent()}
         </div>
     );

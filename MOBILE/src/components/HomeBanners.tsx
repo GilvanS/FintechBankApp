@@ -6,21 +6,21 @@ const banners = [
         title: 'Invista no seu futuro',
         description: 'Conheça nossas opções de investimento e faça seu dinheiro render.',
         navigateTo: 'investments',
-        bgClass: 'bg-gradient-to-br from-purple-600 to-indigo-600',
+        iconBgClass: 'bg-purple-200',
     },
     {
         icon: '💳',
         title: 'Sua carteira digital',
         description: 'Todos os seus cartões em um só lugar, com segurança e praticidade.',
         navigateTo: 'wallet',
-        bgClass: 'bg-gradient-to-br from-sky-500 to-cyan-500',
+        iconBgClass: 'bg-sky-200',
     },
     {
         icon: '💰',
         title: 'Crédito para você',
         description: 'Simule e contrate empréstimos com as melhores taxas do mercado.',
         navigateTo: 'loans',
-        bgClass: 'bg-gradient-to-br from-emerald-500 to-green-500',
+        iconBgClass: 'bg-emerald-200',
     },
 ];
 
@@ -52,18 +52,25 @@ const HomeBanners: React.FC<HomeBannersProps> = ({ onNavigate }) => {
 
     return (
         <div className="pt-4">
-            <div className="relative overflow-hidden rounded-2xl">
+            <div className="relative overflow-hidden rounded-3xl">
                  {banners.map((banner, index) => (
                     <div
                         key={index}
                         className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${index === currentIndex ? 'opacity-100' : 'opacity-0'}`}
                         onClick={() => onNavigate(banner.navigateTo)}
                     >
-                        <div className={`w-full h-48 rounded-[2rem] p-6 flex flex-col justify-between cursor-pointer border border-white/10 ${banner.bgClass}`}>
-                            <div className="text-4xl">{banner.icon}</div>
-                            <div>
-                                <h3 className="text-lg font-bold text-white">{banner.title}</h3>
-                                <p className="text-xs text-white/80">{banner.description}</p>
+                        <div className="w-full h-48 rounded-3xl p-6 flex flex-col justify-between cursor-pointer bg-white text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all">
+                            <div className={`w-12 h-12 rounded-full border-2 border-black flex items-center justify-center text-2xl ${banner.iconBgClass}`}>
+                                {banner.icon}
+                            </div>
+                            <div className="flex items-end justify-between gap-3">
+                                <div>
+                                    <h3 className="text-lg font-black text-black leading-tight">{banner.title}</h3>
+                                    <p className="text-xs font-bold text-gray-700 mt-1">{banner.description}</p>
+                                </div>
+                                <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center shrink-0 active:scale-95 transition-transform">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"/></svg>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -75,7 +82,7 @@ const HomeBanners: React.FC<HomeBannersProps> = ({ onNavigate }) => {
                         <button
                             key={index}
                             onClick={() => setCurrentIndex(index)}
-                            className={`w-2 h-2 rounded-full transition-all ${currentIndex === index ? 'bg-white w-4' : 'bg-white/50'}`}
+                            className={`w-2 h-2 rounded-full border border-black transition-all ${currentIndex === index ? 'bg-black w-4' : 'bg-black/30'}`}
                         />
                     ))}
                 </div>

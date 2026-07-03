@@ -22,7 +22,7 @@ const Loans: React.FC<LoansProps> = ({ onBack }) => {
     };
 
     return (
-        <div className="bg-background-dark text-white min-h-full flex flex-col">
+        <div className="bg-volt-dark text-white min-h-full flex flex-col">
             <header className="flex items-center p-4 border-b border-white/10 pt-[calc(1rem+env(safe-area-inset-top))]">
                 <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10" aria-label="Voltar">
                     <span className="material-symbols-outlined">arrow_back</span>
@@ -33,13 +33,13 @@ const Loans: React.FC<LoansProps> = ({ onBack }) => {
             <main className="flex-1 p-6 flex flex-col gap-8">
                 {/* Hero */}
                 <div className="flex flex-col items-center text-center gap-4 py-4">
-                    <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-4xl text-primary">monetization_on</span>
+                    <div className="w-20 h-20 rounded-full bg-volt-green/10 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-4xl text-volt-green">monetization_on</span>
                     </div>
                     <div>
-                        <span className="inline-block text-xs font-semibold bg-primary/20 text-primary px-3 py-1 rounded-full mb-3">Em breve</span>
+                        <span className="inline-block text-xs font-semibold bg-volt-green/20 text-volt-green px-3 py-1 rounded-full mb-3">Em breve</span>
                         <h2 className="text-2xl font-bold text-white">Crédito pensado para você</h2>
-                        <p className="text-white/60 mt-2 text-sm leading-relaxed">
+                        <p className="text-on-surface-variant mt-2 text-sm leading-relaxed">
                             Simule e contrate empréstimos diretamente pelo app, com as melhores condições do mercado.
                         </p>
                     </div>
@@ -48,13 +48,13 @@ const Loans: React.FC<LoansProps> = ({ onBack }) => {
                 {/* Feature list */}
                 <div className="flex flex-col gap-3">
                     {features.map(f => (
-                        <div key={f.icon} className="flex items-start gap-4 bg-surface-dark rounded-xl p-4">
-                            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                                <span className="material-symbols-outlined text-primary text-xl">{f.icon}</span>
+                        <div key={f.icon} className="flex items-start gap-4 bg-volt-surface rounded-xl p-4">
+                            <div className="w-10 h-10 rounded-lg bg-volt-green/10 flex items-center justify-center shrink-0">
+                                <span className="material-symbols-outlined text-volt-green text-xl">{f.icon}</span>
                             </div>
                             <div>
                                 <p className="font-semibold text-white text-sm">{f.label}</p>
-                                <p className="text-white/50 text-xs mt-0.5">{f.detail}</p>
+                                <p className="text-on-surface-variant text-xs mt-0.5">{f.detail}</p>
                             </div>
                         </div>
                     ))}
@@ -64,7 +64,7 @@ const Loans: React.FC<LoansProps> = ({ onBack }) => {
                 <button
                     onClick={handleInterest}
                     disabled={registered}
-                    className="w-full py-4 rounded-xl font-semibold text-background-dark bg-primary hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                    className="w-full py-4 rounded-xl font-semibold text-background-dark bg-volt-green hover:bg-volt-green/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
                     {registered ? 'Interesse registrado!' : 'Quero ser notificado'}
                 </button>

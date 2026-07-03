@@ -20,6 +20,8 @@ import PurchaseConfirmation from './PurchaseConfirmation';
 import BottomNavBar from './BottomNavBar';
 import Admin from './Admin';
 import Investments from './Investments';
+import Wallet from './Wallet';
+import Loans from './Loans';
 import PointsDashboard from './PointsDashboard';
 import AnticipateInstallments from './AnticipateInstallments';
 import InstallmentReview from './InstallmentReview';
@@ -74,7 +76,7 @@ const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; o
 };
 
 
-type View = 'home' | 'cards' | 'shop' | 'investments' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'currentInvoice' | 'limit';
+type View = 'home' | 'cards' | 'shop' | 'investments' | 'wallet' | 'loans' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'currentInvoice' | 'limit';
 
 const Dashboard: React.FC = () => {
     const { user, updateUser, logout, view: topLevelView, navigateTo } = useAuth();
@@ -565,6 +567,10 @@ const Dashboard: React.FC = () => {
                 return <PurchaseConfirmation details={confirmationDetails} onClose={() => handleNavigate('home')} />;
             case 'investments':
                 return <Investments onBack={() => handleNavigate('home')} />;
+            case 'wallet':
+                return <Wallet onBack={() => handleNavigate('home')} />;
+            case 'loans':
+                return <Loans onBack={() => handleNavigate('home')} />;
             case 'shop':
                 if (!user) return null;
                 return (
