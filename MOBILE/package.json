@@ -1,7 +1,7 @@
 {
   "name": "fintech-bank-app",
   "private": true,
-  "version": "4.0.4-20260626-2106",
+  "version": "4.0.4-20260702-2028",
   "type": "module",
   "scripts": {
     "dev": "vite",
