@@ -109,9 +109,12 @@ const Admin: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isOpen, on
     };
 
     useEffect(() => {
-        fetchRequests();
-        fetchStats();
-    }, []);
+        // Busca dados apenas quando o painel é aberto (evita chamadas no mount do Dashboard)
+        if (isOpen) {
+            fetchRequests();
+            fetchStats();
+        }
+    }, [isOpen]);
 
     const handleSearch = async (e?: React.FormEvent) => {
         e?.preventDefault();
@@ -283,7 +286,7 @@ const Admin: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isOpen, on
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className={`flex flex-col relative w-full max-h-[85vh] rounded-3xl overflow-hidden z-10 ${modalCardClass}`}
+                        className={`flex flex-col relative w-full max-w-3xl max-h-[85vh] rounded-3xl overflow-hidden z-10 ${modalCardClass}`}
                         id="admin-page"
                         data-testid="admin-page"
                         data-cy="admin-page"
