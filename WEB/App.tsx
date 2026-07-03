@@ -157,7 +157,7 @@ function App() {
             <AppStateProvider>
                 <DialogProvider>
                     <div className="h-screen w-screen bg-volt-dark font-sans overflow-hidden flex items-center justify-center">
-                    <div className="w-full h-full md:max-w-md md:border-x-8 md:border-[#1a1a1a] overflow-hidden relative shadow-2xl bg-volt-dark">
+                    <div className="w-full h-full md:max-w-md overflow-hidden relative shadow-2xl bg-volt-dark">
                         <DemoBanner />
                         {showOnboarding ? (
                             <Onboarding onComplete={handleOnboardingComplete} />
