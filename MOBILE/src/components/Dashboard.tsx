@@ -94,7 +94,6 @@ const Dashboard: React.FC = () => {
     const [isBoletoOpen, setIsBoletoOpen] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
     // Shop is now full-page
-    const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
     const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
     const [isHeaderHidden, setIsHeaderHidden] = useState(false);
 
@@ -188,9 +187,9 @@ const Dashboard: React.FC = () => {
         return () => { cancelled = true; };
     }, [currentView, user]);
 
-    // Refresh extrato quando modal de statement abre
+    // Refresh extrato quando a view de statement abre
     useEffect(() => {
-        if (!isStatementModalOpen || !user) return;
+        if (currentView !== 'statement' || !user) return;
         let cancelled = false;
         getUserStatement(user.cpf).then(stmt => {
             if (stmt.success && stmt.transactions && !cancelled) {
@@ -198,7 +197,7 @@ const Dashboard: React.FC = () => {
             }
         });
         return () => { cancelled = true; };
-    }, [isStatementModalOpen]);
+    }, [currentView]);
     const handleGoToPaymentFromModal = () => {
         setIsBlockedModalOpen(false);
         handleNavigate('closedInvoice');
@@ -229,8 +228,8 @@ const Dashboard: React.FC = () => {
         }
 
         if (newView === 'statement') {
-            setCurrentView('home');
-            setIsStatementModalOpen(true);
+            if (currentView !== 'statement') setPreviousView(currentView);
+            setCurrentView('statement');
             return;
         }
         if (newView === 'limit') {
@@ -609,6 +608,26 @@ const Dashboard: React.FC = () => {
                         />
                     </div>
                 );
+            case 'statement':
+                if (!user) return null;
+                return (
+                    <div className={`min-h-full pb-20 w-full max-w-4xl mx-auto ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
+                        <div className={`flex items-center gap-3 p-4 border-b sticky top-0 z-50 ${theme === 'midnight' ? 'border-white/5 bg-[#0f0f0f]' : 'border-black/5 bg-volt-yellow'}`}>
+                            <button onClick={handleBack} className={`p-2 -ml-2 rounded-full transition-colors cursor-pointer ${theme === 'midnight' ? 'hover:bg-white/10 text-white' : 'hover:bg-black/10 text-black'}`}>
+                                <span className={`text-xl ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>←</span>
+                            </button>
+                            <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Extrato</h1>
+                        </div>
+                        <StatementPaginated
+                            user={user}
+                            onNavigate={(view) => {
+                                if (view !== 'home' && view !== 'statement') handleNavigate(view as View);
+                                else handleBack();
+                            }}
+                            onBack={handleBack}
+                        />
+                    </div>
+                );
             case 'points':
                 return <PointsDashboard user={user!} onBack={() => handleNavigate('cards')} />;
             case 'anticipateInstallments':
@@ -737,7 +756,7 @@ const Dashboard: React.FC = () => {
             >
                 {renderContent()}
             </div>
-            {topLevelView !== 'admin' && ['home', 'products', 'profile', 'cards', 'limit'].includes(currentView) && !isStatementModalOpen && (
+            {topLevelView !== 'admin' && ['home', 'products', 'profile', 'cards', 'limit'].includes(currentView) && (
                  <BottomNavBar currentView={currentView} onNavigate={(view) => handleNavigate(view)} theme={theme} />
             )}
             
@@ -810,56 +829,6 @@ const Dashboard: React.FC = () => {
             )}
 
 
-
-            {/* ── Statement Modal ───────────────────────── */}
-            <AnimatePresence>
-                {isStatementModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 pt-16">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-                            onClick={() => setIsStatementModalOpen(false)}
-                        />
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full h-fit max-h-[85vh] bg-volt-surface border-2 border-volt-primary shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] rounded-3xl flex flex-col overflow-hidden"
-                        >
-                            {/* Modal Header */}
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
-                                        <span className="material-symbols-outlined text-white/80">receipt_long</span>
-                                    </div>
-                                    <div>
-                                        <h2 className="text-xl font-black text-white uppercase tracking-wider">Extrato</h2>
-                                        <p className="text-xs text-white/50 uppercase tracking-widest">Histórico de Movimentações</p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setIsStatementModalOpen(false)}
-                                    className="p-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
-                                >
-                                    <span className="material-symbols-outlined text-xl">close</span>
-                                </button>
-                            </div>
-                            <div className="flex-1 overflow-y-auto no-scrollbar relative bg-[#131313]">
-                                <StatementPaginated
-                                    user={user!}
-                                    onNavigate={(view) => {
-                                        setIsStatementModalOpen(false);
-                                        if (view !== 'home' && view !== 'statement') handleNavigate(view as View);
-                                    }}
-                                    onBack={() => setIsStatementModalOpen(false)}
-                                />
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
 
             {/* ── Limit Modal ───────────────────────────── */}
             <AnimatePresence>
