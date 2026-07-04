@@ -190,17 +190,19 @@ export default function BoletoModal({
           {!paymentSuccess ? (
             <>
               {step === 'scan_camera' && (
-                <div className="flex-grow flex flex-col h-full bg-zinc-950 text-white select-none">
-                  <div className="h-14 flex items-center justify-between px-4 shrink-0 border-b border-zinc-900 bg-zinc-900/50">
+                <div className={`flex-grow flex flex-col h-full select-none ${isMidnight ? 'bg-zinc-950 text-white' : 'bg-volt-yellow text-black'}`}>
+                  <div className={`h-14 flex items-center justify-between px-4 shrink-0 border-b ${isMidnight ? 'border-zinc-900 bg-zinc-900/50' : 'border-black/15 bg-volt-yellow'}`}>
                     <div className="flex items-center">
-                      <button onClick={handleCloseAll} className="p-2 -ml-2 rounded-full text-white hover:bg-zinc-800 transition-colors">
+                      <button onClick={handleCloseAll} className={`p-2 -ml-2 rounded-full transition-colors ${isMidnight ? 'text-white hover:bg-zinc-800' : 'text-black hover:bg-black/10'}`}>
                         <ArrowLeft size={22} className="stroke-[2.5]" />
                       </button>
                       <h2 className="ml-3 font-extrabold text-base">Leitor de Código</h2>
                     </div>
                     <button
                       onClick={toggleFlash}
-                      className={`p-2 rounded-full transition-all ${isFlashOn ? 'text-yellow-400 bg-zinc-800' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+                      className={`p-2 rounded-full transition-all ${isFlashOn
+                        ? (isMidnight ? 'text-yellow-400 bg-zinc-800' : 'text-amber-600 bg-black/10')
+                        : (isMidnight ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' : 'text-black/50 hover:text-black hover:bg-black/10')}`}
                     >
                       <Zap size={20} className={isFlashOn ? 'fill-yellow-400' : ''} />
                     </button>
@@ -233,25 +235,25 @@ export default function BoletoModal({
                     </div>
                   </div>
 
-                  <div className="p-5 bg-zinc-900 border-t border-zinc-800 shrink-0 flex flex-col items-center gap-4">
+                  <div className={`p-5 shrink-0 flex flex-col items-center gap-4 border-t ${isMidnight ? 'bg-zinc-900 border-zinc-800' : 'bg-volt-yellow border-black/15'}`}>
                     <button
                       onClick={() => {
                         setScannerMessage('Detectando código...');
                         setTimeout(() => setStep('boleto_info'), 600);
                       }}
-                      className="w-full py-3.5 bg-gradient-to-r from-zinc-800 to-zinc-900 border border-zinc-750 text-volt-primary rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-97 flex items-center justify-center gap-2"
+                      className={`w-full py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-97 flex items-center justify-center gap-2 ${isMidnight ? 'bg-gradient-to-r from-zinc-800 to-zinc-900 border border-zinc-750 text-volt-primary' : 'bg-black text-volt-lime border-2 border-black'}`}
                     >
                       <Sparkles size={14} className="animate-pulse" />
                       Simular Leitura do Código
                     </button>
                     <div className="w-full flex items-center gap-3">
-                      <div className="h-px bg-zinc-800 flex-1" />
-                      <span className="text-[9px] uppercase font-black tracking-widest text-zinc-500 shrink-0">Alternativa de Entrada</span>
-                      <div className="h-px bg-zinc-800 flex-1" />
+                      <div className={`h-px flex-1 ${isMidnight ? 'bg-zinc-800' : 'bg-black/20'}`} />
+                      <span className={`text-[9px] uppercase font-black tracking-widest shrink-0 ${isMidnight ? 'text-zinc-500' : 'text-black/50'}`}>Alternativa de Entrada</span>
+                      <div className={`h-px flex-1 ${isMidnight ? 'bg-zinc-800' : 'bg-black/20'}`} />
                     </div>
                     <button
                       onClick={() => setStep('input_barcode')}
-                      className="w-full py-3 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white rounded-xl font-bold text-xs uppercase tracking-wider active:scale-97 transition-all flex items-center justify-center gap-2"
+                      className={`w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider active:scale-97 transition-all flex items-center justify-center gap-2 ${isMidnight ? 'bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white' : 'bg-white border-2 border-black text-black hover:bg-black/5'}`}
                     >
                       <Keyboard size={16} />
                       Digitar código manualmente
