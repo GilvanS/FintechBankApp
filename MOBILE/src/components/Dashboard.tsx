@@ -778,6 +778,7 @@ const Dashboard: React.FC = () => {
                         triggerSmartAlertCheck(newTx);
                     }
                 }}
+                theme={theme}
             />
             {currentItem && (
                 <InstallmentModal

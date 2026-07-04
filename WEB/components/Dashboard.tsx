@@ -770,6 +770,7 @@ const Dashboard: React.FC = () => {
                 onClose={() => setIsBoletoOpen(false)}
                 accountBalance={user?.balance ?? 0}
                 onTransactionComplete={handleBoletoComplete}
+                theme={theme}
             />
             {currentItem && (
                 <InstallmentModal

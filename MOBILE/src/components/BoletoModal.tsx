@@ -11,6 +11,7 @@ interface BoletoModalProps {
   onClose: () => void;
   accountBalance: number;
   onTransactionComplete: (newTx: Transaction, amount: number) => void;
+  theme?: 'yellow' | 'midnight';
 }
 
 type BoletoStep = 'scan_camera' | 'input_barcode' | 'boleto_info' | 'confirm_payment';
@@ -22,7 +23,9 @@ export default function BoletoModal({
   isOpen,
   onClose,
   onTransactionComplete,
+  theme = 'yellow',
 }: BoletoModalProps) {
+  const isMidnight = theme === 'midnight';
   const [step, setStep] = useState<BoletoStep>('scan_camera');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -164,7 +167,7 @@ export default function BoletoModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex flex-col bg-black overflow-hidden animate-fade-in">
+      <div className={`fixed inset-0 z-[100] flex flex-col overflow-hidden animate-fade-in ${isMidnight ? 'bg-black' : 'bg-volt-yellow'}`}>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
