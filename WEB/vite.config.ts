@@ -1,6 +1,7 @@
 import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig(() => {
     const isDemo = process.env.VITE_USE_MOCK_API === 'true';
@@ -16,7 +17,7 @@ export default defineConfig(() => {
           }
         }
       },
-      plugins: [react()],
+      plugins: [react(), tailwindcss()],
       esbuild: {
         target: 'es2020'
       },
