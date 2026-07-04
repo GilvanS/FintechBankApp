@@ -32,10 +32,10 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: LucideIc
             : 'bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-black hover:bg-gray-50'
     }`}>
         <div className="flex items-center space-x-3 mb-3">
-            <Icon className={`w-6 h-6 sm:w-8 sm:h-8 ${isMidnight ? 'text-volt-green' : 'text-black'}`} />
-            <p className={`text-[10px] sm:text-xs break-words leading-tight ${isMidnight ? 'font-semibold text-white/80' : 'font-black uppercase tracking-wider text-black/60'}`}>{title}</p>
+            <Icon className={`w-6 h-6 ${isMidnight ? 'text-volt-green' : 'text-black'}`} />
+            <p className={`text-[10px] break-words leading-tight ${isMidnight ? 'font-semibold text-white/80' : 'font-black uppercase tracking-wider text-black/60'}`}>{title}</p>
         </div>
-        <p className={`text-2xl sm:text-3xl ${isMidnight ? 'font-bold text-white' : 'font-black text-black'}`}>{value}</p>
+        <p className={`text-2xl ${isMidnight ? 'font-bold text-white' : 'font-black text-black'}`}>{value}</p>
     </div>
 );
 
@@ -296,7 +296,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
             data-cy="admin-page"
             data-playwright="admin-page"
         >
-            <div className="p-4 sm:p-6 md:p-8 overflow-y-auto no-scrollbar flex flex-col flex-1">
+            <div className="p-4 overflow-y-auto no-scrollbar flex flex-col flex-1">
                 <header
                     className="flex items-center justify-between gap-3 mb-8 test-admin-header"
                     id="admin-header"
@@ -347,7 +347,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                             >
                 {/* Stats */}
                 <section
-                    className="grid grid-cols-2 gap-3 sm:gap-4 test-admin-stats"
+                    className="grid grid-cols-2 gap-4 test-admin-stats"
                     id="admin-stats"
                     data-testid="admin-stats"
                     data-cy="admin-stats"
@@ -394,7 +394,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                     </h2>
                     <form
                         onSubmit={handleSearch}
-                        className="flex flex-col gap-3 sm:gap-4 mb-6 test-admin-search-form"
+                        className="flex flex-col gap-4 mb-6 test-admin-search-form"
                         id="admin-search-form"
                         name="admin-search-form"
                         data-testid="admin-search-form"
@@ -429,7 +429,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                         </button>
                     </form>
                     {searchedUser && (
-                        <div className={`p-6 rounded-2xl flex flex-col lg:flex-row gap-8 ${innerCardClass}`}>
+                        <div className={`p-6 rounded-2xl flex flex-col gap-8 ${innerCardClass}`}>
                             <div className="flex-1 space-y-2">
                                 <h3 className={`font-bold text-2xl ${titleClass}`}>{searchedUser.fullName}</h3>
                                 <p className={`text-sm ${isMidnight ? 'font-medium text-white/70' : 'font-bold uppercase text-black/70'}`}>CPF: {formatCPF(searchedUser.cpf)}</p>
@@ -437,7 +437,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                                     {searchedUser.isBlocked ? 'CONTA BLOQUEADA' : 'CONTA ATIVA'} / {searchedUser.creditCard.isBlocked ? 'CARTÃO BLOQUEADO' : 'CARTÃO ATIVO'}
                                 </p>
                                 <div
-                                    className="flex flex-col gap-3 sm:gap-4 mt-6 test-admin-user-actions"
+                                    className="flex flex-col gap-4 mt-6 test-admin-user-actions"
                                     id="admin-user-actions"
                                     data-testid="admin-user-actions"
                                     data-cy="admin-user-actions"
@@ -475,7 +475,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                                         onClick={() => openModal('deposit', searchedUser)}
                                         className={`flex-1 py-3 rounded-2xl transition-all test-admin-deposit-button ${btnTypographyClass} ${neutralBtnClass}`}
                                         id="btn-admin-deposit"
-                                        name="btn-admin-deposit"
+                                        name="admin-deposit-button"
                                         data-testid="admin-deposit-button"
                                         data-cy="admin-deposit-button"
                                         data-playwright="admin-deposit-button"
@@ -487,9 +487,9 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                                 </div>
                             </div>
 
-                            <div className={`flex-1 border-t lg:border-t-0 lg:border-l lg:pl-8 pt-6 lg:pt-0 ${dividerClass}`}>
+                            <div className={`flex-1 border-t pt-6 ${dividerClass}`}>
                                 <h4 className={`font-bold mb-4 uppercase ${titleClass}`}>Alterar Dados do Cartão</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4">
                                     <div>
                                         <label className={`text-xs font-bold uppercase ${isMidnight ? 'text-white/70' : 'text-black/70'}`}>Vencimento do Cartão (MM/AA)</label>
                                         <input
@@ -520,7 +520,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                 </section>
 
                 {/* Requests */}
-                <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <section className="grid grid-cols-1 gap-8">
                     {/* Password Requests */}
                     <div
                         className={`p-6 rounded-2xl test-admin-password-requests ${sectionCardClass}`}
@@ -574,7 +574,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                                             name={`btn-admin-deny-password-${req.cpf}`}
                                             data-testid={`btn-admin-deny-password-${req.cpf}`}
                                             data-cy={`btn-admin-deny-password-${req.cpf}`}
-                                            data-playwright={`btn-admin-deny-password-${req.cpf}`}
+                                            data-playwright={`admin-deny-password-${req.cpf}`}
                                             aria-label={`Negar solicitação de senha para ${formatCPF(req.cpf)}`}
                                             type="button"
                                         >
@@ -657,7 +657,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                     </div>
 
                     {/* Massa de Teste — Billing Mock */}
-                    <div className={`p-6 rounded-2xl lg:col-span-2 flex flex-col items-center text-center ${isMidnight ? 'bg-volt-surface border border-white/5 shadow-md' : 'bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}`}>
+                    <div className={`p-6 rounded-2xl flex flex-col items-center text-center ${isMidnight ? 'bg-volt-surface border border-white/5 shadow-md' : 'bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}`}>
                         <h2 className={isMidnight ? `text-xl font-bold mb-2 ${titleClass}` : `text-xl font-black uppercase tracking-wider mb-2 ${titleClass}`}>Massa de Teste (Billing)</h2>
                         <p className={isMidnight ? `text-xs mb-6 ${subTextClass}` : `text-xs font-bold mb-6 uppercase ${subTextClass}`}>Aplica cenários de faturamento para automação. Não afeta dados de produção.</p>
 
@@ -770,7 +770,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                             <p className={`font-bold mb-8 text-lg ${subTextClass}`}>Você tem certeza que deseja executar esta ação para o CPF <span className={`font-bold ${titleClass}`}>{formatCPF(modalState.data.cpf)}</span>?</p>
                         )}
                         <div
-                            className="flex flex-col sm:flex-row justify-end gap-4 mt-8 test-admin-modal-actions"
+                            className="flex flex-col justify-end gap-4 mt-8 test-admin-modal-actions"
                             id="admin-modal-actions"
                             data-testid="admin-modal-actions"
                             data-cy="admin-modal-actions"
@@ -809,7 +809,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
 
             {/* Toast */}
             {toast && (
-                <div className={`fixed bottom-8 right-8 left-8 sm:left-auto p-4 rounded-xl border font-bold uppercase tracking-wider z-50 ${
+                <div className={`fixed bottom-8 right-8 left-8 p-4 rounded-xl border font-bold uppercase tracking-wider z-50 ${
                     toast.type === 'success'
                         ? (isMidnight ? 'bg-volt-green/20 text-volt-green border-volt-green/30' : 'bg-volt-lime/25 text-black border-black')
                         : (isMidnight ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-red-500/20 text-red-700 border-red-600/40')
