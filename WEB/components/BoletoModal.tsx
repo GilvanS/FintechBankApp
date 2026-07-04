@@ -26,6 +26,11 @@ export default function BoletoModal({
   theme = 'yellow',
 }: BoletoModalProps) {
   const isMidnight = theme === 'midnight';
+  // Classes derivadas do tema — telas internas (a câmera permanece escura de propósito)
+  const textCls = isMidnight ? 'text-white' : 'text-black';
+  const borderCls = isMidnight ? 'border-white/10' : 'border-black/15';
+  const hoverCls = isMidnight ? 'hover:bg-white/10' : 'hover:bg-black/10';
+  const cardCls = isMidnight ? 'bg-white/5 border-white/10' : 'bg-white border-black/15';
   const [step, setStep] = useState<BoletoStep>('scan_camera');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -256,9 +261,9 @@ export default function BoletoModal({
               )}
 
               {step === 'input_barcode' && (
-                <div className="flex-grow flex flex-col text-white">
-                  <div className="h-14 flex items-center px-4 shrink-0 border-b border-white/10">
-                    <button onClick={() => setStep('scan_camera')} className="p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors">
+                <div className={`flex-grow flex flex-col ${textCls}`}>
+                  <div className={`h-14 flex items-center px-4 shrink-0 border-b ${borderCls}`}>
+                    <button onClick={() => setStep('scan_camera')} className={`p-2 -ml-2 rounded-full ${hoverCls} transition-colors`}>
                       <ArrowLeft size={22} className="stroke-[2.5]" />
                     </button>
                     <h2 className="ml-3 font-extrabold text-base">Pagamento de Boleto</h2>
@@ -273,17 +278,17 @@ export default function BoletoModal({
                     <div className="relative py-3 pr-8 min-h-[90px] flex items-center border-b border-volt-primary">
                       <div className="font-mono text-base font-extrabold tracking-widest whitespace-pre-line leading-relaxed">
                         {rawBarcode ? formatBoletoCode(rawBarcode) : (
-                          <span className="text-zinc-600 font-sans tracking-normal font-normal">00000.00000 00000.000000...</span>
+                          <span className={`font-sans tracking-normal font-normal ${isMidnight ? 'text-zinc-600' : 'text-black/30'}`}>00000.00000 00000.000000...</span>
                         )}
                       </div>
                       {rawBarcode && (
-                        <button onClick={() => setRawBarcode('')} className="absolute right-0 top-1/2 -translate-y-1/2 p-1 rounded-full bg-white/10 hover:bg-white/20 text-zinc-300 transition-colors">
+                        <button onClick={() => setRawBarcode('')} className={`absolute right-0 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors ${isMidnight ? 'bg-white/10 hover:bg-white/20 text-zinc-300' : 'bg-black/10 hover:bg-black/20 text-black/60'}`}>
                           <X size={16} />
                         </button>
                       )}
                     </div>
 
-                    <div className="p-3 flex justify-between items-center rounded-2xl bg-white/5 border border-white/10">
+                    <div className={`p-3 flex justify-between items-center rounded-2xl border ${cardCls}`}>
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black uppercase text-on-surface-variant">Exemplo Homologado</span>
                         <span className="text-xs font-extrabold">Boleto de R$ 393,22</span>
@@ -306,13 +311,17 @@ export default function BoletoModal({
                     </button>
                   </div>
 
-                  <div className="p-3 grid grid-cols-4 gap-2.5 shrink-0 border-t border-white/10 bg-black/40">
+                  <div className={`p-3 grid grid-cols-4 gap-2.5 shrink-0 border-t ${isMidnight ? 'border-white/10 bg-black/40' : 'border-black/15 bg-black/5'}`}>
                     {keyboardKeys.map((key, index) => {
                       const keyClass = key.action === 'submit'
                         ? 'bg-volt-primary text-black font-bold'
                         : key.isSpecial
-                          ? 'bg-white/10 hover:bg-white/20 border border-white/10 text-volt-primary font-bold'
-                          : 'bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium';
+                          ? (isMidnight
+                              ? 'bg-white/10 hover:bg-white/20 border border-white/10 text-volt-primary font-bold'
+                              : 'bg-black/10 hover:bg-black/15 border border-black/15 text-black font-bold')
+                          : (isMidnight
+                              ? 'bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium'
+                              : 'bg-white hover:bg-black/5 border border-black/15 text-black font-medium');
                       return (
                         <button
                           key={index}
@@ -329,16 +338,16 @@ export default function BoletoModal({
               )}
 
               {step === 'boleto_info' && (
-                <div className="flex-grow flex flex-col text-white overflow-y-auto no-scrollbar">
-                  <div className="h-14 flex items-center px-4 shrink-0 border-b border-white/10">
-                    <button onClick={() => setStep('input_barcode')} className="p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors">
+                <div className={`flex-grow flex flex-col overflow-y-auto no-scrollbar ${textCls}`}>
+                  <div className={`h-14 flex items-center px-4 shrink-0 border-b ${borderCls}`}>
+                    <button onClick={() => setStep('input_barcode')} className={`p-2 -ml-2 rounded-full ${hoverCls} transition-colors`}>
                       <ArrowLeft size={22} className="stroke-[2.5]" />
                     </button>
                     <h2 className="ml-3 font-extrabold text-base">Informações do Boleto</h2>
                   </div>
 
                   <div className="p-5 flex-grow space-y-6">
-                    <div className="space-y-1 py-4 border-b border-white/10">
+                    <div className={`space-y-1 py-4 border-b ${borderCls}`}>
                       <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Valor do pagamento</span>
                       <div className="text-4xl font-extrabold tracking-tight flex items-baseline">
                         <span className="text-2xl mr-1 font-bold text-volt-primary">R$</span>393,22
@@ -351,28 +360,28 @@ export default function BoletoModal({
                         ['Beneficiário', 'Beneficiario Ambiente Homologacao'],
                         ['Pagador', 'Pagador Ambiente De Homologacao'],
                       ].map(([label, value]) => (
-                        <div key={label} className="flex justify-between items-start text-xs pb-3 border-b border-white/10">
+                        <div key={label} className={`flex justify-between items-start text-xs pb-3 border-b ${borderCls}`}>
                           <span className="font-bold uppercase tracking-wide shrink-0 text-on-surface-variant">{label}</span>
                           <span className="font-extrabold text-right max-w-[200px] leading-snug">{value}</span>
                         </div>
                       ))}
                     </div>
 
-                    <div className="rounded-2xl overflow-hidden border border-white/10 bg-white/5">
+                    <div className={`rounded-2xl overflow-hidden border ${cardCls}`}>
                       <button
                         onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-                        className="w-full p-4 flex justify-between items-center font-extrabold text-xs uppercase tracking-wider border-b border-white/10 bg-white/5"
+                        className={`w-full p-4 flex justify-between items-center font-extrabold text-xs uppercase tracking-wider border-b ${isMidnight ? 'border-white/10 bg-white/5' : 'border-black/15 bg-black/5'}`}
                       >
                         <span className="flex items-center gap-1.5">📄 Dados do pagamento</span>
                         {isDetailsExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       </button>
                       <AnimatePresence>
                         {isDetailsExpanded && (
-                          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden text-[11px] divide-y divide-white/10">
+                          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className={`overflow-hidden text-[11px] divide-y ${isMidnight ? 'divide-white/10' : 'divide-black/10'}`}>
                             <div className="p-4 space-y-3.5">
                               <div className="flex justify-between items-center"><span className="text-on-surface-variant font-bold">Valor do Documento</span><span className="font-extrabold">R$ 393,22</span></div>
                               <div className="flex justify-between items-center"><span className="text-on-surface-variant font-bold">Valor do Título</span><span className="font-extrabold">R$ 436,92</span></div>
-                              <div className="flex justify-between items-center"><span className="text-on-surface-variant font-bold">Descontos (-)</span><span className="text-red-400 font-extrabold">- R$ 43,70</span></div>
+                              <div className="flex justify-between items-center"><span className="text-on-surface-variant font-bold">Descontos (-)</span><span className={`font-extrabold ${isMidnight ? 'text-red-400' : 'text-red-600'}`}>- R$ 43,70</span></div>
                               <div className="space-y-1 pt-1.5">
                                 <span className="font-bold block text-on-surface-variant">Código de Barras</span>
                                 <span className="font-mono font-bold leading-normal block break-all text-[10px] text-volt-primary">{SAMPLE_BARCODE}</span>
@@ -396,16 +405,16 @@ export default function BoletoModal({
               )}
 
               {step === 'confirm_payment' && (
-                <div className="flex-grow flex flex-col text-white overflow-y-auto no-scrollbar">
-                  <div className="h-14 flex items-center px-4 shrink-0 border-b border-white/10">
-                    <button onClick={() => setStep('boleto_info')} className="p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors">
+                <div className={`flex-grow flex flex-col overflow-y-auto no-scrollbar ${textCls}`}>
+                  <div className={`h-14 flex items-center px-4 shrink-0 border-b ${borderCls}`}>
+                    <button onClick={() => setStep('boleto_info')} className={`p-2 -ml-2 rounded-full ${hoverCls} transition-colors`}>
                       <ArrowLeft size={22} className="stroke-[2.5]" />
                     </button>
                     <h2 className="ml-3 font-extrabold text-base">Confirmação de Pagamento</h2>
                   </div>
 
                   <div className="p-5 flex-grow space-y-5">
-                    <div className="space-y-1 py-3 border-b border-white/10">
+                    <div className={`space-y-1 py-3 border-b ${borderCls}`}>
                       <span className="text-[10px] font-black uppercase tracking-wider block text-on-surface-variant">Valor do pagamento</span>
                       <span className="text-3xl font-black tracking-tight block">R$ 393,22</span>
                     </div>
@@ -416,16 +425,16 @@ export default function BoletoModal({
                         ['Beneficiário', 'Beneficiario Ambiente Homologacao'],
                         ['Pagador', 'Pagador Ambiente De Homologacao'],
                       ].map(([label, value]) => (
-                        <div key={label} className="flex justify-between items-start text-xs pb-2.5 border-b border-white/10">
+                        <div key={label} className={`flex justify-between items-start text-xs pb-2.5 border-b ${borderCls}`}>
                           <span className="text-on-surface-variant font-bold">{label}</span>
                           <span className="font-extrabold text-right max-w-[200px] leading-snug">{value}</span>
                         </div>
                       ))}
-                      <div className="flex justify-between items-center text-xs pb-2.5 border-b border-white/10">
+                      <div className={`flex justify-between items-center text-xs pb-2.5 border-b ${borderCls}`}>
                         <span className="text-on-surface-variant font-bold">Pagar Com</span>
                         <span className="font-extrabold flex items-center gap-1">💳 VoltConta</span>
                       </div>
-                      <div className="flex justify-between items-center text-xs pb-2.5 border-b border-white/10">
+                      <div className={`flex justify-between items-center text-xs pb-2.5 border-b ${borderCls}`}>
                         <span className="text-on-surface-variant font-bold">Agendado Para</span>
                         <div className="relative">
                           <button onClick={() => setShowDatePicker(!showDatePicker)} className="font-extrabold underline decoration-dashed text-volt-primary flex items-center gap-1">
@@ -433,12 +442,12 @@ export default function BoletoModal({
                             {selectedDate === 'hoje' ? 'Hoje (Pagar Agora)' : '26/08/2024'}
                           </button>
                           {showDatePicker && (
-                            <div className="absolute right-0 mt-2 w-48 rounded-xl shadow-xl z-30 p-2 divide-y divide-white/10 bg-[#1c1b1b] border border-white/10">
+                            <div className={`absolute right-0 mt-2 w-48 rounded-xl shadow-xl z-30 p-2 divide-y ${isMidnight ? 'divide-white/10 bg-[#1c1b1b] border border-white/10' : 'divide-black/10 bg-white border-2 border-black'}`}>
                               {(['hoje', '26/08/2024'] as const).map(opt => (
                                 <button
                                   key={opt}
                                   onClick={() => { setSelectedDate(opt); setShowDatePicker(false); }}
-                                  className="w-full text-left p-2.5 text-xs font-bold rounded-lg flex justify-between items-center hover:bg-white/10"
+                                  className={`w-full text-left p-2.5 text-xs font-bold rounded-lg flex justify-between items-center ${hoverCls}`}
                                 >
                                   <span>{opt === 'hoje' ? 'Pagar Hoje' : 'Agendar (26/08/2024)'}</span>
                                   {selectedDate === opt && <Check size={14} className="text-volt-primary" />}
@@ -450,9 +459,9 @@ export default function BoletoModal({
                       </div>
                     </div>
 
-                    <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-4 flex gap-3 text-amber-500 leading-relaxed">
+                    <div className={`border rounded-2xl p-4 flex gap-3 leading-relaxed ${isMidnight ? 'bg-amber-950/20 border-amber-500/30 text-amber-500' : 'bg-amber-100 border-amber-500/60 text-amber-700'}`}>
                       <span className="text-base font-extrabold">ⓘ</span>
-                      <p className="text-[11px] font-bold text-amber-500/90">
+                      <p className={`text-[11px] font-bold ${isMidnight ? 'text-amber-500/90' : 'text-amber-700/90'}`}>
                         Os valores podem sofrer alterações caso o boleto possua juros, multa ou desconto.
                       </p>
                     </div>
@@ -464,7 +473,7 @@ export default function BoletoModal({
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         placeholder="Digite uma descrição opcional"
-                        className="w-full bg-transparent border-b-2 border-white/20 focus:border-volt-primary py-1.5 text-xs font-extrabold focus:outline-none transition-colors"
+                        className={`w-full bg-transparent border-b-2 focus:border-volt-primary py-1.5 text-xs font-extrabold focus:outline-none transition-colors ${isMidnight ? 'border-white/20' : 'border-black/20'}`}
                       />
                       <span className="text-[9px] font-bold block text-on-surface-variant/70">Campo opcional, exibido no comprovante.</span>
                     </div>
@@ -482,7 +491,7 @@ export default function BoletoModal({
               )}
             </>
           ) : (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 p-6 flex flex-col items-center justify-center text-center gap-6 text-white">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`flex-1 p-6 flex flex-col items-center justify-center text-center gap-6 ${textCls}`}>
               <div className="w-20 h-20 rounded-full flex items-center justify-center bg-volt-primary/10 border-4 border-volt-primary text-volt-primary">
                 <CheckCircle2 size={44} className="stroke-[2.5]" />
               </div>
@@ -492,7 +501,7 @@ export default function BoletoModal({
                   Seu boleto no valor de <strong className="text-volt-primary">R$ 393,22</strong> foi pago com sucesso usando seu saldo VoltConta.
                 </p>
               </div>
-              <div className="w-full p-4 text-left space-y-3 rounded-2xl bg-white/5 border border-white/10">
+              <div className={`w-full p-4 text-left space-y-3 rounded-2xl border ${cardCls}`}>
                 <div className="flex justify-between items-center text-xs"><span className="uppercase font-black text-on-surface-variant">Beneficiário</span><span className="font-extrabold truncate max-w-[200px]">Beneficiário Ambiente Homologação</span></div>
                 <div className="flex justify-between items-center text-xs"><span className="uppercase font-black text-on-surface-variant">Valor</span><span className="font-extrabold text-sm">R$ 393,22</span></div>
                 <div className="flex justify-between items-center text-xs"><span className="uppercase font-black text-on-surface-variant">Data de Débito</span><span className="font-extrabold">{selectedDate === 'hoje' ? 'Hoje' : selectedDate}</span></div>
@@ -517,9 +526,9 @@ export default function BoletoModal({
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 30 }}
                   transition={{ type: 'spring', duration: 0.4 }}
-                  className="absolute bottom-6 inset-x-6 z-50 flex flex-col items-center gap-5 text-center p-6 bg-[#1c1b1b] border border-white/10 rounded-[32px] text-white shadow-2xl"
+                  className={`absolute bottom-6 inset-x-6 z-50 flex flex-col items-center gap-5 text-center p-6 rounded-[32px] shadow-2xl ${isMidnight ? 'bg-[#1c1b1b] border border-white/10 text-white' : 'bg-white border-2 border-black text-black'}`}
                 >
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center bg-red-950/20 border border-red-500/30 text-red-500">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center border ${isMidnight ? 'bg-red-950/20 border-red-500/30 text-red-500' : 'bg-red-100 border-red-500/50 text-red-600'}`}>
                     <span className="text-4xl font-extrabold">!</span>
                   </div>
                   <div className="space-y-2">
