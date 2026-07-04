@@ -435,35 +435,41 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
               setInstallments(1);
               setPaymentMethod('balance');
             }}
-            className={`relative h-44 rounded-2xl overflow-hidden cursor-pointer flex flex-col justify-end border transition-all duration-300 ${
+            className={`relative h-56 rounded-2xl overflow-hidden cursor-pointer flex flex-col border transition-all duration-300 ${
               isMidnight 
-                ? 'bg-zinc-900 border-zinc-850 shadow-md hover:border-volt-green/30 shadow-black/10' 
-                : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                ? 'bg-zinc-900 border-2 border-zinc-800 hover:border-volt-green/50 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]' 
+                : 'bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-50'
             }`}
           >
-            {/* Background Product Image */}
-            <img 
-              src={product.image} 
-              alt={product.name}
-              referrerPolicy="no-referrer"
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-            />
-            
-            {/* Dark Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent" />
-
-            {/* Cashback pill overlay at top-right */}
-            <div className="absolute top-2.5 right-2.5 bg-black/80 backdrop-blur-md text-[9px] font-black px-2 py-0.5 rounded-lg text-volt-green border border-volt-green/30 flex items-center gap-0.5">
-              <Percent size={8} /> {product.cashback}
+            {/* Image Section */}
+            <div className={`relative h-32 w-full overflow-hidden ${isMidnight ? 'border-b-2 border-zinc-800' : 'border-b-2 border-black'}`}>
+              <img 
+                src={product.image} 
+                alt={product.name}
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+              />
+              {/* Cashback pill */}
+              <div className={`absolute top-2 right-2 text-[9px] font-black px-2 py-0.5 rounded-lg flex items-center gap-0.5 ${
+                isMidnight 
+                  ? 'bg-black/80 text-volt-green border border-volt-green/30 backdrop-blur-md'
+                  : 'bg-[#A2FF00] text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+              }`}>
+                <Percent size={8} /> {product.cashback}
+              </div>
             </div>
 
-            {/* Product Details overlay at bottom */}
-            <div className="relative p-3.5 space-y-0.5 text-left z-10">
-              <span className="text-[8px] font-extrabold uppercase text-volt-green/80 tracking-widest">{product.category}</span>
-              <h4 className="text-[11px] font-extrabold text-white leading-tight truncate">
-                {product.name}
-              </h4>
-              <p className="text-xs font-black text-volt-green">
+            {/* Product Details */}
+            <div className="p-3 flex flex-col flex-1 justify-between">
+              <div>
+                <span className={`text-[8px] font-extrabold uppercase tracking-widest ${isMidnight ? 'text-volt-green' : 'text-gray-500'}`}>
+                  {product.category}
+                </span>
+                <h4 className={`text-[11px] font-black leading-tight line-clamp-2 mt-0.5 ${isMidnight ? 'text-white' : 'text-black'}`}>
+                  {product.name}
+                </h4>
+              </div>
+              <p className={`text-xs font-black mt-2 ${isMidnight ? 'text-volt-green' : 'text-black'}`}>
                 {formatCurrency(product.price)}
               </p>
             </div>
