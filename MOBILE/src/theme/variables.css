@@ -144,6 +144,58 @@ body:not(.theme-midnight) .text-white * {
     color: #000000 !important;
 }
 
+/* Modais de fundo escuro (BoletoModal, DepositModal, PixModal, InstallmentModal...) mantem
+   texto branco legivel no tema yellow, mesmo com a regra geral de .text-white -> preto acima */
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white * {
+    color: #ffffff !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/20,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/20 * {
+    color: rgba(255,255,255,0.2) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/30,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/30 * {
+    color: rgba(255,255,255,0.3) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/40,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/40 * {
+    color: rgba(255,255,255,0.4) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/50,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/50 * {
+    color: rgba(255,255,255,0.5) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/60,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/60 * {
+    color: rgba(255,255,255,0.6) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/70,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/70 * {
+    color: rgba(255,255,255,0.7) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/80,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/80 * {
+    color: rgba(255,255,255,0.8) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/85,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/85 * {
+    color: rgba(255,255,255,0.85) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/90,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/90 * {
+    color: rgba(255,255,255,0.9) !important;
+}
+
 body:not(.theme-midnight) .text-on-surface-variant,
 body:not(.theme-midnight) .text-on-surface-variant * {
     color: #444444 !important;

@@ -15,6 +15,7 @@ import ShopView from './ShopView';
 import ShoppingCart from './ShoppingCart';
 import PaymentMethods from './PaymentMethods';
 import DepositModal from './DepositModal';
+import BoletoModal from './BoletoModal';
 import InstallmentModal from './InstallmentModal';
 import PurchaseConfirmation from './PurchaseConfirmation';
 import BottomNavBar from './BottomNavBar';
@@ -90,6 +91,7 @@ const Dashboard: React.FC = () => {
     const [currentItem, setCurrentItem] = useState<PurchasedItem | null>(null);
     const [isPixModalOpen, setIsPixModalOpen] = useState(false);
     const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
+    const [isBoletoOpen, setIsBoletoOpen] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
     // Shop is now full-page
     const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
@@ -142,6 +144,12 @@ const Dashboard: React.FC = () => {
             setIsBlockedModalOpen(false);
         }
     }, [currentView, user]);
+
+    useEffect(() => {
+        if (topLevelView === 'admin' && user?.role === 'admin') {
+            setCurrentView('admin');
+        }
+    }, [topLevelView, user]);
 
     // Refresh automatico ao entrar em telas de cartoes
     useEffect(() => {
@@ -210,7 +218,8 @@ const Dashboard: React.FC = () => {
             return;
         }
         if (newView === 'admin') {
-            setIsAdminModalOpen(true);
+            setPreviousView(currentView);
+            setCurrentView('admin');
             return;
         }
         if (newView === 'shop') {
@@ -247,7 +256,7 @@ const Dashboard: React.FC = () => {
             transactions: [newTx, ...user.transactions],
         };
         updateUser(updatedUser);
-        triggerSmartAlertCheck(newTx.title || newTx.description, amount, 'outros');
+        triggerSmartAlertCheck(newTx.description ?? '', amount, 'outros');
     };
 
     const handleDepositComplete = (newTx: Transaction, amount: number) => {
@@ -258,6 +267,17 @@ const Dashboard: React.FC = () => {
             transactions: [newTx, ...user.transactions],
         };
         updateUser(updatedUser);
+    };
+
+    const handleBoletoComplete = (newTx: Transaction, amount: number) => {
+        if (!user) return;
+        const updatedUser = {
+            ...user,
+            balance: user.balance + amount,
+            transactions: [newTx, ...user.transactions],
+        };
+        updateUser(updatedUser);
+        triggerSmartAlertCheck(newTx.description ?? 'Pagamento de Boleto', amount, 'outros');
     };
 
     // --- Cart Logic ---
@@ -534,13 +554,14 @@ const Dashboard: React.FC = () => {
         switch (currentView) {
             case 'home':
                 return (
-                    <HomeView 
-                        user={user!} 
-                        onNavigate={handleNavigate} 
-                        theme={theme} 
+                    <HomeView
+                        user={user!}
+                        onNavigate={handleNavigate}
+                        theme={theme}
                         setIsFinancialHealthOpen={setFinancialHealthOpen}
                         setIsAiRecurringModalOpen={setAiRecurringModalOpen}
                         setActiveDrawer={setActiveDrawer}
+                        openBoletoModal={() => setIsBoletoOpen(true)}
                     />
                 );
             case 'cards':
@@ -641,7 +662,20 @@ const Dashboard: React.FC = () => {
                         </div>
                     </div>
                 );
-                return <HomeView user={user!} onNavigate={handleNavigate} theme={theme} />;
+            case 'admin':
+                return (
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar flex justify-center ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <div className="w-full max-w-4xl min-h-full flex flex-col">
+                            <Admin 
+                                isOpen={true} 
+                                onClose={() => {
+                                    if (topLevelView === 'admin') navigateTo('dashboard');
+                                    handleNavigate('home');
+                                }} 
+                            />
+                        </div>
+                    </div>
+                );
         }
     };
 
@@ -734,6 +768,12 @@ const Dashboard: React.FC = () => {
                 onClose={() => setIsDepositModalOpen(false)}
                 onDepositComplete={handleDepositComplete}
             />
+            <BoletoModal
+                isOpen={isBoletoOpen}
+                onClose={() => setIsBoletoOpen(false)}
+                accountBalance={user?.balance ?? 0}
+                onTransactionComplete={handleBoletoComplete}
+            />
             {currentItem && (
                 <InstallmentModal
                     isOpen={isInstallmentModalOpen}
@@ -746,13 +786,7 @@ const Dashboard: React.FC = () => {
                     }}
                 />
             )}
-            <Admin 
-                isOpen={isAdminModalOpen || (topLevelView === 'admin' && user?.role === 'admin')} 
-                onClose={() => {
-                    if (topLevelView === 'admin') navigateTo('dashboard');
-                    setIsAdminModalOpen(false);
-                }} 
-            />
+
             {isFinancialHealthOpen && (
                 <FinancialHealthModal 
                     isOpen={isFinancialHealthOpen} 

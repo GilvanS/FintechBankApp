@@ -59,15 +59,17 @@ interface HomeViewProps {
     setIsFinancialHealthOpen?: (open: boolean) => void;
     setIsAiRecurringModalOpen?: (open: boolean) => void;
     setActiveDrawer?: (drawer: 'balance' | 'analytics' | 'insights' | 'trends' | null) => void;
+    openBoletoModal?: () => void;
 }
 
-const HomeView: React.FC<HomeViewProps> = ({ 
-  user, 
-  onNavigate, 
+const HomeView: React.FC<HomeViewProps> = ({
+  user,
+  onNavigate,
   theme = 'midnight',
   setIsFinancialHealthOpen,
   setIsAiRecurringModalOpen,
-  setActiveDrawer
+  setActiveDrawer,
+  openBoletoModal
 }) => {
   const { showDialog } = useDialog();
   const biometricEnabled = localStorage.getItem('volt_biometric_enabled') === 'true';
@@ -904,7 +906,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             { label: 'PIX', icon: Bolt, action: () => onNavigate('pix'), highlight: true },
             { label: 'Shop', icon: ShoppingBag, action: () => onNavigate('shop'), highlight: false },
             { label: 'Cartões', icon: CreditCard, action: () => onNavigate('cards'), highlight: false },
-            { label: 'Contas', icon: Receipt, action: () => alert('Contas e boletos para pagamento serão importados automaticamente pelo seu DDA.'), highlight: false },
+            { label: 'Pagar Boleto', icon: Receipt, action: () => openBoletoModal?.(), highlight: true },
             { label: 'Extrato', icon: FileText, action: () => onNavigate('statement'), highlight: false },
           ].map((item, index) => {
             const Icon = item.icon;
