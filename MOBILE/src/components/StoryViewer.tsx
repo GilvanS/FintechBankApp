@@ -22,7 +22,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
       onClose();
     }
   };
-  
+
   const goToPreviousStory = () => {
     if (currentStoryIndex > 0) {
       setCurrentStoryIndex(currentStoryIndex - 1);
@@ -36,7 +36,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     progressStartTimeRef.current = Date.now();
-    
+
     timerRef.current = setInterval(() => {
         const elapsedTime = Date.now() - progressStartTimeRef.current;
         const currentProgress = (elapsedTime / STORY_DURATION) * 100;
@@ -58,7 +58,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
     const { clientX, currentTarget } = e;
     const { left, width } = currentTarget.getBoundingClientRect();
     const tapPosition = clientX - left;
-    
+
     if (tapPosition < width * 0.3) {
       goToPreviousStory();
     } else {
@@ -67,30 +67,34 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
   };
 
   const currentStory = stories[currentStoryIndex];
+  const hasImage = !!currentStory.image;
+  const accentBg = currentStory.accent || 'bg-volt-yellow';
 
   return (
-    <div 
-        className="absolute inset-0 bg-black z-50 flex flex-col p-4 select-none animate-fade-in overflow-hidden"
+    <div
+        className={`absolute inset-0 z-50 flex flex-col p-4 select-none animate-fade-in overflow-hidden ${hasImage ? 'bg-black' : accentBg}`}
     >
-      {/* Background Image */}
-      {currentStory.image && (
-          <img 
-            src={currentStory.image} 
+      {/* Background Image (opcional) */}
+      {hasImage && (
+        <>
+          <img
+            src={currentStory.image}
             alt={currentStory.title}
             className="absolute inset-0 w-full h-full object-cover animate-ken-burns"
             key={currentStoryIndex} // Re-trigger animation on change
           />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20"></div>
+        </>
       )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20"></div>
 
       {/* Main Container */}
       <div className="relative z-10 flex flex-col h-full">
         {/* Progress Bars */}
-        <div className="flex w-full space-x-1 mt-2">
+        <div className="flex w-full space-x-1.5 mt-2">
           {stories.map((_, index) => (
-            <div key={index} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
+            <div key={index} className={`flex-1 h-2 overflow-hidden ${hasImage ? 'bg-white/30 rounded-full' : 'bg-black/15 border-2 border-black'}`}>
               <div
-                className="h-full bg-white"
+                className={hasImage ? 'h-full bg-white' : 'h-full bg-black'}
                 style={{
                   width: `${index < currentStoryIndex ? 100 : (index === currentStoryIndex ? progress : 0)}%`,
                   transition: index === currentStoryIndex ? 'width 0.05s linear' : 'none',
@@ -101,40 +105,82 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between mt-4 text-white">
-          <div className="flex items-center space-x-2">
-            <div className="flex items-center justify-center w-8 h-8 font-bold bg-green-500 rounded-full text-black">F</div>
-            <span className="text-sm font-semibold">Fintech App</span>
+        <div className={`flex items-center justify-between mt-4 ${hasImage ? 'text-white' : 'text-black'}`}>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center w-9 h-9 font-black bg-black text-volt-lime border-2 border-black">V</div>
+            <span className="text-sm font-black uppercase tracking-wide">Volt Stories</span>
           </div>
-          <button onClick={onClose} className="text-2xl text-white/80 hover:text-white transition-colors">&times;</button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            className="relative z-30 w-9 h-9 flex items-center justify-center text-2xl font-black leading-none bg-white text-black border-2 border-black hover:bg-black hover:text-white transition-colors"
+          >
+            &times;
+          </button>
         </div>
-        
+
         {/* Spacer to push content to bottom */}
         <div className="flex-grow"></div>
 
         {/* Content */}
-        <div className="max-w-sm px-2 mx-auto text-center text-white pb-8">
-          {!currentStory.image && (
-            <div className="mb-4 text-6xl transition-transform duration-500 transform" key={currentStoryIndex}>{currentStory.icon}</div>
+        <div className="w-full max-w-sm mx-auto pb-10" key={currentStoryIndex}>
+          {currentStory.badge && (
+            <span className="inline-block mb-4 -rotate-1 bg-black text-white text-[10px] font-black uppercase tracking-[0.18em] px-3 py-1.5">
+              {currentStory.badge}
+            </span>
           )}
-          <h2 className="mb-3 text-2xl font-bold leading-tight" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{currentStory.title}</h2>
-          <p className="text-md text-gray-200" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>{currentStory.description}</p>
+
+          {currentStory.icon && !hasImage && (
+            <div className="mb-4 w-16 h-16 flex items-center justify-center text-3xl bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+              {currentStory.icon}
+            </div>
+          )}
+
+          <h2
+            className={`mb-2 text-3xl font-black uppercase leading-[0.95] ${hasImage ? 'text-white' : 'text-black'}`}
+            style={hasImage ? { textShadow: '0 2px 4px rgba(0,0,0,0.5)' } : undefined}
+          >
+            {currentStory.title}
+          </h2>
+          <p
+            className={`text-sm font-semibold leading-snug ${hasImage ? 'text-gray-200' : 'text-black/70'}`}
+            style={hasImage ? { textShadow: '0 1px 3px rgba(0,0,0,0.5)' } : undefined}
+          >
+            {currentStory.description}
+          </p>
+
+          {currentStory.stats && currentStory.stats.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {currentStory.stats.map((s, i) => (
+                <div key={i} className="flex items-center justify-between bg-white border-2 border-black px-4 py-2.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  <span className="text-xs font-bold uppercase tracking-wide text-black/70">{s.label}</span>
+                  <span className="text-sm font-black text-black">{s.value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {currentStory.status && (
+            <span className="inline-block mt-4 bg-black text-volt-lime text-xs font-black uppercase tracking-widest px-4 py-2 border-2 border-black">
+              {currentStory.status}
+            </span>
+          )}
+
           {currentStory.url && (
             <a
               href={currentStory.url}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()} // Prevent story navigation
-              className="inline-block px-5 py-2 mt-4 text-sm font-bold text-black bg-green-400 rounded-full hover:bg-green-300 transition-colors"
+              className="relative z-30 block mt-4 text-center px-5 py-2.5 text-sm font-black uppercase text-black bg-volt-lime border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none transition-all"
             >
               Ler Notícia
             </a>
           )}
         </div>
       </div>
-      
+
       {/* Click Handlers */}
-      <div 
+      <div
         className="absolute inset-0 z-20"
         onClick={handleTap}
       />

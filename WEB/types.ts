@@ -60,12 +60,21 @@ export interface LimitIncreaseRequest {
     status: 'pending' | 'approved' | 'denied';
 }
 
+export interface StoryStat {
+    label: string;
+    value: string;
+}
+
 export interface Story {
     title: string;
     description: string;
     icon?: string;
     image?: string;
     url?: string;
+    badge?: string;
+    accent?: string;
+    stats?: StoryStat[];
+    status?: string;
 }
 
 export interface AppNotification {

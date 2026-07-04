@@ -67,6 +67,11 @@ export interface LimitIncreaseRequest {
     status: 'pending' | 'approved' | 'denied';
 }
 
+export interface StoryStat {
+    label: string;
+    value: string;
+}
+
 export interface Story {
     id?: string;
     title: string;
@@ -77,6 +82,10 @@ export interface Story {
     viewed?: boolean;
     expiresAt?: string;
     url?: string;
+    badge?: string;
+    accent?: string;
+    stats?: StoryStat[];
+    status?: string;
 }
 
 export interface AppNotification {

@@ -18,25 +18,53 @@ import { motion, AnimatePresence } from 'motion/react';
 
 const MOCK_STORIES: Story[] = [
   {
-    title: 'App Volt',
-    description: 'Explore uma carteira digital com superpoderes: comandos de voz inteligentes, biometria facial, e análise de gastos para você nunca estourar o orçamento.',
-    icon: '⚡'
+    title: 'Status de Economia',
+    description: 'Seus gastos essenciais deste mês, organizados por categoria. Você fechou o mês gastando menos — continue nesse ritmo!',
+    icon: '📊',
+    badge: 'Visão 360º do seu dinheiro',
+    accent: 'bg-volt-lime',
+    stats: [
+      { label: 'Alimentação', value: 'R$ 480,00' },
+      { label: 'Transporte', value: 'R$ 150,00' },
+    ],
+    status: 'Caiu 12% vs. mês anterior',
   },
   {
-    title: 'Chave Pix',
-    description: 'Toque em "Fazer Pix", informe uma chave CPF, E-mail ou celular para enviar dinheiro em segundos, com toda segurança.',
-    icon: '💠'
+    title: 'Simulação de Chave Pix',
+    description: 'Informe uma chave CPF, e-mail ou celular, confirme o valor e pronto: o dinheiro cai na conta do destinatário na hora.',
+    icon: '💠',
+    badge: 'Transferência rápida em segundos',
+    accent: 'bg-volt-yellow',
   },
   {
-    title: 'Área Pix',
-    description: 'Cadastre suas chaves Pix Volt e receba transferências instantâneas de qualquer banco de forma gratuita.',
-    icon: '🔑'
+    title: 'QR Code Dinâmico',
+    description: 'Gere um QR Code para receber qualquer valor. Suas chaves Pix ficam organizadas em um só lugar, prontas para uso.',
+    icon: '🔳',
+    badge: 'Organize suas chaves e receba',
+    accent: 'bg-[#7CE7FF]',
   },
   {
-    title: 'Pagar Contas',
-    description: 'Automatize o pagamento de boletos e assinaturas mensais sem estresse utilizando o Volt IA Assistant.',
-    icon: '💵'
-  }
+    title: 'Boleto Importado por DDA',
+    description: 'Suas contas chegam sozinhas pelo Débito Direto Autorizado. Aqui está a fatura da sua conta de luz, já quitada.',
+    icon: '📄',
+    badge: 'Importação automática por DDA',
+    accent: 'bg-[#FF9F5A]',
+    stats: [
+      { label: 'COELBA · Energia', value: 'R$ 214,90' },
+    ],
+    status: 'Pago',
+  },
+  {
+    title: 'Cronograma Inteligente',
+    description: 'Programe seus pagamentos recorrentes e escolha o melhor dia para cada um. Nunca mais perca um vencimento.',
+    icon: '📅',
+    badge: 'Agendamento flexível',
+    accent: 'bg-[#C6A2FF]',
+    stats: [
+      { label: 'Condomínio', value: 'Todo dia 28' },
+      { label: 'Internet', value: 'Todo dia 10' },
+    ],
+  },
 ];
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie } from 'recharts';
 import D3SparkLine from './charts/D3SparkLine';
