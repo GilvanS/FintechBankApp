@@ -388,18 +388,19 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
         </div>
 
         {/* Categories Chips */}
-        <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin hide-scrollbar">
+        <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin">
           {categories.map(cat => {
             const isSelected = selectedCategory === cat;
             return (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
+                style={(!isMidnight && isSelected) ? { color: 'white' } : {}}
                 className={`py-1.5 px-3 rounded-xl text-[10px] font-black tracking-wide uppercase shrink-0 transition-all cursor-pointer ${
                   isSelected
                     ? isMidnight
                       ? 'bg-volt-green text-black font-extrabold shadow-md'
-                      : 'bg-black text-white'
+                      : 'bg-black'
                     : isMidnight
                       ? 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-850'
                       : 'bg-white border-2 border-black hover:bg-gray-50'
