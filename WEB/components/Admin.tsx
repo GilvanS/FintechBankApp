@@ -290,7 +290,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
 
     return (
         <div 
-            className={`flex flex-col relative w-full h-full min-h-screen ${modalCardClass} test-admin-page`}
+            className={`flex flex-col relative w-full h-full min-h-full ${modalCardClass} max-w-4xl mx-auto test-admin-page`}
             id="admin-page"
             data-testid="admin-page"
             data-cy="admin-page"
