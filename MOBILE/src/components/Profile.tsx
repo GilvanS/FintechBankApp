@@ -784,7 +784,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
             <button
                 onClick={logout}
                 className={theme === 'midnight'
-                    ? 'w-full text-center py-4 font-semibold text-white bg-red-600 hover:bg-red-500 rounded-xl transition-all border-none shadow-[0_4px_12px_rgba(220,38,38,0.2)]'
+                    ? 'w-full text-center py-4 font-black uppercase tracking-widest text-white bg-red-600 hover:bg-red-500 rounded-2xl transition-all border-none shadow-[0_4px_15px_rgba(220,38,38,0.4)]'
                     : 'w-full text-center py-4 text-xs tracking-widest uppercase font-black text-white bg-red-600 border-4 border-black rounded-2xl hover:bg-red-700 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] transition-all'
                 }
                 type="button"

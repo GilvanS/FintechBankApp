@@ -664,16 +664,13 @@ const Dashboard: React.FC = () => {
                 );
             case 'admin':
                 return (
-                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar flex justify-center ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
-                        <div className="w-full max-w-4xl min-h-full flex flex-col">
-                            <Admin 
-                                isOpen={true} 
-                                onClose={() => {
-                                    if (topLevelView === 'admin') navigateTo('dashboard');
-                                    handleNavigate('home');
-                                }} 
-                            />
-                        </div>
+                    <div className={`min-h-full pb-20 ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
+                        <Admin 
+                            onClose={() => {
+                                if (topLevelView === 'admin') navigateTo('dashboard');
+                                handleNavigate('home');
+                            }} 
+                        />
                     </div>
                 );
         }
@@ -771,8 +768,16 @@ const Dashboard: React.FC = () => {
             <BoletoModal
                 isOpen={isBoletoOpen}
                 onClose={() => setIsBoletoOpen(false)}
-                accountBalance={user?.balance ?? 0}
-                onTransactionComplete={handleBoletoComplete}
+                accountBalance={user?.balance || 0}
+                onTransactionComplete={(newTx, amount) => {
+                    if (user) {
+                        updateUser({
+                            balance: user.balance + amount,
+                            transactions: [newTx, ...user.transactions]
+                        });
+                        triggerSmartAlertCheck(newTx);
+                    }
+                }}
             />
             {currentItem && (
                 <InstallmentModal

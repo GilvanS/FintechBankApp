@@ -164,22 +164,21 @@ export default function BoletoModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[100] flex flex-col bg-black overflow-hidden animate-fade-in">
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={handleCloseAll}
-          className="absolute inset-0 bg-black/80 backdrop-blur-md"
-        />
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
           transition={{ type: 'spring', duration: 0.5 }}
-          className="relative w-full max-w-md h-[85vh] max-h-[720px] bg-[#0a0a0a] border border-white/10 shadow-2xl rounded-3xl flex flex-col overflow-hidden z-10"
+          className="relative w-full h-full flex flex-col overflow-hidden z-10"
         >
+          <style>{`
+            @keyframes fade-in {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
+          `}</style>
           {!paymentSuccess ? (
             <>
               {step === 'scan_camera' && (

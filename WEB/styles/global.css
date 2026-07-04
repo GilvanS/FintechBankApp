@@ -583,8 +583,8 @@ body.theme-midnight .recharts-default-tooltip {
 }
 body.theme-midnight .recharts-default-tooltip * { color: #e5e2e1 !important; }
 
-/* SVG ticks e grid — midnight */
-body.theme-midnight svg text  { fill: #b9cbbc !important; }
-body.theme-midnight svg line,
-body.theme-midnight svg path  { stroke: #201f1f !important; }
+/* SVG ticks e grid — midnight (apenas para graficos recharts, evitar quebrar icones Lucide) */
+body.theme-midnight .recharts-wrapper svg text { fill: #b9cbbc !important; }
+body.theme-midnight .recharts-wrapper svg line,
+body.theme-midnight .recharts-wrapper svg path { stroke: #353534 !important; }
 

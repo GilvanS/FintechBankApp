@@ -39,7 +39,7 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: LucideIc
     </div>
 );
 
-const Admin: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isOpen, onClose }) => {
+const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
     const { user: adminUser, logout } = useAuth();
     const { theme } = useAppState();
     const isMidnight = theme === 'midnight';
@@ -121,12 +121,9 @@ const Admin: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isOpen, on
     };
 
     useEffect(() => {
-        // Busca dados apenas quando o painel é aberto (evita chamadas no mount do Dashboard)
-        if (isOpen) {
-            fetchRequests();
-            fetchStats();
-        }
-    }, [isOpen]);
+        fetchRequests();
+        fetchStats();
+    }, []);
 
     const handleSearch = async (e?: React.FormEvent) => {
         e?.preventDefault();
