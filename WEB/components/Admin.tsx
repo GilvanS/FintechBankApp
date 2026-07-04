@@ -31,11 +31,11 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: LucideIc
             ? 'bg-volt-surface border-white/5 shadow-md text-white hover:border-volt-green/20'
             : 'bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-black hover:bg-gray-50'
     }`}>
-        <div className="flex items-center space-x-3 mb-4">
-            <Icon className={`w-8 h-8 ${isMidnight ? 'text-volt-green' : 'text-black'}`} />
-            <p className={`text-sm ${isMidnight ? 'font-semibold text-white/80' : 'font-black uppercase tracking-wider text-black/60'}`}>{title}</p>
+        <div className="flex items-center space-x-3 mb-3">
+            <Icon className={`w-6 h-6 sm:w-8 sm:h-8 ${isMidnight ? 'text-volt-green' : 'text-black'}`} />
+            <p className={`text-[10px] sm:text-xs break-words leading-tight ${isMidnight ? 'font-semibold text-white/80' : 'font-black uppercase tracking-wider text-black/60'}`}>{title}</p>
         </div>
-        <p className={`text-4xl ${isMidnight ? 'font-bold text-white' : 'font-black text-black'}`}>{value}</p>
+        <p className={`text-2xl sm:text-3xl ${isMidnight ? 'font-bold text-white' : 'font-black text-black'}`}>{value}</p>
     </div>
 );
 
@@ -290,7 +290,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
 
     return (
         <div 
-            className={`flex flex-col relative w-full h-full min-h-full ${modalCardClass} max-w-4xl mx-auto test-admin-page`}
+            className={`flex flex-col relative w-full h-full min-h-full ${modalCardClass} max-w-7xl mx-auto test-admin-page`}
             id="admin-page"
             data-testid="admin-page"
             data-cy="admin-page"
@@ -347,7 +347,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                             >
                 {/* Stats */}
                 <section
-                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 test-admin-stats"
+                    className="grid grid-cols-2 gap-3 sm:gap-4 test-admin-stats"
                     id="admin-stats"
                     data-testid="admin-stats"
                     data-cy="admin-stats"
@@ -394,7 +394,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                     </h2>
                     <form
                         onSubmit={handleSearch}
-                        className="flex flex-col sm:flex-row gap-4 mb-6 test-admin-search-form"
+                        className="flex flex-col gap-3 sm:gap-4 mb-6 test-admin-search-form"
                         id="admin-search-form"
                         name="admin-search-form"
                         data-testid="admin-search-form"
@@ -437,7 +437,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                                     {searchedUser.isBlocked ? 'CONTA BLOQUEADA' : 'CONTA ATIVA'} / {searchedUser.creditCard.isBlocked ? 'CARTÃO BLOQUEADO' : 'CARTÃO ATIVO'}
                                 </p>
                                 <div
-                                    className="flex flex-col sm:flex-row gap-4 mt-6 test-admin-user-actions"
+                                    className="flex flex-col gap-3 sm:gap-4 mt-6 test-admin-user-actions"
                                     id="admin-user-actions"
                                     data-testid="admin-user-actions"
                                     data-cy="admin-user-actions"
