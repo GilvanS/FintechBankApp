@@ -158,9 +158,6 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
   if (!user) return null;
 
   // Classes derivadas do tema — mantém a mesma estrutura visual, troca só as cores.
-  const cardClass = isMidnight
-    ? 'bg-[#0a0a0a] text-white border border-white/10 shadow-2xl'
-    : 'bg-white text-black border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]';
   const headerClass = isMidnight
     ? 'border-b border-white/10 bg-white/[0.02]'
     : 'border-b-4 border-black bg-volt-yellow-pastel';
@@ -189,23 +186,14 @@ export default function PixModal({ isOpen, onClose }: PixModalProps) {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          {/* Backdrop */}
+        <div className="fixed inset-0 z-[100]">
+          {/* Tela cheia (view) */}
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={handleClose}
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
-          />
-
-          {/* Modal Card */}
-          <motion.div
-            initial={{ scale: 0.95, y: 20, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            exit={{ scale: 0.95, y: 20, opacity: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className={`flex flex-col relative w-full h-[85vh] rounded-3xl overflow-hidden z-10 ${cardClass}`}
+            className={`flex flex-col relative w-full h-full overflow-hidden ${bodyBgClass}`}
           >
             {/* Modal Header */}
             <div className={`flex items-center justify-between px-6 py-4 shrink-0 ${headerClass}`}>

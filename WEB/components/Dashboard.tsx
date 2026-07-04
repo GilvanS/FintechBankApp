@@ -89,7 +89,6 @@ const Dashboard: React.FC = () => {
 
     const [cart, setCart] = useState<PurchasedItem[]>([]);
     const [currentItem, setCurrentItem] = useState<PurchasedItem | null>(null);
-    const [isPixModalOpen, setIsPixModalOpen] = useState(false);
     const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
     const [isBoletoOpen, setIsBoletoOpen] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -209,7 +208,8 @@ const Dashboard: React.FC = () => {
 
     const handleNavigate = useCallback((newView: View, item?: any) => {
         if (newView === 'pix') {
-            setIsPixModalOpen(true);
+            if (currentView !== 'pix') setPreviousView(currentView);
+            setCurrentView('pix');
             return;
         }
         if (newView === 'deposit') {
@@ -608,6 +608,11 @@ const Dashboard: React.FC = () => {
                         />
                     </div>
                 );
+            case 'pix':
+                if (!user) return null;
+                return (
+                    <PixModal isOpen={true} onClose={handleBack} />
+                );
             case 'statement':
                 if (!user) return null;
                 return (
@@ -773,12 +778,6 @@ const Dashboard: React.FC = () => {
                 description={passwordModalInfo.description}
                 isLoading={isProcessing}
             />
-            {isPixModalOpen && (
-                <PixModal 
-                    isOpen={isPixModalOpen} 
-                    onClose={() => setIsPixModalOpen(false)} 
-                />
-            )}
             <DepositModal
                 isOpen={isDepositModalOpen}
                 onClose={() => setIsDepositModalOpen(false)}
