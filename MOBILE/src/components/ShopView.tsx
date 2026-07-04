@@ -46,6 +46,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
 
   // Pet Modal State
   const [isPetModalOpen, setIsPetModalOpen] = useState(false);
+  const [redeemModal, setRedeemModal] = useState<{ type: 'success' | 'empty'; amount: number } | null>(null);
   const [petSubscribed, setPetSubscribed] = useState(() => {
     return localStorage.getItem('volt_pet_subscribed') === 'true';
   });
@@ -231,7 +232,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
 
   const handleRedeemCashback = () => {
     if (cashbackBalance <= 0) {
-      alert('Você ainda não tem saldo de cashback para resgatar.');
+      setRedeemModal({ type: 'empty', amount: 0 });
       return;
     }
 
@@ -256,7 +257,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
 
     onPurchaseComplete(newTx, redeemAmount);
     setCashbackBalance(0);
-    alert(`Sucesso! ${formatCurrency(redeemAmount)} de cashback foi transferido e creditado no seu saldo principal.`);
+    setRedeemModal({ type: 'success', amount: redeemAmount });
   };
 
   if (loading) {
@@ -286,6 +287,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
           }`}>
             <button
               onClick={() => setCurrency('BRL')}
+              style={currency === 'BRL' && !isMidnight ? { color: 'white' } : undefined}
               className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
                 currency === 'BRL'
                   ? isMidnight
@@ -298,6 +300,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
             </button>
             <button
               onClick={() => setCurrency('USD')}
+              style={currency === 'USD' && !isMidnight ? { color: 'white' } : undefined}
               className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
                 currency === 'USD'
                   ? isMidnight
@@ -802,6 +805,59 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                   </button>
                 )}
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Cashback Redeem Modal (neo-brutalista, substitui alert()) */}
+      <AnimatePresence>
+        {redeemModal && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setRedeemModal(null)}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.92, y: 24, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.92, y: 24, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+              className={`relative z-10 w-full max-w-xs p-6 rounded-2xl text-center flex flex-col items-center gap-4 ${
+                isMidnight
+                  ? 'bg-zinc-950 border border-zinc-800 text-white'
+                  : 'bg-white text-black border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
+              }`}
+            >
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl ${
+                redeemModal.type === 'success'
+                  ? isMidnight ? 'bg-volt-green/10 border-2 border-volt-green' : 'bg-volt-lime border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                  : isMidnight ? 'bg-zinc-800 border border-zinc-700' : 'bg-volt-yellow-pastel border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+              }`}>
+                {redeemModal.type === 'success' ? '🎉' : '💸'}
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base font-black uppercase tracking-tight">
+                  {redeemModal.type === 'success' ? 'Cashback resgatado!' : 'Sem saldo de cashback'}
+                </h3>
+                <p className={`text-xs font-bold leading-relaxed ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>
+                  {redeemModal.type === 'success'
+                    ? `${formatCurrency(redeemModal.amount)} foram creditados no seu saldo principal.`
+                    : 'Você ainda não acumulou cashback para resgatar. Compre na Shop Volt e volte aqui!'}
+                </p>
+              </div>
+              <button
+                onClick={() => setRedeemModal(null)}
+                style={!isMidnight ? { color: 'white' } : undefined}
+                className={`w-full py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  isMidnight
+                    ? 'bg-volt-green text-black hover:opacity-90'
+                    : 'bg-black text-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                }`}
+              >
+                Entendi
+              </button>
             </motion.div>
           </div>
         )}
