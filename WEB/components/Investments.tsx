@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAppState } from '../contexts/AppStateContext';
 // FIX: Corrected import path for FixedIncomeProduct type from parent directory.
 import { FixedIncomeProduct } from '../types';
 
@@ -56,19 +57,55 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
     const [totalInvested] = useState(12345.67); // Mocked value
     const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
+    const { theme } = useAppState();
+    const isMidnight = theme === 'midnight';
+
+    // Theme-derived styles
+    const containerClass = isMidnight
+        ? 'bg-volt-dark text-white'
+        : 'bg-volt-yellow text-black';
+    const titleClass = isMidnight
+        ? 'text-2xl font-bold tracking-tight text-white'
+        : 'text-2xl font-black uppercase tracking-wide text-black';
+    const backBtnClass = isMidnight
+        ? 'p-2 rounded-full border border-white/10 bg-volt-surface hover:bg-white/10 text-white shadow-none'
+        : 'p-2 rounded-full border-2 border-black bg-white text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-black/5';
+    const cardClass = isMidnight
+        ? 'bg-volt-surface border border-white/5 shadow-lg rounded-2xl'
+        : 'bg-white border-4 border-black shadow-[4px_4px_0px_0px_#A2FF00] rounded-3xl';
+    const cardTitleClass = isMidnight
+        ? 'text-xs font-semibold text-white/60 uppercase tracking-wider block'
+        : 'text-gray-900 font-bold uppercase tracking-wider text-xs block';
+    const balanceClass = isMidnight
+        ? 'text-3xl font-bold mt-2 text-volt-green'
+        : 'text-3xl font-black mt-2 text-black';
+    const sectionTitleClass = isMidnight
+        ? 'text-lg font-semibold text-white mb-3'
+        : 'text-lg font-black uppercase text-black mb-3';
+    const productCardClass = isMidnight
+        ? 'w-full text-left p-4 bg-volt-surface border border-white/5 rounded-2xl shadow-md flex justify-between items-center hover:border-volt-green/20 transition-all text-white'
+        : 'w-full text-left p-4 bg-white border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] flex justify-between items-center hover:bg-gray-50 transition-all text-black';
+    const productNameClass = isMidnight
+        ? 'font-semibold text-white'
+        : 'font-black text-black';
+    const productDescClass = isMidnight
+        ? 'text-sm text-on-surface-variant font-medium'
+        : 'text-sm text-gray-500 font-bold';
+    const arrowClass = isMidnight ? 'text-volt-green' : 'text-black';
+
     const renderMainDashboard = () => (
         <>
             <header className="flex items-center mb-6 px-4 pt-4">
-                <button onClick={onBack} className="mr-4 p-2 rounded-full hover:bg-white/10">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
+                <button onClick={onBack} className={`mr-4 transition-all active:scale-95 flex items-center justify-center ${backBtnClass}`}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7"/></svg>
                 </button>
-                <h1 className="text-2xl font-bold">Investimentos</h1>
+                <h1 className={titleClass}>Investimentos</h1>
             </header>
             <main className="flex-grow overflow-y-auto no-scrollbar px-4 space-y-6">
-                <div className="bg-volt-surface rounded-2xl p-6 text-white">
+                <div className={`p-6 ${cardClass}`}>
                     <div className="flex justify-between items-center">
-                        <span className="text-orange-300">Total investido</span>
-                         <button onClick={() => setIsBalanceVisible(!isBalanceVisible)} className="text-orange-300 hover:text-white">
+                        <span className={cardTitleClass}>Total investido</span>
+                        <button onClick={() => setIsBalanceVisible(!isBalanceVisible)} className={`transition-colors ${isMidnight ? 'text-white hover:text-gray-300' : 'text-black hover:bg-black/5'}`}>
                             {isBalanceVisible ? (
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                             ) : (
@@ -76,21 +113,20 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
                             )}
                         </button>
                     </div>
-                    <p className={`text-3xl font-bold mt-2 transition-all duration-300 ${!isBalanceVisible ? 'blur-md' : ''}`}>
+                    <p className={`${balanceClass} transition-all duration-300 ${!isBalanceVisible ? 'blur-md' : ''}`}>
                         {isBalanceVisible ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalInvested) : 'R$ ••••••'}
                     </p>
                 </div>
                 <div>
-                    <h2 className="text-lg font-semibold text-white mb-3">Onde investir</h2>
+                    <h2 className={sectionTitleClass}>Onde investir</h2>
                     <div className="space-y-3">
-                        <button onClick={() => setView('fixedIncome')} className="w-full text-left p-4 bg-volt-surface rounded-lg flex justify-between items-center hover:bg-white/10">
+                        <button onClick={() => setView('fixedIncome')} className={productCardClass}>
                             <div>
-                                <p className="font-bold text-white">Renda Fixa</p>
-                                <p className="text-sm text-on-surface-variant">Investimentos seguros com rentabilidade previsível.</p>
+                                <p className={productNameClass}>Renda Fixa</p>
+                                <p className={productDescClass}>Investimentos seguros com rentabilidade previsível.</p>
                             </div>
-                            <svg className="w-5 h-5 text-on-surface-variant" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
+                            <svg className={`w-5 h-5 ${arrowClass}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"/></svg>
                         </button>
-                        {/* More categories can be added here */}
                     </div>
                 </div>
             </main>
@@ -100,22 +136,27 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
     const renderFixedIncomeView = () => (
         <>
             <header className="flex items-center mb-6 px-4 pt-4">
-                <button onClick={() => setView('main')} className="mr-4 p-2 rounded-full hover:bg-white/10">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
+                <button onClick={() => setView('main')} className={`mr-4 transition-all active:scale-95 flex items-center justify-center ${backBtnClass}`}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7"/></svg>
                 </button>
-                <h1 className="text-2xl font-bold">Renda Fixa</h1>
+                <h1 className={titleClass}>Renda Fixa</h1>
             </header>
             <main className="flex-grow overflow-y-auto no-scrollbar px-4 space-y-3">
-                {mockFixedIncomeProducts.map(product => (
-                    <div key={product.id} className="bg-volt-surface p-4 rounded-lg">
-                        <h3 className="font-bold text-white">{product.name}</h3>
-                        <p className="text-sm text-orange-400 font-semibold">{product.yield}</p>
-                        <div className="flex justify-between items-center mt-3 text-xs text-on-surface-variant">
-                            <span>Mínimo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.minInvestment)}</span>
-                            <span>Liquidez: {product.liquidity}</span>
+                {mockFixedIncomeProducts.map(product => {
+                    const productItemCardClass = isMidnight
+                        ? 'bg-volt-surface border border-white/5 shadow-md p-4 rounded-2xl'
+                        : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] p-4 rounded-lg';
+                    return (
+                        <div key={product.id} className={productItemCardClass}>
+                            <h3 className={productNameClass}>{product.name}</h3>
+                            <p className={`text-sm font-bold mt-1 ${isMidnight ? 'text-volt-green' : 'text-volt-lime'}`}>{product.yield}</p>
+                            <div className={`flex justify-between items-center mt-3 text-xs font-bold ${isMidnight ? 'text-on-surface-variant' : 'text-gray-400'}`}>
+                                <span>Mínimo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.minInvestment)}</span>
+                                <span>Liquidez: {product.liquidity}</span>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </main>
         </>
     );
@@ -131,7 +172,7 @@ const Investments: React.FC<InvestmentsProps> = ({ onBack }) => {
     };
     
     return (
-        <div className="bg-volt-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28">
+        <div className={`min-h-full flex flex-col w-full max-w-md mx-auto pb-28 font-sans ${containerClass}`}>
             {renderContent()}
         </div>
     );

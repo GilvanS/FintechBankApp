@@ -59,16 +59,23 @@ const HomeBanners: React.FC<HomeBannersProps> = ({ onNavigate }) => {
                         className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${index === currentIndex ? 'opacity-100' : 'opacity-0'}`}
                         onClick={() => onNavigate(banner.navigateTo)}
                     >
-                        <div className="w-full h-48 rounded-3xl p-6 flex flex-col justify-between cursor-pointer bg-white text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all">
-                            <div className={`w-12 h-12 rounded-full border-2 border-black flex items-center justify-center text-2xl ${banner.iconBgClass}`}>
-                                {banner.icon}
-                            </div>
-                            <div className="flex items-end justify-between gap-3">
-                                <div>
-                                    <h3 className="text-lg font-black text-black leading-tight">{banner.title}</h3>
-                                    <p className="text-xs font-bold text-gray-700 mt-1">{banner.description}</p>
+                        <div className="w-full h-48 rounded-3xl overflow-hidden flex flex-col justify-between cursor-pointer bg-white text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all">
+                            <div className={`h-24 w-full relative flex items-center justify-center overflow-hidden border-b-4 border-black p-2 ${
+                                banner.navigateTo === 'investments' ? 'bg-gradient-to-br from-purple-500 to-indigo-700' :
+                                banner.navigateTo === 'wallet' ? 'bg-gradient-to-br from-sky-400 to-blue-600' :
+                                'bg-gradient-to-br from-emerald-500 to-teal-700'
+                            }`}>
+                                <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] mix-blend-overlay"></div>
+                                <div className="relative w-12 h-12 bg-white rounded-xl shadow-lg flex items-center justify-center rotate-3 border-2 border-black">
+                                    <span className="text-2xl drop-shadow-md">{banner.icon}</span>
                                 </div>
-                                <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center shrink-0 active:scale-95 transition-transform">
+                            </div>
+                            <div className="p-3.5 flex-1 flex flex-col justify-between relative bg-white">
+                                <div>
+                                    <h3 className="text-[13px] font-black text-black leading-none uppercase tracking-wide">{banner.title}</h3>
+                                    <p className="text-[10px] font-bold text-gray-700 mt-1 line-clamp-1">{banner.description}</p>
+                                </div>
+                                <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center text-white active:scale-95 transition-transform">
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"/></svg>
                                 </div>
                             </div>

@@ -764,11 +764,14 @@ export default function Profile({ onNavigate }: ProfileProps) {
           </div>
         </section>
 
-        {user.role === 'admin' && (
-            <div className="pt-2">
+        {user?.role === 'admin' && (
+            <div className={`pt-6 border-t ${theme === 'midnight' ? 'border-white/5' : 'border-black/10'}`}>
                 <button
                     onClick={() => onNavigate('admin')}
-                    className="w-full text-center py-4 text-xs tracking-widest uppercase font-black text-black bg-volt-green border-4 border-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2"
+                    className={theme === 'midnight'
+                        ? 'w-full text-center py-4 font-semibold text-black bg-volt-green hover:bg-[#00e38b] rounded-xl transition-all flex items-center justify-center gap-2 border-none shadow-[0_0_15px_rgba(0,255,157,0.25)]'
+                        : 'w-full text-center py-4 text-xs tracking-widest uppercase font-black text-black bg-volt-green border-4 border-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2'
+                    }
                     type="button"
                 >
                     <span className="material-symbols-outlined text-black">admin_panel_settings</span>
@@ -780,7 +783,10 @@ export default function Profile({ onNavigate }: ProfileProps) {
         <div className="pt-4 space-y-4">
             <button
                 onClick={logout}
-                className="w-full text-center py-4 text-xs tracking-widest uppercase font-black text-white bg-black border-4 border-black rounded-2xl hover:bg-red-500 hover:text-black hover:border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] transition-all"
+                className={theme === 'midnight'
+                    ? 'w-full text-center py-4 font-semibold text-white bg-red-600 hover:bg-red-500 rounded-xl transition-all border-none shadow-[0_4px_12px_rgba(220,38,38,0.2)]'
+                    : 'w-full text-center py-4 text-xs tracking-widest uppercase font-black text-white bg-red-600 border-4 border-black rounded-2xl hover:bg-red-700 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] transition-all'
+                }
                 type="button"
             >
                 Sair da Conta Volt
@@ -788,7 +794,11 @@ export default function Profile({ onNavigate }: ProfileProps) {
 
             <button
                 onClick={() => setShowVersionPopup(true)}
-                className="w-full text-center py-2 text-[10px] font-bold text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors uppercase tracking-widest"
+                className={`w-full text-center py-2 text-[10px] font-bold transition-colors uppercase tracking-widest ${
+                    theme === 'midnight'
+                        ? 'text-white/40 hover:text-white'
+                        : 'text-black/40 hover:text-black'
+                }`}
                 type="button"
             >
                 Versão do App

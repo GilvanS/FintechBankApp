@@ -911,8 +911,8 @@ export default function LimitView({
                     readOnly
                     onClick={() => setFocusedPinIndex(idx)}
                     placeholder={isFocused ? '|' : ''}
-                    className={`w-12 h-14 bg-zinc-900 border-b-2 text-volt-green text-center font-black text-xl rounded-lg focus:outline-none transition-all placeholder:text-zinc-700 ${
-                      isFocused ? 'border-volt-green ring-2 ring-volt-green/20 shadow-[0_0_12px_rgba(0,255,157,0.3)]' : 'border-zinc-800'
+                    className={`w-12 h-14 bg-white border-2 text-black text-center font-black text-xl rounded-lg focus:outline-none transition-all placeholder:text-gray-400 ${
+                      isFocused ? 'border-black ring-2 ring-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'border-black'
                     }`}
                   />
                 );
@@ -928,7 +928,7 @@ export default function LimitView({
                 key={num}
                 type="button"
                 onClick={() => handlePinChange(num.toString())}
-                className="w-16 h-12 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-white font-extrabold text-sm flex items-center justify-center cursor-pointer transition-all active:scale-95"
+                className="w-16 h-12 rounded-xl bg-white border-2 border-black hover:bg-gray-100 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-extrabold text-sm flex items-center justify-center cursor-pointer transition-all active:scale-95"
               >
                 {num}
               </button>
@@ -936,14 +936,14 @@ export default function LimitView({
             <button
               type="button"
               onClick={handlePinBackspace}
-              className="w-16 h-12 rounded-xl bg-zinc-900/60 hover:bg-zinc-850 text-zinc-400 font-extrabold text-xs flex items-center justify-center cursor-pointer transition-all active:scale-95"
+              className="w-16 h-12 rounded-xl bg-gray-100 border-2 border-black hover:bg-gray-200 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-extrabold text-xs flex items-center justify-center cursor-pointer transition-all active:scale-95"
             >
               ⌫
             </button>
             <button
               type="button"
               onClick={() => handlePinChange('0')}
-              className="w-16 h-12 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-white font-extrabold text-sm flex items-center justify-center cursor-pointer transition-all active:scale-95"
+              className="w-16 h-12 rounded-xl bg-white border-2 border-black hover:bg-gray-100 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-extrabold text-sm flex items-center justify-center cursor-pointer transition-all active:scale-95"
             >
               0
             </button>
@@ -954,19 +954,19 @@ export default function LimitView({
                 newPin[3] = Math.floor(Math.random() * 10).toString();
                 setPin(newPin);
               }}
-              className="w-16 h-12 rounded-xl bg-zinc-900/60 hover:bg-zinc-850 text-zinc-400 font-extrabold text-[9px] uppercase tracking-tighter flex items-center justify-center cursor-pointer transition-all active:scale-95"
+              className="w-16 h-12 rounded-xl bg-gray-100 border-2 border-black hover:bg-gray-200 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-extrabold text-[9px] uppercase tracking-tighter flex items-center justify-center cursor-pointer transition-all active:scale-95"
             >
               Preencher
             </button>
           </div>
 
           {/* Protocol Card */}
-          <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 text-left space-y-1.5 shadow-xl max-w-sm mx-auto">
-            <div className="flex items-center gap-1.5 text-volt-green">
-              <Shield size={16} />
+          <div className="bg-white p-4 rounded-xl border-2 border-black text-black text-left space-y-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] max-w-sm mx-auto">
+            <div className="flex items-center gap-1.5 text-black">
+              <Shield size={16} className="text-volt-green stroke-[3]" />
               <span className="text-[8px] font-black uppercase tracking-widest">Protocolo Seguro</span>
             </div>
-            <p className="text-[10px] text-on-surface-variant leading-relaxed">
+            <p className="text-[10px] text-black leading-relaxed font-bold">
               Confirme o código gerado no seu cartão de segurança físico ou token digital para autorizar este saque de {formatBRL(withdrawAmount)}.
             </p>
           </div>
@@ -977,7 +977,7 @@ export default function LimitView({
             disabled={loading || pin.some(d => d === '')}
             className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
               pin.some(d => d === '')
-                ? 'bg-zinc-800/40 text-zinc-500 border border-zinc-850 cursor-not-allowed'
+                ? 'bg-gray-100 text-gray-400 border-2 border-gray-300 cursor-not-allowed shadow-[2px_2px_0px_0px_rgba(200,200,200,1)]'
                 : 'btn-primary'
             }`}
           >
@@ -1210,7 +1210,7 @@ export default function LimitView({
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 30, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-sm rounded-[2rem] overflow-hidden border p-6 flex flex-col bg-zinc-900 border-zinc-800 text-white shadow-2xl"
+              className="relative w-full max-w-sm rounded-[2rem] overflow-hidden border-4 p-6 flex flex-col bg-white border-black text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
             >
               {/* Header Info icon */}
               <div className="text-center space-y-4 py-4">
@@ -1218,7 +1218,7 @@ export default function LimitView({
                   <AlertCircle className="text-red-500 stroke-[2.5]" size={36} />
                 </div>
                 <h3 className="text-xl font-black text-red-500 uppercase tracking-wide">Importante</h3>
-                <p className="text-xs text-on-surface-variant leading-relaxed px-4">
+                <p className="text-xs text-gray-800 leading-relaxed px-4 font-bold">
                   Para seguir, é preciso ter uma conta em que você seja o titular para receber o dinheiro.
                 </p>
               </div>

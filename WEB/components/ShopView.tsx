@@ -496,18 +496,12 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 20, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              className={`relative w-full max-w-sm rounded-[2rem] overflow-hidden border p-6 flex flex-col ${
-                isMidnight 
-                  ? 'bg-zinc-900 border-zinc-800 text-white' 
-                  : 'bg-white border-4 border-black text-black shadow-2xl'
-              }`}
+              className="relative w-full max-w-sm rounded-[2rem] overflow-hidden p-6 flex flex-col bg-white border-4 border-black text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
             >
               {/* Close Button */}
               <button
                 onClick={() => setSelectedProduct(null)}
-                className={`absolute top-4 right-4 p-1.5 rounded-full transition-colors z-50 ${
-                  isMidnight ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' : 'text-black hover:bg-gray-100'
-                }`}
+                className="absolute top-4 right-4 p-1.5 rounded-full transition-colors z-50 text-black hover:bg-black/10"
               >
                 <X size={18} />
               </button>
@@ -544,9 +538,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                   {/* Payment Form */}
                   <form onSubmit={handleBuyProduct} className="space-y-4 pt-1">
                     {/* Price and Cashback calculation */}
-                    <div className={`p-4 rounded-xl border flex justify-between items-center ${
-                      isMidnight ? 'bg-zinc-950 border-zinc-850' : 'bg-gray-50 border-black/5'
-                    }`}>
+                    <div className="p-4 rounded-xl flex justify-between items-center bg-gray-50 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                       <div>
                         <span className="text-[9px] text-on-surface-variant uppercase block font-bold">Valor do Produto</span>
                         <span className="text-base font-black text-volt-green">
@@ -611,12 +603,10 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                         <select
                           value={installments}
                           onChange={(e) => setInstallments(parseInt(e.target.value))}
-                          className={`w-full p-2.5 text-xs rounded-xl border focus:outline-none focus:border-volt-green ${
-                            isMidnight ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-black/10'
-                          }`}
+                          className="w-full p-2.5 text-xs rounded-xl border-2 border-black focus:outline-none focus:border-black bg-white text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                         >
                           {[1, 2, 3, 4, 5, 6, 10, 12].map((i) => (
-                            <option key={i} value={i} className="bg-zinc-900 text-white">
+                            <option key={i} value={i} className="bg-white text-black">
                               {i}x de {formatCurrency(selectedProduct.price / i)} sem juros
                             </option>
                           ))}
@@ -639,9 +629,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                         }}
                         required
                         placeholder="••••"
-                        className={`w-full p-2.5 text-center text-lg rounded-xl border focus:outline-none focus:border-volt-green tracking-[0.5em] ${
-                          isMidnight ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-black/10'
-                        }`}
+                        className="w-full p-2.5 text-center text-lg rounded-xl border-2 border-black focus:outline-none focus:border-black bg-white text-black tracking-[0.5em] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                       />
                     </div>
 
@@ -680,9 +668,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                     <p className="text-xs text-on-surface-variant">Sua transação foi realizada e o cashback já foi creditado.</p>
                   </div>
 
-                  <div className={`rounded-2xl p-4 text-left text-xs space-y-2.5 ${
-                    isMidnight ? 'bg-zinc-950 border border-zinc-850' : 'bg-gray-50 border border-black/5'
-                  }`}>
+                  <div className="rounded-2xl p-4 text-left text-xs space-y-2.5 bg-gray-50 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                     <div className="flex justify-between">
                       <span className="text-on-surface-variant font-medium">Produto:</span>
                       <span className="font-extrabold truncate max-w-[150px]">{selectedProduct.name}</span>
@@ -733,7 +719,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 25, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              className="relative w-full max-w-sm bg-zinc-900 border border-zinc-800 text-white rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col"
+              className="relative w-full max-w-sm bg-white border-4 border-black text-black rounded-[2.5rem] overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col"
             >
               {/* Header Gradient Pill */}
               <div className="bg-gradient-to-r from-volt-green to-[#00A86B] py-7 px-4 flex flex-col items-center justify-center text-center relative">
@@ -760,21 +746,21 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
               {/* Modal Content */}
               <div className="p-6 flex flex-col items-center text-center space-y-5">
                 <div className="space-y-2">
-                  <h4 className="text-sm font-black text-white px-2 leading-snug">
+                  <h4 className="text-sm font-black text-black px-2 leading-snug">
                     Do primeiro sintoma até a solução, a gente te ajuda a cuidar do seu pet.
                   </h4>
-                  <p className="text-[11px] text-zinc-400 leading-normal px-4">
+                  <p className="text-[11px] text-gray-700 leading-normal px-4">
                     Coberturas completas para cães e gatos de todas as idades, incluindo consultas, vacinas e exames.
                   </p>
                 </div>
 
                 {/* Pricing component */}
                 <div className="space-y-0.5">
-                  <span className="text-[9px] text-zinc-400 block uppercase tracking-wider font-extrabold">
+                  <span className="text-[9px] text-gray-700 block uppercase tracking-wider font-extrabold">
                     Plano mensal por apenas
                   </span>
-                  <p className="text-3xl font-black text-volt-green flex items-baseline justify-center gap-1">
-                    <span className="text-sm font-bold text-volt-green">R$</span>
+                  <p className="text-3xl font-black text-black flex items-baseline justify-center gap-1">
+                    <span className="text-sm font-bold text-black">R$</span>
                     11,99
                   </p>
                 </div>
