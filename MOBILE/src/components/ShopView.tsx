@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { Transaction } from '../types';
 import { getProducts, checkout } from '../services/api';
+import PasswordModal from './PasswordModal';
+import { useDialog } from '../contexts/GlobalDialogContext';
 
 interface ShopViewProps {
   accountBalance: number;
@@ -25,6 +27,7 @@ interface Product {
 }
 
 export default function ShopView({ accountBalance, onPurchaseComplete, theme }: ShopViewProps) {
+  const { showDialog } = useDialog();
   const [cashbackBalance, setCashbackBalance] = useState<number>(() => {
     const saved = localStorage.getItem('volt_cashback_balance');
     return saved ? parseFloat(saved) : 42.50;
@@ -46,6 +49,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
 
   // Pet Modal State
   const [isPetModalOpen, setIsPetModalOpen] = useState(false);
+  const [isPetPasswordOpen, setIsPetPasswordOpen] = useState(false);
   const [redeemModal, setRedeemModal] = useState<{ type: 'success' | 'empty'; amount: number } | null>(null);
   const [petSubscribed, setPetSubscribed] = useState(() => {
     return localStorage.getItem('volt_pet_subscribed') === 'true';
@@ -173,13 +177,28 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
     }
   };
 
-  const handlePetSubscribe = () => {
+  const handlePetSubscribeClick = () => {
     const petPrice = 11.99;
     if (accountBalance < petPrice) {
-      alert('Saldo de conta insuficiente para ativar o plano pet.');
+      showDialog({
+        title: 'Saldo insuficiente',
+        message: 'Saldo de conta insuficiente para ativar o plano pet.'
+      });
+      return;
+    }
+    setIsPetPasswordOpen(true);
+  };
+
+  const handlePetSubscribeConfirm = (enteredPin: string) => {
+    if (enteredPin !== '9898') {
+      showDialog({
+        title: 'Erro de Autenticação',
+        message: 'Senha (PIN) incorreta. Use o PIN padrão do mock: 9898'
+      });
       return;
     }
 
+    setIsPetPasswordOpen(false);
     setCheckoutLoading(true);
 
     setTimeout(() => {
@@ -193,12 +212,10 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
       const newTx: Transaction = {
         id: Math.random().toString(36).substring(2, 11),
         title: 'Ativação Fintech Pet Plan',
-        amount: -petPrice,
-        type: 'expense',
-        category: 'saude',
+        amount: -11.99,
+        type: 'PAYMENT',
         date: now.toISOString(),
-        formattedDate: `${weekdays[now.getDay()]} • ${formattedDate}`,
-        time: `${formatNumber(now.getHours())}:${formatNumber(now.getMinutes())}`
+        description: 'Assinatura Plano Fintech Pet + Shop',
       };
 
       // Add as recurring bill in localstorage if it exists
@@ -210,7 +227,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
           bills.push({
             id: 'rec_pet',
             title: 'Plano Fintech Pet + Shop',
-            amount: -petPrice,
+            amount: -11.99,
             category: 'saude',
             dueDate: '24/07/2026',
             status: 'paid',
@@ -222,11 +239,16 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
         console.error(e);
       }
 
-      onPurchaseComplete(newTx, -petPrice);
+      onPurchaseComplete(newTx, -11.99);
       setPetSubscribed(true);
       localStorage.setItem('volt_pet_subscribed', 'true');
       setCheckoutLoading(false);
       setIsPetModalOpen(false);
+      
+      showDialog({
+        title: 'Plano Ativado!',
+        message: 'O Plano Fintech Pet + Shop foi ativado com sucesso. R$ 11,99 foram debitados de sua conta.'
+      });
     }, 1200);
   };
 
@@ -293,7 +315,9 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                   ? isMidnight
                     ? 'bg-volt-green text-black font-extrabold shadow-sm'
                     : 'bg-black text-white'
-                  : 'text-zinc-500 hover:text-white'
+                  : isMidnight
+                    ? 'text-zinc-500 hover:text-white'
+                    : 'text-zinc-500 hover:text-black'
               }`}
             >
               BRL
@@ -306,7 +330,9 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                   ? isMidnight
                     ? 'bg-volt-green text-black font-extrabold shadow-sm'
                     : 'bg-black text-white'
-                  : 'text-zinc-500 hover:text-white'
+                  : isMidnight
+                    ? 'text-zinc-500 hover:text-white'
+                    : 'text-zinc-500 hover:text-black'
               }`}
             >
               USD
@@ -793,7 +819,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                   </div>
                 ) : (
                   <button
-                    onClick={handlePetSubscribe}
+                    onClick={handlePetSubscribeClick}
                     disabled={checkoutLoading}
                     className="w-full bg-volt-green text-black font-extrabold py-3.5 rounded-2xl text-xs uppercase tracking-wider hover:opacity-95 active:scale-98 transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-volt-green/20 cursor-pointer"
                   >
@@ -862,6 +888,15 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
           </div>
         )}
       </AnimatePresence>
+
+      <PasswordModal
+        isOpen={isPetPasswordOpen}
+        onClose={() => setIsPetPasswordOpen(false)}
+        onConfirm={handlePetSubscribeConfirm}
+        title="Digite a senha do cartão"
+        description="Confirme o seu PIN de 4 dígitos para ativar o Plano Pet (padrão: 9898)"
+        isLoading={checkoutLoading}
+      />
     </div>
   );
 }

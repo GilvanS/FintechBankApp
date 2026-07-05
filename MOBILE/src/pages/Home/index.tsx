@@ -445,7 +445,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
         case 'transactionReceipt': 
             return selectedTransaction ? <Suspense fallback={<LoadingFallback />}><TransactionReceipt transaction={selectedTransaction} onBack={() => { setSelectedTransaction(null); handleNavigate('home'); }} /></Suspense> : <HomeView user={user} onNavigate={handleNavigate} />;
         case 'statement': 
-            return <Suspense fallback={<LoadingFallback />}><StatementPaginated onNavigate={handleNavigate} onBack={() => handleNavigate('home')} /></Suspense>;
+            return <Suspense fallback={<LoadingFallback />}><StatementPaginated user={user} onNavigate={handleNavigate} onBack={() => handleNavigate('home')} /></Suspense>;
         case 'currentInvoice': 
             return <Suspense fallback={<LoadingFallback />}><CurrentInvoiceView user={user} onBack={() => handleNavigate('cards')} /></Suspense>;
         case 'closedInvoice': 

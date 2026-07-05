@@ -1180,9 +1180,9 @@ export async function adminResetTestData(): Promise<{ success: boolean; message?
 
 // ── Adapters de compatibilidade com componentes portados do WEB ──────────────
 
-export async function performPix(cpf: string, key: string, amount: number, description: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> {
+export async function performPix(cpf: string, key: string, amount: number, description: string, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> {
     try {
-        const res = await api.post('/pix/transfer', { cpf, key, amount, description }, {
+        const res = await api.post('/pix/transfer', { cpf, key, amount, description, pin }, {
             headers: getAuthHeaders('json'),
         });
         return res.data;
@@ -1191,9 +1191,9 @@ export async function performPix(cpf: string, key: string, amount: number, descr
     }
 }
 
-export async function performPixCreditInstallment(cpf: string, amount: number, installments: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> {
+export async function performPixCreditInstallment(cpf: string, amount: number, installments: number, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> {
     try {
-        const res = await api.post('/pix/credit-installment', { cpf, amount, installments }, {
+        const res = await api.post('/pix/credit-installment', { cpf, amount, installments, pin }, {
             headers: getAuthHeaders('json'),
         });
         return res.data;

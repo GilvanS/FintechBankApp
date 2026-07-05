@@ -7,7 +7,7 @@ import { useAppState } from '../contexts/AppStateContext';
 
 import HomeView from './HomeView';
 import Profile from './Profile';
-import PixModal from './PixModal';
+import PixView from './PixView';
 import Statement from './Statement';
 import StatementPaginated from './StatementPaginated';
 import CardDashboard from './CardDashboard';
@@ -611,7 +611,7 @@ const Dashboard: React.FC = () => {
             case 'pix':
                 if (!user) return null;
                 return (
-                    <PixModal isOpen={true} onClose={handleBack} />
+                    <PixView onBack={handleBack} />
                 );
             case 'statement':
                 if (!user) return null;

@@ -1,8 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useContext } from 'react';
 import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus, Mic } from 'lucide-react';
 
-import type { User, Story } from '../types';
+import type { User, Story, RecurringBill, Transaction } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
+import { useAuth, AuthContext } from '../context/AuthContext';
+import { useAppState } from '../contexts/AppStateContext';
+import PasswordModal from './PasswordModal';
 import HomeBanners from './HomeBanners';
 import NewsSection from './NewsSection';
 import ShopOffersBanner from './ShopOffersBanner';
@@ -100,11 +103,16 @@ const HomeView: React.FC<HomeViewProps> = ({
   openBoletoModal
 }) => {
   const { showDialog } = useDialog();
+  const { checkRecurringBillNotifications } = useAppState();
+  const auth = useContext(AuthContext);
+  const updateUser = auth?.updateUser || (() => {});
   const biometricEnabled = localStorage.getItem('volt_biometric_enabled') === 'true';
   const [balanceIsVisible, setIsBalanceVisible] = useState(!biometricEnabled);
   const [isBiometricOpen, setIsBiometricOpen] = useState(false);
   const [isIntelligenceMenuOpen, setIsIntelligenceMenuOpen] = useState(false);
   const [isViewingStories, setIsViewingStories] = useState(false);
+  const [pendingBillId, setPendingBillId] = useState<string | null>(null);
+  const [isPasswordVerifyOpen, setIsPasswordVerifyOpen] = useState(false);
 
   const showStoriesStatus = (() => {
     const localVal = localStorage.getItem('volt_show_home_stories_status');
@@ -517,23 +525,56 @@ const HomeView: React.FC<HomeViewProps> = ({
       return;
     }
 
-    const confirmPay = window.confirm(
-      `Confirmar o pagamento de ${bill.title} no valor de R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}?`
-    );
+    setPendingBillId(billId);
+    setIsPasswordVerifyOpen(true);
+  };
 
-    if (!confirmPay) return;
+  const handlePasswordConfirm = async (enteredPin: string) => {
+    setIsPasswordVerifyOpen(false);
+    if (enteredPin !== '9898') {
+      showDialog({ title: 'Erro', message: 'Senha PIN incorreta!' });
+      return;
+    }
 
+    if (!pendingBillId) return;
+    const billId = pendingBillId;
+    setPendingBillId(null);
+
+    const bill = recurringBills.find(b => b.id === billId);
+    if (!bill) return;
+
+    const absoluteAmount = Math.abs(bill.amount);
     const now = new Date();
     const formatNumber = (num: number) => String(num).padStart(2, '0');
     const formattedDateString = `${formatNumber(now.getDate())}/${formatNumber(now.getMonth() + 1)}/${now.getFullYear()}`;
-    const weekdays = [
-      'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'
-    ];
 
-    showDialog({ title: 'Sucesso', message: 'Conta paga com sucesso!' });
+    const getNextMonthDate = (dateStr: string) => {
+      const parts = dateStr.split('/');
+      if (parts.length !== 3) return dateStr;
+      let day = parseInt(parts[0], 10);
+      let month = parseInt(parts[1], 10);
+      let year = parseInt(parts[2], 10);
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+      const formatNumber = (num: number) => String(num).padStart(2, '0');
+      return `${formatNumber(day)}/${formatNumber(month)}/${year}`;
+    };
 
+    const nextBills: RecurringBill[] = [];
     const updatedBills = recurringBills.map(b => {
       if (b.id === billId) {
+        const nextId = b.id.includes('_next') ? b.id + 'x' : `${b.id}_next`;
+        nextBills.push({
+          ...b,
+          id: nextId,
+          dueDate: getNextMonthDate(b.dueDate),
+          status: 'pending' as const,
+          paidAtDate: undefined
+        });
+
         return {
           ...b,
           status: 'paid' as const,
@@ -543,8 +584,25 @@ const HomeView: React.FC<HomeViewProps> = ({
       return b;
     });
 
-    setRecurringBills(updatedBills);
-    localStorage.setItem('volt_recurring_bills', JSON.stringify(updatedBills));
+    const finalBills = [...updatedBills, ...nextBills];
+    setRecurringBills(finalBills);
+    localStorage.setItem('volt_recurring_bills', JSON.stringify(finalBills));
+    checkRecurringBillNotifications();
+
+    const newTx: Transaction = {
+      id: `rec-pay-${Date.now()}`,
+      type: 'payment',
+      amount: -absoluteAmount,
+      description: `Pagamento Recorrente: ${bill.title}`,
+      date: now.toISOString(),
+      category: bill.category || 'outros',
+    };
+
+    updateUser({
+      ...user,
+      balance: user.balance - absoluteAmount,
+      transactions: [newTx, ...(user.transactions || [])],
+    });
 
     showDialog({ title: 'Sucesso', message: `Sucesso! O pagamento de ${bill.title} de R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} foi realizado.` });
   };
@@ -2626,6 +2684,14 @@ const HomeView: React.FC<HomeViewProps> = ({
           <StoryViewer stories={MOCK_STORIES} onClose={() => setIsViewingStories(false)} />
         )}
       </AnimatePresence>
+
+      <PasswordModal
+        isOpen={isPasswordVerifyOpen}
+        onClose={() => setIsPasswordVerifyOpen(false)}
+        onConfirm={handlePasswordConfirm}
+        title="Confirmar Pagamento Recorrente"
+        description="Digite seu PIN de 4 dígitos para autorizar o pagamento desta conta."
+      />
     </motion.div>
   );
 };

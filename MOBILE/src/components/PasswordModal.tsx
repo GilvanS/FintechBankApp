@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shield, ArrowLeft, X } from 'lucide-react';
 import { useAppState } from '../contexts/AppStateContext';
@@ -19,6 +19,14 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
     const [pin, setPin] = useState<string[]>(['', '', '', '']);
     const [focusedPinIndex, setFocusedPinIndex] = useState<number>(0);
 
+    const pinRef = useRef(pin);
+    const indexRef = useRef(focusedPinIndex);
+
+    useEffect(() => {
+        pinRef.current = pin;
+        indexRef.current = focusedPinIndex;
+    }, [pin, focusedPinIndex]);
+
     // Reset PIN when modal opens
     useEffect(() => {
         if (isOpen) {
@@ -27,26 +35,69 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
         }
     }, [isOpen]);
 
+    // Handle physical keyboard typing
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const currentPin = pinRef.current;
+            const currentIndex = indexRef.current;
+
+            if (e.key === 'Backspace') {
+                if (currentIndex > 0 && currentPin[currentIndex] === '') {
+                    const newPin = [...currentPin];
+                    newPin[currentIndex - 1] = '';
+                    setPin(newPin);
+                    setFocusedPinIndex(currentIndex - 1);
+                } else {
+                    const newPin = [...currentPin];
+                    newPin[currentIndex] = '';
+                    setPin(newPin);
+                }
+            } else if (e.key === 'Enter') {
+                if (currentPin.every(d => d !== '')) {
+                    onConfirm(currentPin.join(''));
+                }
+            } else if (/^[0-9]$/.test(e.key)) {
+                if (currentIndex < 4) {
+                    const newPin = [...currentPin];
+                    newPin[currentIndex] = e.key;
+                    setPin(newPin);
+                    if (currentIndex < 3) {
+                        setFocusedPinIndex(currentIndex + 1);
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onConfirm]);
+
     const handlePinChange = (val: string) => {
-        if (focusedPinIndex < 4) {
-            const newPin = [...pin];
-            newPin[focusedPinIndex] = val;
+        const currentIndex = indexRef.current;
+        const currentPin = pinRef.current;
+        if (currentIndex < 4) {
+            const newPin = [...currentPin];
+            newPin[currentIndex] = val;
             setPin(newPin);
-            if (focusedPinIndex < 3) {
-                setFocusedPinIndex(focusedPinIndex + 1);
+            if (currentIndex < 3) {
+                setFocusedPinIndex(currentIndex + 1);
             }
         }
     };
 
     const handlePinBackspace = () => {
-        if (focusedPinIndex > 0 && pin[focusedPinIndex] === '') {
-            const newPin = [...pin];
-            newPin[focusedPinIndex - 1] = '';
+        const currentIndex = indexRef.current;
+        const currentPin = pinRef.current;
+        if (currentIndex > 0 && currentPin[currentIndex] === '') {
+            const newPin = [...currentPin];
+            newPin[currentIndex - 1] = '';
             setPin(newPin);
-            setFocusedPinIndex(focusedPinIndex - 1);
+            setFocusedPinIndex(currentIndex - 1);
         } else {
-            const newPin = [...pin];
-            newPin[focusedPinIndex] = '';
+            const newPin = [...currentPin];
+            newPin[currentIndex] = '';
             setPin(newPin);
         }
     };

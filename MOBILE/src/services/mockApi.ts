@@ -130,7 +130,7 @@ export const signUp = async (data: SignUpData): Promise<{ success: boolean; mess
 
 // ... other existing API functions ...
 
-export const payCreditCardInvoice = async (cpf: string, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
+export const payCreditCardInvoice = async (cpf: string, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
     await delay(1500);
     const store = _getStore();
     const userIndex = store.users.findIndex(u => u.cpf === cpf);
@@ -139,6 +139,9 @@ export const payCreditCardInvoice = async (cpf: string, pin?: string): Promise<{
     }
 
     const user = store.users[userIndex];
+    if (pin !== '9898') {
+        return { success: false, message: 'Senha (PIN) incorreta.' };
+    }
     const invoiceAmount = user.creditCard.closedInvoice;
 
     if (invoiceAmount <= 0) {
@@ -478,13 +481,14 @@ export const getPixRecipientInfo = async (key: string, senderCpf: string): Promi
     return { success: true, name: recipient.fullName, cpf: maskCpf(recipient.cpf) };
 };
 
-export const performPix = async (cpf: string, key: string, amount: number, description: string): Promise<{ success: boolean; message: string, user?: Omit<User, 'password'>, transaction?: Transaction }> => {
+export const performPix = async (cpf: string, key: string, amount: number, description: string, pin: string): Promise<{ success: boolean; message: string, user?: Omit<User, 'password'>, transaction?: Transaction }> => {
     await delay(1500);
     const store = _getStore();
     const senderIndex = store.users.findIndex(u => u.cpf === cpf);
     if (senderIndex === -1) return { success: false, message: 'Usuário remetente não encontrado.' };
 
     const sender = store.users[senderIndex];
+    if (pin !== '9898') return { success: false, message: 'Senha (PIN) incorreta.' };
     if (sender.balance < amount) return { success: false, message: 'Saldo insuficiente.' };
 
     const dailyUsage = await getPixDailyUsage(cpf);
@@ -550,13 +554,14 @@ export const getPixContacts = async (cpf: string): Promise<PixContact[]> => {
     return user ? user.pixContacts : [];
 };
 
-export const performPixCreditInstallment = async (cpf: string, amount: number, installments: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const performPixCreditInstallment = async (cpf: string, amount: number, installments: number, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
     await delay(1500);
     const store = _getStore();
     const userIndex = store.users.findIndex(u => u.cpf === cpf);
     if (userIndex === -1) return { success: false, message: 'Usuário não encontrado.' };
 
     const user = store.users[userIndex];
+    if (pin !== '9898') return { success: false, message: 'Senha (PIN) incorreta.' };
     const interest = amount * 0.05 * installments; // Simple interest 5% per month
     const totalAmount = amount + interest;
     

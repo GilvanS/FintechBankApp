@@ -163,19 +163,20 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
             const diffTime = dueDateObj.getTime() - today.getTime();
             const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
-            // Disparar se faltarem exatamente 2 dias
-            if (diffDays === 2) {
-                const uniqueNotifId = `bill-due-2days-${bill.id}-${bill.dueDate}`;
+            // Disparar se estiver vencida ou vencer nos próximos 3 dias
+            if (diffDays <= 3) {
+                const uniqueNotifId = `bill-due-${diffDays}days-${bill.id}-${bill.dueDate}`;
                 const alreadyExists = updatedNotifs.some(n => n.id === uniqueNotifId);
 
                 if (!alreadyExists) {
                     const absAmount = Math.abs(bill.amount);
                     const formattedAmt = absAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                    const daysText = diffDays < 0 ? `há ${Math.abs(diffDays)} dias (atrasada)` : diffDays === 0 ? 'hoje' : diffDays === 1 ? 'em 1 dia' : `em ${diffDays} dias`;
                     
                     const newNotif: AppNotification = {
                         id: uniqueNotifId,
-                        title: 'Vencimento Próximo 📅',
-                        description: `A conta "${bill.title}" no valor de R$ ${formattedAmt} vence em 2 dias (${bill.dueDate}).`,
+                        title: 'Previsão de Cobrança 📅',
+                        description: `A conta "${bill.title}" no valor de R$ ${formattedAmt} vence ${daysText} (${bill.dueDate}).`,
                         time: 'Agora'
                     };
 
@@ -183,8 +184,8 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
                     triggeredAny = true;
 
                     setToast({
-                        title: '⚠️ VENCIMENTO PRÓXIMO',
-                        message: `Aviso Volt: A conta "${bill.title}" no valor de R$ ${formattedAmt} vence em 2 dias (${bill.dueDate}).`
+                        title: '⚠️ PREVISÃO DE COBRANÇA',
+                        message: `Previsão: A conta "${bill.title}" no valor de R$ ${formattedAmt} vence ${daysText} (${bill.dueDate}).`
                     });
                 }
             }

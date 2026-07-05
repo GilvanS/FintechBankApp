@@ -4,6 +4,7 @@ import { CreditCard, Key, ShieldAlert, Sliders, ToggleLeft, ToggleRight, CheckCi
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../contexts/AppStateContext';
 import { payCreditCardInvoice } from '../services/api';
+import PasswordModal from './PasswordModal';
 
 interface CardDashboardProps {
     onBack: () => void;
@@ -19,6 +20,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentSuccess, setPaymentSuccess] = useState(false);
     const [paymentError, setPaymentError] = useState('');
+    const [isPasswordVerifyOpen, setIsPasswordVerifyOpen] = useState(false);
 
     if (!user) return null;
     const { creditCard } = user;
@@ -59,7 +61,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
 
     const invoiceAmount = creditCard.closedInvoice > 0 ? creditCard.closedInvoice : creditCard.currentInvoice;
 
-    const handlePayInvoiceSubmit = async (e: React.FormEvent) => {
+    const handlePayInvoiceSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setPaymentError('');
 
@@ -73,18 +75,27 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
             return;
         }
 
+        setIsPasswordVerifyOpen(true);
+    };
+
+    const handlePasswordConfirm = async (enteredPin: string) => {
+        setIsPasswordVerifyOpen(false);
+        setPaymentError('');
         try {
-            const updatedUser = await payCreditCardInvoice(user.cpf, invoiceAmount);
-            if (updatedUser) {
+            const result = await payCreditCardInvoice(user.cpf, enteredPin);
+            if (result && (result.success || (result as any).cpf)) {
+                const updatedUser = result.user || result;
                 updateUser(updatedUser);
                 setPaymentSuccess(true);
                 setTimeout(() => {
                     setPaymentSuccess(false);
                     setShowPaymentModal(false);
                 }, 2000);
+            } else {
+                setPaymentError(result.message || 'Erro ao realizar pagamento.');
             }
-        } catch (error) {
-            setPaymentError('Erro ao realizar pagamento.');
+        } catch (error: any) {
+            setPaymentError(error.message || 'Erro ao realizar pagamento.');
         }
     };
 
@@ -515,6 +526,14 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                         </div>
                     )}
                 </AnimatePresence>
+
+                <PasswordModal
+                    isOpen={isPasswordVerifyOpen}
+                    onClose={() => setIsPasswordVerifyOpen(false)}
+                    onConfirm={handlePasswordConfirm}
+                    title="Confirmar Pagamento"
+                    description="Digite seu PIN de 4 dígitos para autorizar o pagamento da fatura."
+                />
             </div>
         </div>
     );

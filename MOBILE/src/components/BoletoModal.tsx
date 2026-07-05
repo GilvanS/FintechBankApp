@@ -5,6 +5,8 @@ import {
   RefreshCw, Sparkles, CalendarDays, Zap, Keyboard, Barcode
 } from 'lucide-react';
 import { Transaction } from '../types';
+import PasswordModal from './PasswordModal';
+import { useDialog } from '../contexts/GlobalDialogContext';
 
 interface BoletoModalProps {
   isOpen: boolean;
@@ -25,6 +27,7 @@ export default function BoletoModal({
   onTransactionComplete,
   theme = 'yellow',
 }: BoletoModalProps) {
+  const { showDialog } = useDialog();
   const isMidnight = theme === 'midnight';
   // Classes derivadas do tema — telas internas (a câmera permanece escura de propósito)
   const textCls = isMidnight ? 'text-white' : 'text-black';
@@ -32,6 +35,7 @@ export default function BoletoModal({
   const hoverCls = isMidnight ? 'hover:bg-white/10' : 'hover:bg-black/10';
   const cardCls = isMidnight ? 'bg-white/5 border-white/10' : 'bg-white border-black/15';
   const [step, setStep] = useState<BoletoStep>('scan_camera');
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -140,6 +144,19 @@ export default function BoletoModal({
 
   const handleFinalPaymentApproval = () => {
     setShowAttentionModal(false);
+    setIsPasswordModalOpen(true);
+  };
+
+  const handlePasswordConfirm = (enteredPin: string) => {
+    if (enteredPin !== '9898') {
+      showDialog({
+        title: 'Erro de Autenticação',
+        message: 'Senha (PIN) incorreta. Verifique e tente novamente.',
+      });
+      return;
+    }
+
+    setIsPasswordModalOpen(false);
     setLoading(true);
 
     setTimeout(() => {
@@ -536,7 +553,7 @@ export default function BoletoModal({
                   <div className="space-y-2">
                     <h3 className="text-xl font-extrabold">Atenção</h3>
                     <p className="text-xs leading-relaxed font-bold px-1 text-on-surface-variant">
-                      Se na data escolhida não houver saldo suficiente em conta, o pagamento não será efetivado.
+                      Se na data escolher não houver saldo suficiente em conta, o pagamento não será efetivado.
                     </p>
                   </div>
                   <div className="w-full flex flex-col gap-2.5">
@@ -551,6 +568,15 @@ export default function BoletoModal({
               </>
             )}
           </AnimatePresence>
+
+          <PasswordModal
+            isOpen={isPasswordModalOpen}
+            onClose={() => setIsPasswordModalOpen(false)}
+            onConfirm={handlePasswordConfirm}
+            title="Digite a senha do cartão"
+            description="Confirme o seu PIN de 4 dígitos para autorizar o pagamento deste boleto (padrão: 9898)"
+            isLoading={loading}
+          />
         </motion.div>
       </div>
     </AnimatePresence>

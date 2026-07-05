@@ -153,11 +153,11 @@ export const requestNewPassword = async (cpf: string): Promise<{ success: boolea
   }
 };
 
-export const performPix = async (cpf: string, key: string, amount: number, description: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
+export const performPix = async (cpf: string, key: string, amount: number, description: string, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
   try {
     const result = await apiCall<{ success: boolean; message: string; user?: any; transaction?: Transaction }>('/pix/transfer', {
       method: 'POST',
-      body: JSON.stringify({ cpf, key, amount, description }),
+      body: JSON.stringify({ cpf, key, amount, description, pin }),
     });
     return result;
   } catch (error: any) {
@@ -187,11 +187,11 @@ export const getPixRecipientInfo = async (key: string, senderCpf: string): Promi
   }
 };
 
-export const performPixCreditInstallment = async (cpf: string, amount: number, installments: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const performPixCreditInstallment = async (cpf: string, amount: number, installments: number, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/pix/credit-installment', {
       method: 'POST',
-      body: JSON.stringify({ cpf, amount, installments }),
+      body: JSON.stringify({ cpf, amount, installments, pin }),
     });
     return result;
   } catch (error: any) {
