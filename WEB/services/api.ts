@@ -84,6 +84,31 @@ export const getUserMe = async (): Promise<{ success: boolean; message?: string;
   }
 };
 
+export interface ApiCard {
+  id: string;
+  number: string;
+  numberMasked: string;
+  type: 'physical' | 'virtual';
+  brand: string;
+  expiry: string;
+  expiryShort: string;
+  cvv: string;
+  pin: string;
+  isActivated: boolean;
+  isBlocked: boolean;
+  nickname: string | null;
+  createdAt: string;
+}
+
+// Cartões reais (fintech.cards) — número exibido SEMPRE truncado no app (numberMasked)
+export const getMyCards = async (): Promise<{ success: boolean; cards?: ApiCard[] }> => {
+  try {
+    return await apiCall<{ success: boolean; cards: ApiCard[] }>('/cards/my-cards');
+  } catch {
+    return { success: false };
+  }
+};
+
 export const getUserStatement = async (cpf: string): Promise<{ success: boolean; message?: string; transactions?: Transaction[] }> => {
   try {
     const result = await apiCall<{ success: boolean; transactions?: Transaction[] }>(`/users/${cpf}/statement`, {
@@ -153,11 +178,11 @@ export const requestNewPassword = async (cpf: string): Promise<{ success: boolea
   }
 };
 
-export const performPix = async (cpf: string, key: string, amount: number, description: string, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
+export const performPix = async (cpf: string, key: string, amount: number, description: string, pin: string, category?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
   try {
     const result = await apiCall<{ success: boolean; message: string; user?: any; transaction?: Transaction }>('/pix/transfer', {
       method: 'POST',
-      body: JSON.stringify({ cpf, key, amount, description, pin }),
+      body: JSON.stringify({ cpf, key, amount, description, pin, category }),
     });
     return result;
   } catch (error: any) {
