@@ -4,11 +4,11 @@ import {
   CreditCard, Eye, EyeOff, Key, ShieldAlert, Sliders, 
   ToggleLeft, ToggleRight, Sparkles, CheckCircle2, 
   AlertCircle, Wifi, Plus, Trash2, Copy, Check, 
-  Truck, Package, MapPin, Calendar, Clock, Lock, Unlock, 
+  Truck, Package, MapPin, Calendar, Lock, Unlock,
   Flame, RefreshCw, HelpCircle
 } from 'lucide-react';
 import { CreditCard as CardType } from '../types';
-import { getMyCards, ApiCard } from '../services/api';
+import { getMyCards, generateVirtualCard, toggleBlockCard, deleteVirtualCard, ApiCard } from '../services/api';
 import CardDeliveryTracking, { DeliveryStatus, isDeliveryStatus } from './CardDeliveryTracking';
 
 interface CardsViewProps {
@@ -24,14 +24,15 @@ interface CardsViewProps {
 const PHYSICAL_EXPIRY = '08/30';
 const PHYSICAL_CVV = '123';
 
+// Cartão virtual da UI — derivado de ApiCard (fintech.cards); número sempre truncado
 interface VirtualCard {
   id: string;
   name: string;
-  number: string;
+  numberMasked: string;
+  last4: string;
+  fullNumber: string;
   expiry: string;
   cvv: string;
-  type: 'permanent' | 'temp-24h' | 'temp-date';
-  expirationDate?: string;
   isBlocked: boolean;
   createdAt: string;
 }
@@ -72,12 +73,7 @@ export default function CardsView({
   const [unlockError, setUnlockError] = useState('');
   const [unlockSuccess, setUnlockSuccess] = useState(false);
 
-  // Virtual Cards state
-  const [virtualCards, setVirtualCards] = useState<VirtualCard[]>(() => {
-    const saved = localStorage.getItem('volt_virtual_cards');
-    return saved ? JSON.parse(saved) : [];
-  });
-
+  // Virtual Cards — seleção ativa (preferência de UI); a lista vem da API
   const [activeVirtualCardId, setActiveVirtualCardId] = useState<string | null>(() => {
     const saved = localStorage.getItem('volt_active_virtual_card_id');
     return saved || null;
@@ -86,9 +82,8 @@ export default function CardsView({
   // Modal to generate virtual card
   const [showCreateVirtualModal, setShowCreateVirtualModal] = useState(false);
   const [newVirtualCardName, setNewVirtualCardName] = useState('');
-  const [newVirtualCardType, setNewVirtualCardType] = useState<'permanent' | 'temp-24h' | 'temp-date'>('permanent');
-  const [newVirtualCardDate, setNewVirtualCardDate] = useState('');
   const [newVirtualCardError, setNewVirtualCardError] = useState('');
+  const [isCreatingVirtual, setIsCreatingVirtual] = useState(false);
 
   // Reveal details
   const [revealVirtualDetails, setRevealVirtualDetails] = useState(false);
@@ -120,6 +115,19 @@ export default function CardsView({
   }, []);
   useEffect(() => refreshApiCards(), [refreshApiCards]);
   const apiPhysical = apiCards.find(c => c.type === 'physical');
+  const virtualCards: VirtualCard[] = apiCards
+    .filter(c => c.type === 'virtual')
+    .map(c => ({
+      id: String(c.id),
+      name: (c.nickname || 'CARTÃO VIRTUAL').toUpperCase(),
+      numberMasked: c.numberMasked,
+      last4: (c.numberMasked || '').trim().slice(-4),
+      fullNumber: c.number,
+      expiry: c.expiryShort,
+      cvv: c.cvv,
+      isBlocked: !!c.isBlocked,
+      createdAt: c.createdAt,
+    }));
 
   // Keep limit in sync when creditCard changes
   useEffect(() => {
@@ -202,7 +210,7 @@ export default function CardsView({
     }
   };
 
-  const handleCreateVirtualCard = (e: React.FormEvent) => {
+  const handleCreateVirtualCard = async (e: React.FormEvent) => {
     e.preventDefault();
     setNewVirtualCardError('');
 
@@ -211,85 +219,34 @@ export default function CardsView({
       return;
     }
 
-    if (newVirtualCardType === 'temp-date' && !newVirtualCardDate) {
-      setNewVirtualCardError('Por favor, selecione uma data de validade.');
+    setIsCreatingVirtual(true);
+    const result = await generateVirtualCard(newVirtualCardName.trim().toUpperCase());
+    setIsCreatingVirtual(false);
+
+    if (!result.success) {
+      setNewVirtualCardError(result.message || 'Erro ao gerar cartão virtual.');
       return;
     }
 
-    // Generate credit card details
-    const bin = '5540';
-    const s1 = Math.floor(1000 + Math.random() * 9000).toString();
-    const s2 = Math.floor(1000 + Math.random() * 9000).toString();
-    const s3 = Math.floor(1000 + Math.random() * 9000).toString();
-    const fullNumber = `${bin} ${s1} ${s2} ${s3}`;
-    const cvv = Math.floor(100 + Math.random() * 900).toString();
-    
-    let expiry = '08/31';
-    if (newVirtualCardType === 'temp-date') {
-      const parts = newVirtualCardDate.split('-');
-      if (parts.length === 3) {
-        expiry = `${parts[1]}/${parts[0].substring(2)}`;
-      }
-    } else if (newVirtualCardType === 'temp-24h') {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
-      const yy = String(tomorrow.getFullYear()).substring(2);
-      expiry = `${mm}/${yy}`;
-    }
-
-    const newCard: VirtualCard = {
-      id: 'vc_' + Math.random().toString(36).substring(2, 11),
-      name: newVirtualCardName.trim().toUpperCase(),
-      number: fullNumber,
-      expiry,
-      cvv,
-      type: newVirtualCardType,
-      expirationDate: newVirtualCardType === 'temp-date' ? newVirtualCardDate : undefined,
-      createdAt: new Date().toISOString(),
-      isBlocked: false,
-    };
-
-    const updated = [...virtualCards, newCard];
-    setVirtualCards(updated);
-    localStorage.setItem('volt_virtual_cards', JSON.stringify(updated));
-    
-    // Auto-select
-    setActiveVirtualCardId(newCard.id);
-    localStorage.setItem('volt_active_virtual_card_id', newCard.id);
-
-    // Reset
+    refreshApiCards();
     setNewVirtualCardName('');
-    setNewVirtualCardType('permanent');
-    setNewVirtualCardDate('');
     setShowCreateVirtualModal(false);
   };
 
-  const handleDeleteVirtualCard = (id: string) => {
-    const updated = virtualCards.filter(c => c.id !== id);
-    setVirtualCards(updated);
-    localStorage.setItem('volt_virtual_cards', JSON.stringify(updated));
+  const handleDeleteVirtualCard = async (id: string) => {
+    const result = await deleteVirtualCard(id);
+    if (!result.success) return;
 
     if (activeVirtualCardId === id) {
-      const nextId = updated.length > 0 ? updated[0].id : null;
-      setActiveVirtualCardId(nextId);
-      if (nextId) {
-        localStorage.setItem('volt_active_virtual_card_id', nextId);
-      } else {
-        localStorage.removeItem('volt_active_virtual_card_id');
-      }
+      setActiveVirtualCardId(null);
+      localStorage.removeItem('volt_active_virtual_card_id');
     }
+    refreshApiCards();
   };
 
-  const handleToggleBlockVirtualCard = (id: string) => {
-    const updated = virtualCards.map(c => {
-      if (c.id === id) {
-        return { ...c, isBlocked: !c.isBlocked };
-      }
-      return c;
-    });
-    setVirtualCards(updated);
-    localStorage.setItem('volt_virtual_cards', JSON.stringify(updated));
+  const handleToggleBlockVirtualCard = async (id: string) => {
+    const result = await toggleBlockCard(id);
+    if (result.success) refreshApiCards();
   };
 
   const copyToClipboard = (text: string, field: string) => {
@@ -550,7 +507,7 @@ export default function CardsView({
                         {activeType === 'physical' ? (
                           apiPhysical?.numberMasked ?? `•••• •••• •••• ${String(creditCard.number || '').split(' ').pop()}`
                         ) : (
-                          revealVirtualDetails ? selectedVirtualCard.number : `•••• •••• •••• ${selectedVirtualCard.number.split(' ').pop()}`
+                          selectedVirtualCard.numberMasked
                         )}
                       </div>
                     </div>
@@ -714,7 +671,7 @@ export default function CardsView({
               <div className="bg-white/5 p-2 rounded-lg flex items-start gap-2">
                 <HelpCircle size={13} className="text-volt-green shrink-0 mt-0.5" />
                 <p className="text-[9px] text-zinc-400 leading-normal">
-                  <span className="font-extrabold text-white uppercase">Dados do Cartão:</span> Veja na frente do cartão acima para simular. Validade: <span className="font-mono text-volt-green font-bold">08/30</span> e CVV: <span className="font-mono text-volt-green font-bold">123</span>.
+                  <span className="font-extrabold text-white uppercase">Dados do Cartão:</span> CVV = <span className="font-mono text-volt-green font-bold">últimos 3 dígitos do seu CPF</span>; validade conforme a mensagem no seu <span className="font-extrabold text-volt-green">Perfil</span> (criação da conta +5 anos).
                 </p>
               </div>
 
@@ -814,7 +771,7 @@ export default function CardsView({
                             ? 'bg-zinc-800 text-zinc-500' 
                             : 'bg-cyan-500/10 text-cyan-400'
                         }`}>
-                          {card.type === 'temp-24h' ? <Clock size={15} /> : <Calendar size={15} />}
+                          <Calendar size={15} />
                         </div>
                         <div>
                           <h5 className="font-bold text-xs text-white uppercase tracking-wide flex items-center gap-1.5">
@@ -824,9 +781,7 @@ export default function CardsView({
                             )}
                           </h5>
                           <span className="text-[9px] text-zinc-500 uppercase font-black tracking-wider">
-                            {card.type === 'permanent' && 'Recorrente / Assinaturas'}
-                            {card.type === 'temp-24h' && 'Temporário 24 horas'}
-                            {card.type === 'temp-date' && 'Válido por Período'}
+                            Virtual · Compras Online
                           </span>
                         </div>
                       </div>
@@ -863,7 +818,7 @@ export default function CardsView({
                     {/* Numeric details row */}
                     <div className="flex justify-between items-center bg-black/20 p-2 rounded-xl border border-white/5">
                       <div className="font-mono text-[11px] text-zinc-300 tracking-wider">
-                        •••• •••• •••• {card.number.split(' ').pop()}
+                        •••• •••• •••• {card.last4}
                       </div>
                       
                       <div className="flex items-center gap-3">
@@ -873,7 +828,7 @@ export default function CardsView({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            copyToClipboard(card.number, card.id);
+                            copyToClipboard(card.fullNumber, card.id);
                           }}
                           className="text-cyan-400 hover:text-cyan-300 transition-all cursor-pointer flex items-center gap-1"
                         >
@@ -1060,70 +1015,12 @@ export default function CardsView({
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] text-zinc-400 font-extrabold uppercase tracking-wider">
-                    Tipo de Validade do Cartão
-                  </label>
-                  
-                  <div className="grid grid-cols-1 gap-2">
-                    {[
-                      { 
-                        id: 'permanent', 
-                        label: 'Recorrente (Para Sempre)', 
-                        desc: 'Para assinaturas contínuas de serviços como Netflix/Spotify.',
-                        icon: Calendar 
-                      },
-                      { 
-                        id: 'temp-24h', 
-                        label: 'Temporário (24 Horas)', 
-                        desc: 'O cartão se auto-destrói de forma definitiva em 24 horas.',
-                        icon: Clock 
-                      },
-                      { 
-                        id: 'temp-date', 
-                        label: 'Expiração Customizada', 
-                        desc: 'Você define a data limite em que o cartão se tornará inválido.',
-                        icon: Calendar 
-                      }
-                    ].map((opt) => {
-                      const Icon = opt.icon;
-                      const isSel = newVirtualCardType === opt.id;
-                      return (
-                        <div
-                          key={opt.id}
-                          onClick={() => setNewVirtualCardType(opt.id as any)}
-                          className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
-                            isSel 
-                              ? 'bg-cyan-500/10 border-cyan-400 text-white' 
-                              : 'bg-black/30 border-white/5 text-zinc-400 hover:border-white/10'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Icon size={14} className={isSel ? 'text-cyan-400' : 'text-zinc-500'} />
-                            <span className="text-xs font-bold">{opt.label}</span>
-                          </div>
-                          <p className="text-[9px] text-zinc-500 leading-normal mt-0.5">{opt.desc}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="bg-black/30 border border-white/5 rounded-xl p-2.5 flex items-center gap-2">
+                  <Calendar size={14} className="text-cyan-400 shrink-0" />
+                  <p className="text-[9px] text-zinc-400 leading-normal">
+                    Cartão <span className="font-bold text-white">recorrente</span> para compras online e assinaturas, com a mesma validade do seu cartão físico e CVV exclusivo.
+                  </p>
                 </div>
-
-                {newVirtualCardType === 'temp-date' && (
-                  <div className="space-y-1.5 animate-fadeIn">
-                    <label className="text-[10px] text-zinc-400 font-extrabold uppercase tracking-wider">
-                      Escolha a Data Limite
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      min={new Date().toISOString().split('T')[0]}
-                      value={newVirtualCardDate}
-                      onChange={(e) => setNewVirtualCardDate(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-400"
-                    />
-                  </div>
-                )}
 
                 {newVirtualCardError && (
                   <div className="flex items-center gap-2 p-2.5 bg-red-500/10 border border-red-500/20 text-red-300 rounded-xl text-[10px]">
@@ -1142,9 +1039,10 @@ export default function CardsView({
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 bg-cyan-400 text-black font-extrabold py-3 rounded-xl text-xs hover:bg-cyan-300 active:scale-95 transition-all cursor-pointer uppercase tracking-wider"
+                    disabled={isCreatingVirtual}
+                    className="flex-1 bg-cyan-400 text-black font-extrabold py-3 rounded-xl text-xs hover:bg-cyan-300 active:scale-95 transition-all cursor-pointer uppercase tracking-wider disabled:opacity-50 disabled:cursor-wait"
                   >
-                    Gerar Cartão
+                    {isCreatingVirtual ? 'Gerando...' : 'Gerar Cartão'}
                   </button>
                 </div>
               </form>

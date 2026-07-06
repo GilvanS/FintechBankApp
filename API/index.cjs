@@ -49,9 +49,47 @@ const databricksService = dbService;
 // Conectar ao banco será feito no bootstrap()
 // dbService.connect(); // Removido - conexão é feita no bootstrap()
 
+// --- Motor de Faturas ---
+const cron = require('node-cron');
+const { runEngine } = require('./services/invoiceEngine');
+// Agendar verificação diariamente à meia-noite
+cron.schedule('0 0 * * *', async () => {
+    console.log('[Cron] Executando Invoice Engine...');
+    try {
+        await runEngine();
+    } catch (e) {
+        console.error('[Cron] Erro no Invoice Engine:', e);
+    }
+});
+
 // --- Funções de Normalização (snake_case do DB para camelCase do App) ---
 const normalizeUser = (dbUser) => {
     if (!dbUser) return null;
+    
+    // Calcular status dinâmico do cartão
+    const getDeliveryStatus = () => {
+        if (dbUser.card_is_activated) return 'unlocked';
+        
+        let timeStatus = 0; // manufacturing
+        if (dbUser.created_at) {
+            const createdAt = new Date(dbUser.created_at).getTime();
+            const now = Date.now();
+            const diffHours = (now - createdAt) / (1000 * 60 * 60);
+            
+            if (diffHours >= 2) timeStatus = 2; // delivered
+            else if (diffHours >= 1) timeStatus = 1; // shipping
+        }
+        
+        const statusMap = { 'manufacturing': 0, 'shipping': 1, 'delivered': 2, 'unlocked': 3 };
+        const revMap = { 0: 'manufacturing', 1: 'shipping', 2: 'delivered', 3: 'unlocked' };
+        
+        const dbStatusValue = statusMap[dbUser.card_delivery_status] || 0;
+        
+        // Pega o status mais avançado entre o tempo e o que está salvo (para suportar botões manuais)
+        const finalStatusValue = Math.max(timeStatus, dbStatusValue);
+        return revMap[finalStatusValue] || 'manufacturing';
+    };
+
     return {
         cpf: dbUser.cpf,
         fullName: dbUser.full_name,
@@ -62,10 +100,12 @@ const normalizeUser = (dbUser) => {
         loginAttempts: dbUser.login_attempts || 0,
         pixDailyLimit: dbUser.pix_daily_limit !== null && dbUser.pix_daily_limit !== undefined ? parseFloat(dbUser.pix_daily_limit) : 2000.00,
         passwordResetRequested: dbUser.password_reset_requested,
+        createdAt: toISO(dbUser.created_at),
         // Novos campos de perfil
         username: dbUser.username,
         profileDescription: dbUser.profile_description,
         showStoriesPopup: dbUser.show_stories_popup,
+        profileMessage: dbUser.profile_message,
         // Estado do cartao de credito
         creditCard: {
             dueDate: dbUser.credit_card_due_date,
@@ -74,6 +114,8 @@ const normalizeUser = (dbUser) => {
             totalLimit: dbUser.credit_card_total_limit ? parseFloat(dbUser.credit_card_total_limit) : null,
             pointsBalance: dbUser.credit_card_points_balance ? parseInt(dbUser.credit_card_points_balance, 10) : 0,
             isBlocked: !!dbUser.credit_card_is_blocked,
+            deliveryStatus: getDeliveryStatus(),
+            isActivated: !!dbUser.card_is_activated,
             // Observacao: transacoes do cartao sao representadas em `transactions` com tipos INVOICE_*
         }
     };
@@ -504,6 +546,20 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     const defaultCreditCardIsBlocked = false;
     const defaultCreditCardPointsBalance = 0;
     
+    // Gerar dados iniciais do cartao de credito
+    const cvv = cpf.slice(-3); // Ultimos 3 digitos do cpf
+    const creationDate = new Date();
+    const expiryDate = new Date();
+    expiryDate.setFullYear(creationDate.getFullYear() + 5);
+    const expiry = `${String(expiryDate.getMonth() + 1).padStart(2, '0')}/${String(expiryDate.getFullYear()).slice(-2)}`;
+    
+    const formatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' });
+    const formattedCreation = formatter.format(creationDate);
+    
+    const profileMessage = `Cartão em produção. Criado em ${formattedCreation} UTC. Validade: ${expiry}, CVV: ${cvv}`;
+    const cardDeliveryStatus = 'manufacturing';
+    const cardIsActivated = false;
+    
     try {
         // Escapar hash da senha também (pode conter caracteres especiais)
         // IMPORTANTE: O hash do bcrypt pode conter $, /, ., etc. Precisamos escapar apenas aspas simples
@@ -529,8 +585,8 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
         
         const userId = databricksService.generateUUID();
         const insertQuery = `
-            INSERT INTO ${databricksService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, credit_card_total_limit, credit_card_available_limit, credit_card_is_blocked, credit_card_points_balance, created_at, updated_at)
-            VALUES ('${userId}', '${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, ${defaultCreditCardTotalLimit}, ${defaultCreditCardAvailableLimit}, ${defaultCreditCardIsBlocked}, ${defaultCreditCardPointsBalance}, '${now}', '${now}')
+            INSERT INTO ${databricksService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, credit_card_total_limit, credit_card_available_limit, credit_card_is_blocked, credit_card_points_balance, created_at, updated_at, card_cvv, card_expiry, card_delivery_status, card_is_activated, profile_message)
+            VALUES ('${userId}', '${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, ${defaultCreditCardTotalLimit}, ${defaultCreditCardAvailableLimit}, ${defaultCreditCardIsBlocked}, ${defaultCreditCardPointsBalance}, '${now}', '${now}', '${cvv}', '${expiry}', '${cardDeliveryStatus}', ${cardIsActivated}, '${escapeSQL(profileMessage)}')
         `;
         
         console.log('🔵 [SIGNUP] Query INSERT (hash truncado para log):', insertQuery.replace(/'(\$2[^']{50})[^']+'/, "'$1...'"));
@@ -804,19 +860,31 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
         return null;
     }).filter(Boolean);
 
-    // Janela do ciclo de billing para filtro correto das faturas
-    const _bcRows = await databricksService.executeQuery(
-        `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
-    );
-    const _bc = _bcRows[0] || { close_day: 20, due_day: 10 };
-    const _cyc = computeCurrentCycle(_bc);
-    const _cd = _cyc.closeDate;
-    const _closeMs = Date.UTC(_cd.getFullYear(), _cd.getMonth(), _cd.getDate(), 23, 59, 59, 999);
-    const _prevCloseMs = Date.UTC(_cd.getFullYear(), _cd.getMonth() - 1, _cd.getDate(), 23, 59, 59, 999);
-
     const invoiceDueDate = normalized.creditCard?.invoiceDueDate ? new Date(normalized.creditCard.invoiceDueDate) : null;
     let invoiceDueDateEndOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
     if (invoiceDueDateEndOfDay) invoiceDueDateEndOfDay.setUTCHours(23, 59, 59, 999);
+
+    let _closeMs = 0;
+    let _prevCloseMs = 0;
+    if (invoiceDueDateEndOfDay && !isNaN(invoiceDueDateEndOfDay.getTime())) {
+        const _cd = new Date(invoiceDueDateEndOfDay);
+        _cd.setDate(_cd.getDate() - 7);
+        _closeMs = _cd.getTime();
+
+        const _prevCd = new Date(_cd);
+        _prevCd.setMonth(_prevCd.getMonth() - 1);
+        _prevCloseMs = _prevCd.getTime();
+    } else {
+        // Fallback for users without due date
+        const _cd = new Date();
+        _cd.setDate(_cd.getDate() - 7);
+        _cd.setUTCHours(23, 59, 59, 999);
+        _closeMs = _cd.getTime();
+        
+        const _prevCd = new Date(_cd);
+        _prevCd.setMonth(_prevCd.getMonth() - 1);
+        _prevCloseMs = _prevCd.getTime();
+    }
 
     normalized.creditCard = normalized.creditCard || {};
     normalized.creditCard.transactions = cardTransactions;
@@ -1423,14 +1491,14 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
     const { items, paymentMethod, cashbackUsed = 0, installments = 1, pin, interestRate } = req.body || {};
     
     if (!Array.isArray(items) || !items.length || !paymentMethod || !pin || pin.length !== 4) {
-        console.log('❌ [SHOP CHECKOUT] Validação falhou:', {
-            itemsIsArray: Array.isArray(items),
-            itemsLength: items?.length,
-            paymentMethod,
-            pin,
-            pinLength: pin?.length
-        });
         return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+    
+    if (['card_debit', 'credit'].includes(paymentMethod)) {
+        const [dbUser] = await databricksService.executeQuery(`SELECT card_is_activated FROM ${databricksService.fq('users')} WHERE cpf = '${req.user.cpf}'`);
+        if (!dbUser || !dbUser.card_is_activated) {
+            return res.status(403).json({ success: false, message: 'Cartão físico não está ativado.' });
+        }
     }
     
     const catalog = await shopRepo.listProducts();
@@ -2504,19 +2572,27 @@ apiRouter.post('/admin/users/:cpf/card-details', bearerAuth(), authenticateAdmin
     }
 
     const sets = [];
-    if (typeof dueDate === 'string') sets.push(`credit_card_due_date = '${dueDate.replace(/'/g, "''")}'`);
-    if (typeof invoiceDueDate === 'string') sets.push(`credit_card_invoice_due_date = '${invoiceDueDate.replace(/'/g, "''")}'`);
+    if (typeof dueDate === 'string') {
+        if (dueDate.trim() === '') sets.push(`credit_card_due_date = NULL`);
+        else sets.push(`credit_card_due_date = '${dueDate.replace(/'/g, "''")}'`);
+    }
+    if (typeof invoiceDueDate === 'string') {
+        if (invoiceDueDate.trim() === '' || invoiceDueDate === 'Invalid Date') sets.push(`credit_card_invoice_due_date = NULL`);
+        else sets.push(`credit_card_invoice_due_date = '${invoiceDueDate.replace(/'/g, "''")}'`);
+    }
     if (typeof availableLimit === 'number') sets.push(`credit_card_available_limit = ${Number(availableLimit).toFixed(2)}`);
     if (typeof totalLimit === 'number') sets.push(`credit_card_total_limit = ${Number(totalLimit).toFixed(2)}`);
     if (typeof pointsBalance === 'number') sets.push(`credit_card_points_balance = ${Math.floor(pointsBalance)}`);
 
     // Regra de bloqueio: se invoiceDueDate estiver >7 dias no passado, bloqueia cartao
     let blockCard = false;
-    if (typeof invoiceDueDate === 'string') {
+    if (typeof invoiceDueDate === 'string' && invoiceDueDate.trim() !== '' && invoiceDueDate !== 'Invalid Date') {
         const inv = new Date(invoiceDueDate);
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        blockCard = inv < sevenDaysAgo;
+        if (!isNaN(inv.getTime())) {
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            blockCard = inv < sevenDaysAgo;
+        }
     }
     if (blockCard) {
         sets.push('credit_card_is_blocked = true');
@@ -2538,6 +2614,271 @@ apiRouter.post('/admin/users/:cpf/card-details', bearerAuth(), authenticateAdmin
     res.json({ success: true, user: normalizeUser(user) });
 }));
 
+// Ativar cartão físico
+// ─── Utilitário: geração de número de cartão com Luhn ───────────────────────
+const generateCardNumber = (bin = '5981012') => {
+    // BIN 7 dígitos + 8 dígitos aleatórios + 1 dígito verificador Luhn = 16
+    const randomPart = Array.from({ length: 8 }, () => Math.floor(Math.random() * 10)).join('');
+    const partial = bin + randomPart; // 15 dígitos
+
+    // Algoritmo de Luhn para calcular o dígito verificador
+    let sum = 0;
+    for (let i = 0; i < partial.length; i++) {
+        let d = parseInt(partial[partial.length - 1 - i]);
+        if (i % 2 === 0) { d *= 2; if (d > 9) d -= 9; }
+        sum += d;
+    }
+    const checkDigit = (10 - (sum % 10)) % 10;
+    const raw = partial + checkDigit; // 16 dígitos
+
+    // Formatar: XXXX XXXX XXXX XXXX
+    const formatted = raw.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+    return { raw, formatted };
+};
+
+const formatExpiry = (expiryShort) => {
+    // Converte MM/YY → MM/AAAA   ex: 07/31 → 07/2031
+    if (!expiryShort) return expiryShort;
+    const [mm, yy] = expiryShort.split('/');
+    return `${mm}/20${yy}`;
+};
+
+// ─── POST /cards/physical/activate — ativa o cartão e gera o número ──────────
+apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cvv, expiry } = req.body || {};
+    const cpf = req.user.cpf;
+
+    if (!cvv || !expiry) {
+        return res.status(400).json({ success: false, message: 'CVV e Validade são obrigatórios.' });
+    }
+
+    const [dbUser] = await databricksService.executeQuery(`SELECT card_cvv, card_expiry, card_is_activated FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
+    if (!dbUser) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    if (dbUser.card_is_activated) return res.status(400).json({ success: false, message: 'Cartão já está ativado.' });
+
+    if (dbUser.card_cvv !== cvv || dbUser.card_expiry !== expiry) {
+        return res.status(401).json({ success: false, message: 'CVV ou Validade incorretos.' });
+    }
+
+    // Gerar número de cartão físico com BIN Mastercard 5981012
+    let cardRaw, cardFormatted;
+    let attempts = 0;
+    while (attempts < 10) {
+        const gen = generateCardNumber('5981012');
+        // Verificar unicidade no banco
+        const [existing] = await databricksService.executeQuery(
+            `SELECT id FROM fintech.cards WHERE card_number_raw = '${gen.raw}'`
+        );
+        if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; break; }
+        attempts++;
+    }
+    if (!cardRaw) return res.status(500).json({ success: false, message: 'Erro ao gerar número do cartão. Tente novamente.' });
+
+    const expiryFull = formatExpiry(dbUser.card_expiry);
+    const pin = '9898';
+
+    // Salvar cartão na tabela fintech.cards
+    await databricksService.executeQuery(`
+        INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated)
+        VALUES ('${cpf}', '${cardFormatted}', '${cardRaw}', 'physical', 'mastercard', '5981012', '${expiryFull}', '${dbUser.card_expiry}', '${cvv}', '${pin}', true)
+    `);
+
+    // Atualizar status do usuário
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET card_is_activated = true, card_delivery_status = 'unlocked', updated_at = current_timestamp()
+        WHERE cpf = '${cpf}'
+    `);
+
+    res.json({
+        success: true,
+        message: 'Cartão ativado com sucesso!',
+        card: {
+            number: cardFormatted,
+            expiry: expiryFull,
+            expiryShort: dbUser.card_expiry,
+            cvv,
+            pin,
+            brand: 'mastercard',
+            type: 'physical'
+        }
+    });
+}));
+
+// ─── GET /cards/my-cards — lista todos os cartões do usuário ─────────────────
+apiRouter.get('/cards/my-cards', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+
+    const cards = await databricksService.executeQuery(`
+        SELECT id, card_number, card_number_raw, card_type, card_brand, bin,
+               expiry, expiry_short, cvv, pin, is_activated, is_blocked, nickname, created_at
+        FROM fintech.cards
+        WHERE user_cpf = '${cpf}'
+        ORDER BY created_at ASC
+    `);
+
+    res.json({
+        success: true,
+        cards: cards.map(c => ({
+            id: c.id,
+            number: c.card_number,
+            numberMasked: '**** **** **** ' + c.card_number_raw.slice(-4),
+            type: c.card_type,
+            brand: c.card_brand,
+            expiry: c.expiry,
+            expiryShort: c.expiry_short,
+            cvv: c.cvv,
+            pin: c.pin,
+            isActivated: c.is_activated,
+            isBlocked: c.is_blocked,
+            nickname: c.nickname,
+            createdAt: c.created_at
+        }))
+    });
+}));
+
+// ─── POST /cards/virtual/generate — gera um novo cartão virtual ──────────────
+apiRouter.post('/cards/virtual/generate', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+    const { nickname } = req.body || {};
+
+    // Verificar se usuário tem cartão físico ativado
+    const [dbUser] = await databricksService.executeQuery(
+        `SELECT card_is_activated, card_expiry FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`
+    );
+    if (!dbUser) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    if (!dbUser.card_is_activated) {
+        return res.status(403).json({ success: false, message: 'Ative o cartão físico antes de gerar cartões virtuais.' });
+    }
+
+    // Gerar número virtual (mesmo BIN, novos dígitos)
+    let cardRaw, cardFormatted;
+    let attempts = 0;
+    while (attempts < 10) {
+        const gen = generateCardNumber('5981012');
+        const [existing] = await databricksService.executeQuery(
+            `SELECT id FROM fintech.cards WHERE card_number_raw = '${gen.raw}'`
+        );
+        if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; break; }
+        attempts++;
+    }
+    if (!cardRaw) return res.status(500).json({ success: false, message: 'Erro ao gerar cartão virtual.' });
+
+    // CVV virtual aleatório de 3 dígitos
+    const virtualCvv = String(Math.floor(Math.random() * 900) + 100);
+    const expiryFull = formatExpiry(dbUser.card_expiry);
+    const pin = '9898';
+    const safeNickname = nickname ? nickname.replace(/'/g, "''").substring(0, 100) : 'Cartão Virtual';
+
+    await databricksService.executeQuery(`
+        INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated, nickname)
+        VALUES ('${cpf}', '${cardFormatted}', '${cardRaw}', 'virtual', 'mastercard', '5981012', '${expiryFull}', '${dbUser.card_expiry}', '${virtualCvv}', '${pin}', true, '${safeNickname}')
+    `);
+
+    res.json({
+        success: true,
+        message: 'Cartão virtual gerado com sucesso!',
+        card: {
+            number: cardFormatted,
+            numberMasked: '**** **** **** ' + cardRaw.slice(-4),
+            expiry: expiryFull,
+            expiryShort: dbUser.card_expiry,
+            cvv: virtualCvv,
+            pin,
+            brand: 'mastercard',
+            type: 'virtual',
+            nickname: safeNickname
+        }
+    });
+}));
+
+// ─── PUT /cards/:id/toggle-block — bloqueia/desbloqueia cartão virtual ────────
+apiRouter.put('/cards/:id/toggle-block', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+    const cardId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(cardId)) {
+        return res.status(400).json({ success: false, message: 'Id de cartão inválido.' });
+    }
+
+    const [card] = await databricksService.executeQuery(`
+        SELECT id, is_blocked FROM fintech.cards
+        WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
+    `);
+    if (!card) {
+        return res.status(404).json({ success: false, message: 'Cartão virtual não encontrado.' });
+    }
+
+    const newBlocked = !card.is_blocked;
+    await databricksService.executeQuery(`
+        UPDATE fintech.cards SET is_blocked = ${newBlocked}
+        WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
+    `);
+
+    res.json({ success: true, isBlocked: newBlocked, message: newBlocked ? 'Cartão bloqueado.' : 'Cartão desbloqueado.' });
+}));
+
+// ─── DELETE /cards/:id — exclui (queima) cartão virtual ──────────────────────
+apiRouter.delete('/cards/:id', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+    const cardId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(cardId)) {
+        return res.status(400).json({ success: false, message: 'Id de cartão inválido.' });
+    }
+
+    const [card] = await databricksService.executeQuery(`
+        SELECT id FROM fintech.cards
+        WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
+    `);
+    if (!card) {
+        return res.status(404).json({ success: false, message: 'Cartão virtual não encontrado (o cartão físico não pode ser excluído).' });
+    }
+
+    await databricksService.executeQuery(`
+        DELETE FROM fintech.cards
+        WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
+    `);
+
+    res.json({ success: true, message: 'Cartão virtual excluído.' });
+}));
+
+
+
+// Endpoint administrativo para alterar status de entrega
+apiRouter.put('/admin/cards/:cpf/delivery-status', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    const { status } = req.body || {};
+    
+    if (!['manufacturing', 'shipping', 'tracking', 'delivered', 'unlocked'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Status inválido.' });
+    }
+    
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')} 
+        SET card_delivery_status = '${status}', updated_at = current_timestamp()
+        WHERE cpf = '${cpf}'
+    `);
+    
+    res.json({ success: true, message: 'Status de entrega atualizado!' });
+}));
+
+// Endpoint para testar avanço de entrega (apenas para ambiente de desenvolvimento)
+apiRouter.put('/cards/physical/test-delivery-status', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+    const { status } = req.body || {};
+    
+    if (!['manufacturing', 'shipping', 'tracking', 'delivered', 'unlocked'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Status inválido.' });
+    }
+    
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')} 
+        SET card_delivery_status = '${status}', updated_at = current_timestamp()
+        WHERE cpf = '${cpf}'
+    `);
+    
+    res.json({ success: true, message: 'Status de entrega avançado (Teste)!' });
+}));
+
 // Inserir compra na fatura ABERTA (Admin)
 apiRouter.post('/admin/users/:cpf/card/purchase/open', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf } = req.params;
@@ -2550,6 +2891,11 @@ apiRouter.post('/admin/users/:cpf/card/purchase/open', bearerAuth(), authenticat
     }
     const user = await usersRepo.findByCpf(cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    
+    const [dbUser] = await databricksService.executeQuery(`SELECT card_is_activated FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
+    if (!dbUser || !dbUser.card_is_activated) {
+        return res.status(403).json({ success: false, message: 'Cartão físico não está ativado.' });
+    }
 
     const qty = Number.isInteger(installments) ? installments : 1;
     if (qty < 1 || qty > 24) {
@@ -2613,6 +2959,11 @@ apiRouter.post('/admin/users/:cpf/card/purchase/closed', bearerAuth(), authentic
     }
     const user = await usersRepo.findByCpf(cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    
+    const [dbUser] = await databricksService.executeQuery(`SELECT card_is_activated FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
+    if (!dbUser || !dbUser.card_is_activated) {
+        return res.status(403).json({ success: false, message: 'Cartão físico não está ativado.' });
+    }
 
     const qty = Number.isInteger(installments) ? installments : 1;
     if (qty < 1 || qty > 24) {
@@ -2710,6 +3061,37 @@ apiRouter.post('/admin/invoices/:cpf/:invoiceId/status', bearerAuth(), authentic
     auditLog(req, 'admin_invoice_status_change', 'info', { cpf, invoiceId, from: invoice.status, to: status });
 
     return res.json({ success: true, invoice: updated });
+}));
+
+apiRouter.post('/admin/invoices/engine/force-cycle', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.body || {};
+    // Puxa o engine (import inline para evitar loops, ou usamos global)
+    const { runEngine } = require('./services/invoiceEngine');
+    const result = await runEngine(cpf);
+    res.json(result);
+}));
+
+apiRouter.put('/admin/invoices/:cpf/due-date', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    const { invoiceDueDate } = req.body || {};
+    
+    if (!cpf || !invoiceDueDate) {
+        return res.status(400).json({ success: false, message: 'Payload invalido. Forneça invoiceDueDate.' });
+    }
+    
+    const { esc } = repoContext;
+    const dDate = new Date(invoiceDueDate);
+    if (isNaN(dDate.getTime())) {
+        return res.status(400).json({ success: false, message: 'Data inválida.' });
+    }
+
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET credit_card_invoice_due_date = ${esc(dDate.toISOString())}, updated_at = current_timestamp()
+        WHERE cpf = ${esc(cpf)}
+    `);
+    
+    res.json({ success: true, message: 'Vencimento da fatura atualizado com sucesso.', invoiceDueDate: dDate.toISOString() });
 }));
 
 // --- Solicitações de aumento de limite PIX (via repositório) ---

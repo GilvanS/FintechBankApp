@@ -109,6 +109,33 @@ export const getMyCards = async (): Promise<{ success: boolean; cards?: ApiCard[
   }
 };
 
+export const generateVirtualCard = async (nickname: string): Promise<{ success: boolean; message?: string }> => {
+  try {
+    return await apiCall<{ success: boolean; message?: string }>('/cards/virtual/generate', {
+      method: 'POST',
+      body: JSON.stringify({ nickname }),
+    });
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Erro ao gerar cartão virtual.' };
+  }
+};
+
+export const toggleBlockCard = async (cardId: string): Promise<{ success: boolean; isBlocked?: boolean; message?: string }> => {
+  try {
+    return await apiCall<{ success: boolean; isBlocked?: boolean; message?: string }>(`/cards/${cardId}/toggle-block`, { method: 'PUT' });
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Erro ao alterar bloqueio.' };
+  }
+};
+
+export const deleteVirtualCard = async (cardId: string): Promise<{ success: boolean; message?: string }> => {
+  try {
+    return await apiCall<{ success: boolean; message?: string }>(`/cards/${cardId}`, { method: 'DELETE' });
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Erro ao excluir cartão.' };
+  }
+};
+
 export const getUserStatement = async (cpf: string): Promise<{ success: boolean; message?: string; transactions?: Transaction[] }> => {
   try {
     const result = await apiCall<{ success: boolean; transactions?: Transaction[] }>(`/users/${cpf}/statement`, {
