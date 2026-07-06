@@ -49,9 +49,9 @@
 
 ## 3. BACKLOG (próximas features, em ordem sugerida)
 
-1. **Revelar número completo** (feature separada, decisão do usuário): fluxo seguro (PIN/senha) para destruncar `number` + copiar; hoje o olho revela só CVV.
-2. **Cartões virtuais via API**: trocar o CRUD localStorage do `CardsView` por `POST /api/cards/virtual/generate` + `GET my-cards` (type='virtual'); bloquear/excluir precisam de endpoints novos no backend.
-3. **Hint desatualizado no form de desbloqueio**: UI ainda sugere `08/30`/`123`, mas o backend valida CVV=fim do CPF e validade=+5 anos; trocar hint para apontar a `profileMessage` do Perfil.
+1. ~~**Revelar número completo**~~ ✅ **FEITO (2026-07-06, commit 7e2bd47b)**: olho abre PasswordModal → PIN do cartão (mock `9898`, validado contra `apiCard.pin`) → revela número+CVV por 20s e re-trunca; PIN errado mantém o modal com aviso.
+2. ~~**Cartões virtuais via API**~~ ✅ **FEITO (2026-07-06, commit 1f48cd3a)**: novos endpoints `PUT /api/cards/:id/toggle-block` e `DELETE /api/cards/:id` (só virtual, escopo por cpf); CardsView deriva virtuais de `my-cards`, cria via `generate` (só apelido — backend não tem tipos 24h/data), fim do `localStorage volt_virtual_cards`.
+3. ~~**Hint desatualizado no form de desbloqueio**~~ ✅ **FEITO (commit 1f48cd3a)**: hint agora aponta CVV=últimos 3 dígitos do CPF + validade da mensagem do Perfil.
 4. **Fase 2 MOBILE**: espelhar CardsView/CardDeliveryTracking/CardDashboard + isenções CSS em `variables.css` (MOBILE é Ionic/Capacitor — cópia 1:1, sem RN).
 5. **Porte pendente da new-base**: HomeView (status SVG + stories-dark) e PixView (auto-categorização **mockada** — decisão: sem backend).
 6. **Findings do react-review pendentes no `CardDeliveryTracking`**: `default` no switch (CRITICAL — valor sujo de status), stepper `<div onClick>` → `<button>` (a11y), `aria-hidden` em SVGs. (Foram aplicados e depois o arquivo foi substituído pela versão da base; sanitização hoje é feita pelo CardsView via `isDeliveryStatus`.)
