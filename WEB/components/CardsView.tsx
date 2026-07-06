@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { CreditCard as CardType } from '../types';
 import { getMyCards, generateVirtualCard, toggleBlockCard, deleteVirtualCard, ApiCard } from '../services/api';
+import PasswordModal from './PasswordModal';
 import CardDeliveryTracking, { DeliveryStatus, isDeliveryStatus } from './CardDeliveryTracking';
 
 interface CardsViewProps {
@@ -85,9 +86,11 @@ export default function CardsView({
   const [newVirtualCardError, setNewVirtualCardError] = useState('');
   const [isCreatingVirtual, setIsCreatingVirtual] = useState(false);
 
-  // Reveal details
+  // Reveal details — número/CVV só destrunca após PIN correto (auto-oculta em 20s)
   const [revealVirtualDetails, setRevealVirtualDetails] = useState(false);
   const [revealPhysicalDetails, setRevealPhysicalDetails] = useState(false);
+  const [revealPinTarget, setRevealPinTarget] = useState<'physical' | 'virtual' | null>(null);
+  const [revealPinError, setRevealPinError] = useState(false);
 
   // Copy feedback state
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -247,6 +250,24 @@ export default function CardsView({
   const handleToggleBlockVirtualCard = async (id: string) => {
     const result = await toggleBlockCard(id);
     if (result.success) refreshApiCards();
+  };
+
+  // Revelar número completo: exige PIN do cartão (mock 9898); auto-oculta em 20s
+  const handleRevealPinConfirm = (enteredPin: string) => {
+    const expectedPin = apiPhysical?.pin || '9898';
+    if (enteredPin !== expectedPin) {
+      setRevealPinError(true);
+      return; // modal permanece aberto com aviso de PIN incorreto
+    }
+    const target = revealPinTarget;
+    setRevealPinError(false);
+    setRevealPinTarget(null);
+    if (target === 'physical') setRevealPhysicalDetails(true);
+    if (target === 'virtual') setRevealVirtualDetails(true);
+    scheduleTimer(() => {
+      setRevealPhysicalDetails(false);
+      setRevealVirtualDetails(false);
+    }, 20000);
   };
 
   const copyToClipboard = (text: string, field: string) => {
@@ -505,22 +526,29 @@ export default function CardsView({
                       {/* Masked/Unmasked Number */}
                       <div className="text-white/85 font-mono tracking-widest text-base drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
                         {activeType === 'physical' ? (
-                          apiPhysical?.numberMasked ?? `•••• •••• •••• ${String(creditCard.number || '').split(' ').pop()}`
+                          revealPhysicalDetails && apiPhysical
+                            ? apiPhysical.number
+                            : (apiPhysical?.numberMasked ?? `•••• •••• •••• ${String(creditCard.number || '').split(' ').pop()}`)
                         ) : (
-                          selectedVirtualCard.numberMasked
+                          revealVirtualDetails ? selectedVirtualCard.fullNumber : selectedVirtualCard.numberMasked
                         )}
                       </div>
                     </div>
 
-                    <button 
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (activeType === 'physical') {
-                          setRevealPhysicalDetails(!revealPhysicalDetails);
+                        const isRevealed = activeType === 'physical' ? revealPhysicalDetails : revealVirtualDetails;
+                        if (isRevealed) {
+                          // ocultar não exige PIN
+                          setRevealPhysicalDetails(false);
+                          setRevealVirtualDetails(false);
                         } else {
-                          setRevealVirtualDetails(!revealVirtualDetails);
+                          setRevealPinError(false);
+                          setRevealPinTarget(activeType);
                         }
                       }}
+                      aria-label="Revelar ou ocultar dados do cartão"
                       className="p-1 hover:bg-white/10 rounded-lg text-white/70 hover:text-white transition-all cursor-pointer"
                     >
                       {activeType === 'physical' ? (
@@ -1160,6 +1188,16 @@ export default function CardsView({
         )}
       </AnimatePresence>
 
+      {/* PIN para revelar número completo (auto-oculta em 20s) */}
+      <PasswordModal
+        isOpen={revealPinTarget !== null}
+        onClose={() => { setRevealPinTarget(null); setRevealPinError(false); }}
+        onConfirm={handleRevealPinConfirm}
+        title="Revelar Dados do Cartão"
+        description={revealPinError
+          ? 'PIN incorreto. Digite o PIN de 4 dígitos do seu cartão para revelar o número completo.'
+          : 'Digite o PIN de 4 dígitos do seu cartão para revelar o número completo por 20 segundos.'}
+      />
     </div>
   );
 }
