@@ -593,6 +593,102 @@ export async function getUserMe(): Promise<{ success: boolean; message?: string;
 // Alias para compatibilidade
 export const getProfile = getUserMe;
 
+// ========== CARTÕES REAIS (fintech.cards) ==========
+// Número exibido SEMPRE truncado no app (numberMasked); revelar exige PIN
+
+export interface ApiCard {
+    id: string;
+    number: string;
+    numberMasked: string;
+    type: 'physical' | 'virtual';
+    brand: string;
+    expiry: string;
+    expiryShort: string;
+    cvv: string;
+    pin: string;
+    isActivated: boolean;
+    isBlocked: boolean;
+    nickname: string | null;
+    createdAt: string;
+}
+
+export const getMyCards = async (): Promise<{ success: boolean; cards?: ApiCard[] }> => {
+    try {
+        const res = await api.get('/cards/my-cards', { headers: getAuthHeaders('none') });
+        return res.data?.success ? { success: true, cards: res.data.cards } : { success: false };
+    } catch {
+        return { success: false };
+    }
+};
+
+// ── Resumo e histórico de faturas ──────────────────────────────────────────
+export interface InvoiceSummary {
+    saldoAnterior: number;
+    jurosRemuneratorios: number;
+    iof: number;
+    jurosMora: number;
+    multa: number;
+    totalDespesas: number;
+    totalPagamentos: number;
+    totalCreditos: number;
+    saldoFinal: number;
+    pagamentoMinimo: number;
+    dataVencimento: string;
+    melhorDataCompra: string;
+}
+
+export interface InvoiceHistoryItem {
+    month: string;
+    amount: number;
+    status: string;
+    period: string;
+}
+
+export const getInvoiceSummary = async (type: 'fechada' | 'aberta'): Promise<{ success: boolean; summary?: InvoiceSummary | null }> => {
+    try {
+        const res = await api.get(`/credit/invoices/summary/${type}`, { headers: getAuthHeaders('none') });
+        return res.data?.success ? { success: true, summary: res.data.summary } : { success: false };
+    } catch {
+        return { success: false };
+    }
+};
+
+export const getInvoiceHistory = async (): Promise<{ success: boolean; history?: InvoiceHistoryItem[] }> => {
+    try {
+        const res = await api.get('/credit/invoices/history', { headers: getAuthHeaders('none') });
+        return res.data?.success ? { success: true, history: res.data.history } : { success: false };
+    } catch {
+        return { success: false };
+    }
+};
+
+export const generateVirtualCard = async (nickname: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+        const res = await api.post('/cards/virtual/generate', { nickname }, { headers: getAuthHeaders('json') });
+        return { success: !!res.data?.success, message: res.data?.message };
+    } catch (e: any) {
+        return { success: false, message: e?.response?.data?.message || 'Erro ao gerar cartão virtual.' };
+    }
+};
+
+export const toggleBlockCard = async (cardId: string): Promise<{ success: boolean; isBlocked?: boolean; message?: string }> => {
+    try {
+        const res = await api.put(`/cards/${cardId}/toggle-block`, {}, { headers: getAuthHeaders('json') });
+        return { success: !!res.data?.success, isBlocked: res.data?.isBlocked, message: res.data?.message };
+    } catch (e: any) {
+        return { success: false, message: e?.response?.data?.message || 'Erro ao alterar bloqueio.' };
+    }
+};
+
+export const deleteVirtualCard = async (cardId: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+        const res = await api.delete(`/cards/${cardId}`, { headers: getAuthHeaders('none') });
+        return { success: !!res.data?.success, message: res.data?.message };
+    } catch (e: any) {
+        return { success: false, message: e?.response?.data?.message || 'Erro ao excluir cartão.' };
+    }
+};
+
 // ========== FUNÇÕES DE ADMIN ==========
 
 // Método: adminGetUserByCpf - Busca usuário por CPF (Admin)
@@ -1180,9 +1276,9 @@ export async function adminResetTestData(): Promise<{ success: boolean; message?
 
 // ── Adapters de compatibilidade com componentes portados do WEB ──────────────
 
-export async function performPix(cpf: string, key: string, amount: number, description: string, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> {
+export async function performPix(cpf: string, key: string, amount: number, description: string, pin: string, category?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> {
     try {
-        const res = await api.post('/pix/transfer', { cpf, key, amount, description, pin }, {
+        const res = await api.post('/pix/transfer', { cpf, key, amount, description, pin, category }, {
             headers: getAuthHeaders('json'),
         });
         return res.data;

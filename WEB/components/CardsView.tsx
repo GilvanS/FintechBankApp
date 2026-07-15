@@ -5,17 +5,19 @@ import {
   ToggleLeft, ToggleRight, Sparkles, CheckCircle2, 
   AlertCircle, Wifi, Plus, Trash2, Copy, Check, 
   Truck, Package, MapPin, Calendar, Lock, Unlock,
-  Flame, RefreshCw, HelpCircle
+  Flame, RefreshCw, HelpCircle, X, FileText
 } from 'lucide-react';
 import { CreditCard as CardType } from '../types';
 import { getMyCards, generateVirtualCard, toggleBlockCard, deleteVirtualCard, ApiCard } from '../services/api';
 import PasswordModal from './PasswordModal';
 import CardDeliveryTracking, { DeliveryStatus, isDeliveryStatus } from './CardDeliveryTracking';
+import InvoiceSummarySheet from './InvoiceSummarySheet';
 
 interface CardsViewProps {
   creditCard: CardType;
   updateCreditCard: (newCard: Partial<CardType>) => void;
   userName: string;
+  profileMessage?: string;
   onOpenInvoice: () => void;
   invoiceAmount: number;
   onRequestPayInvoice: () => void; // abre o fluxo real de pagamento (PIN + backend) no pai
@@ -42,6 +44,7 @@ export default function CardsView({
   creditCard,
   updateCreditCard,
   userName,
+  profileMessage,
   onOpenInvoice,
   invoiceAmount,
   onRequestPayInvoice,
@@ -49,7 +52,10 @@ export default function CardsView({
   const [activeType, setActiveType] = useState<'physical' | 'virtual'>('physical');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [showBillingModal, setShowBillingModal] = useState(false);
+  const [showInvoiceSummary, setShowInvoiceSummary] = useState(false);
   const [tempLimit, setTempLimit] = useState(creditCard.totalLimit);
+  const [tempDueDay, setTempDueDay] = useState(creditCard.dueDay || 15);
   // NFC não existe no modelo do backend — persistência local
   const [nfcEnabled, setNfcEnabled] = useState(() => localStorage.getItem('volt_nfc_enabled') !== 'false');
 
@@ -73,6 +79,10 @@ export default function CardsView({
   const [unlockCvv, setUnlockCvv] = useState('');
   const [unlockError, setUnlockError] = useState('');
   const [unlockSuccess, setUnlockSuccess] = useState(false);
+
+  // Delivery UX: modal de rastreamento + revelar form de ativação
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const [showUnlockForm, setShowUnlockForm] = useState(false);
 
   // Virtual Cards — seleção ativa (preferência de UI); a lista vem da API
   const [activeVirtualCardId, setActiveVirtualCardId] = useState<string | null>(() => {
@@ -135,7 +145,31 @@ export default function CardsView({
   // Keep limit in sync when creditCard changes
   useEffect(() => {
     setTempLimit(creditCard.totalLimit);
-  }, [creditCard.totalLimit]);
+    if (creditCard.dueDay) setTempDueDay(creditCard.dueDay);
+  }, [creditCard.totalLimit, creditCard.dueDay]);
+
+  const handleSaveBillingCycle = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch('/api/cards/billing-cycle', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ dueDay: tempDueDay })
+      });
+      const data = await response.json();
+      if (data.success) {
+        updateCreditCard({ dueDay: tempDueDay, closingDay: data.closingDay });
+        setShowBillingModal(false);
+      } else {
+        alert(data.message || 'Erro ao alterar vencimento.');
+      }
+    } catch (e) {
+      alert('Erro na conexão com o servidor.');
+    }
+  };
 
   const toggleNfc = () => {
     if (!isPhysicalUnlocked) return;
@@ -650,13 +684,85 @@ export default function CardsView({
       {/* --- PHYSICAL TRACKING & UNLOCK SUITE --- */}
       {activeType === 'physical' && !isPhysicalUnlocked && (
         <div className="space-y-4">
-          <CardDeliveryTracking
-            status={isDeliveryStatus(physicalCardStatus) ? physicalCardStatus : 'manufacturing'}
-            onStatusChange={(status) => updatePhysicalStatus(status)}
-          />
+          {/* Mensagem do cartão vinda do backend (profile_message) — também exibida no Perfil */}
+          {profileMessage && (
+            <div className="bg-volt-surface border border-volt-green/20 rounded-2xl p-3.5 flex items-start gap-2.5">
+              <Sparkles size={14} className="text-volt-green shrink-0 mt-0.5 animate-pulse" aria-hidden="true" />
+              <p className="text-[11px] text-zinc-300 leading-relaxed font-semibold">{profileMessage}</p>
+            </div>
+          )}
+          {/* Bento card de logística — botões Rastrear / Recebi meu cartão */}
+          <div className="bg-volt-surface border border-white/5 rounded-2xl p-5 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-volt-green/10 border border-volt-green/20 flex items-center justify-center text-volt-green shrink-0">
+                <CreditCard size={20} />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-white">Cartão FintechBank</h4>
+                <p className="text-[11px] text-on-surface-variant leading-relaxed mt-0.5">
+                  Acompanhe a entrega do seu cartão. Enquanto isso, comece a usar seu cartão virtual.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setShowTrackingModal(true)}
+                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold text-xs border border-white/10 transition-all active:scale-95"
+                data-testid="btn-rastrear"
+              >
+                <MapPin size={14} className="text-volt-green" /> Rastrear
+              </button>
+              <button
+                onClick={() => setShowUnlockForm(true)}
+                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-volt-green text-black font-black text-xs transition-all active:scale-95 uppercase tracking-wide"
+                data-testid="btn-recebi-cartao"
+              >
+                <Check size={14} /> Recebi meu cartão
+              </button>
+            </div>
+          </div>
+
+          {/* Modal de rastreamento com o stepper */}
+          <AnimatePresence>
+            {showTrackingModal && (
+              <motion.div
+                className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 backdrop-blur-sm"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowTrackingModal(false)}
+              >
+                <motion.div
+                  className="w-full max-w-md bg-volt-surface rounded-t-3xl border-t border-white/10 p-5 pb-8 max-h-[85vh] overflow-y-auto"
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  exit={{ y: '100%' }}
+                  transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-base text-white flex items-center gap-2">
+                      <MapPin size={18} className="text-volt-green" /> Rastreamento do cartão
+                    </h3>
+                    <button
+                      onClick={() => setShowTrackingModal(false)}
+                      className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-on-surface-variant hover:bg-white/10"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <CardDeliveryTracking
+                    status={isDeliveryStatus(physicalCardStatus) ? physicalCardStatus : 'manufacturing'}
+                    onStatusChange={(status) => updatePhysicalStatus(status)}
+                  />
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* CVV + Expiry confirmation unlocking form */}
-          {physicalCardStatus === 'delivered' && (
+          {showUnlockForm && (
             <form onSubmit={handleUnlockPhysicalCard} className="bg-volt-surface-high border border-volt-green/20 p-4 rounded-xl space-y-4">
               <div className="flex items-center gap-2 border-b border-white/5 pb-2">
                 <Unlock size={14} className="text-volt-green" />
@@ -746,6 +852,22 @@ export default function CardsView({
               Novo Cartão
             </button>
           </div>
+          <div className="flex gap-2">
+                      <Button 
+                          className="flex-1 bg-gray-100 text-gray-900 hover:bg-gray-200 h-14 rounded-2xl flex flex-col items-center justify-center gap-1"
+                          onClick={() => onOpenInvoice()}
+                      >
+                          <FileText className="w-5 h-5 text-gray-600" />
+                          <span className="text-xs font-medium">Faturas</span>
+                      </Button>
+                      <Button 
+                          className="flex-1 bg-violet-600 hover:bg-violet-700 text-white h-14 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg shadow-violet-600/20"
+                          onClick={() => onRequestPayInvoice()}
+                      >
+                          <Receipt className="w-5 h-5" />
+                          <span className="text-xs font-medium">Pagar</span>
+                      </Button>
+                    </div>
 
           {virtualCards.length === 0 ? (
             <div className="bg-volt-surface border border-dashed border-white/10 p-8 rounded-2xl flex flex-col items-center justify-center text-center gap-3">
@@ -898,6 +1020,15 @@ export default function CardsView({
             disabled: activeType === 'physical' && !isPhysicalUnlocked,
           },
           {
+            label: 'Ciclo de fatura',
+            icon: Calendar,
+            action: () => {
+              setTempDueDay(creditCard.dueDay || 15);
+              setShowBillingModal(true);
+            },
+            disabled: activeType === 'physical' && !isPhysicalUnlocked,
+          },
+          {
             label: 'Ver senha',
             icon: Key,
             action: () => setShowPasswordModal(true),
@@ -986,21 +1117,39 @@ export default function CardsView({
 
       {/* Floating Invoice Summary & Payment Card at Bottom (Absolute positioning safe above navbar) */}
       <div className="fixed bottom-24 left-0 w-full px-4 z-20">
-        <div className="max-w-md mx-auto bg-volt-surface border-4 border-black rounded-3xl p-4 flex justify-between items-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-          <div>
+        <div className="max-w-md mx-auto bg-volt-surface border-4 border-black rounded-3xl p-4 flex justify-between items-center gap-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="min-w-0 flex-1">
             <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-black">Fatura Atual</p>
-            <p className="text-lg font-black text-white">
+            <p className="text-lg font-black text-white truncate">
               R$ {invoiceAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
           </div>
-          <button
-            onClick={onRequestPayInvoice}
-            className="bg-volt-green text-black px-5 py-2.5 rounded-xl font-bold text-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer"
-          >
-            Pagar
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowInvoiceSummary(true)}
+              className="flex items-center gap-1.5 border border-white/20 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs hover:bg-white/5 active:scale-95 transition-all cursor-pointer"
+              aria-label="Ver resumo da fatura"
+            >
+              <FileText size={13} />
+              Resumo
+            </button>
+            <button
+              onClick={onRequestPayInvoice}
+              className="bg-volt-green text-black px-5 py-2.5 rounded-xl font-bold text-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+            >
+              Pagar
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Invoice Summary Bottom Sheet */}
+      <InvoiceSummarySheet
+        open={showInvoiceSummary}
+        onClose={() => setShowInvoiceSummary(false)}
+        type={creditCard.closedInvoice && creditCard.closedInvoice > 0 ? 'fechada' : 'aberta'}
+        title={creditCard.closedInvoice && creditCard.closedInvoice > 0 ? 'Resumo da fatura' : 'Resumo da fatura aberta'}
+      />
 
       {/* --- CREATE VIRTUAL CARD MODAL --- */}
       <AnimatePresence>
@@ -1074,6 +1223,76 @@ export default function CardsView({
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* --- BILLING CYCLE MODAL --- */}
+      <AnimatePresence>
+        {showBillingModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowBillingModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-volt-surface border border-white/10 p-6 rounded-2xl shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-white text-lg">Vencimento</h3>
+                <div 
+                  className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center cursor-pointer hover:bg-white/10 transition-colors"
+                  onClick={() => setShowBillingModal(false)}
+                >
+                  <Plus size={20} className="text-zinc-400 rotate-45" />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-black/40 p-4 rounded-2xl border border-white/5">
+                  <p className="text-zinc-400 text-xs mb-2">Dia de Vencimento</p>
+                  <input
+                    type="number"
+                    min="1"
+                    max="28"
+                    value={tempDueDay}
+                    onChange={(e) => setTempDueDay(Number(e.target.value))}
+                    className="w-full bg-transparent text-white font-bold text-xl outline-none"
+                  />
+                </div>
+                
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-[10px] text-zinc-400 leading-relaxed">
+                  <p>
+                    Seu fechamento (corte) da fatura ocorre sempre <strong>7 dias</strong> antes do vencimento.
+                  </p>
+                  <p className="mt-2">
+                    Com o vencimento no dia <strong className="text-white">{tempDueDay}</strong>, 
+                    o fechamento será no dia <strong className="text-white">{tempDueDay - 7 > 0 ? tempDueDay - 7 : new Date(new Date().getFullYear(), new Date().getMonth(), tempDueDay - 7).getDate()}</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-8">
+                <button
+                  onClick={() => setShowBillingModal(false)}
+                  className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-2.5 rounded-xl text-xs active:scale-95 transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveBillingCycle}
+                  className="flex-1 bg-volt-green text-black font-bold py-2.5 rounded-xl text-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+                >
+                  Salvar
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

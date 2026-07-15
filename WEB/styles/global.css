@@ -109,6 +109,83 @@ body:not(.theme-midnight) .bg-volt-surface-high {
     border-radius: 1rem !important;
 }
 
+/* Exempt stories-dark from brutalist overrides to preserve readability and color fidelity */
+body:not(.theme-midnight) .stories-dark,
+body:not(.theme-midnight) .stories-dark * {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    box-shadow: none !important;
+}
+body:not(.theme-midnight) .stories-dark .text-white,
+body:not(.theme-midnight) .stories-dark .text-white * {
+    color: #ffffff !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-100 {
+    color: #f4f4f5 !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-200 {
+    color: #e4e4e7 !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-300 {
+    color: #d4d4d8 !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-400 {
+    color: #a1a1aa !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-500 {
+    color: #71717a !important;
+}
+body:not(.theme-midnight) .stories-dark .text-volt-green,
+body:not(.theme-midnight) .stories-dark .text-volt-green * {
+    color: #A2FF00 !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-volt-green {
+    background-color: #A2FF00 !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-zinc-900 {
+    background-color: #18181b !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-zinc-950 {
+    background-color: #09090b !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-gradient-to-br {
+    border-color: rgba(162, 255, 0, 0.3) !important;
+}
+body:not(.theme-midnight) .stories-dark .border-volt-green/30 {
+    border-color: rgba(162, 255, 0, 0.3) !important;
+}
+body:not(.theme-midnight) .stories-dark .text-amber-400 {
+    color: #fbbf24 !important;
+}
+body:not(.theme-midnight) .stories-dark .text-pink-400 {
+    color: #f472b6 !important;
+}
+body:not(.theme-midnight) .stories-dark .text-blue-400 {
+    color: #60a5fa !important;
+}
+body:not(.theme-midnight) .stories-dark .text-emerald-400 {
+    color: #34d399 !important;
+}
+
+/* Exempt credit-card-shell and exempt-brutalist from brutalist overrides */
+body:not(.theme-midnight) .credit-card-shell,
+body:not(.theme-midnight) .credit-card-shell * {
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+body:not(.theme-midnight) .exempt-brutalist,
+body:not(.theme-midnight) .exempt-brutalist * {
+    color: unset !important;
+    border-color: unset !important;
+    box-shadow: none !important;
+}
+body:not(.theme-midnight) .exempt-brutalist text {
+    fill: #ffffff !important;
+}
+
 /* Forçar texto preto dentro de cards e nav no tema yellow */
 body:not(.theme-midnight) .bg-volt-surface *,
 body:not(.theme-midnight) .bg-volt-surface-high *,
@@ -587,4 +664,70 @@ body.theme-midnight .recharts-default-tooltip * { color: #e5e2e1 !important; }
 body.theme-midnight .recharts-wrapper svg text { fill: #b9cbbc !important; }
 body.theme-midnight .recharts-wrapper svg line,
 body.theme-midnight .recharts-wrapper svg path { stroke: #353534 !important; }
+
+/* ============================================================
+   ISENÇÕES DO OVERRIDE BRUTALISTA (Gestão de Cartões + Stories)
+   Áreas intencionalmente escuras no tema Yellow: stories fullscreen,
+   shell do cartão de crédito e blocos exempt-brutalist (SVGs animados).
+   Mantidas no FINAL do arquivo para vencer o cascade dos overrides acima.
+   ============================================================ */
+
+/* Stories fullscreen escuras preservam fidelidade de cor no tema Yellow */
+body:not(.theme-midnight) .stories-dark,
+body:not(.theme-midnight) .stories-dark * {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+}
+body:not(.theme-midnight) .stories-dark .text-white,
+body:not(.theme-midnight) .stories-dark .text-white * {
+  color: #ffffff !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-100 { color: #f4f4f5 !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-200 { color: #e4e4e7 !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-300 { color: #d4d4d8 !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-400 { color: #a1a1aa !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-500 { color: #71717a !important; }
+body:not(.theme-midnight) .stories-dark .text-volt-green,
+body:not(.theme-midnight) .stories-dark .text-volt-green * {
+  color: #A2FF00 !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-volt-green {
+  background-color: #A2FF00 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-zinc-900 {
+  background-color: #18181b !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-zinc-950 {
+  background-color: #09090b !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-gradient-to-br {
+  border-color: rgba(162, 255, 0, 0.3) !important;
+}
+body:not(.theme-midnight) .stories-dark .border-volt-green\/30 {
+  border-color: rgba(162, 255, 0, 0.3) !important;
+}
+body:not(.theme-midnight) .stories-dark .text-amber-400 { color: #fbbf24 !important; }
+body:not(.theme-midnight) .stories-dark .text-pink-400 { color: #f472b6 !important; }
+body:not(.theme-midnight) .stories-dark .text-blue-400 { color: #60a5fa !important; }
+body:not(.theme-midnight) .stories-dark .text-emerald-400 { color: #34d399 !important; }
+
+/* Shell do cartão de crédito e blocos exempt-brutalist (SVGs do tracking) */
+body:not(.theme-midnight) .credit-card-shell,
+body:not(.theme-midnight) .credit-card-shell * {
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+body:not(.theme-midnight) .exempt-brutalist,
+body:not(.theme-midnight) .exempt-brutalist * {
+  color: unset !important;
+  border-color: unset !important;
+  box-shadow: none !important;
+}
+body:not(.theme-midnight) .exempt-brutalist text {
+  fill: #ffffff !important;
+}
 

@@ -109,6 +109,45 @@ export const getMyCards = async (): Promise<{ success: boolean; cards?: ApiCard[
   }
 };
 
+// ── Resumo e histórico de faturas ──────────────────────────────────────────
+export interface InvoiceSummary {
+  saldoAnterior: number;
+  jurosRemuneratorios: number;
+  iof: number;
+  jurosMora: number;
+  multa: number;
+  totalDespesas: number;
+  totalPagamentos: number;
+  totalCreditos: number;
+  saldoFinal: number;
+  pagamentoMinimo: number;
+  dataVencimento: string;
+  melhorDataCompra: string;
+}
+
+export interface InvoiceHistoryItem {
+  month: string;
+  amount: number;
+  status: string;
+  period: string;
+}
+
+export const getInvoiceSummary = async (type: 'fechada' | 'aberta'): Promise<{ success: boolean; summary?: InvoiceSummary | null }> => {
+  try {
+    return await apiCall<{ success: boolean; summary: InvoiceSummary | null }>(`/credit/invoices/summary/${type}`);
+  } catch {
+    return { success: false };
+  }
+};
+
+export const getInvoiceHistory = async (): Promise<{ success: boolean; history?: InvoiceHistoryItem[] }> => {
+  try {
+    return await apiCall<{ success: boolean; history: InvoiceHistoryItem[] }>('/credit/invoices/history');
+  } catch {
+    return { success: false };
+  }
+};
+
 export const generateVirtualCard = async (nickname: string): Promise<{ success: boolean; message?: string }> => {
   try {
     return await apiCall<{ success: boolean; message?: string }>('/cards/virtual/generate', {

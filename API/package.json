@@ -37,6 +37,7 @@
     "knex": "^3.2.10",
     "mysql2": "^3.9.7",
     "newman-reporter-html": "^1.0.5",
+    "node-cron": "^4.6.0",
     "pg": "^8.16.3",
     "swagger-autogen": "^2.23.7",
     "swagger-ui-express": "^5.0.1",

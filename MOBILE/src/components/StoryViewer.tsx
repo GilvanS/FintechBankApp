@@ -148,7 +148,268 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
         </div>
 
         {/* Spacer to push content to bottom */}
-        <div className="flex-grow"></div>
+        <div className="flex-grow flex flex-col justify-center items-center py-4 relative my-auto">
+          {/* Graphic Simulator based on visualType */}
+          {currentStory.visualType && (
+            <div className="w-full max-w-xs aspect-square bg-zinc-950 rounded-3xl border-2 border-zinc-800 flex items-center justify-center p-6 relative overflow-hidden shadow-2xl group my-4">
+              {/* Decorative Tech Cyber grids */}
+              <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] opacity-20" />
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-zinc-800 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-zinc-800 to-transparent" />
+
+              {currentStory.visualType === 'app' && (
+                <div className="w-full h-full flex flex-col justify-between relative z-10 text-left">
+                  <div className="flex justify-between items-center bg-zinc-900/80 p-2 rounded-xl border border-white/5">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-volt-green animate-pulse" />
+                      <span className="text-[8px] font-black tracking-widest text-zinc-400">VOLT ENGINE</span>
+                    </div>
+                    <span className="text-[8px] font-mono text-volt-green">PORT:3000 // OK</span>
+                  </div>
+
+                  {/* Cyber Balance Card Mock */}
+                  <div className="my-auto bg-gradient-to-br from-zinc-900 to-black p-4 rounded-2xl border-2 border-volt-green/30 shadow-[0_0_15px_rgba(0,229,255,0.07)] space-y-2">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider">SALDO TOTAL</span>
+                      <span className="text-[10px]">⚡</span>
+                    </div>
+                    <h4 className="text-xl font-black text-white font-mono">
+                      R$ 14.250,00
+                    </h4>
+                    <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
+                      <div className="bg-volt-green h-full w-[65%]" />
+                    </div>
+                  </div>
+
+                  {/* SVG Interactive Simulator Status */}
+                  <div className="relative w-full overflow-hidden rounded-xl border-2 border-pink-400 bg-white shadow-[0_4px_14px_rgba(236,72,153,0.3)] p-2 flex items-center gap-2">
+                    <svg className="w-7 h-7 text-pink-600 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="24" height="24" rx="6" fill="rgba(236, 72, 153, 0.15)" />
+                      <path d="M7 6V18M17 6V18M5 9H19M5 15H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <div className="text-left min-w-0">
+                      <span className="text-[8px] font-black uppercase text-pink-600 tracking-widest block leading-none">Simulador Volt</span>
+                      <p className="text-[10px] text-zinc-950 font-black leading-tight mt-0.5 truncate">
+                        Sua carteira digital inteligente
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentStory.visualType === 'insights' && (
+                <div className="w-full h-full flex flex-col justify-between relative z-10 text-left">
+                  <div className="flex items-center gap-1 bg-zinc-900/80 p-1.5 rounded-xl border border-white/5">
+                    <span className="text-[10px] animate-bounce">✨</span>
+                    <span className="text-[8px] font-black text-zinc-400 uppercase tracking-wider">RECOMENDAÇÃO INTELIGENTE</span>
+                  </div>
+
+                  {/* Glowing Insight progress bars */}
+                  <div className="space-y-3 my-auto">
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[9px] font-black uppercase text-zinc-400">
+                        <span>🍔 Alimentação</span>
+                        <span className="text-volt-green">R$ 480,00</span>
+                      </div>
+                      <div className="w-full h-2 bg-zinc-900 border border-white/5 rounded-full overflow-hidden">
+                        <div className="h-full bg-volt-green rounded-full" style={{ width: '55%' }} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[9px] font-black uppercase text-zinc-400">
+                        <span>🚗 Transporte</span>
+                        <span className="text-amber-400">R$ 150,00</span>
+                      </div>
+                      <div className="w-full h-2 bg-zinc-900 border border-white/5 rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-400 rounded-full" style={{ width: '22%' }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SVG Insight Economy Status */}
+                  <div className="relative w-full overflow-hidden rounded-xl border-2 border-emerald-400 bg-white shadow-[0_4px_14px_rgba(16,185,129,0.3)] p-2 flex items-center gap-2">
+                    <svg className="w-7 h-7 text-emerald-600 shrink-0 animate-pulse" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="24" height="24" rx="6" fill="rgba(16, 185, 129, 0.15)" />
+                      <path d="M6 15L10 11L13 14L18 8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M14 8H18V12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <div className="text-left min-w-0">
+                      <span className="text-[8px] font-black uppercase text-emerald-600 tracking-widest block leading-none">Status de Economia</span>
+                      <p className="text-[10px] text-zinc-950 font-black leading-tight mt-0.5">
+                        Sua média de gastos caiu 12%! Ótimo progresso rumo à meta.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentStory.visualType === 'pix' && (
+                <div className="w-full h-full flex flex-col justify-between relative z-10 text-left">
+                  <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest text-center">Simulação Chave Pix</span>
+
+                  <div className="space-y-2.5 my-auto">
+                    <div className="bg-zinc-900 p-2.5 rounded-xl border-2 border-black flex items-center justify-between shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs text-white">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">💠</span>
+                        <span className="font-bold">Chave CPF</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 font-mono">***.382.***-99</span>
+                    </div>
+
+                    <div className="bg-[#00E5FF]/10 p-2.5 rounded-xl border-2 border-[#00E5FF]/40 flex items-center justify-between text-xs text-[#00E5FF]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">✉️</span>
+                        <span className="font-bold">Chave E-mail</span>
+                      </div>
+                      <span className="text-[10px] font-mono">volthub@pay.com</span>
+                    </div>
+                  </div>
+
+                  {/* SVG Secure Transfer Status */}
+                  <div className="relative w-full overflow-hidden rounded-xl border-2 border-[#00B0FF] bg-white shadow-[0_4px_14px_rgba(0,176,255,0.3)] p-2 flex items-center gap-2">
+                    <svg className="w-7 h-7 text-[#00838F] shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="24" height="24" rx="6" fill="rgba(0, 176, 255, 0.15)" />
+                      <path d="M7 12H17M17 12L13 8M17 12L13 16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <div className="text-left min-w-0">
+                      <span className="text-[8px] font-black uppercase text-[#00838F] tracking-widest block leading-none">Transferência Segura</span>
+                      <p className="text-[10px] text-zinc-950 font-black leading-tight mt-0.5 truncate">
+                        Chave Pix protegida com criptografia
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentStory.visualType === 'pix_receive' && (
+                <div className="w-full h-full flex flex-col justify-between items-center relative z-10 text-left">
+                  <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest text-center">QR Code Dinâmico</span>
+
+                  {/* Styled vector QR Code representation */}
+                  <div className="w-24 h-24 bg-white p-2 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center my-auto relative group">
+                    <div className="grid grid-cols-3 gap-1.5 w-full h-full">
+                      <div className="bg-black rounded" />
+                      <div className="border-2 border-black rounded" />
+                      <div className="bg-black rounded" />
+                      <div className="border-2 border-black rounded" />
+                      <div className="bg-black rounded" />
+                      <div className="border-2 border-black rounded" />
+                      <div className="bg-black rounded" />
+                      <div className="border-2 border-black rounded" />
+                      <div className="bg-black rounded" />
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-volt-green/30 to-transparent h-1/3 animate-bounce w-full pointer-events-none" />
+                  </div>
+
+                  {/* SVG Receive QR Code Status */}
+                  <div className="relative w-full overflow-hidden rounded-xl border-2 border-amber-500 bg-white shadow-[0_4px_14px_rgba(245,158,11,0.3)] p-2 flex items-center gap-2">
+                    <svg className="w-7 h-7 text-amber-600 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="24" height="24" rx="6" fill="rgba(245, 158, 11, 0.15)" />
+                      <rect x="6" y="6" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="2" strokeDasharray="2 2" />
+                      <path d="M12 9V15M9 12H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <div className="text-left min-w-0">
+                      <span className="text-[8px] font-black uppercase text-amber-600 tracking-widest block leading-none">Recebimento Ativo</span>
+                      <p className="text-[10px] text-zinc-950 font-black leading-tight mt-0.5 truncate">
+                        Gere, copie ou escaneie e receba já
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentStory.visualType === 'payment' && (
+                <div className="w-full h-full flex flex-col justify-between relative z-10 text-left">
+                  <div className="flex justify-between items-center text-[8px] font-black text-zinc-500 uppercase tracking-wider">
+                    <span>BOLETO IMPORTADO</span>
+                    <span>DDA VOLT</span>
+                  </div>
+
+                  {/* Bill Receipt Mock */}
+                  <div className="bg-zinc-900 border border-white/5 p-3 rounded-2xl my-auto space-y-2 relative overflow-hidden">
+                    <div className="absolute right-2 top-2 bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 font-black text-[8px] uppercase tracking-widest px-2 py-0.5 rounded rotate-12">
+                      PAGO ✔
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[7px] text-zinc-500 uppercase font-bold block">Favorecido</span>
+                      <h5 className="text-[10px] font-black text-white truncate">COELBA - ENERGIA ELÉTRICA</h5>
+                    </div>
+
+                    <div className="flex justify-between border-t border-white/5 pt-1.5">
+                      <div>
+                        <span className="text-[7px] text-zinc-500 uppercase font-bold block">Vencimento</span>
+                        <span className="text-[9px] font-bold text-white font-mono">28/06/2026</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[7px] text-zinc-500 uppercase font-bold block">Valor Líquido</span>
+                        <span className="text-[9px] font-black text-volt-green font-mono">R$ 145,20</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SVG Bill Paid Status */}
+                  <div className="relative w-full overflow-hidden rounded-xl border-2 border-emerald-400 bg-white shadow-[0_4px_14px_rgba(16,185,129,0.3)] p-2 flex items-center gap-2">
+                    <svg className="w-7 h-7 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="24" height="24" rx="6" fill="rgba(16, 185, 129, 0.15)" />
+                      <path d="M8 12L11 15L16 9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <div className="text-left min-w-0">
+                      <span className="text-[8px] font-black uppercase text-emerald-600 tracking-widest block leading-none">Status da Conta</span>
+                      <p className="text-[10px] text-zinc-950 font-black leading-tight mt-0.5 truncate">
+                        Boleto quitado com sucesso pelo DDA
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentStory.visualType === 'payment_schedule' && (
+                <div className="w-full h-full flex flex-col justify-between relative z-10 text-left">
+                  <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">Cronograma Inteligente</span>
+
+                  {/* Timeline Tracker */}
+                  <div className="my-auto space-y-2 px-1">
+                    <div className="flex items-center gap-3 bg-zinc-900 p-2 rounded-xl border border-white/5">
+                      <div className="w-6 h-6 rounded-lg bg-volt-green/10 text-volt-green flex items-center justify-center font-bold text-xs">
+                        28
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h6 className="text-[9px] font-black uppercase text-white truncate">CONDOMÍNIO RESIDENCIAL</h6>
+                        <p className="text-[8px] text-volt-green font-bold">Agendado automaticamente</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 bg-zinc-900 p-2 rounded-xl border border-white/5 opacity-50">
+                      <div className="w-6 h-6 rounded-lg bg-zinc-800 text-zinc-400 flex items-center justify-center font-bold text-xs">
+                        10
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h6 className="text-[9px] font-black uppercase text-zinc-400 truncate">INTERNET FIBRA - TIM</h6>
+                        <p className="text-[8px] text-zinc-500">Próximo vencimento em Julho</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SVG Schedule Success Status */}
+                  <div className="relative w-full overflow-hidden rounded-xl border-2 border-blue-500 bg-white shadow-[0_4px_14px_rgba(59,130,246,0.3)] p-2 flex items-center gap-2">
+                    <svg className="w-7 h-7 text-blue-600 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="24" height="24" rx="6" fill="rgba(59, 130, 246, 0.15)" />
+                      <path d="M8 7V9M16 7V9M7 11H17M8 10H16C17.1046 10 18 10.8954 18 12V17C18 18.1046 17.1046 19 16 19H8C6.89543 19 6 18.1046 6 17V12C6 10.8954 6.89543 10 8 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <div className="text-left min-w-0">
+                      <span className="text-[8px] font-black uppercase text-blue-600 tracking-widest block leading-none">Agendamento Automático</span>
+                      <p className="text-[10px] text-zinc-950 font-black leading-tight mt-0.5 truncate">
+                        Contas agendadas sem multas ou juros
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Content */}
         <div className="w-full max-w-sm mx-auto pb-10" key={currentStoryIndex}>

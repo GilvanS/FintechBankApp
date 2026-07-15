@@ -151,7 +151,17 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
         today.setHours(0, 0, 0, 0);
 
         let triggeredAny = false;
-        let updatedNotifs = [...currentNotifs];
+        // Filter out notifications for bills that are now paid
+        let updatedNotifs = currentNotifs.filter(n => {
+            if (n.id.startsWith('bill-due-')) {
+                const paidBillMatch = bills.some(b => b.status !== 'pending' && n.id.includes(`-${b.id}-`));
+                if (paidBillMatch) {
+                    triggeredAny = true;
+                    return false;
+                }
+            }
+            return true;
+        });
 
         bills.forEach((bill) => {
             if (bill.status !== 'pending') return;

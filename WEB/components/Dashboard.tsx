@@ -149,6 +149,16 @@ const Dashboard: React.FC = () => {
         }
     }, [topLevelView, user]);
 
+    // Mostra o popup de Saude Financeira automaticamente ao logar (uma vez por dia por usuario)
+    useEffect(() => {
+        if (!user?.cpf) return;
+        const today = new Date().toISOString().slice(0, 10);
+        const storageKey = `volt_health_popup_seen_${user.cpf}_${today}`;
+        if (localStorage.getItem(storageKey)) return;
+        localStorage.setItem(storageKey, 'true');
+        setFinancialHealthOpen(true);
+    }, [user?.cpf, setFinancialHealthOpen]);
+
     // Refresh automatico ao entrar em telas de cartoes
     useEffect(() => {
         let cancelled = false;
@@ -661,7 +671,7 @@ const Dashboard: React.FC = () => {
                             </button>
                             <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Fatura</h1>
                         </div>
-                        <InvoiceView invoiceAmount={user.creditCard.closedInvoice > 0 ? user.creditCard.closedInvoice : user.creditCard.currentInvoice} />
+                        <InvoiceView user={user} onPayInvoice={handlePayInvoice} />
                     </div>
                 );
             case 'limit':
@@ -803,13 +813,6 @@ const Dashboard: React.FC = () => {
                 />
             )}
 
-            {isFinancialHealthOpen && (
-                <FinancialHealthModal 
-                    isOpen={isFinancialHealthOpen} 
-                    onClose={() => setFinancialHealthOpen(false)} 
-                    transactions={user.transactions} 
-                />
-            )}
             {isAiModalOpen && (
                 <AiAssistantModal 
                     isOpen={isAiModalOpen} 

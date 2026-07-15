@@ -237,6 +237,12 @@ export default function Profile({ onNavigate }: ProfileProps) {
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-volt-green border-2 border-black text-black text-[10px] font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
             Conta Volt Premium
           </div>
+          
+          {user.profileMessage && (
+            <div className="mt-2 text-xs font-medium text-black dark:text-white bg-volt-green/20 dark:bg-volt-green/10 border-2 border-volt-green rounded-xl p-3 shadow-[2px_2px_0px_0px_rgba(0,255,157,0.5)]">
+              {user.profileMessage}
+            </div>
+          )}
         </div>
 
         {/* Real-Time Name Customizer Input */}

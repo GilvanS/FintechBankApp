@@ -33,6 +33,10 @@ export interface CreditCard {
     totalLimit: number;
     pointsBalance: number;
     isBlocked: boolean;
+    deliveryStatus?: 'manufacturing' | 'shipping' | 'tracking' | 'delivered' | 'unlocked';
+    isActivated?: boolean;
+    dueDay?: number;
+    closingDay?: number;
     transactions: CardTransaction[];
     closedTransactions: CardTransaction[];
     futureInstallments?: Record<string, number>;
@@ -75,6 +79,7 @@ export interface Story {
     accent?: string;
     stats?: StoryStat[];
     status?: string;
+    visualType?: string;
 }
 
 export interface AppNotification {
@@ -123,6 +128,8 @@ export interface User {
     fullName: string;
     username?: string;
     profileDescription?: string;
+    profileMessage?: string;
+    createdAt?: string;
     email: string;
     password: string; // This would be hashed in a real app
     balance: number;

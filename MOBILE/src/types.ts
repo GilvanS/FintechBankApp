@@ -40,6 +40,8 @@ export interface CreditCard {
     totalLimit: number;
     pointsBalance: number;
     isBlocked: boolean;
+    deliveryStatus?: 'manufacturing' | 'shipping' | 'tracking' | 'delivered' | 'unlocked';
+    isActivated?: boolean;
     transactions: CardTransaction[];
     closedTransactions: CardTransaction[];
     futureInstallments?: Record<string, number>;
@@ -137,6 +139,8 @@ export interface User {
     fullName: string;
     username?: string;
     profileDescription?: string;
+    profileMessage?: string;
+    createdAt?: string;
     email: string;
     password: string;
     balance: number;

@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-08T00:00:00.000Z",
+  "title": "Design System: VOLT",
+  "extensions": {
+    "colorMeta": {
+      "volt-green": { "role": "primary", "displayName": "Electric Wire Green", "canonical": "#00ff9d", "tonalRamp": ["#052e1f", "#0a4a32", "#0f6b48", "#0a8f5e", "#00b878", "#00e38b", "#00ff9d", "#8affce"] },
+      "volt-yellow": { "role": "primary", "displayName": "Concrete Yellow", "canonical": "#FFD700", "tonalRamp": ["#4d3f00", "#806900", "#b39200", "#e6bb00", "#ffd700", "#ffe14d", "#ffec85", "#fff6c2"] },
+      "volt-dark": { "role": "neutral", "displayName": "Midnight Base", "canonical": "#131313", "tonalRamp": ["#000000", "#0a0a0a", "#131313", "#1c1b1b", "#201f1f", "#2a2a2a", "#353534", "#4a4a49"] },
+      "volt-surface": { "role": "neutral", "displayName": "Midnight Surface", "canonical": "#201f1f", "tonalRamp": ["#0a0a0a", "#131313", "#1c1b1b", "#201f1f", "#2a2a2a", "#353534", "#4a4a49", "#606060"] },
+      "on-surface-variant": { "role": "neutral", "displayName": "Muted Green-Gray", "canonical": "#b9cbbc", "tonalRamp": ["#20261f", "#3a4538", "#556354", "#718070", "#8ea38d", "#b9cbbc", "#d4e0d3", "#eef3ed"] },
+      "volt-lime": { "role": "secondary", "displayName": "Exempt-Surface Lime", "canonical": "#A2FF00", "tonalRamp": ["#2b4400", "#476f00", "#649c00", "#82cc00", "#a2ff00", "#bcff4d", "#d4ff8a", "#ecffc6"] },
+      "volt-cyan": { "role": "tertiary", "displayName": "Tag Cyan", "canonical": "#00E5FF", "tonalRamp": ["#003a40", "#005f68", "#008795", "#00b0c2", "#00e5ff", "#4defff", "#8ff5ff", "#c9fbff"] },
+      "volt-pink-focus": { "role": "tertiary", "displayName": "Focus Pink", "canonical": "#FF5C8D", "tonalRamp": ["#4d0018", "#80092c", "#b32148", "#e63d69", "#ff5c8d", "#ff8aab", "#ffb3c7", "#ffdae4"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Space Grotesk Display", "purpose": "Screen titles, hero balances, invoice totals — the number the user came to check." },
+      "label": { "displayName": "Micro-label", "purpose": "Tiny uppercase eyebrows above every stat value (Loud Label, Quiet Value Rule)." },
+      "mono": { "displayName": "JetBrains Mono", "purpose": "CVV/expiry/PIN fields, transaction IDs, receipts." }
+    },
+    "shadows": [
+      { "name": "brutalist-primary", "value": "6px 6px 0px 0px rgba(0,0,0,1)", "purpose": "Yellow-theme main cards — the signature stuck-on-the-page look." },
+      { "name": "brutalist-nested", "value": "4px 4px 0px 0px rgba(0,0,0,1)", "purpose": "Yellow-theme nested high-contrast blocks." },
+      { "name": "none-midnight", "value": "none", "purpose": "Midnight theme never shades — depth comes from the surface tonal step, not a shadow." }
+    ],
+    "motion": [
+      { "name": "sheet-spring", "value": "type: spring, damping: 30, stiffness: 300", "purpose": "Bottom-sheet slide-up for every modal (invoice summary, delivery tracking, promos)." },
+      { "name": "tap-compress", "value": "active:scale-95", "purpose": "Button tactile feedback — compression, not hover-lift." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "max-w-md (app shell is phone-width even on WEB)" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button (Midnight)",
+      "kind": "button",
+      "refersTo": "button-primary-midnight",
+      "description": "Main CTA in dark theme — solid volt-green fill, black uppercase text.",
+      "html": "<button class=\"ds-btn-primary-mid\">CONFIRMAR</button>",
+      "css": ".ds-btn-primary-mid { background: #00ff9d; color: #000000; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 24px; border: none; border-radius: 1rem; font-size: 13px; transition: transform 0.15s ease-out; } .ds-btn-primary-mid:hover { opacity: 0.9; } .ds-btn-primary-mid:active { transform: scale(0.95); } .ds-btn-primary-mid:focus-visible { outline: 2px solid #00ff9d; outline-offset: 2px; }"
+    },
+    {
+      "name": "Primary Button (Yellow)",
+      "kind": "button",
+      "refersTo": "button-primary-yellow",
+      "description": "Main CTA in brutalist light theme — solid black fill, yellow text, offset shadow.",
+      "html": "<button class=\"ds-btn-primary-yellow\">CONFIRMAR</button>",
+      "css": ".ds-btn-primary-yellow { background: #000000; color: #FFD700; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 24px; border: 3px solid #000000; border-radius: 1rem; font-size: 13px; box-shadow: 4px 4px 0px 0px rgba(0,0,0,1); transition: transform 0.15s ease-out, box-shadow 0.15s ease-out; } .ds-btn-primary-yellow:active { transform: translate(4px, 4px); box-shadow: 0px 0px 0px 0px rgba(0,0,0,1); } .ds-btn-primary-yellow:focus-visible { outline: 2px solid #000000; outline-offset: 2px; }"
+    },
+    {
+      "name": "Card (Midnight)",
+      "kind": "card",
+      "refersTo": "card-midnight",
+      "description": "Standard surface container in dark theme — tonal border only, no shadow.",
+      "html": "<div class=\"ds-card-mid\"><span class=\"ds-card-mid-label\">FATURA ATUAL</span><p class=\"ds-card-mid-value\">R$ 270,95</p></div>",
+      "css": ".ds-card-mid { background: #201f1f; border: 1px solid rgba(255,255,255,0.05); border-radius: 1.5rem; padding: 20px; } .ds-card-mid-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #b9cbbc; } .ds-card-mid-value { font-family: 'Space Grotesk', sans-serif; font-weight: 900; font-size: 24px; color: #00ff9d; margin-top: 4px; }"
+    },
+    {
+      "name": "Card (Yellow)",
+      "kind": "card",
+      "refersTo": "card-yellow",
+      "description": "Standard surface container in brutalist light theme — thick black border, hard offset shadow.",
+      "html": "<div class=\"ds-card-yellow\"><span class=\"ds-card-yellow-label\">FATURA ATUAL</span><p class=\"ds-card-yellow-value\">R$ 270,95</p></div>",
+      "css": ".ds-card-yellow { background: #FFFFFF; border: 4px solid #000000; border-radius: 1.5rem; box-shadow: 6px 6px 0px 0px rgba(0,0,0,1); padding: 20px; color: #000000; } .ds-card-yellow-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #000000; } .ds-card-yellow-value { font-family: 'Space Grotesk', sans-serif; font-weight: 900; font-size: 24px; color: #000000; margin-top: 4px; }"
+    },
+    {
+      "name": "Bottom Sheet Handle",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Drag-handle bar at the top of every bottom-sheet modal (invoice summary, tracking, promos).",
+      "html": "<div class=\"ds-sheet\"><div class=\"ds-sheet-handle\"></div><h3 class=\"ds-sheet-title\">Resumo da fatura</h3></div>",
+      "css": ".ds-sheet { background: #201f1f; border-radius: 1.5rem 1.5rem 0 0; border-top: 1px solid rgba(255,255,255,0.1); padding: 20px; } .ds-sheet-handle { width: 40px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 999px; margin: 0 auto 16px; } .ds-sheet-title { font-weight: 700; font-size: 16px; color: #ffffff; }"
+    },
+    {
+      "name": "Bottom Nav Pill",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Floating rounded navigation bar shared by both themes; only the active-state fill swaps per theme.",
+      "html": "<nav class=\"ds-nav\"><button class=\"ds-nav-item ds-nav-item--active\">Início</button><button class=\"ds-nav-item\">Cartões</button></nav>",
+      "css": ".ds-nav { display: flex; gap: 8px; background: #ffffff; border-radius: 999px; padding: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); } .ds-nav-item { padding: 10px 16px; border-radius: 999px; border: none; background: transparent; font-size: 11px; font-weight: 700; color: #6b7280; } .ds-nav-item--active { background: #f3f4f6; color: #000000; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Neon-Concrete Notebook",
+    "overview": "VOLT is one banking product with two physical materials depending on the hour. By day (Yellow theme) it's concrete: saturated yellow ground, thick black borders, hard offset shadows with zero blur — like a brutalist notebook margin, confident to the point of irreverence. By night (Midnight theme) it's neon: near-black surfaces, a single electric-green wire (volt-green #00ff9d) running through numbers and CTAs, glowing rather than shadowing. Neither skin is a \"dark mode toggle\" on the other; each has its own elevation physics, its own contrast rules, its own restraint. This system explicitly rejects generic fintech AI-slop — purple-blue gradients, gradient-clipped text, identical floating hero-metric cards — and rejects old-school corporate banking's navy-serious, bureaucratic density.",
+    "keyCharacteristics": [
+      "Two fully-specified themes, never a single design reskinned after the fact",
+      "Zero soft shadows in either theme — hard offset (Yellow) or none (Midnight)",
+      "One accent per theme used with restraint",
+      "Brazilian fintech vocabulary is native, not translated"
+    ],
+    "rules": [
+      { "name": "The One Wire Rule", "body": "Midnight has exactly one accent color in play at a time: volt-green.", "section": "colors" },
+      { "name": "The Full-Bleed Exception Rule", "body": "Volt Yellow is the only brand color allowed to be a full-page background rather than an accent.", "section": "colors" },
+      { "name": "The Loud Label, Quiet Value Rule", "body": "Micro-labels are tiny, bold, and uppercase; the value beneath them is large.", "section": "typography" },
+      { "name": "The No-Blur Rule", "body": "Zero blur() in any shadow, in either theme.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do build every new component theme-aware from the start",
+      "Do use volt-green as the single accent wire in Midnight",
+      "Do keep micro-labels tiny/bold/uppercase and their values large",
+      "Do use the spring bottom-sheet pattern for any new modal",
+      "Do treat pt-BR formatting and Brazilian fintech vocabulary as first-class"
+    ],
+    "donts": [
+      "Don't use any blur-based box-shadow in either theme",
+      "Don't use purple-blue gradients, gradient-clipped text, or the SaaS hero-metric template",
+      "Don't default to navy-serious, bureaucratic, form-dense corporate-bank styling",
+      "Don't render a Yellow-theme card without its 3-4px black border",
+      "Don't introduce a second bright accent color competing with volt-green in Midnight screens"
+    ]
+  }
+}

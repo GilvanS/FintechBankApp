@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Send, CheckCircle2, AlertTriangle, Smartphone, Mail, Hash, User as UserIcon, Key } from 'lucide-react';
+import { X, Send, CheckCircle2, AlertTriangle, Smartphone, Mail, Hash, User as UserIcon, Key, Utensils, Car, Tv, Heart, MoreHorizontal, Sparkles, Brain, Loader2 } from 'lucide-react';
 import { getPixRecipientInfo, performPix, performPixCreditInstallment, getUserByCpf, getUserStatement, addPixContact } from '../services/api';
 import { PixContact, Transaction } from '../types';
 import { parseCurrency, formatCurrency } from '../utils/formatters';
@@ -32,12 +32,97 @@ export default function PixView({ onBack }: PixViewProps) {
   const [createdTx, setCreatedTx] = useState<Transaction | null>(null);
 
   const [recipientInfo, setRecipientInfo] = useState<{ name: string; cpf: string } | null>(null);
-  const [transferDetails, setTransferDetails] = useState<{ key: string, amount: number, description: string, useCredit: boolean } | null>(null);
+  const [transferDetails, setTransferDetails] = useState<{ key: string, amount: number, description: string, useCredit: boolean, category?: string } | null>(null);
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [pendingPinAction, setPendingPinAction] = useState<null | ((pin: string) => Promise<void>)>(null);
 
   const [useCredit, setUseCredit] = useState(false);
+
+  // AI Auto-categorization states
+  const [selectedCategory, setSelectedCategory] = useState<'refeicao' | 'mobilidade' | 'cultura' | 'saude' | 'outros'>('outros');
+  const [isAutoCategorizing, setIsAutoCategorizing] = useState(false);
+  const [aiConfidence, setAiConfidence] = useState<number | null>(null);
+  const [aiReason, setAiReason] = useState<string | null>(null);
+  const [aiSuggestedCategory, setAiSuggestedCategory] = useState<string | null>(null);
+
+  const performAutoCategorization = async (desc: string) => {
+    if (!desc || desc.trim().length < 3) return;
+    
+    setIsAutoCategorizing(true);
+    try {
+      const response = await fetch("/api/gemini/categorize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: desc }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.category) {
+          setSelectedCategory(data.category);
+          setAiSuggestedCategory(data.category);
+          if (data.confidence !== undefined) setAiConfidence(data.confidence);
+          if (data.reason) setAiReason(data.reason);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to auto-categorize transaction:", err);
+    } finally {
+      setIsAutoCategorizing(false);
+    }
+    
+    // Local fallback rules if API fails or key is not configured
+    const cleanDesc = desc.toLowerCase().trim();
+    let category: 'refeicao' | 'mobilidade' | 'cultura' | 'saude' | 'outros' = 'outros';
+    let reason = "Classificado automaticamente usando o motor de regras local.";
+    
+    if (
+      cleanDesc.includes('uber') || cleanDesc.includes('99') || cleanDesc.includes('taxi') || 
+      cleanDesc.includes('posto') || cleanDesc.includes('gasolina') || cleanDesc.includes('combustivel') || 
+      cleanDesc.includes('metro') || cleanDesc.includes('onibus') || cleanDesc.includes('pedagio') || 
+      cleanDesc.includes('estacionamento') || cleanDesc.includes('cabify') || cleanDesc.includes('carro') ||
+      cleanDesc.includes('viagem') || cleanDesc.includes('buser')
+    ) {
+      category = 'mobilidade';
+      reason = "Identificado transporte ou mobilidade na descrição (Motor Local).";
+    } else if (
+      cleanDesc.includes('restaurante') || cleanDesc.includes('ifood') || cleanDesc.includes('mcdonald') || 
+      cleanDesc.includes('burger') || cleanDesc.includes('pizza') || cleanDesc.includes('padaria') || 
+      cleanDesc.includes('supermercado') || cleanDesc.includes('mercado') || cleanDesc.includes('cafe') || 
+      cleanDesc.includes('doce') || cleanDesc.includes('jantar') || cleanDesc.includes('almoco') || 
+      cleanDesc.includes('esfiha') || cleanDesc.includes('comida') || cleanDesc.includes('outback') ||
+      cleanDesc.includes('pao') || cleanDesc.includes('subway') || cleanDesc.includes('starbucks')
+    ) {
+      category = 'refeicao';
+      reason = "Identificado alimentação, restaurante ou mercado na descrição (Motor Local).";
+    } else if (
+      cleanDesc.includes('cinema') || cleanDesc.includes('teatro') || cleanDesc.includes('netflix') || 
+      cleanDesc.includes('spotify') || cleanDesc.includes('show') || cleanDesc.includes('ingresso') || 
+      cleanDesc.includes('livro') || cleanDesc.includes('game') || cleanDesc.includes('jogos') || 
+      cleanDesc.includes('museu') || cleanDesc.includes('disney') || cleanDesc.includes('prime video') ||
+      cleanDesc.includes('steam') || cleanDesc.includes('playstation') || cleanDesc.includes('xbox') ||
+      cleanDesc.includes('show') || cleanDesc.includes('evento')
+    ) {
+      category = 'cultura';
+      reason = "Identificado entretenimento, lazer, streaming ou cultura na descrição (Motor Local).";
+    } else if (
+      cleanDesc.includes('farmacia') || cleanDesc.includes('drogaria') || cleanDesc.includes('medico') || 
+      cleanDesc.includes('hospital') || cleanDesc.includes('dentista') || cleanDesc.includes('remedio') || 
+      cleanDesc.includes('exame') || cleanDesc.includes('clinica') || cleanDesc.includes('saude') ||
+      cleanDesc.includes('terapia') || cleanDesc.includes('psicologo') || cleanDesc.includes('pague menos') ||
+      cleanDesc.includes('raia') || cleanDesc.includes('drogasil')
+    ) {
+      category = 'saude';
+      reason = "Identificado gastos com saúde, farmácia ou serviços médicos (Motor Local).";
+    }
+    
+    setSelectedCategory(category);
+    setAiSuggestedCategory(category);
+    setAiConfidence(0.85);
+    setAiReason(reason);
+  };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const inputValue = e.target.value;
@@ -73,7 +158,7 @@ export default function PixView({ onBack }: PixViewProps) {
     setLoading(true);
     const recipientResult = await getPixRecipientInfo(pixKey, user.cpf);
     if (recipientResult.success && recipientResult.name && recipientResult.cpf) {
-        setTransferDetails({ key: pixKey, amount: numericAmount, description, useCredit });
+        setTransferDetails({ key: pixKey, amount: numericAmount, description, useCredit, category: selectedCategory });
         setRecipientInfo({ name: recipientResult.name, cpf: recipientResult.cpf });
         setSubView('confirmation');
     } else {
@@ -90,7 +175,7 @@ export default function PixView({ onBack }: PixViewProps) {
           if (transferDetails.useCredit) {
               result = await performPixCreditInstallment(user.cpf, transferDetails.amount, 1, pin);
           } else {
-              result = await performPix(user.cpf, transferDetails.key, transferDetails.amount, transferDetails.description, pin);
+              result = await performPix(user.cpf, transferDetails.key, transferDetails.amount, transferDetails.description, pin, transferDetails.category);
           }
           if (result.success) {
               // Update user balance/statement
@@ -103,7 +188,7 @@ export default function PixView({ onBack }: PixViewProps) {
                       const newTx = stmt.transactions[0];
                       if (newTx) {
                           setCreatedTx(newTx);
-                          triggerSmartAlertCheck(newTx.title || newTx.description, newTx.amount, 'outros');
+                          triggerSmartAlertCheck(newTx.title || newTx.description, newTx.amount, transferDetails.category || 'outros');
                       }
                   } else {
                       updateUser(refreshed.user);
@@ -136,6 +221,10 @@ export default function PixView({ onBack }: PixViewProps) {
     setPixKey('');
     setAmount('');
     setDescription('');
+    setSelectedCategory('outros');
+    setAiSuggestedCategory(null);
+    setAiConfidence(null);
+    setAiReason(null);
     setError('');
     setSuccess(false);
     setCreatedTx(null);
@@ -334,9 +423,122 @@ export default function PixView({ onBack }: PixViewProps) {
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              onBlur={() => performAutoCategorization(description)}
               placeholder="Escreva uma mensagem para o comprovante"
               className={`w-full px-4 py-3 rounded-xl text-sm font-semibold transition-all outline-none ${inputClass}`}
             />
+          </div>
+
+          {/* Category Selection with AI Suggestion */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <label className={`text-xs block uppercase tracking-wider font-semibold ${labelClass}`}>
+                Categoria do Gasto
+              </label>
+              {description.trim().length >= 3 && (
+                <button
+                  type="button"
+                  onClick={() => performAutoCategorization(description)}
+                  disabled={isAutoCategorizing}
+                  className="text-[11px] font-bold text-volt-green flex items-center gap-1 hover:opacity-85 active:scale-95 disabled:opacity-50 transition-all cursor-pointer bg-transparent border-none"
+                >
+                  {isAutoCategorizing ? (
+                    <>
+                      <Loader2 size={12} className="animate-spin text-volt-green" />
+                      Analisando...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={12} className="text-volt-green" />
+                      Classificar com IA
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Category Options Grid */}
+            <div className="grid grid-cols-5 gap-1.5">
+              {[
+                { type: 'refeicao', label: 'Refeição', icon: Utensils },
+                { type: 'mobilidade', label: 'Mobilidade', icon: Car },
+                { type: 'cultura', label: 'Cultura', icon: Tv },
+                { type: 'saude', label: 'Saúde', icon: Heart },
+                { type: 'outros', label: 'Outros', icon: MoreHorizontal },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isSelected = selectedCategory === item.type;
+                const isSuggested = aiSuggestedCategory === item.type;
+                
+                return (
+                  <button
+                    key={item.type}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategory(item.type as any);
+                      if (item.type !== aiSuggestedCategory) {
+                        setAiConfidence(null);
+                        setAiReason(null);
+                      }
+                    }}
+                    className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl border relative transition-all active:scale-95 cursor-pointer ${
+                      isSelected
+                        ? isMidnight
+                          ? 'border-volt-primary bg-volt-primary/10 text-volt-primary shadow-[0_0_12px_rgba(0,255,157,0.15)]'
+                          : 'border-black bg-volt-lime text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                        : isMidnight
+                          ? 'border-white/5 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'
+                          : 'border-black/10 bg-black/5 text-black/50 hover:bg-black/10 hover:text-black'
+                    }`}
+                  >
+                    {isSuggested && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-volt-green rounded-full border border-volt-surface flex items-center justify-center">
+                        <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+                      </span>
+                    )}
+                    <Icon size={16} className="mb-1" />
+                    <span className="text-[9px] font-semibold tracking-tight">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* AI Feedback Badge / Alert */}
+            <AnimatePresence>
+              {(isAutoCategorizing || aiConfidence !== null) && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-2 p-2.5 rounded-xl bg-zinc-900 border border-volt-green/45 shadow-[0_0_12px_rgba(0,255,157,0.15)] space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold text-[#00ff9d] flex items-center gap-1">
+                        <Brain size={12} className="text-[#00ff9d]" />
+                        Auto-categorização Inteligente
+                      </span>
+                      {aiConfidence !== null && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-volt-green/15 text-[#00ff9d] font-bold border border-volt-green/30">
+                          {Math.round(aiConfidence * 100)}% de certeza
+                        </span>
+                      )}
+                    </div>
+                    {isAutoCategorizing ? (
+                      <p className="text-[10px] text-zinc-300 animate-pulse">
+                        Analisando a descrição para identificar o padrão de gasto...
+                      </p>
+                    ) : (
+                      aiReason && (
+                        <p className="text-[10px] text-zinc-100 leading-relaxed italic font-medium">
+                          "{aiReason}"
+                        </p>
+                      )
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Error Message */}

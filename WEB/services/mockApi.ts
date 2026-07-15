@@ -464,7 +464,7 @@ export const getPixRecipientInfo = async (key: string, senderCpf: string): Promi
     return { success: true, name: recipient.fullName, cpf: maskCpf(recipient.cpf) };
 };
 
-export const performPix = async (cpf: string, key: string, amount: number, description: string, pin: string): Promise<{ success: boolean; message: string, user?: Omit<User, 'password'>, transaction?: Transaction }> => {
+export const performPix = async (cpf: string, key: string, amount: number, description: string, pin: string, category?: string): Promise<{ success: boolean; message: string, user?: Omit<User, 'password'>, transaction?: Transaction }> => {
     await delay(1500);
     const store = _getStore();
     const senderIndex = store.users.findIndex(u => u.cpf === cpf);
@@ -493,7 +493,8 @@ export const performPix = async (cpf: string, key: string, amount: number, descr
         date: new Date().toISOString(),
         description: description || 'Transferência PIX',
         to: recipient.cpf,
-        recipientName: recipient.fullName
+        recipientName: recipient.fullName,
+        category: category || 'outros'
     };
     sender.transactions.unshift(senderTransaction);
 
@@ -948,6 +949,93 @@ export const getUserStatement = async (cpf: string): Promise<{ success: boolean;
     const user = _findUser(cpf);
     if (!user) return { success: false, message: 'Usuário não encontrado.' };
     return { success: true, transactions: (user as any).transactions || [] };
+};
+
+// ── Resumo e histórico de faturas (mock) ────────────────────────────────────
+const _mockCurrentUser = (): any | null => {
+    const token = localStorage.getItem('authToken');
+    if (!token) return null;
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (!payload.cpf) return null;
+        return _findUser(payload.cpf);
+    } catch {
+        return null;
+    }
+};
+
+const _fmtDate = (d: Date): string =>
+    d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ de /g, '/');
+
+export const getInvoiceSummary = async (
+    type: 'fechada' | 'aberta'
+): Promise<{ success: boolean; summary?: any | null }> => {
+    await delay(300);
+    const user = _mockCurrentUser();
+    if (!user) return { success: false };
+    const cc = user.creditCard || {};
+    const dueDate = cc.invoiceDueDate ? new Date(cc.invoiceDueDate) : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 15);
+    const bestBuy = new Date(dueDate); bestBuy.setDate(bestBuy.getDate() - 7);
+
+    if (type === 'fechada') {
+        const total = Number(cc.closedInvoice || 0);
+        if (total <= 0) return { success: true, summary: null };
+        return {
+            success: true,
+            summary: {
+                saldoAnterior: 0,
+                jurosRemuneratorios: 0,
+                iof: 0,
+                jurosMora: 0,
+                multa: 0,
+                totalDespesas: total,
+                totalPagamentos: 0,
+                totalCreditos: 0,
+                saldoFinal: total,
+                pagamentoMinimo: Math.max(total * 0.15, 10),
+                dataVencimento: _fmtDate(dueDate),
+                melhorDataCompra: _fmtDate(bestBuy),
+            },
+        };
+    }
+    const open = Number(cc.currentInvoice || 0);
+    const saldoAnterior = Number(cc.closedInvoice || 0);
+    return {
+        success: true,
+        summary: {
+            saldoAnterior,
+            jurosRemuneratorios: 0,
+            iof: 0,
+            jurosMora: 0,
+            multa: 0,
+            totalDespesas: open,
+            totalPagamentos: 0,
+            totalCreditos: 0,
+            saldoFinal: open + saldoAnterior,
+            pagamentoMinimo: 0,
+            dataVencimento: _fmtDate(dueDate),
+            melhorDataCompra: _fmtDate(bestBuy),
+        },
+    };
+};
+
+export const getInvoiceHistory = async (): Promise<{ success: boolean; history?: any[] }> => {
+    await delay(300);
+    const user = _mockCurrentUser();
+    if (!user) return { success: false };
+    const cc = user.creditCard || {};
+    const dueDate = cc.invoiceDueDate ? new Date(cc.invoiceDueDate) : new Date();
+    const monthLabel = (offset: number) => {
+        const d = new Date(dueDate); d.setMonth(d.getMonth() + offset);
+        return d.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '');
+    };
+    const history = [
+        { month: monthLabel(0), amount: Number(cc.currentInvoice || 0), status: 'Fatura aberta', period: '' },
+    ];
+    if (Number(cc.closedInvoice || 0) > 0) {
+        history.push({ month: monthLabel(-1), amount: Number(cc.closedInvoice), status: 'Esta fatura', period: '' });
+    }
+    return { success: true, history };
 };
 
 export const getUserStatementPaginated = async (

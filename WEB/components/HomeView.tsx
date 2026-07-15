@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useContext } from 'react';
-import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus, Mic } from 'lucide-react';
+import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus, Mic, Barcode } from 'lucide-react';
+import InvoiceSummarySheet from './InvoiceSummarySheet';
 
 import type { User, Story, RecurringBill, Transaction } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
@@ -21,6 +22,14 @@ import { motion, AnimatePresence } from 'motion/react';
 
 const MOCK_STORIES: Story[] = [
   {
+    title: 'App Volt',
+    description: 'Explore uma carteira digital com superpoderes: comandos de voz inteligentes, biometria facial, e análise automatizada de gastos para você nunca mais estourar sua meta de orçamento.',
+    icon: '⚡',
+    badge: 'Seja bem-vindo ao Volt Hub!',
+    accent: 'bg-volt-lime',
+    visualType: 'app',
+  },
+  {
     title: 'Status de Economia',
     description: 'Seus gastos essenciais deste mês, organizados por categoria. Você fechou o mês gastando menos — continue nesse ritmo!',
     icon: '📊',
@@ -31,6 +40,7 @@ const MOCK_STORIES: Story[] = [
       { label: 'Transporte', value: 'R$ 150,00' },
     ],
     status: 'Caiu 12% vs. mês anterior',
+    visualType: 'insights',
   },
   {
     title: 'Simulação de Chave Pix',
@@ -38,6 +48,7 @@ const MOCK_STORIES: Story[] = [
     icon: '💠',
     badge: 'Transferência rápida em segundos',
     accent: 'bg-volt-yellow',
+    visualType: 'pix',
   },
   {
     title: 'QR Code Dinâmico',
@@ -45,6 +56,7 @@ const MOCK_STORIES: Story[] = [
     icon: '🔳',
     badge: 'Organize suas chaves e receba',
     accent: 'bg-[#7CE7FF]',
+    visualType: 'pix_receive',
   },
   {
     title: 'Boleto Importado por DDA',
@@ -56,6 +68,7 @@ const MOCK_STORIES: Story[] = [
       { label: 'COELBA · Energia', value: 'R$ 214,90' },
     ],
     status: 'Pago',
+    visualType: 'payment',
   },
   {
     title: 'Cronograma Inteligente',
@@ -67,6 +80,7 @@ const MOCK_STORIES: Story[] = [
       { label: 'Condomínio', value: 'Todo dia 28' },
       { label: 'Internet', value: 'Todo dia 10' },
     ],
+    visualType: 'payment_schedule',
   },
 ];
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie } from 'recharts';
@@ -111,6 +125,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [isBiometricOpen, setIsBiometricOpen] = useState(false);
   const [isIntelligenceMenuOpen, setIsIntelligenceMenuOpen] = useState(false);
   const [isViewingStories, setIsViewingStories] = useState(false);
+  const [hideHomeInvoice, setHideHomeInvoice] = useState(false);
+  const [isInvoiceSummaryOpen, setIsInvoiceSummaryOpen] = useState(false);
   const [pendingBillId, setPendingBillId] = useState<string | null>(null);
   const [isPasswordVerifyOpen, setIsPasswordVerifyOpen] = useState(false);
 
@@ -2009,49 +2025,105 @@ const HomeView: React.FC<HomeViewProps> = ({
         variants={itemVariants}
         className="bg-volt-surface rounded-2xl border border-white/5 overflow-hidden shadow-lg"
       >
-        <div className="p-5 flex flex-col gap-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2 text-white">
-              <CreditCard size={18} className="text-volt-green" />
-              <h3 className="font-bold text-sm">Cartão de Crédito</h3>
-            </div>
-            <span className="text-[10px] font-bold text-on-surface-variant bg-white/5 px-2.5 py-1 rounded-full uppercase">
-              Venc. 15 SET
-            </span>
-          </div>
+        {(() => {
+          const cc = user.creditCard;
+          const invoiceDue = cc?.invoiceDueDate ? new Date(cc.invoiceDueDate) : null;
+          const bestBuy = invoiceDue ? new Date(new Date(invoiceDue).setDate(invoiceDue.getDate() - 7)) : null;
+          const fmtShort = (d: Date | null) =>
+            d ? d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase() : '--';
+          const totalLimit = cc?.totalLimit || 0;
+          const availableLimit = cc?.availableLimit || 0;
+          const usedPct = totalLimit > 0 ? Math.min(100, Math.max(0, ((totalLimit - availableLimit) / totalLimit) * 100)) : 0;
+          return (
+            <div className="p-5 flex flex-col gap-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2 text-white">
+                  <CreditCard size={18} className="text-volt-green" />
+                  <h3 className="font-bold text-sm">Fatura aberta</h3>
+                </div>
+                <span className="text-[10px] font-bold text-on-surface-variant bg-white/5 px-2.5 py-1 rounded-full uppercase">
+                  Venc. {fmtShort(invoiceDue)}
+                </span>
+              </div>
 
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Fatura Atual</span>
-            <span className="text-2xl font-black text-volt-green drop-shadow-[0_0_8px_rgba(0,227,139,0.2)]">
-              R$ {(user.creditCard?.currentInvoice || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Fatura Atual</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-black text-volt-green drop-shadow-[0_0_8px_rgba(0,227,139,0.2)]">
+                    {hideHomeInvoice
+                      ? 'R$ ••••'
+                      : `R$ ${(cc?.currentInvoice || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  </span>
+                  <button
+                    onClick={() => setHideHomeInvoice((v) => !v)}
+                    className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-on-surface-variant hover:bg-white/10"
+                    aria-label={hideHomeInvoice ? 'Mostrar valor' : 'Ocultar valor'}
+                  >
+                    {hideHomeInvoice ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
 
-          <div className="flex flex-col gap-1.5">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-on-surface-variant">Limite Disponível</span>
-              <span className="font-bold text-white">R$ 3.349,00</span>
-            </div>
-            {/* Progress Bar */}
-            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: '0%' }}
-                animate={{ width: '35%' }}
-                transition={{ duration: 1, ease: 'easeOut' }}
-                className="h-full bg-volt-green rounded-full shadow-[0_0_10px_rgba(0,227,139,0.5)]"
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-white/5 rounded-xl px-3 py-2">
+                  <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider">Melhor dia de compra</p>
+                  <p className="text-xs font-black text-white mt-0.5">{fmtShort(bestBuy)}</p>
+                </div>
+                <div className="bg-white/5 rounded-xl px-3 py-2">
+                  <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider">Vencimento</p>
+                  <p className="text-xs font-black text-white mt-0.5">{fmtShort(invoiceDue)}</p>
+                </div>
+              </div>
 
-          <button
-            onClick={() => onNavigate('cards')}
-            className="w-full mt-1 py-3 px-4 bg-white/5 hover:bg-white/10 rounded-xl text-volt-green font-bold text-xs flex items-center justify-center gap-1 border border-volt-green/10 transition-all active:scale-95 cursor-pointer"
-          >
-            Ver fatura e limite
-            <ChevronRight size={14} />
-          </button>
-        </div>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-on-surface-variant">Limite Disponível</span>
+                  <span className="font-bold text-white">
+                    R$ {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: '0%' }}
+                    animate={{ width: `${usedPct}%` }}
+                    transition={{ duration: 1, ease: 'easeOut' }}
+                    className="h-full bg-volt-green rounded-full shadow-[0_0_10px_rgba(0,227,139,0.5)]"
+                  />
+                </div>
+              </div>
+
+              {/* Scroll lateral de ações rápidas */}
+              <div className="flex gap-2.5 overflow-x-auto hide-scrollbar py-1 -mx-1 px-1">
+                <button
+                  onClick={() => onNavigate('cards')}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
+                >
+                  <Barcode size={14} /> Pagar fatura
+                </button>
+                <button
+                  onClick={() => onNavigate('cards')}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
+                >
+                  <CreditCard size={14} /> Meus cartões
+                </button>
+                <button
+                  onClick={() => setIsInvoiceSummaryOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
+                >
+                  <FileText size={14} /> Resumo da fatura
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </motion.section>
+
+      <InvoiceSummarySheet
+        open={isInvoiceSummaryOpen}
+        onClose={() => setIsInvoiceSummaryOpen(false)}
+        type="aberta"
+        title="Resumo da fatura aberta"
+      />
 
       {/* Spending Analytics Section */}
       <motion.section
