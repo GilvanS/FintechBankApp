@@ -61,4 +61,43 @@ function calcCharges(invoiceAmount, daysOverdue) {
     return { multa, juros, total: Math.round((multa + juros) * 100) / 100 };
 }
 
-module.exports = { computeCurrentCycle, calcCharges };
+// Mesma taxa diária de juros remuneratórios usada no motor de cobrança (runBillingValidation)
+const JUROS_REMUNERATORIOS_DIARIO = 0.00513;
+const MONTHLY_INSTALLMENT_RATE = JUROS_REMUNERATORIOS_DIARIO * 30; // ~15,39% a.m.
+const IOF_FIXO_RATE = 0.0038;
+const IOF_DIARIO_RATE = 0.000082;
+
+/**
+ * Calcula um plano de parcelamento de fatura usando as mesmas taxas do motor de
+ * cobrança (juros remuneratórios + IOF), amortizado pela tabela Price.
+ *
+ * @param {number} principal - valor da fatura a financiar
+ * @param {number} installments - número de parcelas (2-12)
+ */
+function computeInstallmentPlan(principal, installments) {
+    const iofFixo = Math.round(principal * IOF_FIXO_RATE * 100) / 100;
+    const diasFinanciamento = Math.min(installments * 30, 365);
+    const iofDiario = Math.round(principal * IOF_DIARIO_RATE * diasFinanciamento * 100) / 100;
+    const iof = Math.round((iofFixo + iofDiario) * 100) / 100;
+    const financiado = principal + iof;
+
+    const i = MONTHLY_INSTALLMENT_RATE;
+    const installmentValue = Math.round(
+        (financiado * i / (1 - Math.pow(1 + i, -installments))) * 100
+    ) / 100;
+    const totalAmount = Math.round(installmentValue * installments * 100) / 100;
+    const juros = Math.round((totalAmount - principal - iof) * 100) / 100;
+
+    return { installments, installmentValue, totalAmount, iof, juros, monthlyRate: i };
+}
+
+/** Gera as opções de parcelamento de 2x a 12x para o valor informado. */
+function buildInstallmentOptions(principal) {
+    const options = [];
+    for (let n = 2; n <= 12; n++) {
+        options.push(computeInstallmentPlan(principal, n));
+    }
+    return options;
+}
+
+module.exports = { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions };

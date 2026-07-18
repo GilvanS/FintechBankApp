@@ -158,7 +158,7 @@ const Shop: React.FC<ShopProps> = ({ isOpen, onClose, onAddToCart, onInitiatePur
                             onClick={() => setCurrency('BRL')}
                             className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
                                 currency === 'BRL'
-                                    ? 'bg-[#00ff9d] text-black font-extrabold shadow-sm'
+                                    ? 'bg-volt-green text-black font-extrabold shadow-sm'
                                     : 'text-zinc-500 hover:text-white'
                             }`}
                         >
@@ -168,7 +168,7 @@ const Shop: React.FC<ShopProps> = ({ isOpen, onClose, onAddToCart, onInitiatePur
                             onClick={() => setCurrency('USD')}
                             className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
                                 currency === 'USD'
-                                    ? 'bg-[#00ff9d] text-black font-extrabold shadow-sm'
+                                    ? 'bg-volt-green text-black font-extrabold shadow-sm'
                                     : 'text-zinc-500 hover:text-white'
                             }`}
                         >
@@ -237,7 +237,7 @@ const Shop: React.FC<ShopProps> = ({ isOpen, onClose, onAddToCart, onInitiatePur
                                 onClick={() => setSelectedCategory(cat as string)}
                                 className={`px-3 py-1 text-[10px] font-bold rounded-full whitespace-nowrap transition-colors border ${
                                     selectedCategory === cat 
-                                    ? 'bg-[#00ff9d] text-black border-[#00ff9d]' 
+                                    ? 'bg-volt-green text-black border-volt-green' 
                                     : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                                 }`}
                             >
@@ -261,7 +261,7 @@ const Shop: React.FC<ShopProps> = ({ isOpen, onClose, onAddToCart, onInitiatePur
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => handleProductClick(product)} 
-                            className="relative h-44 rounded-2xl overflow-hidden cursor-pointer flex flex-col justify-end border transition-all duration-300 bg-zinc-900 border-zinc-850 shadow-md hover:border-[#00ff9d]/30 shadow-black/10 test-product-card group"
+                            className="relative h-44 rounded-2xl overflow-hidden cursor-pointer flex flex-col justify-end border transition-all duration-300 bg-zinc-900 border-zinc-850 shadow-md hover:border-volt-green/30 shadow-black/10 test-product-card group"
                             id={`product-card-${product.id}`}
                             data-testid={`shop-product-card-${product.id}`}
                             data-cy={`shop-product-card-${product.id}`}
@@ -285,7 +285,7 @@ const Shop: React.FC<ShopProps> = ({ isOpen, onClose, onAddToCart, onInitiatePur
                 
                             {/* Cashback pill overlay at top-right */}
                             {product.cashback && (
-                              <div className="absolute top-2.5 right-2.5 bg-black/80 backdrop-blur-md text-[9px] font-black px-2 py-0.5 rounded-lg text-[#00ff9d] border border-[#00ff9d]/30 flex items-center gap-0.5 z-10">
+                              <div className="absolute top-2.5 right-2.5 bg-black/80 backdrop-blur-md text-[9px] font-black px-2 py-0.5 rounded-lg text-volt-green border border-volt-green/30 flex items-center gap-0.5 z-10">
                                 {product.cashback}
                               </div>
                             )}
@@ -293,7 +293,7 @@ const Shop: React.FC<ShopProps> = ({ isOpen, onClose, onAddToCart, onInitiatePur
                             {/* Product Details overlay at bottom */}
                             <div className="relative p-3.5 space-y-0.5 text-left z-10">
                                 {product.category && (
-                                  <span className="text-[8px] font-extrabold uppercase text-[#00ff9d]/80 tracking-widest">{product.category}</span>
+                                  <span className="text-[8px] font-extrabold uppercase text-volt-green/80 tracking-widest">{product.category}</span>
                                 )}
                                 <h4 
                                     className="text-[11px] font-extrabold text-white leading-tight truncate test-product-name"
@@ -304,7 +304,7 @@ const Shop: React.FC<ShopProps> = ({ isOpen, onClose, onAddToCart, onInitiatePur
                                     {product.name}
                                 </h4>
                                 <p 
-                                    className="text-xs font-black text-[#00ff9d] test-product-price"
+                                    className="text-xs font-black text-volt-green test-product-price"
                                     id={`product-price-${product.id}`}
                                     data-testid={`shop-product-price-${product.id}`}
                                     data-cy={`shop-product-price-${product.id}`}

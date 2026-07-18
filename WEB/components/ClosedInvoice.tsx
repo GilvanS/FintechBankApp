@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, CardTransaction } from '../types';
 import { useAppState } from '../contexts/AppStateContext';
+import InvoiceSummarySheet from './InvoiceSummarySheet';
+import { getInvoiceHistory, InvoiceHistoryItem } from '../services/api';
 
 interface ClosedInvoiceProps {
   user: User;
@@ -44,6 +46,9 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
   const [hideValue, setHideValue] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<InvoiceTab>('fechada');
+  const [showSummarySheet, setShowSummarySheet] = useState(false);
+  const [historyData, setHistoryData] = useState<InvoiceHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const isOpenInvoice = activeTab === 'aberta';
   const isNextMonth = activeTab === 'proximas';
   const invoiceAmount = isOpenInvoice
@@ -69,9 +74,9 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
     ? new Date(creditCard.closedInvoiceDueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
     : '--/--';
 
-  const minPayment = invoiceAmount > 0 ? Math.max(invoiceAmount * 0.15, 10) : 0;
+  const minPayment = invoiceAmount > 0 ? Math.max(invoiceAmount * 0.10, 10) : 0;
   const effectiveMin = balance > 0 ? Math.min(balance, minPayment) : minPayment;
-  const minLabel = balance < minPayment ? 'Pagar o máximo possível' : 'Pagar mínimo (15%)';
+  const minLabel = balance < minPayment ? 'Pagar o máximo possível' : 'Pagar mínimo (10%)';
 
   const closedTxs = isOpenInvoice
     ? (creditCard.transactions ?? [])
@@ -86,6 +91,16 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
   }
   const total = closedTxs.reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
 
+  useEffect(() => {
+    if (activeTab !== 'historico') return;
+    let active = true;
+    setHistoryLoading(true);
+    getInvoiceHistory()
+      .then((res) => { if (active) setHistoryData(res.history ?? []); })
+      .finally(() => { if (active) setHistoryLoading(false); });
+    return () => { active = false; };
+  }, [activeTab]);
+
   const handlePay = async (amt: number) => {
     setIsLoading(true);
     try { await onPayInvoice(amt); } finally { setIsLoading(false); setPayStep('idle'); }
@@ -96,7 +111,6 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
     else if (payMode === 'custom') {
       const parsed = parseFloat(String(customAmount).replace(',', '.'));
       if (isNaN(parsed) || parsed <= 0) { setCustomError('Informe um valor válido.'); return; }
-      if (parsed < effectiveMin) { setCustomError(`Valor mínimo: ${fmt(effectiveMin)}`); return; }
       setCustomError('');
       amt = Math.min(parsed, invoiceAmount);
     }
@@ -104,95 +118,204 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
   };
 
   return (
-    <div className={`${isMidnight ? 'text-white' : 'text-black'} bg-volt-dark min-h-full flex flex-col w-full max-w-md mx-auto pb-28`}>
+    <div className={`${isMidnight ? 'text-white bg-volt-dark' : 'text-black bg-gray-50'} min-h-full flex flex-col w-full max-w-md mx-auto pb-28`}>
 
-      <header className={`sticky top-0 z-20 ${isMidnight ? 'bg-volt-surface border-b border-white/5' : 'bg-volt-primary text-black'}`}>
+      <header className={`sticky top-0 z-20 ${isMidnight ? 'bg-volt-surface border-b border-white/5' : 'bg-volt-primary'}`}>
         <div className="flex items-center px-4 pt-4 pb-2">
-          <button onClick={onBack} className={`p-2 -ml-2 rounded-full transition-colors ${isMidnight ? 'hover:bg-white/10' : 'hover:bg-black/10'}`} data-testid="invoice-back">
-            <span className={`material-symbols-outlined ${isMidnight ? 'text-white' : 'text-black'}`}>arrow_back</span>
+          <button onClick={onBack} className="p-2 -ml-2 rounded-full transition-colors hover:bg-black/10" data-testid="invoice-back">
+            <span className="material-symbols-outlined text-black">arrow_back</span>
           </button>
-          <h2 className={`flex-1 text-center text-lg font-semibold pr-8 ${isMidnight ? 'text-white' : 'text-black'}`}>Fatura</h2>
+          <h2 className="flex-1 text-center text-lg font-bold pr-8 text-black">Fatura</h2>
         </div>
-        <div className="flex px-4 pb-1 gap-0" role="tablist">
+        <div className="flex px-4 pb-0 gap-0" role="tablist">
           {([
-            { key: 'fechada',  label: 'Fechada'  },
-            { key: 'aberta',   label: 'Aberta'   },
-            { key: 'historico',label: 'Histórico'},
-            { key: 'proximas', label: 'Próximas' },
+            { key: 'fechada',   label: 'Fechada'   },
+            { key: 'aberta',    label: 'Aberta'    },
+            { key: 'historico', label: 'Histórico' },
+            { key: 'proximas',  label: 'Próximas'  },
           ] as const).map(t => (
             <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className={`flex-1 py-2 text-sm font-medium transition-colors relative ${activeTab === t.key ? 'text-white' : 'text-white/50'}`}
+              className={`flex-1 py-2.5 text-sm font-semibold transition-colors relative ${
+                activeTab === t.key
+                  ? isMidnight ? 'text-white' : 'text-black'
+                  : isMidnight ? 'text-white/40' : 'text-black/40'
+              }`}
               data-testid={`tab-${t.key}`} role="tab" aria-selected={activeTab === t.key}>
               {t.label}
-              {activeTab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />}
+              {activeTab === t.key && <span className={`absolute bottom-0 left-0 right-0 h-[3px] rounded-t-full ${isMidnight ? 'bg-volt-green' : 'bg-volt-green'}`} />}
             </button>
           ))}
         </div>
       </header>
 
+      <InvoiceSummarySheet
+        open={showSummarySheet}
+        onClose={() => setShowSummarySheet(false)}
+        type={activeTab === 'aberta' ? 'aberta' : 'fechada'}
+        title={activeTab === 'aberta' ? 'Resumo da fatura aberta' : 'Resumo da fatura'}
+      />
+
       <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-5 pb-8">
 
-        {/* ── Card de resumo (spec §2) ── */}
-        <div className={`${isMidnight ? 'bg-volt-surface border border-white/5' : 'bg-white border-2 border-black'} rounded-2xl p-5 shadow-lg space-y-4`}>
+        {/* ── Card Fechada: estilo amarelo com borda preta ── */}
+        {activeTab === 'fechada' && (
+          <div className={`rounded-2xl p-5 space-y-4 ${
+            isMidnight
+              ? 'bg-volt-surface border border-white/5 shadow-lg'
+              : 'bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+          }`}>
+            {/* Header: VALOR TOTAL + eye */}
+            <div className="flex items-center justify-between">
+              <p className={`text-xs font-black uppercase tracking-widest ${isMidnight ? 'text-white/50' : 'text-black/60'}`}>Valor Total</p>
+              <button
+                onClick={() => setHideValue(h => !h)}
+                className={`p-1 rounded-full transition-colors ${isMidnight ? 'text-white/40 hover:text-white' : 'text-black/40 hover:text-black'}`}
+                aria-label={hideValue ? 'Mostrar valor' : 'Ocultar valor'}
+              >
+                <span className="material-symbols-outlined text-xl">{hideValue ? 'visibility_off' : 'visibility'}</span>
+              </button>
+            </div>
+            {/* Valor */}
+            <p
+              className={`text-4xl font-black tracking-tight ${isCredit ? 'text-volt-green' : isMidnight ? 'text-white' : 'text-black'}`}
+              data-testid="closed-invoice-amount"
+            >
+              {hideValue ? '• • • • •' : fmt(Math.abs(invoiceAmount))}
+            </p>
+            {/* Vencimento */}
+            {!isCredit && invoiceAmount > 0 && (
+              <p className={`text-sm ${isMidnight ? 'text-white/60' : 'text-black/70'}`}>
+                Vencimento em <span className="font-semibold">{dueDate}</span>
+              </p>
+            )}
+            {isCredit && (
+              <p className="text-sm text-volt-green font-medium">Não há fatura para pagar neste mês</p>
+            )}
+            {/* Status tag inadimplência */}
+            {!isCredit && invoiceAmount > 0 && (
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold ${
+                user.accountStatus === 'inadimplente'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : isOverdue
+                    ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                    : isMidnight ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-green-100 text-green-700 border border-green-200'
+              }`}>
+                <span className="material-symbols-outlined text-sm">{status.icon}</span>
+                {status.label}
+              </div>
+            )}
+            {/* Botões de ação - Fechada */}
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pt-1 pb-0.5 -mx-1 px-1">
+              <button
+                onClick={() => setShowSummarySheet(true)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 border transition-all active:scale-95 ${
+                  isMidnight ? 'border-white/15 text-white bg-white/5' : 'border-black/20 text-black bg-black/5'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">format_list_bulleted</span>
+                Resumo da fatura
+              </button>
+              {!isCredit && invoiceAmount > 0 && (
+                <button
+                  onClick={() => { setPayStep('pick'); setPayMode('total'); setCustomAmount(''); setCustomError(''); }}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 border transition-all active:scale-95 ${
+                    isMidnight ? 'border-white/15 text-white bg-white/5' : 'border-black/20 text-black bg-black/5'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-sm">bar_chart</span>
+                  Pagar fatura
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
-          {/* Status tag */}
-          {isNextMonth ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-500/15 text-gray-400 border border-gray-500/20">
-              <span className="material-symbols-outlined text-sm" aria-hidden="true">schedule</span>
-              Próxima fatura — encargos previstos
-            </span>
-          ) : isOpenInvoice ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/20">
-              <span className="material-symbols-outlined text-sm" aria-hidden="true">pending</span>
-              Fatura em aberto
-            </span>
-          ) : isCredit ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/15 text-primary">
-              <span className="material-symbols-outlined text-sm" aria-hidden="true">info</span>
-              Não há fatura para pagar neste mês
-            </span>
-          ) : (
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${status.bg} ${status.color}`}>
-              <span className="material-symbols-outlined text-sm" aria-hidden="true">{status.icon}</span>
-              {status.label}
-            </span>
-          )}
-
-          {/* Valor principal + eye toggle */}
-          <div>
-            <p className={`text-xs mb-1 ${isMidnight ? 'text-white/50' : 'text-black/50'}`}>Valor total</p>
-            <div className="flex items-center justify-between gap-3">
+        {/* ── Card Aberta: estilo referência com botões de ação ── */}
+        {activeTab === 'aberta' && (
+          <div className={`rounded-2xl p-5 space-y-3 ${
+            isMidnight
+              ? 'bg-volt-surface border border-white/5 shadow-lg'
+              : 'bg-white border border-gray-200 shadow-sm'
+          }`}>
+            {/* Label + seta */}
+            <div className="flex items-center justify-between">
+              <p className={`text-sm font-medium ${isMidnight ? 'text-white/60' : 'text-black/60'}`}>Fatura aberta</p>
+              <span className={`material-symbols-outlined text-sm ${isMidnight ? 'text-white/40' : 'text-black/30'}`}>chevron_right</span>
+            </div>
+            {/* Valor + eye */}
+            <div className="flex items-center gap-3">
               <p
-                className={`text-3xl font-bold ${isCredit ? 'text-volt-primary' : isMidnight ? 'text-white' : 'text-black'}`}
+                className={`text-3xl font-black tracking-tight ${isMidnight ? 'text-white' : 'text-black'}`}
                 data-testid="closed-invoice-amount"
               >
-                {hideValue ? '• • • • • •' : fmt(Math.abs(invoiceAmount))}
+                {hideValue ? '• • • • •' : fmt(Math.abs(invoiceAmount))}
               </p>
               <button
                 onClick={() => setHideValue(h => !h)}
-                className={`p-1 rounded-full transition-colors ${isMidnight ? 'hover:bg-white/10 text-white/50 hover:text-white' : 'hover:bg-black/10 text-black/50 hover:text-black'}`}
+                className={`p-1 rounded-full transition-colors ${isMidnight ? 'text-white/40 hover:text-white' : 'text-black/40 hover:text-black'}`}
                 aria-label={hideValue ? 'Mostrar valor' : 'Ocultar valor'}
               >
-                <span className="material-symbols-outlined text-xl">
-                  {hideValue ? 'visibility_off' : 'visibility'}
-                </span>
+                <span className="material-symbols-outlined text-xl">{hideValue ? 'visibility_off' : 'visibility'}</span>
+              </button>
+            </div>
+            {/* Vencimento + Melhor dia */}
+            <div className="space-y-0.5">
+              <p className={`text-xs ${isMidnight ? 'text-white/50' : 'text-black/50'}`}>
+                Vencimento <span className="font-semibold">{dueDate}</span>
+              </p>
+              <p className={`text-xs ${isMidnight ? 'text-white/50' : 'text-black/50'}`}>
+                Melhor dia de compra <span className="font-semibold">{'--'}</span>
+              </p>
+            </div>
+            {/* Botões de ação em scroll horizontal */}
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pt-1 pb-0.5 -mx-1 px-1">
+              <button
+                onClick={() => { setPayStep('pick'); setPayMode('total'); }}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 border transition-all active:scale-95 ${
+                  isMidnight ? 'border-white/15 text-white bg-white/5' : 'border-black/20 text-black bg-black/5'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">bar_chart</span>
+                Pagar fatura
+              </button>
+              <button
+                onClick={onBack}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 border transition-all active:scale-95 ${
+                  isMidnight ? 'border-white/15 text-white bg-white/5' : 'border-black/20 text-black bg-black/5'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">credit_card</span>
+                Meus cartões
+              </button>
+              <button
+                onClick={() => setShowSummarySheet(true)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 border transition-all active:scale-95 ${
+                  isMidnight ? 'border-white/15 text-white bg-white/5' : 'border-black/20 text-black bg-black/5'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">format_list_bulleted</span>
+                Resumo da fatura
               </button>
             </div>
           </div>
+        )}
 
-          {/* Grid vencimento | pagamento mínimo */}
-          {!isOpenInvoice && !isNextMonth && !isCredit && invoiceAmount > 0 && (
-            <div className={`grid grid-cols-2 gap-4 pt-1 border-t ${isMidnight ? 'border-white/10' : 'border-black/10'}`}>
-              <div>
-                <p className={isMidnight ? 'text-xs text-gray-400' : 'text-xs text-gray-600'}>Vence em</p>
-                <p className={`text-sm font-semibold ${isMidnight ? 'text-white' : 'text-black'}`}>{dueDate}</p>
-              </div>
-              <div>
-                <p className={isMidnight ? 'text-xs text-gray-400' : 'text-xs text-gray-600'}>Pagamento mínimo</p>
-                <p className={`text-sm font-semibold ${isMidnight ? 'text-white' : 'text-black'}`}>{fmt(effectiveMin)}</p>
-              </div>
-            </div>
-          )}
+        {/* ── Card Próximas ── */}
+        {activeTab === 'proximas' && (
+          <div className={`rounded-2xl p-5 space-y-3 ${
+            isMidnight ? 'bg-volt-surface border border-white/5 shadow-lg' : 'bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+          }`}>
+            <p className={`text-xs font-black uppercase tracking-widest ${isMidnight ? 'text-white/50' : 'text-black/60'}`}>Próximas Cobranças</p>
+            <p className={`text-3xl font-black ${isMidnight ? 'text-white' : 'text-black'}`}>{hideValue ? '• • • • •' : fmt(Math.abs(invoiceAmount))}</p>
+            <p className={`text-sm ${isMidnight ? 'text-white/60' : 'text-black/60'}`}>Encargos previstos para o próximo ciclo</p>
+          </div>
+        )}
+
+        {/* ── Encargos + CTAs (apenas aba Fechada) ── */}
+        {activeTab === 'fechada' && (
+          <div className={`rounded-2xl p-5 space-y-4 ${
+            isMidnight ? 'bg-volt-surface border border-white/5 shadow-lg' : 'bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+          }`}>
 
           {/* Encargos — accordion expansível */}
           {!!user.pendingCharges && user.pendingCharges > 0 && (
@@ -244,7 +367,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
           )}
 
           {/* CTAs */}
-          {!isOpenInvoice && !isNextMonth && !isCredit && invoiceAmount > 0 && (
+          {!isCredit && invoiceAmount > 0 && (
             <div className="space-y-2 pt-1">
               {payStep === 'idle' ? (
                 <>
@@ -301,7 +424,8 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
               )}
             </div>
           )}
-        </div>
+          </div>
+        )}
 
         {/* ── Lista de lançamentos (spec §4) ── */}
         <div>
@@ -391,15 +515,14 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
           )}
 
           {activeTab === 'historico' && (() => {
-            const closedAmt = creditCard.closedInvoice ?? 0;
-            const displayAmt = closedAmt > 0 ? closedAmt : (creditCard.currentInvoice ?? 0);
-            const displayTxs: CardTransaction[] = closedAmt > 0
-              ? (creditCard.closedTransactions ?? [])
-              : (creditCard.transactions ?? []);
-            const isCurrentOpen = closedAmt === 0;
-            const monthLabel = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-
-            if (displayAmt === 0 && displayTxs.length === 0) {
+            if (historyLoading) {
+              return (
+                <div className={`rounded-2xl p-5 text-center mt-2 ${isMidnight ? 'bg-volt-surface border border-white/5 text-white/60' : 'bg-white border-2 border-black text-black/60'}`}>
+                  <p className="text-sm">Carregando histórico…</p>
+                </div>
+              );
+            }
+            if (historyData.length === 0) {
               return (
                 <div className={`rounded-2xl p-5 text-center space-y-2 mt-2 ${isMidnight ? 'bg-volt-surface border border-white/5' : 'bg-white border-2 border-black'}`} data-testid="historico-empty">
                   <span className="material-symbols-outlined text-gray-500 text-3xl">receipt_long</span>
@@ -407,49 +530,35 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
                 </div>
               );
             }
-
-            const installmentTypes = ['INVOICE_INSTALLMENT', 'SHOP_CREDIT', 'PIX_CREDIT_SENT'];
-            const isInst = (t: CardTransaction) => installmentTypes.includes(t.type) || !!(t as any).installments || !!(t as any).totalInstallments;
-            const sumInstallments = displayTxs.filter(isInst).reduce((s, t) => s + Math.abs(t.amount), 0);
-            const sumOther = displayTxs.filter(t => !isInst(t)).reduce((s, t) => s + Math.abs(t.amount), 0);
-
             return (
-              <div className={`rounded-2xl p-5 space-y-4 mt-2 ${isMidnight ? 'bg-volt-surface border border-white/5' : 'bg-white border-2 border-black'}`} data-testid="historico-section">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-volt-primary text-xl">history</span>
-                    <p className={`text-xs font-semibold uppercase tracking-wide capitalize ${isMidnight ? 'text-gray-400' : 'text-gray-600'}`}>{monthLabel}</p>
-                  </div>
-                  {isCurrentOpen && (
-                    <span className="text-xs text-blue-500 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">em aberto</span>
-                  )}
+              <div className={`rounded-2xl overflow-hidden mt-2 ${isMidnight ? 'bg-volt-surface border border-white/5' : 'bg-white border-2 border-black'}`} data-testid="historico-section">
+                {/* Cabeçalho da tabela */}
+                <div className={`grid grid-cols-[auto_1fr_auto] gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-wider ${isMidnight ? 'bg-white/5 text-white/50' : 'bg-black/5 text-black/50'}`}>
+                  <span>Mês</span>
+                  <span className="text-center">Período das compras</span>
+                  <span className="text-right">Pagamento</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <p className={`text-sm ${isMidnight ? 'text-white/70' : 'text-black/70'}`}>{isCurrentOpen ? 'Fatura em aberto' : 'Última fatura fechada'}</p>
-                  <p className={`text-2xl font-bold ${isMidnight ? 'text-white' : 'text-black'}`} data-testid="historico-amount">{fmt(displayAmt)}</p>
-                </div>
-                {(sumInstallments > 0 || sumOther > 0) && (
-                  <div className={`border-t pt-3 space-y-2 ${isMidnight ? 'border-white/10' : 'border-black/10'}`}>
-                    {sumInstallments > 0 && (
-                      <div className="flex justify-between items-center text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-base text-yellow-500">event_repeat</span>
-                          <span className={isMidnight ? 'text-white/70' : 'text-black/70'}>Parcelas</span>
-                        </div>
-                        <span className="font-semibold text-yellow-500" data-testid="historico-installments">{fmt(sumInstallments)}</span>
-                      </div>
-                    )}
-                    {sumOther > 0 && (
-                      <div className="flex justify-between items-center text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className={`material-symbols-outlined text-base ${isMidnight ? 'text-white/50' : 'text-black/50'}`}>shopping_bag</span>
-                          <span className={isMidnight ? 'text-white/70' : 'text-black/70'}>Compras e outros</span>
-                        </div>
-                        <span className={`font-semibold ${isMidnight ? 'text-white' : 'text-black'}`} data-testid="historico-other">{fmt(sumOther)}</span>
-                      </div>
-                    )}
+                {historyData.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className={`grid grid-cols-[auto_1fr_auto] gap-3 px-4 py-3 items-center border-t ${isMidnight ? 'border-white/5' : 'border-black/5'}`}
+                    data-testid={`historico-row-${idx}`}
+                  >
+                    <span className={`text-sm font-black ${isMidnight ? 'text-white' : 'text-black'}`}>{item.month}</span>
+                    <span className={`text-[11px] text-center ${isMidnight ? 'text-white/50' : 'text-black/50'}`}>{item.period || '—'}</span>
+                    <span
+                      className={`text-sm font-bold text-right ${
+                        item.status === 'Fatura aberta'
+                          ? 'text-blue-400'
+                          : item.status === 'Esta fatura'
+                            ? (isMidnight ? 'text-white' : 'text-black')
+                            : 'text-volt-green'
+                      }`}
+                    >
+                      {item.amount > 0 ? fmt(item.amount) : item.status}
+                    </span>
                   </div>
-                )}
+                ))}
               </div>
             );
           })()}

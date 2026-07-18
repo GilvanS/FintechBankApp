@@ -8,6 +8,10 @@ interface InstallmentReviewProps {
     details: {
         amount: number;
         installments: number;
+        installmentValue?: number;
+        totalAmount?: number;
+        iof?: number;
+        juros?: number;
     };
     onConfirm: () => void;
     onBack: () => void;
@@ -27,18 +31,25 @@ const InstallmentReview: React.FC<InstallmentReviewProps> = ({ type, user, detai
     const { amount, installments } = details;
 
     const calculations = useMemo(() => {
-        const isPix = type === 'pix-credit';
-        const interestRatePerInstallment = isPix ? 0.05 : 0.10; // 5% for PIX, 10% for Invoice
+        const firstInstallmentDate = new Date();
+        firstInstallmentDate.setMonth(firstInstallmentDate.getMonth() + 1);
+
+        if (type === 'invoice' && details.installmentValue != null && details.totalAmount != null) {
+            const totalAmount = details.totalAmount;
+            const installmentValue = details.installmentValue;
+            const totalInterest = amount > 0 ? (totalAmount - amount) / amount : 0;
+            return { totalAmount, installmentValue, firstInstallmentDate, interestRatePerInstallment: totalInterest / installments, totalInterest, iof: details.iof, juros: details.juros };
+        }
+
+        const interestRatePerInstallment = 0.05; // 5% a.m. para PIX parcelado no crédito
         const totalInterest = interestRatePerInstallment * installments;
         const totalAmount = amount * (1 + totalInterest);
         const installmentValue = totalAmount / installments;
-        const firstInstallmentDate = new Date();
-        firstInstallmentDate.setMonth(firstInstallmentDate.getMonth() + 1);
-        
-        return { totalAmount, installmentValue, firstInstallmentDate, interestRatePerInstallment, totalInterest };
-    }, [type, amount, installments]);
 
-    const { totalAmount, installmentValue, firstInstallmentDate, interestRatePerInstallment, totalInterest } = calculations;
+        return { totalAmount, installmentValue, firstInstallmentDate, interestRatePerInstallment, totalInterest };
+    }, [type, amount, installments, details.installmentValue, details.totalAmount, details.iof, details.juros]);
+
+    const { totalAmount, installmentValue, firstInstallmentDate, interestRatePerInstallment, totalInterest, iof, juros } = calculations as typeof calculations & { iof?: number; juros?: number };
 
     return (
         <div className="bg-black text-white p-4 min-h-full flex flex-col">
@@ -65,6 +76,8 @@ const InstallmentReview: React.FC<InstallmentReviewProps> = ({ type, user, detai
                 <div className="bg-gray-900 rounded-lg p-4">
                     <InfoRow label="Parcelas" value={`${installments}x de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(installmentValue)}`} />
                     <InfoRow label="1ª parcela" value={firstInstallmentDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })} />
+                    {iof != null && <InfoRow label="IOF" value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(iof)} />}
+                    {juros != null && <InfoRow label="Juros" value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(juros)} />}
                     <InfoRow label="Taxa de juros" value={`${(interestRatePerInstallment * 100).toFixed(2)}% ao mês; ${(totalInterest * 100).toFixed(2)}% ao período`} />
                 </div>
                 

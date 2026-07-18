@@ -14,55 +14,81 @@ const PurchaseConfirmation: React.FC<PurchaseConfirmationProps> = ({ details, on
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
+    // Set a timer to automatically close the confirmation screen after 4 seconds
     const timer = setInterval(() => {
       setProgress(oldProgress => {
         if (oldProgress >= 100) {
           clearInterval(timer);
+          onClose(); // Navigate away
           return 100;
         }
         return oldProgress + 1;
       });
-    }, 10); // Faster animation
+    }, 40); // 40ms * 100 steps = 4000ms
 
     return () => {
-      clearInterval(timer);
+      clearInterval(timer); // Cleanup on unmount
     };
-  }, []);
+  }, [onClose]);
 
   if (!details) return null;
   const { product, message } = details;
 
   return (
-    <div className="absolute inset-0 bg-black z-30 p-6 flex flex-col justify-center items-center text-white animate-fade-in">
-        <div className="bg-surface-dark p-8 rounded-lg shadow-xl w-full max-w-sm text-center">
-            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-10 h-10 text-background-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+    <div
+        className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm p-6 flex flex-col justify-center items-center text-white animate-fade-in test-purchase-confirmation"
+        id="purchase-confirmation"
+        data-testid="purchase-confirmation"
+        data-cy="purchase-confirmation"
+        data-playwright="purchase-confirmation"
+        role="status"
+        aria-live="polite"
+    >
+        <div className="bg-volt-surface border-2 border-volt-primary rounded-3xl p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm text-center relative overflow-hidden">
+            <div className="w-16 h-16 bg-volt-green border-2 border-volt-primary shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-full flex items-center justify-center mx-auto mb-6">
+                <span className="material-symbols-outlined text-4xl text-black">check</span>
             </div>
-            <h2 className="text-2xl font-bold mb-2 text-white">Compra Confirmada!</h2>
-            <p className="text-subtle-dark mb-6">{message}</p>
-            
+            <h2 className="text-2xl font-black uppercase tracking-wider mb-2 text-white">Compra Confirmada!</h2>
+            <p className="text-on-surface-variant font-bold text-sm mb-6">{message}</p>
+
             {product && (
-                <div className="text-left bg-white/5 p-4 rounded-lg mb-6">
-                    <p className="font-bold">{product.name}</p>
-                    <p className="text-primary">{product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                <div className="text-left bg-[#0a0a0a] border border-white/10 p-4 rounded-xl mb-6">
+                    <p
+                        className="font-bold text-sm uppercase tracking-wider test-purchase-confirmation-product"
+                        data-testid="purchase-confirmation-product"
+                        data-cy="purchase-confirmation-product"
+                        data-playwright="purchase-confirmation-product"
+                    >{product.name}</p>
+                    <p
+                        className="text-volt-primary text-xl font-black mt-1 test-purchase-confirmation-amount"
+                        data-testid="purchase-confirmation-amount"
+                        data-cy="purchase-confirmation-amount"
+                        data-playwright="purchase-confirmation-amount"
+                    >{product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                 </div>
             )}
 
-        <div className="w-full bg-white/10 rounded-full h-1 mt-4 mb-6">
+            <button
+                onClick={onClose}
+                className="sr-only test-close-confirmation"
+                id="btn-close-confirmation"
+                name="close-confirmation"
+                data-testid="close-confirmation"
+                data-cy="close-confirmation"
+                data-playwright="close-confirmation"
+                aria-label="Fechar e voltar ao início"
+                type="button"
+            >
+                Voltar ao início
+            </button>
+
+            <div className="w-full bg-black/50 border border-white/10 rounded-full h-1.5 mt-4 overflow-hidden">
                 <div 
-                    className="bg-primary h-1 rounded-full" 
-            style={{ width: `${progress}%`, transition: 'width 10ms linear' }}
+                    className="bg-volt-green h-full rounded-full" 
+                    style={{ width: `${progress}%`, transition: 'width 40ms linear' }}
                 ></div>
             </div>
-
-        {progress >= 100 && (
-          <button
-            onClick={onClose}
-            className="w-full py-3 bg-primary text-background-dark font-bold rounded-lg hover:bg-primary/90 transition-colors animate-fade-in"
-          >
-            Voltar para o Início
-          </button>
-        )}
+            <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mt-3">Redirecionando para o início...</p>
 
         </div>
          <style>{`

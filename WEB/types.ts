@@ -9,6 +9,8 @@ export interface Transaction {
     from?: string;
     recipientName?: string;
     senderName?: string;
+    /** Categoria derivada da descrição pela API (refeicao, mobilidade, cultura, saude, moradia, compras, educacao, outros) */
+    category?: string;
 }
 
 export interface CardTransaction {
@@ -33,6 +35,10 @@ export interface CreditCard {
     totalLimit: number;
     pointsBalance: number;
     isBlocked: boolean;
+    deliveryStatus?: 'manufacturing' | 'shipping' | 'tracking' | 'delivered' | 'unlocked';
+    isActivated?: boolean;
+    dueDay?: number;
+    closingDay?: number;
     transactions: CardTransaction[];
     closedTransactions: CardTransaction[];
     futureInstallments?: Record<string, number>;
@@ -60,12 +66,22 @@ export interface LimitIncreaseRequest {
     status: 'pending' | 'approved' | 'denied';
 }
 
+export interface StoryStat {
+    label: string;
+    value: string;
+}
+
 export interface Story {
     title: string;
     description: string;
     icon?: string;
     image?: string;
     url?: string;
+    badge?: string;
+    accent?: string;
+    stats?: StoryStat[];
+    status?: string;
+    visualType?: string;
 }
 
 export interface AppNotification {
@@ -114,6 +130,8 @@ export interface User {
     fullName: string;
     username?: string;
     profileDescription?: string;
+    profileMessage?: string;
+    createdAt?: string;
     email: string;
     password: string; // This would be hashed in a real app
     balance: number;

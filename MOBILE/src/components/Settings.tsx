@@ -46,7 +46,10 @@ const Settings: React.FC<SettingsProps> = ({ user, onLogout, onBack, onNavigateT
                 </div>
 
                 <div className="pt-4">
-                    <button onClick={onLogout} className="w-full text-center py-3 font-semibold text-red-400 bg-red-900/50 rounded-lg hover:bg-red-900/70">
+                    <button
+                        onClick={onLogout}
+                        className="w-full text-center py-4 text-xs tracking-widest uppercase font-black text-white bg-red-600 border-4 border-black dark:border-white rounded-2xl hover:bg-red-700 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] transition-all"
+                    >
                         Sair do App
                     </button>
                 </div>

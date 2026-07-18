@@ -1,9 +1,51 @@
 /* ─── Google Fonts ─────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=Space+Grotesk:wght@500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@plugin "@tailwindcss/forms";
+
+/* Preserva darkMode: ['selector', '.theme-midnight'] do Tailwind 3 —
+   utilitarios dark: continuam ativados pela classe .theme-midnight no body,
+   nao pela media query prefers-color-scheme. */
+@custom-variant dark (&:where(.theme-midnight, .theme-midnight *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Manrope", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --color-primary:            #00e38b;
+  --color-background-light:   #f6f8f6;
+  --color-background-dark:    #131313;
+  --color-surface-dark:       #201f1f;
+  --color-text-dark:          #e5e2e1;
+  --color-subtle-dark:        #b9cbbc;
+
+  --color-volt-primary:       #00ff9d;
+  --color-volt-primary-dark:  #00e38b;
+  --color-volt-dark:          #131313;
+  --color-volt-surface:       #201f1f;
+  --color-volt-surface-low:   #1c1b1b;
+  --color-volt-surface-high:  #2a2a2a;
+  --color-volt-surface-top:   #353534;
+  --color-volt-white:         #e5e2e1;
+  --color-volt-muted:         #b9cbbc;
+  --color-volt-black:         #000000;
+  --color-volt-green:         #00ff9d;
+
+  --color-volt-yellow:        #FFD700;
+  --color-volt-yellow-pastel: #FFED86;
+  --color-volt-lime:          #A2FF00;
+  --color-volt-cyan:          #00E5FF;
+  --color-volt-pink-focus:    #FF5C8D;
+
+  --color-on-surface:         #e5e2e1;
+  --color-on-surface-variant: #b9cbbc;
+  --color-neon-secondary:     #c9bfff;
+  --color-neon-outline:       #849587;
+  --color-neon-error:         #ffb4ab;
+}
 
 /* ─── Base reset ────────────────────────────────────────────── */
 body {
@@ -67,6 +109,83 @@ body:not(.theme-midnight) .bg-volt-surface-high {
     border-radius: 1rem !important;
 }
 
+/* Exempt stories-dark from brutalist overrides to preserve readability and color fidelity */
+body:not(.theme-midnight) .stories-dark,
+body:not(.theme-midnight) .stories-dark * {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    box-shadow: none !important;
+}
+body:not(.theme-midnight) .stories-dark .text-white,
+body:not(.theme-midnight) .stories-dark .text-white * {
+    color: #ffffff !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-100 {
+    color: #f4f4f5 !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-200 {
+    color: #e4e4e7 !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-300 {
+    color: #d4d4d8 !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-400 {
+    color: #a1a1aa !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-500 {
+    color: #71717a !important;
+}
+body:not(.theme-midnight) .stories-dark .text-volt-green,
+body:not(.theme-midnight) .stories-dark .text-volt-green * {
+    color: #A2FF00 !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-volt-green {
+    background-color: #A2FF00 !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-zinc-900 {
+    background-color: #18181b !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-zinc-950 {
+    background-color: #09090b !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-gradient-to-br {
+    border-color: rgba(162, 255, 0, 0.3) !important;
+}
+body:not(.theme-midnight) .stories-dark .border-volt-green/30 {
+    border-color: rgba(162, 255, 0, 0.3) !important;
+}
+body:not(.theme-midnight) .stories-dark .text-amber-400 {
+    color: #fbbf24 !important;
+}
+body:not(.theme-midnight) .stories-dark .text-pink-400 {
+    color: #f472b6 !important;
+}
+body:not(.theme-midnight) .stories-dark .text-blue-400 {
+    color: #60a5fa !important;
+}
+body:not(.theme-midnight) .stories-dark .text-emerald-400 {
+    color: #34d399 !important;
+}
+
+/* Exempt credit-card-shell and exempt-brutalist from brutalist overrides */
+body:not(.theme-midnight) .credit-card-shell,
+body:not(.theme-midnight) .credit-card-shell * {
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+body:not(.theme-midnight) .exempt-brutalist,
+body:not(.theme-midnight) .exempt-brutalist * {
+    color: unset !important;
+    border-color: unset !important;
+    box-shadow: none !important;
+}
+body:not(.theme-midnight) .exempt-brutalist text {
+    fill: #ffffff !important;
+}
+
 /* Forçar texto preto dentro de cards e nav no tema yellow */
 body:not(.theme-midnight) .bg-volt-surface *,
 body:not(.theme-midnight) .bg-volt-surface-high *,
@@ -87,6 +206,58 @@ body:not(.theme-midnight) .text-on-surface,
 body:not(.theme-midnight) .text-white,
 body:not(.theme-midnight) .text-white * {
     color: #000000 !important;
+}
+
+/* Modais de fundo escuro (BoletoModal, DepositModal, PixModal, InstallmentModal...) mantem
+   texto branco legivel no tema yellow, mesmo com a regra geral de .text-white -> preto acima */
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white * {
+    color: #ffffff !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/20,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/20 * {
+    color: rgba(255,255,255,0.2) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/30,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/30 * {
+    color: rgba(255,255,255,0.3) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/40,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/40 * {
+    color: rgba(255,255,255,0.4) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/50,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/50 * {
+    color: rgba(255,255,255,0.5) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/60,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/60 * {
+    color: rgba(255,255,255,0.6) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/70,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/70 * {
+    color: rgba(255,255,255,0.7) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/80,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/80 * {
+    color: rgba(255,255,255,0.8) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/85,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/85 * {
+    color: rgba(255,255,255,0.85) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/90,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/90 * {
+    color: rgba(255,255,255,0.9) !important;
 }
 
 body:not(.theme-midnight) .text-on-surface-variant,
@@ -489,8 +660,74 @@ body.theme-midnight .recharts-default-tooltip {
 }
 body.theme-midnight .recharts-default-tooltip * { color: #e5e2e1 !important; }
 
-/* SVG ticks e grid — midnight */
-body.theme-midnight svg text  { fill: #b9cbbc !important; }
-body.theme-midnight svg line,
-body.theme-midnight svg path  { stroke: #201f1f !important; }
+/* SVG ticks e grid — midnight (apenas para graficos recharts, evitar quebrar icones Lucide) */
+body.theme-midnight .recharts-wrapper svg text { fill: #b9cbbc !important; }
+body.theme-midnight .recharts-wrapper svg line,
+body.theme-midnight .recharts-wrapper svg path { stroke: #353534 !important; }
+
+/* ============================================================
+   ISENÇÕES DO OVERRIDE BRUTALISTA (Gestão de Cartões + Stories)
+   Áreas intencionalmente escuras no tema Yellow: stories fullscreen,
+   shell do cartão de crédito e blocos exempt-brutalist (SVGs animados).
+   Mantidas no FINAL do arquivo para vencer o cascade dos overrides acima.
+   ============================================================ */
+
+/* Stories fullscreen escuras preservam fidelidade de cor no tema Yellow */
+body:not(.theme-midnight) .stories-dark,
+body:not(.theme-midnight) .stories-dark * {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+}
+body:not(.theme-midnight) .stories-dark .text-white,
+body:not(.theme-midnight) .stories-dark .text-white * {
+  color: #ffffff !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-100 { color: #f4f4f5 !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-200 { color: #e4e4e7 !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-300 { color: #d4d4d8 !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-400 { color: #a1a1aa !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-500 { color: #71717a !important; }
+body:not(.theme-midnight) .stories-dark .text-volt-green,
+body:not(.theme-midnight) .stories-dark .text-volt-green * {
+  color: #A2FF00 !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-volt-green {
+  background-color: #A2FF00 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-zinc-900 {
+  background-color: #18181b !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-zinc-950 {
+  background-color: #09090b !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-gradient-to-br {
+  border-color: rgba(162, 255, 0, 0.3) !important;
+}
+body:not(.theme-midnight) .stories-dark .border-volt-green\/30 {
+  border-color: rgba(162, 255, 0, 0.3) !important;
+}
+body:not(.theme-midnight) .stories-dark .text-amber-400 { color: #fbbf24 !important; }
+body:not(.theme-midnight) .stories-dark .text-pink-400 { color: #f472b6 !important; }
+body:not(.theme-midnight) .stories-dark .text-blue-400 { color: #60a5fa !important; }
+body:not(.theme-midnight) .stories-dark .text-emerald-400 { color: #34d399 !important; }
+
+/* Shell do cartão de crédito e blocos exempt-brutalist (SVGs do tracking) */
+body:not(.theme-midnight) .credit-card-shell,
+body:not(.theme-midnight) .credit-card-shell * {
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+body:not(.theme-midnight) .exempt-brutalist,
+body:not(.theme-midnight) .exempt-brutalist * {
+  color: unset !important;
+  border-color: unset !important;
+  box-shadow: none !important;
+}
+body:not(.theme-midnight) .exempt-brutalist text {
+  fill: #ffffff !important;
+}
 

@@ -1,28 +1,109 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ─── Google Fonts (redesign) ───────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=Space+Grotesk:wght@500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 
+@import "tailwindcss";
+
+@plugin "@tailwindcss/forms";
+
+/* Preserva darkMode: ['selector', '.theme-midnight'] do Tailwind 3 —
+   utilitarios dark: continuam ativados pela classe .theme-midnight no body,
+   nao pela media query prefers-color-scheme. */
+@custom-variant dark (&:where(.theme-midnight, .theme-midnight *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Manrope", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --color-primary:            #00e38b;
+  --color-background-light:   #f6f8f6;
+  --color-background-dark:    #131313;
+  --color-text-light:         #1F2937;
+  --color-text-dark:          #e5e2e1;
+  --color-subtle-light:       #6B7280;
+  --color-subtle-dark:        #b9cbbc;
+  --color-surface-dark:       #201f1f;
+
+  --color-volt-primary:       #00ff9d;
+  --color-volt-primary-dark:  #00e38b;
+  --color-volt-dark:          #131313;
+  --color-volt-surface:       #201f1f;
+  --color-volt-surface-low:   #1c1b1b;
+  --color-volt-surface-high:  #2a2a2a;
+  --color-volt-surface-top:   #353534;
+  --color-volt-white:         #e5e2e1;
+  --color-volt-muted:         #b9cbbc;
+  --color-volt-black:         #000000;
+  --color-volt-green:         #00ff9d;
+
+  --color-volt-yellow:        #FFD700;
+  --color-volt-yellow-pastel: #FFED86;
+  --color-volt-lime:          #A2FF00;
+  --color-volt-cyan:          #00E5FF;
+  --color-volt-pink-focus:    #FF5C8D;
+
+  --color-on-surface:         #e5e2e1;
+  --color-on-surface-variant: #b9cbbc;
+  --color-neon-secondary:     #c9bfff;
+  --color-neon-outline:       #849587;
+  --color-neon-error:         #ffb4ab;
+}
+
+/* ─── Base mobile (Capacitor) ───────────────────────────────── */
 /* Garante altura total para a cadeia h-full funcionar no Capacitor Android */
 html, body, #root {
   height: 100%;
   overflow: hidden;
 }
 
-/* Ionic Dark Theme Override */
-:root {
-  --ion-background-color: #0B1120;
-  --ion-text-color: #E5E7EB;
-  --ion-color-primary: #22C55E;
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
 }
 
+/* Base Headings — Space Grotesk */
+h1, h2, h3, h5, .font-display-lg {
+  font-family: 'Space Grotesk', sans-serif !important;
+}
+
+code, pre, .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ─── Safe area (notch / status bar / gesture bar) ──────────── */
+/* index.html usa viewport-fit=cover; compensa nas barras fixas. */
+header {
+  padding-top: env(safe-area-inset-top, 0px) !important;
+}
+
+nav#bottom-nav {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* ─── Ionic integration ─────────────────────────────────────── */
+/* O tema (Yellow/Midnight) é controlado pelas classes no body;
+   ion-app fica transparente para o body aparecer. */
 ion-app {
-  background-color: #0B1120 !important;
-  color: #E5E7EB !important;
+  background-color: transparent !important;
   position: relative !important;
   overflow: visible !important;
 }
 
-/* Ensure Material Symbols are visible - CRÍTICO PARA APK */
+:root {
+  --ion-background-color: #FFD700;
+  --ion-text-color: #000000;
+  --ion-color-primary: #A2FF00;
+}
+
+body.theme-midnight {
+  --ion-background-color: #131313;
+  --ion-text-color: #e5e2e1;
+  --ion-color-primary: #00ff9d;
+}
+
+/* ─── Material Symbols — CRÍTICO PARA APK ───────────────────── */
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined', 'Roboto', sans-serif !important;
   font-weight: normal !important;
@@ -45,12 +126,582 @@ ion-app {
   font-family: 'Material Symbols Outlined', 'Roboto', sans-serif;
 }
 
-/* Hide scrollbar but keep functionality */
-.no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+/* ─── Scrollbar hide ────────────────────────────────────────── */
+.no-scrollbar::-webkit-scrollbar,
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar,
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+
+/* ════════════════════════════════════════════════════════════ */
+/*  TEMA YELLOW — Volt Brutalist                               */
+/*  Activo quando body NÃO tem a classe .theme-midnight        */
+/* ════════════════════════════════════════════════════════════ */
+
+body:not(.theme-midnight) {
+    background-color: #FFD700 !important;
+    color: #000000 !important;
 }
 
-.no-scrollbar::-webkit-scrollbar {
-  display: none;  /* Chrome, Safari and Opera */
+/* Background do app wrapper */
+body:not(.theme-midnight) .bg-volt-dark {
+    background-color: #FFD700 !important;
+}
+
+/* Main Cards — white com hard shadow brutalista */
+body:not(.theme-midnight) .bg-volt-surface {
+    background-color: #FFFFFF !important;
+    border: 4px solid #000000 !important;
+    box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 1) !important;
+    color: #000000 !important;
+    border-radius: 1.5rem !important;
+}
+
+/* Inner High Contrast Items */
+body:not(.theme-midnight) .bg-volt-surface-high {
+    background-color: #FFED86 !important;
+    border: 3px solid #000000 !important;
+    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1) !important;
+    color: #000000 !important;
+    border-radius: 1rem !important;
+}
+
+/* Forçar texto preto dentro de cards e nav no tema yellow */
+body:not(.theme-midnight) .bg-volt-surface *,
+body:not(.theme-midnight) .bg-volt-surface-high *,
+body:not(.theme-midnight) .modal-card *,
+body:not(.theme-midnight) header *,
+body:not(.theme-midnight) nav * {
+    color: #000000 !important;
+}
+
+/* Verde → preto + bold no tema yellow (contraste) */
+body:not(.theme-midnight) .text-volt-green,
+body:not(.theme-midnight) .text-volt-green * {
+    color: #000000 !important;
+    font-weight: 900 !important;
+}
+
+body:not(.theme-midnight) .text-on-surface,
+body:not(.theme-midnight) .text-white,
+body:not(.theme-midnight) .text-white * {
+    color: #000000 !important;
+}
+
+/* Modais de fundo escuro (BoletoModal, DepositModal, PixModal, InstallmentModal...) mantem
+   texto branco legivel no tema yellow, mesmo com a regra geral de .text-white -> preto acima */
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white * {
+    color: #ffffff !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/20,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/20 * {
+    color: rgba(255,255,255,0.2) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/30,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/30 * {
+    color: rgba(255,255,255,0.3) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/40,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/40 * {
+    color: rgba(255,255,255,0.4) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/50,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/50 * {
+    color: rgba(255,255,255,0.5) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/60,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/60 * {
+    color: rgba(255,255,255,0.6) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/70,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/70 * {
+    color: rgba(255,255,255,0.7) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/80,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/80 * {
+    color: rgba(255,255,255,0.8) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/85,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/85 * {
+    color: rgba(255,255,255,0.85) !important;
+}
+
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/90,
+body:not(.theme-midnight) :is(.bg-black, .bg-zinc-900, .bg-zinc-950, .bg-\[\#0a0a0a\], .bg-\[\#131313\], .bg-\[\#1c1b1b\], .bg-\[\#0d0f12\]) .text-white\/90 * {
+    color: rgba(255,255,255,0.9) !important;
+}
+
+body:not(.theme-midnight) .text-on-surface-variant,
+body:not(.theme-midnight) .text-on-surface-variant * {
+    color: #444444 !important;
+    font-weight: 700 !important;
+}
+
+/* Neon glows → hard shadows no tema yellow */
+body:not(.theme-midnight) .neon-glow,
+body:not(.theme-midnight) .neon-glow-strong,
+body:not(.theme-midnight) .purple-glow {
+    box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+body:not(.theme-midnight) .card-glow {
+    border: 4px solid #000000 !important;
+    box-shadow: 8px 8px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+/* Inputs — yellow mode */
+body:not(.theme-midnight) input[type="text"],
+body:not(.theme-midnight) input[type="number"],
+body:not(.theme-midnight) select,
+body:not(.theme-midnight) textarea {
+    background-color: #FFFFFF !important;
+    border: 3px solid #000000 !important;
+    color: #000000 !important;
+    border-radius: 0.75rem !important;
+    box-shadow: 3px 3px 0px 0px rgba(0, 0, 0, 1) !important;
+    font-weight: 700 !important;
+}
+
+body:not(.theme-midnight) input[type="text"]:focus,
+body:not(.theme-midnight) input[type="number"]:focus {
+    outline: none !important;
+    border-color: #FF5C8D !important;
+    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+/* Botão primário — yellow mode: lime vibrante */
+body:not(.theme-midnight) .bg-volt-green,
+body:not(.theme-midnight) .btn-primary,
+body:not(.theme-midnight) button.btn-primary {
+    background-color: #A2FF00 !important;
+    color: #000000 !important;
+    border: 3px solid #000000 !important;
+    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1) !important;
+    font-weight: 900 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    transition: transform 0.1s, box-shadow 0.1s !important;
+}
+
+body:not(.theme-midnight) .bg-volt-green:hover,
+body:not(.theme-midnight) .btn-primary:hover,
+body:not(.theme-midnight) button.btn-primary:hover {
+    transform: translate(-1px, -1px) !important;
+    box-shadow: 5px 5px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+body:not(.theme-midnight) .bg-volt-green:active,
+body:not(.theme-midnight) .btn-primary:active,
+body:not(.theme-midnight) button.btn-primary:active {
+    transform: translate(3px, 3px) !important;
+    box-shadow: 1px 1px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+/* Botão secundário — yellow mode: cyan */
+body:not(.theme-midnight) .btn-secondary,
+body:not(.theme-midnight) button.btn-secondary {
+    background-color: #00E5FF !important;
+    color: #000000 !important;
+    border: 3px solid #000000 !important;
+    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1) !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    transition: transform 0.1s, box-shadow 0.1s !important;
+}
+
+body:not(.theme-midnight) .btn-secondary:hover,
+body:not(.theme-midnight) button.btn-secondary:hover {
+    background-color: #00D0EB !important;
+    transform: translate(-1px, -1px) !important;
+    box-shadow: 5px 5px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+body:not(.theme-midnight) .btn-secondary:active,
+body:not(.theme-midnight) button.btn-secondary:active {
+    transform: translate(3px, 3px) !important;
+    box-shadow: 1px 1px 0px 0px rgba(0, 0, 0, 1) !important;
+}
+
+/* Modal card wrapper — yellow mode */
+body:not(.theme-midnight) .modal-card {
+    background-color: #FFFFFF !important;
+    border: 4px solid #000000 !important;
+    box-shadow: 10px 10px 0px 0px rgba(0, 0, 0, 1) !important;
+    border-radius: 2rem !important;
+    color: #000000 !important;
+}
+
+/* Progress bar — lime, sem border */
+.bg-volt-green.rounded-full {
+    background-color: #A2FF00 !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Input focus — yellow mode geral */
+body:not(.theme-midnight) input:focus,
+body:not(.theme-midnight) select:focus,
+body:not(.theme-midnight) textarea:focus {
+    outline: none;
+    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1);
+    border-color: #FF5C8D;
+}
+
+
+/* ════════════════════════════════════════════════════════════ */
+/*  TEMA MIDNIGHT — Volt Dark Neon                             */
+/*  Activo quando body tem a classe .theme-midnight            */
+/* ════════════════════════════════════════════════════════════ */
+
+body.theme-midnight {
+    background-color: #131313 !important;
+    /* Dot grid sutil */
+    background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1.5px, transparent 1.5px) !important;
+    background-size: 24px 24px !important;
+    background-position: center !important;
+    color: #e5e2e1 !important;
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* Tipografia midnight — usa Inter (não Space Grotesk) */
+body.theme-midnight h1,
+body.theme-midnight h2,
+body.theme-midnight h3,
+body.theme-midnight h4,
+body.theme-midnight h5,
+body.theme-midnight h6,
+body.theme-midnight .font-display-lg {
+    font-family: 'Inter', sans-serif !important;
+}
+
+body.theme-midnight h1 {
+    font-size: 24px !important;
+    font-weight: 600 !important;
+    line-height: 32px !important;
+}
+@media (min-width: 640px) {
+    body.theme-midnight h1 {
+        font-size: 32px !important;
+        font-weight: 600 !important;
+        line-height: 40px !important;
+        letter-spacing: -0.01em !important;
+    }
+}
+body.theme-midnight h2 {
+    font-size: 20px !important;
+    font-weight: 500 !important;
+    line-height: 28px !important;
+}
+body.theme-midnight h3 {
+    font-size: 16px !important;
+    font-weight: 500 !important;
+    line-height: 24px !important;
+}
+body.theme-midnight p,
+body.theme-midnight span,
+body.theme-midnight div {
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* Cards midnight — tonal elevation */
+body.theme-midnight .bg-volt-surface {
+    background-color: #1c1b1b !important;
+    border: 1px solid #1c1b1b !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+    color: #e5e2e1 !important;
+    border-radius: 1rem !important;
+    transition: border-color 0.2s ease, transform 0.2s ease !important;
+}
+body.theme-midnight .bg-volt-surface:hover {
+    border-color: #00ff9d !important;
+}
+
+body.theme-midnight .bg-volt-surface-high {
+    background-color: #201f1f !important;
+    border: 1px solid #2a2a2a !important;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25) !important;
+    color: #e5e2e1 !important;
+    border-radius: 0.75rem !important;
+}
+
+/* Override bg pastel amarelo → superfície escura no midnight */
+body.theme-midnight .bg-\[\#FFED86\] {
+    background-color: #201f1f !important;
+    color: #e5e2e1 !important;
+    border-color: #2a2a2a !important;
+}
+
+/* Overrides de classes padrão HTML no midnight */
+body.theme-midnight .bg-white        { background-color: #1c1b1b !important; border-color: #2a2a2a !important; }
+body.theme-midnight .bg-gray-100     { background-color: #131313 !important; border-color: #201f1f !important; }
+body.theme-midnight .bg-gray-50      { background-color: #0e0e0e !important; }
+body.theme-midnight .bg-gray-200     { background-color: #2a2a2a !important; border-color: #353534 !important; }
+
+/* Texto — midnight */
+body.theme-midnight .text-black,
+body.theme-midnight .text-gray-900,
+body.theme-midnight .text-gray-800,
+body.theme-midnight .text-gray-700   { color: #e5e2e1 !important; }
+body.theme-midnight .text-gray-600,
+body.theme-midnight .text-gray-500   { color: #b9cbbc !important; }
+
+body.theme-midnight .text-volt-green,
+body.theme-midnight .text-volt-green * { color: #00ff9d !important; }
+
+body.theme-midnight .text-on-surface,
+body.theme-midnight .text-white,
+body.theme-midnight .text-white *    { color: #e5e2e1 !important; }
+
+body.theme-midnight .text-on-surface-variant,
+body.theme-midnight .text-on-surface-variant * { color: #b9cbbc !important; }
+
+/* Elementos verdes e amarelos têm texto escuro para contraste */
+body.theme-midnight .bg-\[\#A2FF00\] *,
+body.theme-midnight .bg-volt-green *,
+body.theme-midnight .bg-\[\#00DF89\] *,
+body.theme-midnight .bg-\[\#00ff9d\] *,
+body.theme-midnight .bg-\[\#FFED86\] * { color: #0c0c0c !important; }
+
+/* Sombras midnight — suaves, não 3D */
+body.theme-midnight [class*="shadow-["] { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important; }
+
+/* Glows midnight — borda fina + sombra suave */
+body.theme-midnight .neon-glow,
+body.theme-midnight .neon-glow-strong,
+body.theme-midnight .purple-glow,
+body.theme-midnight .card-glow {
+    border: 1px solid #1c1b1b !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+}
+body.theme-midnight .neon-glow:hover { border-color: #00ff9d !important; }
+
+/* Header midnight */
+body.theme-midnight header {
+    background-color: #131313 !important;
+    border-bottom: 1px solid #1c1b1b !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+}
+body.theme-midnight header button {
+    background-color: #1c1b1b !important;
+    border: 1px solid #201f1f !important;
+    box-shadow: none !important;
+}
+body.theme-midnight header button * { color: #e5e2e1 !important; }
+body.theme-midnight header h1        { color: #ffffff !important; }
+body.theme-midnight header h1.italic { color: #00ff9d !important; }
+
+/* Navbar midnight */
+body.theme-midnight nav {
+    background-color: #131313 !important;
+    border-top: 1px solid #1c1b1b !important;
+    box-shadow: 0 -4px 25px rgba(0, 0, 0, 0.5) !important;
+}
+body.theme-midnight nav button * { color: #b9cbbc !important; }
+
+/* Tab ativa midnight — pill sólido neon */
+body.theme-midnight nav span.absolute {
+    background-color: #00ff9d !important;
+    border: none !important;
+    box-shadow: 0 0 15px rgba(0, 255, 157, 0.3) !important;
+}
+
+/* Texto/ícone dentro da tab ativa = preto (contraste no fundo verde) */
+body.theme-midnight nav span.absolute ~ div,
+body.theme-midnight nav span.absolute ~ div *,
+body.theme-midnight nav span.absolute ~ span {
+    color: #0c0c0c !important;
+    text-shadow: none !important;
+    filter: none !important;
+}
+
+/* Inputs — midnight */
+body.theme-midnight input[type="text"],
+body.theme-midnight input[type="number"],
+body.theme-midnight select,
+body.theme-midnight textarea {
+    background-color: #201f1f !important;
+    border-top: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: 2px solid #353534 !important;
+    color: #ffffff !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    transition: all 0.2s ease !important;
+}
+body.theme-midnight input[type="text"]:focus,
+body.theme-midnight input[type="number"]:focus,
+body.theme-midnight select:focus,
+body.theme-midnight textarea:focus {
+    outline: none !important;
+    border-bottom: 2px solid #00ff9d !important;
+    background-color: #2a2a2a !important;
+}
+
+body.theme-midnight ::placeholder {
+    color: #6b7280 !important;
+    opacity: 1 !important;
+}
+
+/* Modal card — midnight */
+body.theme-midnight .modal-card {
+    background-color: #1c1b1b !important;
+    border: 1px solid #2a2a2a !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+    color: #e5e2e1 !important;
+    border-radius: 1rem !important;
+}
+
+/* Botão primário — midnight: verde neon */
+body.theme-midnight .bg-volt-green,
+body.theme-midnight .btn-primary,
+body.theme-midnight button.btn-primary {
+    background-color: #00ff9d !important;
+    color: #0c0c0c !important;
+    border: none !important;
+    box-shadow: 0 0 15px rgba(0, 255, 157, 0.2) !important;
+    font-weight: 700 !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+}
+body.theme-midnight .bg-volt-green *,
+body.theme-midnight .btn-primary *,
+body.theme-midnight button.btn-primary * { color: #0c0c0c !important; }
+
+body.theme-midnight .bg-volt-green:hover,
+body.theme-midnight .btn-primary:hover,
+body.theme-midnight button.btn-primary:hover {
+    background-color: #00e38b !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 0 20px rgba(0, 255, 157, 0.35) !important;
+}
+body.theme-midnight .bg-volt-green:active,
+body.theme-midnight .btn-primary:active,
+body.theme-midnight button.btn-primary:active {
+    background-color: #006d40 !important;
+    transform: translateY(1px) !important;
+    box-shadow: 0 0 8px rgba(0, 255, 157, 0.1) !important;
+}
+
+/* Botão secundário — midnight: transparente + borda verde */
+body.theme-midnight .btn-secondary,
+body.theme-midnight button.btn-secondary {
+    background-color: transparent !important;
+    color: #00ff9d !important;
+    border: 1px solid #00ff9d !important;
+    box-shadow: none !important;
+    font-weight: 700 !important;
+    text-transform: none !important;
+}
+body.theme-midnight .btn-secondary *,
+body.theme-midnight button.btn-secondary * { color: #00ff9d !important; }
+
+body.theme-midnight .btn-secondary:hover,
+body.theme-midnight button.btn-secondary:hover {
+    background-color: rgba(0, 255, 157, 0.1) !important;
+}
+body.theme-midnight .btn-secondary:active,
+body.theme-midnight button.btn-secondary:active {
+    transform: scale(0.98) !important;
+}
+
+/* Nav tab ativa — midnight */
+body.theme-midnight nav button.active {
+    background-color: #00ff9d !important;
+    color: #0c0c0c !important;
+}
+
+/* Chips/tags midnight */
+body.theme-midnight [class*="bg-volt-green/15"],
+body.theme-midnight [class*="bg-volt-green/10"] {
+    background-color: rgba(0, 255, 157, 0.15) !important;
+    color: #00ff9d !important;
+    border-radius: 4px !important;
+}
+
+/* Recharts tooltip — midnight */
+body.theme-midnight .recharts-default-tooltip {
+    background-color: #1c1b1b !important;
+    border: 1px solid #2a2a2a !important;
+    color: #e5e2e1 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
+}
+body.theme-midnight .recharts-default-tooltip * { color: #e5e2e1 !important; }
+
+/* SVG ticks e grid — midnight (apenas para graficos recharts, evitar quebrar icones Lucide) */
+body.theme-midnight .recharts-wrapper svg text { fill: #b9cbbc !important; }
+body.theme-midnight .recharts-wrapper svg line,
+body.theme-midnight .recharts-wrapper svg path { stroke: #353534 !important; }
+
+/* ============================================================
+   ISENÇÕES DO OVERRIDE BRUTALISTA (Gestão de Cartões + Stories)
+   Espelho do WEB/styles/global.css — manter no FINAL do arquivo
+   ============================================================ */
+
+body:not(.theme-midnight) .stories-dark,
+body:not(.theme-midnight) .stories-dark * {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    box-shadow: none !important;
+}
+body:not(.theme-midnight) .stories-dark .text-white,
+body:not(.theme-midnight) .stories-dark .text-white * {
+    color: #ffffff !important;
+}
+body:not(.theme-midnight) .stories-dark .text-zinc-100 { color: #f4f4f5 !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-200 { color: #e4e4e7 !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-300 { color: #d4d4d8 !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-400 { color: #a1a1aa !important; }
+body:not(.theme-midnight) .stories-dark .text-zinc-500 { color: #71717a !important; }
+body:not(.theme-midnight) .stories-dark .text-volt-green,
+body:not(.theme-midnight) .stories-dark .text-volt-green * {
+    color: #A2FF00 !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-volt-green {
+    background-color: #A2FF00 !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-zinc-900 {
+    background-color: #18181b !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-zinc-950 {
+    background-color: #09090b !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+body:not(.theme-midnight) .stories-dark .bg-gradient-to-br {
+    border-color: rgba(162, 255, 0, 0.3) !important;
+}
+body:not(.theme-midnight) .stories-dark .border-volt-green\/30 {
+    border-color: rgba(162, 255, 0, 0.3) !important;
+}
+body:not(.theme-midnight) .stories-dark .text-amber-400 { color: #fbbf24 !important; }
+body:not(.theme-midnight) .stories-dark .text-pink-400 { color: #f472b6 !important; }
+body:not(.theme-midnight) .stories-dark .text-blue-400 { color: #60a5fa !important; }
+body:not(.theme-midnight) .stories-dark .text-emerald-400 { color: #34d399 !important; }
+
+/* Shell do cartão de crédito e blocos exempt-brutalist (SVGs do tracking) */
+body:not(.theme-midnight) .credit-card-shell,
+body:not(.theme-midnight) .credit-card-shell * {
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+body:not(.theme-midnight) .exempt-brutalist,
+body:not(.theme-midnight) .exempt-brutalist * {
+    color: unset !important;
+    border-color: unset !important;
+    box-shadow: none !important;
+}
+body:not(.theme-midnight) .exempt-brutalist text {
+    fill: #ffffff !important;
 }

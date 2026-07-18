@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAppState } from '../contexts/AppStateContext';
 
 interface ConfirmDeleteModalProps {
     isOpen: boolean;
@@ -17,6 +18,9 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
     message,
     itemName
 }) => {
+    const { theme } = useAppState();
+    const isMidnight = theme === 'midnight';
+
     if (!isOpen) return null;
 
     return (
@@ -30,7 +34,7 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
             onClick={onClose}
         >
             <div
-                className="bg-surface-dark rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl"
+                className={`rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl ${isMidnight ? 'bg-surface-dark' : 'bg-white border-2 border-black'}`}
                 data-testid="confirm-delete-modal"
                 id="confirm-delete-modal"
                 onClick={(e) => e.stopPropagation()}
@@ -41,7 +45,7 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
                         data-testid="confirm-delete-icon-container"
                     >
                         <span
-                            className="material-symbols-outlined text-red-400 text-4xl"
+                            className="material-symbols-outlined text-red-500 text-4xl"
                             aria-hidden="true"
                             data-testid="confirm-delete-icon"
                         >
@@ -49,7 +53,7 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
                         </span>
                     </div>
                     <h2
-                        className="text-white text-xl font-bold mb-2"
+                        className={`text-xl font-bold mb-2 ${isMidnight ? 'text-white' : 'text-black'}`}
                         id="confirm-delete-modal-title"
                         data-testid="confirm-delete-modal-title"
                         role="heading"
@@ -58,13 +62,13 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
                         {title}
                     </h2>
                     <p
-                        className="text-subtle-dark text-sm"
+                        className={`text-sm ${isMidnight ? 'text-subtle-dark' : 'text-black/60'}`}
                         data-testid="confirm-delete-modal-message"
                         id="confirm-delete-modal-message"
                     >
                         {message}
                         {itemName && (
-                            <span className="block mt-2 font-semibold text-white">{itemName}</span>
+                            <span className={`block mt-2 font-semibold ${isMidnight ? 'text-white' : 'text-black'}`}>{itemName}</span>
                         )}
                     </p>
                 </div>
@@ -72,7 +76,7 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
                 <div className="flex gap-3">
                     <button
                         onClick={onClose}
-                        className="flex-1 px-4 py-3 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors font-medium"
+                        className={`flex-1 px-4 py-3 rounded-lg transition-colors font-medium ${isMidnight ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-black/10 text-black hover:bg-black/20'}`}
                         data-testid="confirm-delete-cancel-button"
                         id="confirm-delete-cancel-button"
                         aria-label="Cancelar exclusão"

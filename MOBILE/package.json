@@ -1,7 +1,7 @@
 {
   "name": "fintech-bank-app",
   "private": true,
-  "version": "4.0.4-20260626-2106",
+  "version": "4.0.4-20260704-1031",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,22 +15,29 @@
     "adb:wifi": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\adb-keep-reverse.ps1 -Device"
   },
   "dependencies": {
+    "@aparajita/capacitor-biometric-auth": "^10.0.0",
     "@capacitor/android": "^7.4.4",
     "@capacitor/app": "^7.1.2",
     "@capacitor/preferences": "^7.0.2",
     "@ionic/react": "^8.7.9",
     "@ionic/react-router": "^8.7.9",
     "axios": "^1.13.2",
+    "d3": "^7.9.0",
     "history": "^4.10.1",
     "ionicons": "^8.0.13",
+    "lucide-react": "^1.23.0",
+    "motion": "^12.42.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-imask": "^7.6.1",
-    "react-router-dom": "^5.3.4"
+    "react-router-dom": "^5.3.4",
+    "recharts": "^3.9.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.4",
     "@capacitor/core": "^7.4.4",
+    "@tailwindcss/forms": "^0.5.11",
+    "@tailwindcss/vite": "^4.3.2",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
@@ -38,10 +45,8 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "autoprefixer": "^10.4.23",
     "jsdom": "^27.2.0",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.19",
+    "tailwindcss": "^4.3.2",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vitest": "^4.0.8"

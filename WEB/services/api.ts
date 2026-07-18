@@ -84,6 +84,123 @@ export const getUserMe = async (): Promise<{ success: boolean; message?: string;
   }
 };
 
+export interface ApiCard {
+  id: string;
+  number: string;
+  numberMasked: string;
+  type: 'physical' | 'virtual';
+  brand: string;
+  expiry: string;
+  expiryShort: string;
+  cvv: string;
+  pin: string;
+  isActivated: boolean;
+  isBlocked: boolean;
+  nickname: string | null;
+  createdAt: string;
+}
+
+// Cartões reais (fintech.cards) — número exibido SEMPRE truncado no app (numberMasked)
+export const getMyCards = async (): Promise<{ success: boolean; cards?: ApiCard[] }> => {
+  try {
+    return await apiCall<{ success: boolean; cards: ApiCard[] }>('/cards/my-cards');
+  } catch {
+    return { success: false };
+  }
+};
+
+export const revealCard = async (cardId: string, pin: string): Promise<{ success: boolean; message?: string; cardNumber?: string; cvv?: string }> => {
+  try {
+    return await apiCall<{ success: boolean; message?: string; cardNumber?: string; cvv?: string }>('/cards/reveal', {
+      method: 'POST',
+      body: JSON.stringify({ cardId, pin })
+    });
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao revelar dados' };
+  }
+};
+
+// ── Resumo e histórico de faturas ──────────────────────────────────────────
+export interface InvoiceSummary {
+  saldoAnterior: number;
+  jurosRemuneratorios: number;
+  iof: number;
+  jurosMora: number;
+  multa: number;
+  totalDespesas: number;
+  totalPagamentos: number;
+  totalCreditos: number;
+  saldoFinal: number;
+  pagamentoMinimo: number;
+  dataVencimento: string;
+  melhorDataCompra: string;
+}
+
+export interface InvoiceHistoryItem {
+  month: string;
+  amount: number;
+  status: string;
+  period: string;
+}
+
+export interface InstallmentPlan {
+  installments: number;
+  installmentValue: number;
+  totalAmount: number;
+  iof: number;
+  juros: number;
+  monthlyRate?: number;
+}
+
+export interface InstallmentReceipt extends InstallmentPlan {
+  amount: number;
+  firstDueDate: string;
+  transactionId: string;
+}
+
+export const getInvoiceSummary = async (type: 'fechada' | 'aberta'): Promise<{ success: boolean; summary?: InvoiceSummary | null }> => {
+  try {
+    return await apiCall<{ success: boolean; summary: InvoiceSummary | null }>(`/credit/invoices/summary/${type}`);
+  } catch {
+    return { success: false };
+  }
+};
+
+export const getInvoiceHistory = async (): Promise<{ success: boolean; history?: InvoiceHistoryItem[] }> => {
+  try {
+    return await apiCall<{ success: boolean; history: InvoiceHistoryItem[] }>('/credit/invoices/history');
+  } catch {
+    return { success: false };
+  }
+};
+
+export const generateVirtualCard = async (nickname: string): Promise<{ success: boolean; message?: string }> => {
+  try {
+    return await apiCall<{ success: boolean; message?: string }>('/cards/virtual/generate', {
+      method: 'POST',
+      body: JSON.stringify({ nickname }),
+    });
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Erro ao gerar cartão virtual.' };
+  }
+};
+
+export const toggleBlockCard = async (cardId: string): Promise<{ success: boolean; isBlocked?: boolean; message?: string }> => {
+  try {
+    return await apiCall<{ success: boolean; isBlocked?: boolean; message?: string }>(`/cards/${cardId}/toggle-block`, { method: 'PUT' });
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Erro ao alterar bloqueio.' };
+  }
+};
+
+export const deleteVirtualCard = async (cardId: string): Promise<{ success: boolean; message?: string }> => {
+  try {
+    return await apiCall<{ success: boolean; message?: string }>(`/cards/${cardId}`, { method: 'DELETE' });
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Erro ao excluir cartão.' };
+  }
+};
+
 export const getUserStatement = async (cpf: string): Promise<{ success: boolean; message?: string; transactions?: Transaction[] }> => {
   try {
     const result = await apiCall<{ success: boolean; transactions?: Transaction[] }>(`/users/${cpf}/statement`, {
@@ -153,11 +270,11 @@ export const requestNewPassword = async (cpf: string): Promise<{ success: boolea
   }
 };
 
-export const performPix = async (cpf: string, key: string, amount: number, description: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
+export const performPix = async (cpf: string, key: string, amount: number, description: string, pin: string, category?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> => {
   try {
     const result = await apiCall<{ success: boolean; message: string; user?: any; transaction?: Transaction }>('/pix/transfer', {
       method: 'POST',
-      body: JSON.stringify({ cpf, key, amount, description }),
+      body: JSON.stringify({ cpf, key, amount, description, pin, category }),
     });
     return result;
   } catch (error: any) {
@@ -187,11 +304,11 @@ export const getPixRecipientInfo = async (key: string, senderCpf: string): Promi
   }
 };
 
-export const performPixCreditInstallment = async (cpf: string, amount: number, installments: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const performPixCreditInstallment = async (cpf: string, amount: number, installments: number, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/pix/credit-installment', {
       method: 'POST',
-      body: JSON.stringify({ cpf, amount, installments }),
+      body: JSON.stringify({ cpf, amount, installments, pin }),
     });
     return result;
   } catch (error: any) {
@@ -279,9 +396,17 @@ export const payCreditCardInvoice = async (cpf: string, pin: string, amount?: nu
   }
 };
 
-export const parcelCreditCardInvoice = async (cpf: string, details: { amount: number, installments: number }, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const getInvoiceInstallmentOptions = async (): Promise<{ success: boolean; amount?: number; options?: InstallmentPlan[]; message?: string }> => {
   try {
-    const result = await apiCall<{ success: boolean; message: string; user?: any }>('/cards/invoice/parcel', {
+    return await apiCall<{ success: boolean; amount: number; options: InstallmentPlan[] }>('/cards/invoice/installment-options');
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao buscar opções de parcelamento' };
+  }
+};
+
+export const parcelCreditCardInvoice = async (cpf: string, details: { installments: number }, pin?: string): Promise<{ success: boolean; message: string; receipt?: InstallmentReceipt }> => {
+  try {
+    const result = await apiCall<{ success: boolean; message: string; receipt?: InstallmentReceipt }>('/cards/invoice/parcel', {
       method: 'POST',
       body: JSON.stringify({ cpf, ...details, pin })
     });

@@ -1,24 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction, User } from '../types';
-import { useAuth } from '../context/AuthContext';
 import { getUserStatementPaginated } from '../services/api';
 import TransactionReceipt from './TransactionReceipt';
-import LoadingSpinner from './LoadingSpinner';
-import ErrorState from './ErrorState';
+import { formatDateBR, formatTimeBR } from '../utils/formatters';
+import { useAppState } from '../contexts/AppStateContext';
+import D3Heatmap from './charts/D3Heatmap';
 
 interface StatementPaginatedProps {
+    user: User;
     onNavigate: (view: string) => void;
     onBack: () => void;
 }
 
 type TabType = 'all' | 'purchases' | 'pix' | 'transfers' | 'payments';
 
-function StatementPaginated({ onNavigate, onBack }: StatementPaginatedProps) {
-    const { user } = useAuth();
+function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProps) {
     const [activeTab, setActiveTab] = useState<TabType>('all');
     const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const { theme } = useAppState();
+    const isMidnight = theme === 'midnight';
+    // Classes derivadas do tema (Yellow = claro neo-brutal, Midnight = original)
+    const textCls = isMidnight ? 'text-white' : 'text-black';
+    const mutedCls = isMidnight ? 'text-white/60' : 'text-black/60';
+    const cardCls = isMidnight ? 'bg-volt-surface border border-white/10' : 'bg-white border-2 border-black';
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
     const [pagination, setPagination] = useState({
@@ -36,19 +41,19 @@ function StatementPaginated({ onNavigate, onBack }: StatementPaginatedProps) {
     const fetchStatement = React.useCallback(async (page: number, type?: TabType) => {
         if (!user?.cpf) return;
         setIsLoading(true);
-        setError(null);
         try {
             const result = await getUserStatementPaginated(user.cpf, page, limit, type === 'all' ? undefined : type);
             if (result.success && result.transactions) {
                 setTransactions(result.transactions);
-                if (result.pagination) setPagination(result.pagination);
+                if (result.pagination) {
+                    setPagination(result.pagination);
+                }
             } else {
                 setTransactions([]);
-                setError(result.message || 'Não foi possível carregar o extrato.');
             }
-        } catch {
+        } catch (error) {
+            console.error('Erro ao buscar extrato:', error);
             setTransactions([]);
-            setError('Erro de conexão. Verifique sua internet e tente novamente.');
         } finally {
             setIsLoading(false);
         }
@@ -118,141 +123,226 @@ function StatementPaginated({ onNavigate, onBack }: StatementPaginatedProps) {
         }
     };
 
-    if (!user) return null;
-
+    // Se uma transação foi selecionada, mostrar o comprovante
     if (selectedTransaction) {
-        return <TransactionReceipt transaction={selectedTransaction} onBack={() => setSelectedTransaction(null)} />;
+        return (
+            <TransactionReceipt 
+                transaction={selectedTransaction} 
+                onBack={() => setSelectedTransaction(null)} 
+            />
+        );
     }
 
     return (
-        <div className="bg-background-dark text-white min-h-screen flex flex-col">
-            <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-subtle-dark/50 pt-[calc(1rem+env(safe-area-inset-top))] shadow-md">
-                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
-                    <span className="material-symbols-outlined">arrow_back</span>
-                </button>
-                <h1 className="text-xl font-bold text-white">Extrato da Conta</h1>
-                <div className="w-10"></div>
-            </header>
+        <main
+            className={`flex-1 p-4 md:p-6 space-y-6 w-full test-statement-paginated ${isMidnight ? 'bg-[#0a0a0a] text-white' : 'bg-volt-yellow text-black'}`}
+            id="statement-paginated"
+            data-testid="statement-paginated"
+            data-cy="statement-paginated"
+            data-playwright="statement-paginated"
+            role="main"
+        >
 
-            <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6 overflow-y-auto no-scrollbar">
-                {/* Saldo */}
-                <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl p-6">
-                    <div className="flex items-center justify-between">
-                        <p className="text-white/70 text-base font-normal leading-normal">Saldo atual</p>
-                        <button className="text-white/70 hover:text-white">
-                            <span className="material-symbols-outlined">visibility</span>
-                        </button>
-                    </div>
-                    <p className="text-white text-4xl font-bold mt-2">{user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+            {/* Saldo */}
+            <div className={`rounded-2xl p-5 ${cardCls} ${isMidnight ? '' : 'shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}`}>
+                <div className="flex items-center justify-between">
+                    <p className={`text-xs font-bold uppercase tracking-widest ${mutedCls}`}>Saldo atual</p>
                 </div>
+                <p
+                    className={`text-4xl font-black mt-1 test-statement-paginated-balance ${textCls}`}
+                    style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                    id="statement-paginated-balance"
+                    data-testid="statement-paginated-balance"
+                    data-cy="statement-paginated-balance"
+                    data-playwright="statement-paginated-balance"
+                >{user.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+            </div>
 
-                {/* Filtros por categoria — chips */}
-                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                    {([
-                        { key: 'all',       label: 'Todos',           icon: 'apps' },
-                        { key: 'purchases', label: 'Compras',         icon: 'shopping_bag' },
-                        { key: 'pix',       label: 'PIX',             icon: 'currency_exchange' },
-                        { key: 'transfers', label: 'Transferências',  icon: 'swap_horiz' },
-                        { key: 'payments',  label: 'Pagamentos',      icon: 'receipt_long' },
-                    ] as const).map(tab => (
-                        <button
-                            key={tab.key}
-                            onClick={() => handleTabChange(tab.key)}
-                            className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
-                                activeTab === tab.key
-                                    ? 'bg-primary text-white'
-                                    : 'bg-white/10 text-white/70 hover:bg-white/15 hover:text-white'
-                            }`}
-                        >
-                            <span className="material-symbols-outlined text-base">{tab.icon}</span>
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
+            {/* Filtros por categoria — estilo volt */}
+            <div className="flex overflow-x-auto no-scrollbar gap-2 pb-2"
+                id="statement-paginated-tabs"
+                data-testid="statement-paginated-tabs"
+            >
+                {([
+                    { key: 'all',       label: 'Todos'          },
+                    { key: 'purchases', label: 'Compras'        },
+                    { key: 'pix',       label: 'PIX'            },
+                    { key: 'transfers', label: 'Transferências' },
+                    { key: 'payments',  label: 'Pagamentos'     },
+                ] as const).map(tab => (
+                    <button
+                        key={tab.key}
+                        onClick={() => handleTabChange(tab.key)}
+                        className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
+                            activeTab === tab.key
+                                ? (isMidnight
+                                    ? 'bg-white/10 text-volt-primary border-white/10'
+                                    : 'bg-black text-volt-lime border-black')
+                                : (isMidnight
+                                    ? 'bg-transparent text-white/50 border-white/5 hover:bg-volt-surface hover:text-white'
+                                    : 'bg-white/60 text-black/60 border-black/20 hover:bg-white hover:text-black')
+                        } test-statement-tab-${tab.key}`}
+                        id={`tab-${tab.key}`}
+                        data-testid={`tab-${tab.key}`}
+                        data-cy={`tab-${tab.key}`}
+                        data-playwright={`tab-${tab.key}`}
+                        role="tab" aria-selected={activeTab === tab.key} type="button">
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
 
-                {/* Lista de transações agrupada por data */}
-                <div className="flex flex-col gap-0">
+            {/* Buscador */}
+            <div className="relative">
+                <span className={`material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 ${isMidnight ? 'text-white/40' : 'text-black/40'}`}>search</span>
+                <input
+                    type="text"
+                    placeholder="Buscar transação..."
+                    className={`w-full rounded-xl py-3 pl-12 pr-4 focus:outline-none transition-colors ${isMidnight ? 'bg-volt-surface border border-white/10 text-white placeholder-white/40 focus:border-volt-primary' : 'bg-white border-2 border-black text-black placeholder-black/40 focus:border-black'}`}
+                    id="statement-search-input"
+                    data-testid="statement-search-input"
+                />
+            </div>
+
+            {/* Lista de transações */}
+            <div className="space-y-4">
+                <div
+                    className="flex flex-col gap-2 test-statement-paginated-list"
+                    id="statement-paginated-list"
+                    data-testid="statement-paginated-list"
+                    data-cy="statement-paginated-list"
+                    data-playwright="statement-paginated-list"
+                    role="list"
+                >
                     {isLoading ? (
-                        <LoadingSpinner message="Carregando transações..." />
-                    ) : error ? (
-                        <ErrorState message={error} onRetry={() => fetchStatement(currentPage, activeTab)} />
+                        <div
+                            className="flex items-center justify-center p-8 test-statement-paginated-loading"
+                            id="statement-paginated-loading"
+                            data-testid="statement-paginated-loading"
+                            role="status"
+                            aria-live="polite"
+                        >
+                            <p className={`font-semibold ${mutedCls}`}>Carregando transações...</p>
+                        </div>
                     ) : transactions.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 gap-3">
-                            <span className="material-symbols-outlined text-4xl text-white/20">receipt_long</span>
-                            <p className="text-white/40 text-sm">Nenhuma transação encontrada</p>
+                        <div
+                            className="flex items-center justify-center p-8 test-statement-paginated-empty"
+                            id="statement-paginated-empty"
+                            data-testid="statement-paginated-empty"
+                            role="status"
+                            aria-live="polite"
+                        >
+                            <p className={`font-semibold ${mutedCls}`}>Nenhuma transação encontrada</p>
                         </div>
-                    ) : (() => {
-                        const grouped: Record<string, Transaction[]> = {};
-                        transactions.forEach(tx => {
-                            const d = new Date(tx.date);
-                            const key = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
-                            if (!grouped[key]) grouped[key] = [];
-                            grouped[key].push(tx);
-                        });
-                        return Object.entries(grouped).map(([dateLabel, dayTxs]) => (
-                            <div key={dateLabel} className="mb-4">
-                                <p className="text-xs font-semibold text-white/40 uppercase tracking-wide py-2 first-letter:capitalize">{dateLabel}</p>
-                                <div className="space-y-0.5">
-                                    {dayTxs.map((tx) => {
-                                        const time = new Date(tx.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                                        const typeLabel = getTypeLabel(tx.type);
-                                        return (
-                                            <button
-                                                key={tx.id}
-                                                onClick={() => setSelectedTransaction(tx)}
-                                                className="w-full flex items-center gap-3 hover:bg-white/5 rounded-xl p-3 transition-colors duration-200 text-left cursor-pointer"
-                                            >
-                                                <div className="flex items-center justify-center rounded-full bg-primary/10 shrink-0 size-10">
-                                                    <span className="material-symbols-outlined text-primary text-base">{getIconForType(tx.type)}</span>
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-white text-sm font-medium leading-normal truncate">{tx.description}</p>
-                                                    <p className="text-white/40 text-xs mt-0.5">{time} • {typeLabel}</p>
-                                                </div>
-                                                <p className={`text-sm font-semibold shrink-0 ${tx.amount < 0 ? 'text-white' : 'text-primary'}`}>
-                                                    {tx.amount < 0 ? '- ' : '+ '}{Math.abs(tx.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                                </p>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        ));
-                    })()}
+                    ) : (
+                        transactions.map((tx) => {
+                            const time = formatTimeBR(tx.date);
+                            const date = formatDateBR(tx.date);
+                            const typeLabel = getTypeLabel(tx.type);
+                            return (
+                                <button
+                                    key={tx.id}
+                                    onClick={() => setSelectedTransaction(tx)}
+                                    className={`w-full flex items-center gap-4 bg-transparent border-b p-4 mb-2 transition-all duration-200 text-left cursor-pointer active:scale-[0.99] test-statement-paginated-item ${isMidnight ? 'border-white/5 hover:bg-volt-surface' : 'border-black/10 hover:bg-white/70'}`}
+                                    data-testid="statement-paginated-item"
+                                    data-cy="statement-paginated-item"
+                                    data-playwright="statement-paginated-item"
+                                    data-transaction-id={tx.id}
+                                    data-transaction-type={tx.type}
+                                    aria-label={`Transação: ${tx.description}`}
+                                    type="button"
+                                    role="listitem"
+                                >
+                                    <div className={`flex items-center justify-center rounded-full shrink-0 size-10 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] ${isMidnight ? 'bg-volt-surface border border-white/10' : 'bg-white border-2 border-black'}`}>
+                                        <span className="material-symbols-outlined text-volt-primary" aria-hidden="true" style={{ fontSize: '18px' }}>{getIconForType(tx.type)}</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className={`text-xs mb-0.5 font-semibold test-statement-paginated-item-date ${isMidnight ? 'text-white/50' : 'text-black/50'}`} data-testid="statement-paginated-item-date">{date} • {time} • {typeLabel}</p>
+                                        <p className={`text-sm font-black leading-normal truncate test-statement-paginated-item-description ${textCls}`} data-testid="statement-paginated-item-description">{tx.description}</p>
+                                    </div>
+                                    <div className="text-right flex-shrink-0">
+                                        <p
+                                            className={`text-base font-black test-statement-paginated-item-amount ${tx.amount < 0 ? (isMidnight ? 'text-red-500' : 'text-red-600') : (isMidnight ? 'text-green-500' : 'text-green-700')}`}
+                                            data-testid="statement-paginated-item-amount"
+                                            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                                        >
+                                            {tx.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </p>
+                                    </div>
+                                </button>
+                            );
+                        })
+                    )}
                 </div>
+            </div>
 
-                {/* Paginação */}
-                {!isLoading && transactions.length > 0 && (
-                    <div className="flex items-center justify-between pt-4 border-t border-subtle-dark/50">
-                        <button
-                            onClick={handlePrevPage}
-                            disabled={!pagination.hasPrev}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                                pagination.hasPrev
+            {/* Paginação */}
+            {!isLoading && transactions.length > 0 && (
+                <div
+                    className={`flex items-center justify-between pt-4 border-t test-statement-pagination ${isMidnight ? 'border-subtle-dark/50' : 'border-black/15'}`}
+                    id="statement-pagination"
+                    data-testid="statement-pagination"
+                    role="navigation"
+                    aria-label="Paginação do extrato"
+                >
+                    <button
+                        onClick={handlePrevPage}
+                        disabled={!pagination.hasPrev}
+                        className={`px-6 py-3 rounded-lg font-medium transition-colors test-prev-page ${
+                            pagination.hasPrev
+                                ? (isMidnight
                                     ? 'bg-primary/20 text-white hover:bg-primary/30'
-                                    : 'bg-white/5 text-white/30 cursor-not-allowed'
-                            }`}
-                        >
-                            Anterior
-                        </button>
-                        <div className="text-white/70 text-sm">
-                            Página {pagination.page} de {pagination.totalPages} ({pagination.total} itens)
-                        </div>
-                        <button
-                            onClick={handleNextPage}
-                            disabled={!pagination.hasNext}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                                pagination.hasNext
-                                    ? 'bg-primary/20 text-white hover:bg-primary/30'
-                                    : 'bg-white/5 text-white/30 cursor-not-allowed'
-                            }`}
-                        >
-                            Próxima
-                        </button>
+                                    : 'bg-black text-white hover:bg-black/80')
+                                : (isMidnight
+                                    ? 'bg-volt-surface text-white/30 cursor-not-allowed'
+                                    : 'bg-black/10 text-black/30 cursor-not-allowed')
+                        }`}
+                        id="btn-prev-page"
+                        name="prev-page"
+                        data-testid="btn-prev-page"
+                        data-cy="btn-prev-page"
+                        data-playwright="btn-prev-page"
+                        aria-label="Página anterior"
+                        type="button"
+                    >
+                        Anterior
+                    </button>
+                    <div
+                        className={`text-sm test-pagination-info ${isMidnight ? 'text-white/70' : 'text-black/70'}`}
+                        id="statement-pagination-info"
+                        data-testid="statement-pagination-info"
+                        data-current-page={pagination.page}
+                        data-total-pages={pagination.totalPages}
+                        data-total-items={pagination.total}
+                        aria-live="polite"
+                    >
+                        Página {pagination.page} de {pagination.totalPages} ({pagination.total} itens)
                     </div>
-                )}
-            </main>
-        </div>
+                    <button
+                        onClick={handleNextPage}
+                        disabled={!pagination.hasNext}
+                        className={`px-6 py-3 rounded-lg font-medium transition-colors test-next-page ${
+                            pagination.hasNext
+                                ? (isMidnight
+                                    ? 'bg-primary/20 text-white hover:bg-primary/30'
+                                    : 'bg-black text-white hover:bg-black/80')
+                                : (isMidnight
+                                    ? 'bg-volt-surface text-white/30 cursor-not-allowed'
+                                    : 'bg-black/10 text-black/30 cursor-not-allowed')
+                        }`}
+                        id="btn-next-page"
+                        name="next-page"
+                        data-testid="btn-next-page"
+                        data-cy="btn-next-page"
+                        data-playwright="btn-next-page"
+                        aria-label="Próxima página"
+                        type="button"
+                    >
+                        Próxima
+                    </button>
+                </div>
+            )}
+        </main>
     );
 }
 

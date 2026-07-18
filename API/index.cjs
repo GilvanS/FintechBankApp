@@ -26,7 +26,7 @@ const { addContact } = require('./repositories/pixRepo');
 const usersRepo = require('./repositories/usersRepo');
 const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword } = require('./repositories/usersRepo');
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
-const { computeCurrentCycle, calcCharges } = require('./utils/billing');
+const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions } = require('./utils/billing');
 const { seedBillingMockData, applyScenario, saveAsMockBaseline, clearMockBaseline } = require('./utils/billingMockSeeder');
 const cardRepo = require('./repositories/cardRepo');
 const invoiceRepo = require('./repositories/invoiceRepo');
@@ -49,9 +49,58 @@ const databricksService = dbService;
 // Conectar ao banco será feito no bootstrap()
 // dbService.connect(); // Removido - conexão é feita no bootstrap()
 
+// --- Motor de Faturas ---
+const cron = require('node-cron');
+const { runEngine } = require('./services/invoiceEngine');
+// Agendar verificação diariamente à meia-noite
+cron.schedule('0 0 * * *', async () => {
+    console.log('[Cron] Executando Invoice Engine...');
+    try {
+        await runEngine();
+    } catch (e) {
+        console.error('[Cron] Erro no Invoice Engine:', e);
+    }
+
+    // Roda logo após o Invoice Engine: marca contas inadimplentes e recalcula
+    // multa/IOF/juros diariamente para faturas fechadas vencidas e não pagas.
+    // Sem este passo, days_overdue e billing_charges nunca são atualizados sozinhos.
+    console.log('[Cron] Executando validação de faturamento (inadimplência/encargos)...');
+    try {
+        const result = await runBillingValidation();
+        console.log('[Cron] Validação de faturamento concluída:', result && result.message);
+    } catch (e) {
+        console.error('[Cron] Erro na validação de faturamento:', e);
+    }
+});
+
 // --- Funções de Normalização (snake_case do DB para camelCase do App) ---
 const normalizeUser = (dbUser) => {
     if (!dbUser) return null;
+    
+    // Calcular status dinâmico do cartão
+    const getDeliveryStatus = () => {
+        if (dbUser.card_is_activated) return 'unlocked';
+        
+        let timeStatus = 0; // manufacturing
+        if (dbUser.created_at) {
+            const createdAt = new Date(dbUser.created_at).getTime();
+            const now = Date.now();
+            const diffHours = (now - createdAt) / (1000 * 60 * 60);
+            
+            if (diffHours >= 2) timeStatus = 2; // delivered
+            else if (diffHours >= 1) timeStatus = 1; // shipping
+        }
+        
+        const statusMap = { 'manufacturing': 0, 'shipping': 1, 'delivered': 2, 'unlocked': 3 };
+        const revMap = { 0: 'manufacturing', 1: 'shipping', 2: 'delivered', 3: 'unlocked' };
+        
+        const dbStatusValue = statusMap[dbUser.card_delivery_status] || 0;
+        
+        // Pega o status mais avançado entre o tempo e o que está salvo (para suportar botões manuais)
+        const finalStatusValue = Math.max(timeStatus, dbStatusValue);
+        return revMap[finalStatusValue] || 'manufacturing';
+    };
+
     return {
         cpf: dbUser.cpf,
         fullName: dbUser.full_name,
@@ -62,10 +111,12 @@ const normalizeUser = (dbUser) => {
         loginAttempts: dbUser.login_attempts || 0,
         pixDailyLimit: dbUser.pix_daily_limit !== null && dbUser.pix_daily_limit !== undefined ? parseFloat(dbUser.pix_daily_limit) : 2000.00,
         passwordResetRequested: dbUser.password_reset_requested,
+        createdAt: toISO(dbUser.created_at),
         // Novos campos de perfil
         username: dbUser.username,
         profileDescription: dbUser.profile_description,
         showStoriesPopup: dbUser.show_stories_popup,
+        profileMessage: dbUser.profile_message,
         // Estado do cartao de credito
         creditCard: {
             dueDate: dbUser.credit_card_due_date,
@@ -74,9 +125,22 @@ const normalizeUser = (dbUser) => {
             totalLimit: dbUser.credit_card_total_limit ? parseFloat(dbUser.credit_card_total_limit) : null,
             pointsBalance: dbUser.credit_card_points_balance ? parseInt(dbUser.credit_card_points_balance, 10) : 0,
             isBlocked: !!dbUser.credit_card_is_blocked,
+            deliveryStatus: getDeliveryStatus(),
+            isActivated: !!dbUser.card_is_activated,
+            dueDay: dbUser.credit_card_due_day || 15,
+            closingDay: (dbUser.credit_card_due_day || 15) - 7 > 0 
+                ? (dbUser.credit_card_due_day || 15) - 7 
+                : new Date(new Date().getFullYear(), new Date().getMonth(), (dbUser.credit_card_due_day || 15) - 7).getDate(),
             // Observacao: transacoes do cartao sao representadas em `transactions` com tipos INVOICE_*
         }
     };
+};
+
+const toLocalSqlTimestamp = (date = new Date()) => {
+    const d = new Date(date);
+    const tzoffset = d.getTimezoneOffset() * 60000;
+    const localISO = new Date(d.getTime() - tzoffset).toISOString();
+    return localISO.replace('T', ' ').replace('Z', '');
 };
 
 // Banco retorna timestamps como string sem 'Z' ou como objeto Date.
@@ -504,6 +568,20 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     const defaultCreditCardIsBlocked = false;
     const defaultCreditCardPointsBalance = 0;
     
+    // Gerar dados iniciais do cartao de credito
+    const cvv = cpf.slice(-3); // Ultimos 3 digitos do cpf
+    const creationDate = new Date();
+    const expiryDate = new Date();
+    expiryDate.setFullYear(creationDate.getFullYear() + 5);
+    const expiry = `${String(expiryDate.getMonth() + 1).padStart(2, '0')}/${String(expiryDate.getFullYear()).slice(-2)}`;
+    
+    const formatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' });
+    const formattedCreation = formatter.format(creationDate);
+    
+    const profileMessage = `Cartão em produção. Criado em ${formattedCreation} UTC. Validade: ${expiry}, CVV: ${cvv}`;
+    const cardDeliveryStatus = 'manufacturing';
+    const cardIsActivated = false;
+    
     try {
         // Escapar hash da senha também (pode conter caracteres especiais)
         // IMPORTANTE: O hash do bcrypt pode conter $, /, ., etc. Precisamos escapar apenas aspas simples
@@ -529,8 +607,8 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
         
         const userId = databricksService.generateUUID();
         const insertQuery = `
-            INSERT INTO ${databricksService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, credit_card_total_limit, credit_card_available_limit, credit_card_is_blocked, credit_card_points_balance, created_at, updated_at)
-            VALUES ('${userId}', '${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, ${defaultCreditCardTotalLimit}, ${defaultCreditCardAvailableLimit}, ${defaultCreditCardIsBlocked}, ${defaultCreditCardPointsBalance}, '${now}', '${now}')
+            INSERT INTO ${databricksService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, credit_card_total_limit, credit_card_available_limit, credit_card_is_blocked, credit_card_points_balance, created_at, updated_at, card_cvv, card_expiry, card_delivery_status, card_is_activated, profile_message)
+            VALUES ('${userId}', '${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, ${defaultCreditCardTotalLimit}, ${defaultCreditCardAvailableLimit}, ${defaultCreditCardIsBlocked}, ${defaultCreditCardPointsBalance}, '${now}', '${now}', '${cvv}', '${expiry}', '${cardDeliveryStatus}', ${cardIsActivated}, '${escapeSQL(profileMessage)}')
         `;
         
         console.log('🔵 [SIGNUP] Query INSERT (hash truncado para log):', insertQuery.replace(/'(\$2[^']{50})[^']+'/, "'$1...'"));
@@ -757,7 +835,24 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
     const normalized = normalizeUser(user);
     let latestInvoice = null;
     try {
-        latestInvoice = await invoiceRepo.findLatestByCpf(req.user.cpf);
+        const invRows = await databricksService.executeQuery(`
+            SELECT status, due_date, valor_total, itemized_transactions FROM ${databricksService.fq('invoices')}
+            WHERE cpf = '${req.user.cpf}' ORDER BY created_at DESC LIMIT 5
+        `);
+        if (invRows.length > 0) {
+                latestInvoice = invRows[0];
+            normalized.invoiceStatus = latestInvoice.status;
+            const closedInvoice = invRows.find(i => i.status === 'FECHADA');
+            if (closedInvoice) {
+                normalized.creditCard.closedInvoiceDueDate = closedInvoice.due_date;
+                normalized.creditCard.closedInvoice = parseFloat(closedInvoice.valor_total || 0);
+                if (closedInvoice.itemized_transactions) {
+                    try {
+                        normalized.creditCard._closedInvoiceSnapshot = JSON.parse(closedInvoice.itemized_transactions);
+                    } catch (_e) { /* snapshot invalido, cai no fallback ao vivo */ }
+                }
+            }
+        }
     } catch (err) {
         const msg = String((err && err.message) || '');
         if (msg.includes('TABLE_OR_VIEW_NOT_FOUND') || msg.includes('invoices')) {
@@ -766,10 +861,64 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
             throw err;
         }
     }
-    if (latestInvoice) normalized.invoiceStatus = latestInvoice.status;
 
-    // Popular creditCard.transactions e currentInvoice
+    // 1. Obter vencimento da fatura e calcular limites do ciclo
+    const closingDay = normalized.creditCard?.closingDay || 9;
+    
+    const today = new Date();
+    let openInvoiceMonth = today.getUTCMonth();
+    let openInvoiceYear = today.getUTCFullYear();
+
+    if (today.getUTCDate() > closingDay) {
+        openInvoiceMonth += 1;
+        if (openInvoiceMonth > 11) {
+            openInvoiceMonth = 0;
+            openInvoiceYear += 1;
+        }
+    }
+
+    const _cd = new Date(Date.UTC(openInvoiceYear, openInvoiceMonth, closingDay, 23, 59, 59, 999));
+    let _closeMs = _cd.getTime();
+
+    const _prevCd = new Date(Date.UTC(openInvoiceYear, openInvoiceMonth - 1, closingDay, 23, 59, 59, 999));
+    let _prevCloseMs = _prevCd.getTime();
+
+    const _prevPrevCd = new Date(Date.UTC(openInvoiceYear, openInvoiceMonth - 2, closingDay, 23, 59, 59, 999));
+    let _prevPrevCloseMs = _prevPrevCd.getTime();
+
+    // Ancorar a janela da fatura FECHADA no due_date real da fatura fechada (tabela invoices),
+    // pois credit_card_invoice_due_date rola para frente a cada fechamento/pagamento e
+    // desalinha a janela heurística acima das compras que realmente compõem a fatura.
+    if (normalized.creditCard.closedInvoiceDueDate) {
+        const _closedDue = new Date(normalized.creditCard.closedInvoiceDueDate);
+        if (!isNaN(_closedDue.getTime())) {
+            _closedDue.setUTCHours(23, 59, 59, 999);
+            const _closedCut = new Date(_closedDue);
+            _closedCut.setDate(_closedCut.getDate() - 7);
+            _prevCloseMs = _closedCut.getTime();
+            const _closedPrevCut = new Date(_closedCut);
+            _closedPrevCut.setMonth(_closedPrevCut.getMonth() - 1);
+            _prevPrevCloseMs = _closedPrevCut.getTime();
+        }
+    }
+
     const cpf = req.user.cpf;
+
+    // 2. Buscar planos de parcelamento ativos e compras parceladas
+    let planRows = [];
+    let splitTxIds = new Set();
+    try {
+        planRows = await databricksService.executeQuery(`
+            SELECT id, purchase_tx_id, description, installment_amount, installments, remaining_installments, next_due_date
+            FROM ${databricksService.fq('installment_plans')}
+            WHERE cpf = '${cpf}' AND status = 'ACTIVE'
+        `);
+        splitTxIds = new Set(planRows.map(p => p.purchase_tx_id).filter(Boolean));
+    } catch (err) {
+        console.warn('Erro ao buscar installment_plans:', err.message);
+    }
+
+    // 3. Buscar transações de cartão do usuário
     const cardRows = await databricksService.executeQuery(`
         SELECT id, type, amount, description, date
         FROM ${databricksService.fq('transactions')}
@@ -779,7 +928,39 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
         LIMIT 100
     `);
 
-    const cardTransactions = cardRows.map(r => {
+    // 4. Injetar parcelas pendentes projetadas se não estiverem fisicamente no banco
+    const pendingInstallments = [];
+    for (const plan of planRows) {
+        if (!plan.remaining_installments || plan.remaining_installments <= 0) continue;
+        const nextInstallmentNum = plan.installments - plan.remaining_installments + 1;
+        const expectedDescPart = `(${nextInstallmentNum}/${plan.installments})`;
+        
+        // Se next_due_date do plano cair no ciclo da fatura aberta atual
+        const nextDueTime = plan.next_due_date ? new Date(plan.next_due_date).getTime() : 0;
+        if (nextDueTime > _prevCloseMs && nextDueTime <= _closeMs) {
+            // Verificar se já existe uma transação física
+            const alreadyExists = cardRows.some(r => {
+                if (r.type !== 'INVOICE_INSTALLMENT') return false;
+                const desc = r.description || '';
+                return desc.includes(plan.description) && desc.includes(expectedDescPart);
+            });
+            
+            if (!alreadyExists) {
+                pendingInstallments.push({
+                    id: `pending-${plan.id}-${nextInstallmentNum}`,
+                    type: 'INVOICE_INSTALLMENT',
+                    amount: -parseFloat(plan.installment_amount),
+                    description: `${plan.description} (${nextInstallmentNum}/${plan.installments})`,
+                    date: plan.next_due_date
+                });
+            }
+        }
+    }
+
+    const allTransactions = [...cardRows, ...pendingInstallments];
+
+    // Mapear transações
+    const cardTransactions = allTransactions.map(r => {
         const base = {
             id: r.id,
             date: toISO(r.date),
@@ -804,59 +985,28 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
         return null;
     }).filter(Boolean);
 
-    // Janela do ciclo de billing para filtro correto das faturas
-    const _bcRows = await databricksService.executeQuery(
-        `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
-    );
-    const _bc = _bcRows[0] || { close_day: 20, due_day: 10 };
-    const _cyc = computeCurrentCycle(_bc);
-    const _cd = _cyc.closeDate;
-    const _closeMs = Date.UTC(_cd.getFullYear(), _cd.getMonth(), _cd.getDate(), 23, 59, 59, 999);
-    const _prevCloseMs = Date.UTC(_cd.getFullYear(), _cd.getMonth() - 1, _cd.getDate(), 23, 59, 59, 999);
-
-    const invoiceDueDate = normalized.creditCard?.invoiceDueDate ? new Date(normalized.creditCard.invoiceDueDate) : null;
-    let invoiceDueDateEndOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
-    if (invoiceDueDateEndOfDay) invoiceDueDateEndOfDay.setUTCHours(23, 59, 59, 999);
-
     normalized.creditCard = normalized.creditCard || {};
-    normalized.creditCard.transactions = cardTransactions;
-    // Fatura aberta: incluir INVOICE_INSTALLMENT (parcelas) e CREDIT/SHOP_CREDIT (compras a vista) com data <= invoiceDueDate
-    // Para compras parceladas, contar apenas as parcelas (não o SHOP_CREDIT). Para compras a vista, contar o SHOP_CREDIT
-    normalized.creditCard.currentInvoice = cardTransactions
-        .filter(tx => {
-            const txDate = new Date(tx.date).getTime();
-            // Fatura aberta: apenas transações do ciclo atual (após último fechamento)
-            if (txDate <= _closeMs) return false;
 
-            // Sempre incluir parcelas
-            if (tx.type === 'INVOICE_INSTALLMENT') return true;
-            
-            // Para CREDIT/SHOP_CREDIT, incluir apenas se não houver parcelas relacionadas (compra a vista)
-            // Verificar se existe alguma parcela com descrição similar e mesma data aproximada (dentro de 5 minutos)
-            if (tx.type === 'CREDIT') {
-                const txTime = new Date(tx.date).getTime();
-                const hasRelatedInstallment = cardTransactions.some(installment => {
-                    if (installment.type !== 'INVOICE_INSTALLMENT') return false;
-                    const instTime = new Date(installment.date).getTime();
-                    const timeDiff = Math.abs(txTime - instTime);
-                    // Se houver parcela na mesma descrição base (sem o "(1/12)") e mesma data aproximada, é compra parcelada
-                    const txDescBase = tx.merchant?.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim() || '';
-                    const instDescBase = installment.merchant?.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim() || '';
-                    return (txDescBase && instDescBase && txDescBase === instDescBase && timeDiff < 5 * 60 * 1000);
-                });
-                // Contar apenas se NÃO tiver parcela relacionada (é compra a vista)
-                return !hasRelatedInstallment;
-            }
-            
-            return false;
-        })
-        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    // Fatura aberta: compras do ciclo atual (_prevCloseMs < date <= _closeMs)
+    const openTransactions = cardTransactions.filter(tx => {
+        const txDate = new Date(tx.date).getTime();
+        if (txDate <= _prevCloseMs || txDate > _closeMs) return false;
+
+        if (splitTxIds.has(tx.id)) return false;
+
+        if (tx.type === 'INVOICE_INSTALLMENT') return true;
+        if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT') return true;
+        
+        return false;
+    });
+
+    normalized.creditCard.transactions = openTransactions;
+    normalized.creditCard.currentInvoice = openTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
 
     const isBlocked = Boolean(normalized.creditCard?.isBlocked);
-    const now = new Date();
 
-    // Se nao houver invoiceDueDate valido, usa hoje como fallback apenas para nao deixar vazio
-    const cutoff = invoiceDueDateEndOfDay && !isNaN(invoiceDueDateEndOfDay.getTime()) ? invoiceDueDateEndOfDay : new Date(now.setUTCHours(23, 59, 59, 999));
+    // Cutoff da fatura fechada = data de corte do ciclo atual (_closeMs)
+    const cutoff = new Date(_closeMs);
 
     let closedTransactions;
     if (isBlocked) {
@@ -872,18 +1022,35 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
         // Nao bloqueado: usar cutoff baseado no invoiceDueDate (consistente com a fatura atual)
         // Fatura fechada: janela do ciclo anterior (prevCloseDate → closeDate)
         closedTransactions = cardTransactions
-            .filter(tx => tx.type === 'INVOICE_INSTALLMENT'
-                && new Date(tx.date).getTime() > _prevCloseMs
-                && new Date(tx.date).getTime() <= _closeMs);
+            .filter(tx => {
+                const txDate = new Date(tx.date).getTime();
+                if (txDate <= _prevPrevCloseMs || txDate > _prevCloseMs) return false;
+
+                // Se for a compra principal de um parcelamento, excluir do somatório da fatura
+                if (splitTxIds.has(tx.id)) return false;
+
+                if (tx.type === 'INVOICE_INSTALLMENT') return true;
+                if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT') return true;
+                
+                return false;
+            });
     }
 
-    normalized.creditCard.closedTransactions = closedTransactions;
-    const rawInvoiceTotal = closedTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    // Preferir o snapshot imutável gravado no fechamento — pagar/antecipar parcelas apaga as
+    // linhas em transactions, então re-derivar ao vivo perderia a lista assim que fosse paga.
+    const closedSnapshot = normalized.creditCard._closedInvoiceSnapshot;
+    delete normalized.creditCard._closedInvoiceSnapshot;
+    normalized.creditCard.closedTransactions = closedSnapshot || closedTransactions;
+    const rawInvoiceTotal = normalized.creditCard.closedTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
     // Pagamentos feitos APÓS o fechamento = pagamentos para a fatura fechada atual
     const paidInCycle = cardRows
         .filter(r => r.type === 'INVOICE_PAYMENT' && new Date(r.date).getTime() > _closeMs)
         .reduce((sum, r) => sum + Math.abs(parseFloat(r.amount || 0)), 0);
-    normalized.creditCard.closedInvoice = Math.max(0, rawInvoiceTotal - paidInCycle);
+
+    const dbClosedInvoice = normalized.creditCard.closedInvoice;
+    normalized.creditCard.closedInvoice = dbClosedInvoice !== undefined && dbClosedInvoice !== null
+        ? Math.max(0, dbClosedInvoice - paidInCycle)
+        : Math.max(0, rawInvoiceTotal - paidInCycle);
 
     // Parcelas futuras projetadas a partir de installment_plans ativos
     try {
@@ -994,7 +1161,24 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
     const normalized = normalizeUser(user);
     let latestInvoice = null;
     try {
-        latestInvoice = await invoiceRepo.findLatestByCpf(cpf);
+        const invRows = await databricksService.executeQuery(`
+            SELECT status, due_date, valor_total, itemized_transactions FROM ${databricksService.fq('invoices')}
+            WHERE cpf = '${cpf}' ORDER BY created_at DESC LIMIT 5
+        `);
+        if (invRows.length > 0) {
+            latestInvoice = invRows[0];
+            normalized.invoiceStatus = latestInvoice.status;
+            const closedInvoice = invRows.find(i => i.status === 'FECHADA');
+            if (closedInvoice) {
+                normalized.creditCard.closedInvoiceDueDate = closedInvoice.due_date;
+                normalized.creditCard.closedInvoice = parseFloat(closedInvoice.valor_total || 0);
+                if (closedInvoice.itemized_transactions) {
+                    try {
+                        normalized.creditCard._closedInvoiceSnapshot = JSON.parse(closedInvoice.itemized_transactions);
+                    } catch (_e) { /* snapshot invalido, cai no fallback ao vivo */ }
+                }
+            }
+        }
     } catch (err) {
         const msg = String((err && err.message) || '');
         if (msg.includes('TABLE_OR_VIEW_NOT_FOUND') || msg.includes('invoices')) {
@@ -1003,9 +1187,73 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
             throw err;
         }
     }
-    if (latestInvoice) normalized.invoiceStatus = latestInvoice.status;
 
-    // Popular creditCard.transactions e currentInvoice
+    // 1. Obter vencimento da fatura e calcular limites do ciclo
+    const invoiceDueDate = normalized.creditCard?.invoiceDueDate ? new Date(normalized.creditCard.invoiceDueDate) : null;
+    let invoiceDueDateEndOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
+    if (invoiceDueDateEndOfDay) invoiceDueDateEndOfDay.setUTCHours(23, 59, 59, 999);
+
+    let _closeMs = 0; // data de corte da fatura aberta atual
+    let _prevCloseMs = 0; // data de corte da fatura fechada
+    let _prevPrevCloseMs = 0; // data de corte da anterior
+    if (invoiceDueDateEndOfDay && !isNaN(invoiceDueDateEndOfDay.getTime())) {
+        const _cd = new Date(invoiceDueDateEndOfDay);
+        _cd.setDate(_cd.getDate() - 7);
+        _closeMs = _cd.getTime();
+
+        const _prevCd = new Date(_cd);
+        _prevCd.setMonth(_prevCd.getMonth() - 1);
+        _prevCloseMs = _prevCd.getTime();
+
+        const _prevPrevCd = new Date(_prevCd);
+        _prevPrevCd.setMonth(_prevPrevCd.getMonth() - 1);
+        _prevPrevCloseMs = _prevPrevCd.getTime();
+    } else {
+        const _cd = new Date();
+        _cd.setDate(_cd.getDate() - 7);
+        _cd.setUTCHours(23, 59, 59, 999);
+        _closeMs = _cd.getTime();
+
+        const _prevCd = new Date(_cd);
+        _prevCd.setMonth(_prevCd.getMonth() - 1);
+        _prevCloseMs = _prevCd.getTime();
+
+        const _prevPrevCd = new Date(_prevCd);
+        _prevPrevCd.setMonth(_prevPrevCd.getMonth() - 1);
+        _prevPrevCloseMs = _prevPrevCd.getTime();
+    }
+
+    // Ancorar a janela da fatura FECHADA no due_date real da fatura fechada (tabela invoices),
+    // pois credit_card_invoice_due_date rola para frente a cada fechamento/pagamento e
+    // desalinha a janela heurística acima das compras que realmente compõem a fatura.
+    if (normalized.creditCard?.closedInvoiceDueDate) {
+        const _closedDue = new Date(normalized.creditCard.closedInvoiceDueDate);
+        if (!isNaN(_closedDue.getTime())) {
+            _closedDue.setUTCHours(23, 59, 59, 999);
+            const _closedCut = new Date(_closedDue);
+            _closedCut.setDate(_closedCut.getDate() - 7);
+            _prevCloseMs = _closedCut.getTime();
+            const _closedPrevCut = new Date(_closedCut);
+            _closedPrevCut.setMonth(_closedPrevCut.getMonth() - 1);
+            _prevPrevCloseMs = _closedPrevCut.getTime();
+        }
+    }
+
+    // 2. Buscar planos de parcelamento ativos e compras parceladas
+    let planRows = [];
+    let splitTxIds = new Set();
+    try {
+        planRows = await databricksService.executeQuery(`
+            SELECT id, purchase_tx_id, description, installment_amount, installments, remaining_installments, next_due_date
+            FROM ${databricksService.fq('installment_plans')}
+            WHERE cpf = '${cpf}' AND status = 'ACTIVE'
+        `);
+        splitTxIds = new Set(planRows.map(p => p.purchase_tx_id).filter(Boolean));
+    } catch (err) {
+        console.warn('Erro ao buscar installment_plans:', err.message);
+    }
+
+    // 3. Buscar transações de cartão do usuário
     const cardRows = await databricksService.executeQuery(`
         SELECT id, type, amount, description, date
         FROM ${databricksService.fq('transactions')}
@@ -1015,7 +1263,40 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
         LIMIT 100
     `);
 
-    const cardTransactions = cardRows.map(r => {
+    // 4. Injetar parcelas pendentes projetadas se não estiverem fisicamente no banco
+    const pendingInstallments = [];
+    for (const plan of planRows) {
+        if (!plan.remaining_installments || plan.remaining_installments <= 0) continue;
+        const nextInstallmentNum = plan.installments - plan.remaining_installments + 1;
+        const expectedDescPart = `(${nextInstallmentNum}/${plan.installments})`;
+        
+        // Se next_due_date do plano cair no ciclo da fatura aberta atual (ou ate a data de vencimento da fatura aberta)
+        const nextDueTime = plan.next_due_date ? new Date(plan.next_due_date).getTime() : 0;
+        const maxDueTime = invoiceDueDateEndOfDay ? invoiceDueDateEndOfDay.getTime() : _closeMs;
+        if (nextDueTime > _prevCloseMs && nextDueTime <= maxDueTime) {
+            // Verificar se já existe uma transação física
+            const alreadyExists = cardRows.some(r => {
+                if (r.type !== 'INVOICE_INSTALLMENT') return false;
+                const desc = r.description || '';
+                return desc.includes(plan.description) && desc.includes(expectedDescPart);
+            });
+            
+            if (!alreadyExists) {
+                pendingInstallments.push({
+                    id: `pending-${plan.id}-${nextInstallmentNum}`,
+                    type: 'INVOICE_INSTALLMENT',
+                    amount: -parseFloat(plan.installment_amount),
+                    description: `${plan.description} (${nextInstallmentNum}/${plan.installments})`,
+                    date: plan.next_due_date
+                });
+            }
+        }
+    }
+
+    const allTransactions = [...cardRows, ...pendingInstallments];
+
+    // Mapear transações
+    const cardTransactions = allTransactions.map(r => {
         const base = {
             id: r.id,
             date: toISO(r.date),
@@ -1040,62 +1321,32 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
         return null;
     }).filter(Boolean);
 
-    // Janela do ciclo de billing para filtro correto das faturas
-    const _bcRows = await databricksService.executeQuery(
-        `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
-    );
-    const _bc = _bcRows[0] || { close_day: 20, due_day: 10 };
-    const _cyc = computeCurrentCycle(_bc);
-    const _cd = _cyc.closeDate;
-    const _closeMs = Date.UTC(_cd.getFullYear(), _cd.getMonth(), _cd.getDate(), 23, 59, 59, 999);
-    const _prevCloseMs = Date.UTC(_cd.getFullYear(), _cd.getMonth() - 1, _cd.getDate(), 23, 59, 59, 999);
-
-    const invoiceDueDate = normalized.creditCard?.invoiceDueDate ? new Date(normalized.creditCard.invoiceDueDate) : null;
-    const invoiceDueDateEndOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
-    if (invoiceDueDateEndOfDay) invoiceDueDateEndOfDay.setUTCHours(23, 59, 59, 999);
-
     normalized.creditCard = normalized.creditCard || {};
-    normalized.creditCard.transactions = cardTransactions;
-    // Fatura aberta: incluir INVOICE_INSTALLMENT (parcelas) e CREDIT/SHOP_CREDIT (compras a vista) com data <= invoiceDueDate
-    // Para compras parceladas, contar apenas as parcelas (não o SHOP_CREDIT). Para compras a vista, contar o SHOP_CREDIT
-    normalized.creditCard.currentInvoice = cardTransactions
-        .filter(tx => {
-            const txDate = new Date(tx.date).getTime();
-            // Fatura aberta: apenas transações do ciclo atual (após último fechamento)
-            if (txDate <= _closeMs) return false;
 
-            // Sempre incluir parcelas
-            if (tx.type === 'INVOICE_INSTALLMENT') return true;
-            
-            // Para CREDIT/SHOP_CREDIT, incluir apenas se não houver parcelas relacionadas (compra a vista)
-            // Verificar se existe alguma parcela com descrição similar e mesma data aproximada (dentro de 5 minutos)
-            if (tx.type === 'CREDIT') {
-                const txTime = new Date(tx.date).getTime();
-                const hasRelatedInstallment = cardTransactions.some(installment => {
-                    if (installment.type !== 'INVOICE_INSTALLMENT') return false;
-                    const instTime = new Date(installment.date).getTime();
-                    const timeDiff = Math.abs(txTime - instTime);
-                    // Se houver parcela na mesma descrição base (sem o "(1/12)") e mesma data aproximada, é compra parcelada
-                    const txDescBase = tx.merchant?.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim() || '';
-                    const instDescBase = installment.merchant?.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim() || '';
-                    return (txDescBase && instDescBase && txDescBase === instDescBase && timeDiff < 5 * 60 * 1000);
-                });
-                // Contar apenas se NÃO tiver parcela relacionada (é compra a vista)
-                return !hasRelatedInstallment;
-            }
-            
-            return false;
-        })
+    // Fatura aberta: incluir parcelas vigentes e compras do ciclo atual
+    // (mesma regra do /users/me — a lista exibida deve ser a do ciclo, não todas as transações)
+    const maxDueTime = invoiceDueDateEndOfDay ? invoiceDueDateEndOfDay.getTime() : _closeMs;
+    const openTransactions = cardTransactions.filter(tx => {
+        const txDate = new Date(tx.date).getTime();
+        if (txDate <= _prevCloseMs || txDate > maxDueTime) return false;
+
+        if (splitTxIds.has(tx.id)) return false;
+
+        if (tx.type === 'INVOICE_INSTALLMENT') return true;
+        if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT') return true;
+
+        return false;
+    });
+    normalized.creditCard.transactions = openTransactions;
+    normalized.creditCard.currentInvoice = openTransactions
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
 
     const isBlocked = Boolean(normalized.creditCard?.isBlocked);
     const now = new Date();
-
     const cutoff = invoiceDueDateEndOfDay && !isNaN(invoiceDueDateEndOfDay.getTime()) ? invoiceDueDateEndOfDay : new Date(now.setUTCHours(23, 59, 59, 999));
 
     let closedTransactions;
     if (isBlocked) {
-        // Bloqueado: fechar apenas parcelas ate o vencimento
         closedTransactions = cardTransactions.filter(tx => {
             const txDate = new Date(tx.date);
             return tx.type === 'INVOICE_INSTALLMENT'
@@ -1104,21 +1355,35 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
         });
         normalized.creditCard.currentInvoice = 0;
     } else {
-        // Não bloqueado: usar cutoff baseado no invoiceDueDate
-        // Fatura fechada: janela do ciclo anterior (prevCloseDate → closeDate)
         closedTransactions = cardTransactions
-            .filter(tx => tx.type === 'INVOICE_INSTALLMENT'
-                && new Date(tx.date).getTime() > _prevCloseMs
-                && new Date(tx.date).getTime() <= _closeMs);
+            .filter(tx => {
+                const txDate = new Date(tx.date).getTime();
+                if (txDate <= _prevPrevCloseMs || txDate > _prevCloseMs) return false;
+
+                if (splitTxIds.has(tx.id)) return false;
+
+                if (tx.type === 'INVOICE_INSTALLMENT') return true;
+                if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT') return true;
+                
+                return false;
+            });
     }
 
-    normalized.creditCard.closedTransactions = closedTransactions;
-    const rawInvoiceTotal = closedTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    // Preferir o snapshot imutável gravado no fechamento — pagar/antecipar parcelas apaga as
+    // linhas em transactions, então re-derivar ao vivo perderia a lista assim que fosse paga.
+    const closedSnapshot = normalized.creditCard._closedInvoiceSnapshot;
+    delete normalized.creditCard._closedInvoiceSnapshot;
+    normalized.creditCard.closedTransactions = closedSnapshot || closedTransactions;
+    const rawInvoiceTotal = normalized.creditCard.closedTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
     // Pagamentos feitos APÓS o fechamento = pagamentos para a fatura fechada atual
     const paidInCycle = cardRows
         .filter(r => r.type === 'INVOICE_PAYMENT' && new Date(r.date).getTime() > _closeMs)
         .reduce((sum, r) => sum + Math.abs(parseFloat(r.amount || 0)), 0);
-    normalized.creditCard.closedInvoice = Math.max(0, rawInvoiceTotal - paidInCycle);
+
+    const dbClosedInvoice = normalized.creditCard.closedInvoice;
+    normalized.creditCard.closedInvoice = dbClosedInvoice !== undefined && dbClosedInvoice !== null
+        ? Math.max(0, dbClosedInvoice - paidInCycle)
+        : Math.max(0, rawInvoiceTotal - paidInCycle);
 
     // Parcelas futuras projetadas a partir de installment_plans ativos
     try {
@@ -1423,14 +1688,14 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
     const { items, paymentMethod, cashbackUsed = 0, installments = 1, pin, interestRate } = req.body || {};
     
     if (!Array.isArray(items) || !items.length || !paymentMethod || !pin || pin.length !== 4) {
-        console.log('❌ [SHOP CHECKOUT] Validação falhou:', {
-            itemsIsArray: Array.isArray(items),
-            itemsLength: items?.length,
-            paymentMethod,
-            pin,
-            pinLength: pin?.length
-        });
         return res.status(400).json({ success: false, message: 'Payload invalido.' });
+    }
+    
+    if (['card_debit', 'credit'].includes(paymentMethod)) {
+        const [dbUser] = await databricksService.executeQuery(`SELECT card_is_activated FROM ${databricksService.fq('users')} WHERE cpf = '${req.user.cpf}'`);
+        if (!dbUser || !dbUser.card_is_activated) {
+            return res.status(403).json({ success: false, message: 'Cartão físico não está ativado.' });
+        }
     }
     
     const catalog = await shopRepo.listProducts();
@@ -1669,7 +1934,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             WHERE cpf = ${esc(req.user.cpf)}
         `);
 
-        const nowIso = new Date().toISOString();
+        const nowIso = toLocalSqlTimestamp();
         // Registrar compra visível na fatura aberta
         // Descrição amigável da compra: nome do primeiro produto ou "<Primeiro produto> + N itens"
         let productDesc;
@@ -1697,16 +1962,17 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         if (qty >= 2) {
             const now = new Date();
 
-            // Usar o próximo close_day do ciclo de billing como data da 1ª parcela
-            // Garante que a parcela caia dentro da janela da fatura aberta atual
-            const chkBcRows = await databricksService.executeQuery(
-                `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
+            // Buscar vencimento da fatura aberta atual do usuário
+            const userRows = await databricksService.executeQuery(
+                `SELECT credit_card_invoice_due_date FROM ${databricksService.fq('users')} WHERE cpf = '${req.user.cpf}'`
             );
-            const chkBc = chkBcRows[0] || { close_day: 20, due_day: 10 };
-            const chkCyc = computeCurrentCycle(chkBc);
-            // próximo close_day = closeDate (Date local) + 1 mês em UTC
-            const _chkCd = chkCyc.closeDate;
-            const firstDue = new Date(Date.UTC(_chkCd.getFullYear(), _chkCd.getMonth() + 1, _chkCd.getDate(), 23, 59, 59, 999));
+            const user = userRows[0] || {};
+            const userDueDate = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
+
+            // O corte da fatura (data da primeira parcela) é 7 dias antes do vencimento
+            const firstDue = new Date(userDueDate);
+            firstDue.setDate(firstDue.getDate() - 7);
+            firstDue.setUTCHours(23, 59, 59, 999);
 
             const parcela = totalParcelado / qty;
 
@@ -1715,7 +1981,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             await databricksService.executeQuery(`
                 INSERT INTO ${databricksService.fq('transactions')}
                 (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-                VALUES ('${firstInstId}', '${req.user.cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${safeProductDesc} (1/${qty})', NULL, NULL, NULL, '${firstDue.toISOString()}')
+                VALUES ('${firstInstId}', '${req.user.cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${safeProductDesc} (1/${qty})', NULL, NULL, NULL, '${toLocalSqlTimestamp(firstDue)}')
             `);
 
             // Plano agregado (restante das parcelas)
@@ -1725,7 +1991,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
 
             const planId = databricksService.generateUUID();
             const { esc } = require('./repositories/context');
-            const planNow = new Date().toISOString();
+            const planNow = toLocalSqlTimestamp();
             // original_amount = valor original da compra (sem juros), total_amount = valor total parcelado (com juros se houver)
             // total_with_interest = mesmo que total_amount para compras com juros, ou total para compras sem juros
             const originalAmount = total; // Valor original sem juros
@@ -1770,7 +2036,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             await databricksService.executeQuery(`
                 INSERT INTO ${databricksService.fq('installment_plans')}
                 (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
-                VALUES (${esc(planId)}, ${esc(req.user.cpf)}, ${esc(txId)}, ${esc('Compra shop (credito)')}, ${originalAmount.toFixed(2)}, ${totalParcelado.toFixed(2)}, ${totalWithInterest.toFixed(2)}, ${qty}, ${parcela.toFixed(2)}, ${typeof rate === 'number' ? rate.toFixed(4) : '0.0000'}, ${remainingBalance}, ${qty - 1}, ${esc(nextDueDate.toISOString())}, ${esc('ACTIVE')}, ${esc(planNow)}, ${esc(planNow)})
+                VALUES (${esc(planId)}, ${esc(req.user.cpf)}, ${esc(txId)}, ${esc('Compra shop (credito)')}, ${originalAmount.toFixed(2)}, ${totalParcelado.toFixed(2)}, ${totalWithInterest.toFixed(2)}, ${qty}, ${parcela.toFixed(2)}, ${typeof rate === 'number' ? rate.toFixed(4) : '0.0000'}, ${remainingBalance}, ${qty - 1}, ${esc(toLocalSqlTimestamp(nextDueDate))}, ${esc('ACTIVE')}, ${esc(planNow)}, ${esc(planNow)})
             `);
             console.log('✅ [SHOP CHECKOUT] Plano de parcelamento inserido com sucesso.');
         }
@@ -2262,13 +2528,23 @@ apiRouter.get('/admin/users/:cpf', bearerAuth(), authenticateAdmin, asyncHandler
 
     const user = normalizeUser(userRow);
 
-    // Enriquecer com a fatura mais recente (se houver)
-    const latestInvoice = await invoiceRepo.findLatestByCpf(cpf);
-    if (latestInvoice && latestInvoice.due_date) {
-        // Opcional: apenas quando status indica fatura fechada
-        user.creditCard.closedInvoiceDueDate = latestInvoice.due_date;
-    } else {
-        user.creditCard.closedInvoiceDueDate = null;
+    // Enriquecer com a fatura mais recente e a fechada
+    try {
+        const invRows = await databricksService.executeQuery(`
+            SELECT status, due_date, valor_total FROM ${databricksService.fq('invoices')}
+            WHERE cpf = '${cpf}' ORDER BY created_at DESC LIMIT 5
+        `);
+        if (invRows.length > 0) { 
+            const latestInvoice = invRows[0]; 
+            user.invoiceStatus = latestInvoice.status;
+            const closedInvoice = invRows.find(i => i.status === 'FECHADA');
+            if (closedInvoice) {
+                user.creditCard.closedInvoiceDueDate = closedInvoice.due_date;
+                user.creditCard.closedInvoice = parseFloat(closedInvoice.valor_total || 0);
+            }
+        }
+    } catch (err) {
+        console.warn('Erro ao buscar invoices para admin:', err.message);
     }
 
     // Incluir purchasedItems para consistencia nas telas administrativas
@@ -2504,19 +2780,27 @@ apiRouter.post('/admin/users/:cpf/card-details', bearerAuth(), authenticateAdmin
     }
 
     const sets = [];
-    if (typeof dueDate === 'string') sets.push(`credit_card_due_date = '${dueDate.replace(/'/g, "''")}'`);
-    if (typeof invoiceDueDate === 'string') sets.push(`credit_card_invoice_due_date = '${invoiceDueDate.replace(/'/g, "''")}'`);
+    if (typeof dueDate === 'string') {
+        if (dueDate.trim() === '') sets.push(`credit_card_due_date = NULL`);
+        else sets.push(`credit_card_due_date = '${dueDate.replace(/'/g, "''")}'`);
+    }
+    if (typeof invoiceDueDate === 'string') {
+        if (invoiceDueDate.trim() === '' || invoiceDueDate === 'Invalid Date') sets.push(`credit_card_invoice_due_date = NULL`);
+        else sets.push(`credit_card_invoice_due_date = '${invoiceDueDate.replace(/'/g, "''")}'`);
+    }
     if (typeof availableLimit === 'number') sets.push(`credit_card_available_limit = ${Number(availableLimit).toFixed(2)}`);
     if (typeof totalLimit === 'number') sets.push(`credit_card_total_limit = ${Number(totalLimit).toFixed(2)}`);
     if (typeof pointsBalance === 'number') sets.push(`credit_card_points_balance = ${Math.floor(pointsBalance)}`);
 
     // Regra de bloqueio: se invoiceDueDate estiver >7 dias no passado, bloqueia cartao
     let blockCard = false;
-    if (typeof invoiceDueDate === 'string') {
+    if (typeof invoiceDueDate === 'string' && invoiceDueDate.trim() !== '' && invoiceDueDate !== 'Invalid Date') {
         const inv = new Date(invoiceDueDate);
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        blockCard = inv < sevenDaysAgo;
+        if (!isNaN(inv.getTime())) {
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            blockCard = inv < sevenDaysAgo;
+        }
     }
     if (blockCard) {
         sets.push('credit_card_is_blocked = true');
@@ -2538,6 +2822,407 @@ apiRouter.post('/admin/users/:cpf/card-details', bearerAuth(), authenticateAdmin
     res.json({ success: true, user: normalizeUser(user) });
 }));
 
+// Ativar cartão físico
+// ─── Utilitário: geração de número de cartão com Luhn ───────────────────────
+const generateCardNumber = (bin = '5981012') => {
+    // BIN 7 dígitos + 8 dígitos aleatórios + 1 dígito verificador Luhn = 16
+    const randomPart = Array.from({ length: 8 }, () => Math.floor(Math.random() * 10)).join('');
+    const partial = bin + randomPart; // 15 dígitos
+
+    // Algoritmo de Luhn para calcular o dígito verificador
+    let sum = 0;
+    for (let i = 0; i < partial.length; i++) {
+        let d = parseInt(partial[partial.length - 1 - i]);
+        if (i % 2 === 0) { d *= 2; if (d > 9) d -= 9; }
+        sum += d;
+    }
+    const checkDigit = (10 - (sum % 10)) % 10;
+    const raw = partial + checkDigit; // 16 dígitos
+
+    // Formatar: XXXX XXXX XXXX XXXX
+    const formatted = raw.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+    return { raw, formatted };
+};
+
+const formatExpiry = (expiryShort) => {
+    // Converte MM/YY → MM/AAAA   ex: 07/31 → 07/2031
+    if (!expiryShort) return expiryShort;
+    const [mm, yy] = expiryShort.split('/');
+    return `${mm}/20${yy}`;
+};
+
+// ─── POST /cards/physical/activate — ativa o cartão e gera o número ──────────
+apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cvv, expiry } = req.body || {};
+    const cpf = req.user.cpf;
+
+    if (!cvv || !expiry) {
+        return res.status(400).json({ success: false, message: 'CVV e Validade são obrigatórios.' });
+    }
+
+    const [dbUser] = await databricksService.executeQuery(`SELECT card_cvv, card_expiry, card_is_activated FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
+    if (!dbUser) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    if (dbUser.card_is_activated) return res.status(400).json({ success: false, message: 'Cartão já está ativado.' });
+
+    if (dbUser.card_cvv !== cvv || dbUser.card_expiry !== expiry) {
+        return res.status(401).json({ success: false, message: 'CVV ou Validade incorretos.' });
+    }
+
+    // Gerar número de cartão físico com BIN Mastercard 5981012
+    let cardRaw, cardFormatted;
+    let attempts = 0;
+    while (attempts < 10) {
+        const gen = generateCardNumber('5981012');
+        // Verificar unicidade no banco
+        const [existing] = await databricksService.executeQuery(
+            `SELECT id FROM fintech.cards WHERE card_number_raw = '${gen.raw}'`
+        );
+        if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; break; }
+        attempts++;
+    }
+    if (!cardRaw) return res.status(500).json({ success: false, message: 'Erro ao gerar número do cartão. Tente novamente.' });
+
+    const expiryFull = formatExpiry(dbUser.card_expiry);
+    const pin = '9898';
+
+    // Salvar cartão na tabela fintech.cards
+    await databricksService.executeQuery(`
+        INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated)
+        VALUES ('${cpf}', '${cardFormatted}', '${cardRaw}', 'physical', 'mastercard', '5981012', '${expiryFull}', '${dbUser.card_expiry}', '${cvv}', '${pin}', true)
+    `);
+
+    // Atualizar status do usuário
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET card_is_activated = true, card_delivery_status = 'unlocked', updated_at = current_timestamp()
+        WHERE cpf = '${cpf}'
+    `);
+
+    res.json({
+        success: true,
+        message: 'Cartão ativado com sucesso!',
+        card: {
+            number: cardFormatted,
+            expiry: expiryFull,
+            expiryShort: dbUser.card_expiry,
+            cvv,
+            pin,
+            brand: 'mastercard',
+            type: 'physical'
+        }
+    });
+}));
+
+// ─── GET /cards/my-cards — lista todos os cartões do usuário ─────────────────
+apiRouter.get('/cards/my-cards', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+
+    const cards = await databricksService.executeQuery(`
+        SELECT id, card_number, card_number_raw, card_type, card_brand, bin,
+               expiry, expiry_short, cvv, pin, is_activated, is_blocked, nickname, created_at
+        FROM fintech.cards
+        WHERE user_cpf = '${cpf}'
+        ORDER BY created_at ASC
+    `);
+
+    res.json({
+        success: true,
+        cards: cards.map(c => ({
+            id: c.id,
+            number: c.card_number,
+            numberMasked: '**** **** **** ' + c.card_number_raw.slice(-4),
+            type: c.card_type,
+            brand: c.card_brand,
+            expiry: c.expiry,
+            expiryShort: c.expiry_short,
+            cvv: c.cvv,
+            pin: c.pin,
+            isActivated: c.is_activated,
+            isBlocked: c.is_blocked,
+            nickname: c.nickname,
+            createdAt: c.created_at
+        }))
+    });
+}));
+
+// ─── POST /admin/simulate-purchases — Simula compras e faturas para teste de corte ──────────────
+apiRouter.post('/admin/simulate-purchases', bearerAuth(), asyncHandler(async (req, res) => {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+
+    const { targetCpf, scenario } = req.body;
+    if (!targetCpf) return res.status(400).json({ success: false, message: 'targetCpf é obrigatorio.' });
+
+    const [dbUser] = await databricksService.executeQuery(
+        `SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${targetCpf}'`
+    );
+    if (!dbUser) return res.status(404).json({ success: false, message: 'Usuario não encontrado.' });
+
+    let now = new Date();
+    // Compra 1x
+    const txId1 = databricksService.generateUUID();
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+        VALUES ('${txId1}', '${targetCpf}', 'SHOP_CREDIT', -50.00, 'Compra à vista simulada', '${now.toISOString()}')
+    `);
+
+    // Compra Parcelada em 3x
+    const txId3 = databricksService.generateUUID();
+    const planId3 = databricksService.generateUUID();
+    const nextDue3 = new Date(now);
+    nextDue3.setMonth(nextDue3.getMonth() + 1);
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+        VALUES ('${txId3}', '${targetCpf}', 'INVOICE_INSTALLMENT', -100.00, 'Compra 3x simulada (1/3)', '${now.toISOString()}')
+    `);
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('installment_plans')}
+        (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
+        VALUES ('${planId3}', '${targetCpf}', '${txId3}', 'Compra 3x simulada', 300.00, 300.00, 300.00, 3, 100.00, 0, 200.00, 2, '${nextDue3.toISOString()}', 'ACTIVE', '${now.toISOString()}', '${now.toISOString()}')
+    `);
+
+    // Compra Parcelada em 6x
+    const txId6 = databricksService.generateUUID();
+    const planId6 = databricksService.generateUUID();
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+        VALUES ('${txId6}', '${targetCpf}', 'INVOICE_INSTALLMENT', -200.00, 'Compra 6x simulada (1/6)', '${now.toISOString()}')
+    `);
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('installment_plans')}
+        (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
+        VALUES ('${planId6}', '${targetCpf}', '${txId6}', 'Compra 6x simulada', 1200.00, 1200.00, 1200.00, 6, 200.00, 0, 1000.00, 5, '${nextDue3.toISOString()}', 'ACTIVE', '${now.toISOString()}', '${now.toISOString()}')
+    `);
+
+    // Conta Recorrente
+    await recurringBillsRepo.create({
+        cpf: targetCpf,
+        name: 'Assinatura Simulada',
+        amount: 39.90,
+        dueDay: dbUser.credit_card_due_day || 15,
+        category: 'entertainment'
+    });
+
+    let healthMessage = 'Simulação (Cenário Bom) concluída. Contas pagas em dia.';
+
+    if (scenario === 'bad') {
+        // Cenário Inadimplente: Atualiza dias de atraso e status da conta
+        await databricksService.executeQuery(`
+            UPDATE ${databricksService.fq('users')} 
+            SET account_status = 'OVERDUE', days_overdue = 15 
+            WHERE cpf = '${targetCpf}'
+        `);
+        healthMessage = 'Simulação (Cenário Ruim) concluída. Conta classificada como inadimplente com 15 dias de atraso.';
+    } else {
+        await databricksService.executeQuery(`
+            UPDATE ${databricksService.fq('users')} 
+            SET account_status = 'ACTIVE', days_overdue = 0 
+            WHERE cpf = '${targetCpf}'
+        `);
+    }
+    
+    // Atualiza o limite de credito
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET credit_card_available_limit = credit_card_available_limit - 1550
+        WHERE cpf = '${targetCpf}'
+    `);
+
+    res.json({ success: true, message: healthMessage });
+}));
+
+// ─── PUT /cards/billing-cycle — altera o dia de vencimento do cartao ──────────────
+apiRouter.put('/cards/billing-cycle', bearerAuth(), [
+    body('dueDay').isInt({ min: 1, max: 28 }).withMessage('Dia de vencimento deve ser entre 1 e 28.')
+], handleValidationErrors, asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+    const { dueDay } = req.body;
+    
+    // Calcula a proxima data de vencimento da fatura com base no dueDay escolhido e no dia atual
+    let now = new Date();
+    let currentMonth = now.getMonth();
+    let currentYear = now.getFullYear();
+    
+    let closingDay = dueDay - 7;
+    let closingDate;
+    
+    if (closingDay > 0) {
+        closingDate = new Date(currentYear, currentMonth, closingDay);
+    } else {
+        // Volta um mes para o fechamento
+        let prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        let yearOfPrevMonth = currentMonth === 0 ? currentYear - 1 : currentYear;
+        // Pega o ultimo dia do mes anterior + closingDay (que eh <= 0)
+        let daysInPrevMonth = new Date(currentYear, currentMonth, 0).getDate();
+        let prevMonthClosingDay = daysInPrevMonth + closingDay;
+        closingDate = new Date(yearOfPrevMonth, prevMonth, prevMonthClosingDay);
+    }
+    
+    // Se a data atual ja passou da data de fechamento do mes atual, a fatura deste mes ja fechou
+    // Logo o proximo vencimento da fatura sera no proximo mes.
+    let nextInvoiceMonth = currentMonth;
+    let nextInvoiceYear = currentYear;
+    
+    if (now.getTime() > closingDate.getTime()) {
+        nextInvoiceMonth = currentMonth + 1;
+        if (nextInvoiceMonth > 11) {
+            nextInvoiceMonth = 0;
+            nextInvoiceYear++;
+        }
+    }
+    
+    const nextInvoiceDate = new Date(nextInvoiceYear, nextInvoiceMonth, dueDay);
+    
+    await databricksService.executeQuery(
+        `UPDATE ${databricksService.fq('users')} SET credit_card_due_day = ${dueDay}, credit_card_invoice_due_date = '${nextInvoiceDate.toISOString()}' WHERE cpf = '${cpf}'`
+    );
+    
+    res.json({ success: true, message: 'Dia de vencimento alterado com sucesso.', nextInvoiceDate: nextInvoiceDate.toISOString(), dueDay, closingDay: closingDate.getDate() });
+}));
+
+// ─── POST /cards/virtual/generate — gera um novo cartão virtual ──────────────
+apiRouter.post('/cards/virtual/generate', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+    const { nickname } = req.body || {};
+
+    // Verificar se usuário tem cartão físico ativado
+    const [dbUser] = await databricksService.executeQuery(
+        `SELECT card_is_activated, card_expiry FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`
+    );
+    if (!dbUser) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    if (!dbUser.card_is_activated) {
+        return res.status(403).json({ success: false, message: 'Ative o cartão físico antes de gerar cartões virtuais.' });
+    }
+
+    // Gerar número virtual (mesmo BIN, novos dígitos)
+    let cardRaw, cardFormatted;
+    let attempts = 0;
+    while (attempts < 10) {
+        const gen = generateCardNumber('5981012');
+        const [existing] = await databricksService.executeQuery(
+            `SELECT id FROM fintech.cards WHERE card_number_raw = '${gen.raw}'`
+        );
+        if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; break; }
+        attempts++;
+    }
+    if (!cardRaw) return res.status(500).json({ success: false, message: 'Erro ao gerar cartão virtual.' });
+
+    // CVV virtual aleatório de 3 dígitos
+    const virtualCvv = String(Math.floor(Math.random() * 900) + 100);
+    const expiryFull = formatExpiry(dbUser.card_expiry);
+    const pin = '9898';
+    const safeNickname = nickname ? nickname.replace(/'/g, "''").substring(0, 100) : 'Cartão Virtual';
+
+    await databricksService.executeQuery(`
+        INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated, nickname)
+        VALUES ('${cpf}', '${cardFormatted}', '${cardRaw}', 'virtual', 'mastercard', '5981012', '${expiryFull}', '${dbUser.card_expiry}', '${virtualCvv}', '${pin}', true, '${safeNickname}')
+    `);
+
+    res.json({
+        success: true,
+        message: 'Cartão virtual gerado com sucesso!',
+        card: {
+            number: cardFormatted,
+            numberMasked: '**** **** **** ' + cardRaw.slice(-4),
+            expiry: expiryFull,
+            expiryShort: dbUser.card_expiry,
+            cvv: virtualCvv,
+            pin,
+            brand: 'mastercard',
+            type: 'virtual',
+            nickname: safeNickname
+        }
+    });
+}));
+
+// ─── PUT /cards/:id/toggle-block — bloqueia/desbloqueia cartão virtual ────────
+apiRouter.put('/cards/:id/toggle-block', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+    const cardId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(cardId)) {
+        return res.status(400).json({ success: false, message: 'Id de cartão inválido.' });
+    }
+
+    const [card] = await databricksService.executeQuery(`
+        SELECT id, is_blocked FROM fintech.cards
+        WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
+    `);
+    if (!card) {
+        return res.status(404).json({ success: false, message: 'Cartão virtual não encontrado.' });
+    }
+
+    const newBlocked = !card.is_blocked;
+    await databricksService.executeQuery(`
+        UPDATE fintech.cards SET is_blocked = ${newBlocked}
+        WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
+    `);
+
+    res.json({ success: true, isBlocked: newBlocked, message: newBlocked ? 'Cartão bloqueado.' : 'Cartão desbloqueado.' });
+}));
+
+// ─── DELETE /cards/:id — exclui (queima) cartão virtual ──────────────────────
+apiRouter.delete('/cards/:id', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+    const cardId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(cardId)) {
+        return res.status(400).json({ success: false, message: 'Id de cartão inválido.' });
+    }
+
+    const [card] = await databricksService.executeQuery(`
+        SELECT id FROM fintech.cards
+        WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
+    `);
+    if (!card) {
+        return res.status(404).json({ success: false, message: 'Cartão virtual não encontrado (o cartão físico não pode ser excluído).' });
+    }
+
+    await databricksService.executeQuery(`
+        DELETE FROM fintech.cards
+        WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
+    `);
+
+    res.json({ success: true, message: 'Cartão virtual excluído.' });
+}));
+
+
+
+// Endpoint administrativo para alterar status de entrega
+apiRouter.put('/admin/cards/:cpf/delivery-status', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    const { status } = req.body || {};
+    
+    if (!['manufacturing', 'shipping', 'tracking', 'delivered', 'unlocked'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Status inválido.' });
+    }
+    
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')} 
+        SET card_delivery_status = '${status}', updated_at = current_timestamp()
+        WHERE cpf = '${cpf}'
+    `);
+    
+    res.json({ success: true, message: 'Status de entrega atualizado!' });
+}));
+
+// Endpoint para testar avanço de entrega (apenas para ambiente de desenvolvimento)
+apiRouter.put('/cards/physical/test-delivery-status', bearerAuth(), asyncHandler(async (req, res) => {
+    const cpf = req.user.cpf;
+    const { status } = req.body || {};
+    
+    if (!['manufacturing', 'shipping', 'tracking', 'delivered', 'unlocked'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Status inválido.' });
+    }
+    
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')} 
+        SET card_delivery_status = '${status}', updated_at = current_timestamp()
+        WHERE cpf = '${cpf}'
+    `);
+    
+    res.json({ success: true, message: 'Status de entrega avançado (Teste)!' });
+}));
+
 // Inserir compra na fatura ABERTA (Admin)
 apiRouter.post('/admin/users/:cpf/card/purchase/open', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf } = req.params;
@@ -2550,6 +3235,11 @@ apiRouter.post('/admin/users/:cpf/card/purchase/open', bearerAuth(), authenticat
     }
     const user = await usersRepo.findByCpf(cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    
+    const [dbUser] = await databricksService.executeQuery(`SELECT card_is_activated FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
+    if (!dbUser || !dbUser.card_is_activated) {
+        return res.status(403).json({ success: false, message: 'Cartão físico não está ativado.' });
+    }
 
     const qty = Number.isInteger(installments) ? installments : 1;
     if (qty < 1 || qty > 24) {
@@ -2566,7 +3256,7 @@ apiRouter.post('/admin/users/:cpf/card/purchase/open', bearerAuth(), authenticat
         rate = ir;
     }
 
-    const nowIso = new Date().toISOString();
+    const nowIso = toLocalSqlTimestamp();
 
     // Regras:
     // - 1 parcela (a vista): aplica desconto 10% e nao gera parcelas
@@ -2595,7 +3285,7 @@ apiRouter.post('/admin/users/:cpf/card/purchase/open', bearerAuth(), authenticat
             await databricksService.executeQuery(`
                 INSERT INTO ${databricksService.fq('transactions')}
                 (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-                VALUES ('${instId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${`${description.replace(/'/g,"''")} (${i}/${qty})`}', NULL, NULL, NULL, '${dueDate.toISOString()}')
+                VALUES ('${instId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${`${description.replace(/'/g,"''")} (${i}/${qty})`}', NULL, NULL, NULL, '${toLocalSqlTimestamp(dueDate)}')
             `);
         }
     }
@@ -2613,6 +3303,11 @@ apiRouter.post('/admin/users/:cpf/card/purchase/closed', bearerAuth(), authentic
     }
     const user = await usersRepo.findByCpf(cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+    
+    const [dbUser] = await databricksService.executeQuery(`SELECT card_is_activated FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
+    if (!dbUser || !dbUser.card_is_activated) {
+        return res.status(403).json({ success: false, message: 'Cartão físico não está ativado.' });
+    }
 
     const qty = Number.isInteger(installments) ? installments : 1;
     if (qty < 1 || qty > 24) {
@@ -2638,7 +3333,7 @@ apiRouter.post('/admin/users/:cpf/card/purchase/closed', bearerAuth(), authentic
         await databricksService.executeQuery(`
             INSERT INTO ${databricksService.fq('transactions')}
             (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-            VALUES ('${txId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-valorVista).toFixed(2)}, '${description.replace(/'/g,"''")}', NULL, NULL, NULL, '${now.toISOString()}')
+            VALUES ('${txId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-valorVista).toFixed(2)}, '${description.replace(/'/g,"''")}', NULL, NULL, NULL, '${toLocalSqlTimestamp(now)}')
         `);
         auditLog(req, 'admin_card_purchase_closed', 'info', { cpf, amount, description, installments: qty });
         return res.status(201).json({ success: true, message: 'Compra a vista registrada na fatura fechada.', installments: qty });
@@ -2655,7 +3350,7 @@ apiRouter.post('/admin/users/:cpf/card/purchase/closed', bearerAuth(), authentic
         await databricksService.executeQuery(`
             INSERT INTO ${databricksService.fq('transactions')}
             (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-            VALUES ('${txId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${`${description.replace(/'/g,"''")} (${i}/${qty})`}', NULL, NULL, NULL, '${dueDate.toISOString()}')
+            VALUES ('${txId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${`${description.replace(/'/g,"''")} (${i}/${qty})`}', NULL, NULL, NULL, '${toLocalSqlTimestamp(dueDate)}')
         `);
     }
 
@@ -2710,6 +3405,37 @@ apiRouter.post('/admin/invoices/:cpf/:invoiceId/status', bearerAuth(), authentic
     auditLog(req, 'admin_invoice_status_change', 'info', { cpf, invoiceId, from: invoice.status, to: status });
 
     return res.json({ success: true, invoice: updated });
+}));
+
+apiRouter.post('/admin/invoices/engine/force-cycle', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.body || {};
+    // Puxa o engine (import inline para evitar loops, ou usamos global)
+    const { runEngine } = require('./services/invoiceEngine');
+    const result = await runEngine(cpf);
+    res.json(result);
+}));
+
+apiRouter.put('/admin/invoices/:cpf/due-date', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    const { invoiceDueDate } = req.body || {};
+    
+    if (!cpf || !invoiceDueDate) {
+        return res.status(400).json({ success: false, message: 'Payload invalido. Forneça invoiceDueDate.' });
+    }
+    
+    const { esc } = repoContext;
+    const dDate = new Date(invoiceDueDate);
+    if (isNaN(dDate.getTime())) {
+        return res.status(400).json({ success: false, message: 'Data inválida.' });
+    }
+
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET credit_card_invoice_due_date = ${esc(dDate.toISOString())}, updated_at = current_timestamp()
+        WHERE cpf = ${esc(cpf)}
+    `);
+    
+    res.json({ success: true, message: 'Vencimento da fatura atualizado com sucesso.', invoiceDueDate: dDate.toISOString() });
 }));
 
 // --- Solicitações de aumento de limite PIX (via repositório) ---
@@ -2896,12 +3622,15 @@ apiRouter.post('/admin/billing/clear-mock-baseline', bearerAuth(), authenticateA
     res.json({ success: true, ...result });
 }));
 
-// POST /admin/billing/validate-all  (alias: /admin/billing/run-cycle)
-apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+// Lógica central de validação de faturamento (marca inadimplência + gera encargos diários).
+// Extraída para função própria para ser reaproveitada tanto pela rota HTTP quanto pelo
+// cron diário — sem isso, nada dispara essa validação automaticamente e days_overdue/
+// billing_charges nunca são atualizados dia a dia.
+async function runBillingValidation() {
     const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
-    if (!configRows.length) return res.status(500).json({ success: false, message: 'Configuração de faturamento não encontrada.' });
+    if (!configRows.length) return { success: false, message: 'Configuração de faturamento não encontrada.' };
     const cfg = configRows[0];
-    if (!cfg.is_active) return res.json({ success: true, message: 'Ciclo de faturamento inativo. Nenhuma validação executada.' });
+    if (!cfg.is_active) return { success: true, message: 'Ciclo de faturamento inativo. Nenhuma validação executada.' };
 
     const cycle = computeCurrentCycle(cfg);
     const today = new Date();
@@ -2912,8 +3641,23 @@ apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], bear
                COALESCE(days_overdue, 0) AS days_overdue,
                COALESCE(credit_card_available_limit, 0) AS credit_card_available_limit,
                COALESCE(credit_card_total_limit, 5000) AS credit_card_total_limit
-        FROM ${databricksService.fq('users')} WHERE role = 'customer'
+        FROM ${databricksService.fq('users')}
     `);
+
+    // Vencimento real de cada fatura FECHADA ainda não paga — não usar
+    // user.credit_card_invoice_due_date aqui: o invoiceEngine rola esse campo para o
+    // PRÓXIMO ciclo assim que o corte da fatura atual passa (7 dias antes do vencimento),
+    // então no dia do vencimento (e durante todo o período de atraso) esse campo já
+    // aponta para um ciclo futuro, fazendo daysOverdue ficar sempre 0.
+    const closedInvoiceRows = await databricksService.executeQuery(`
+        SELECT cpf, due_date, valor_total FROM ${databricksService.fq('invoices')}
+        WHERE status = 'FECHADA' AND data_pagamento IS NULL
+        ORDER BY due_date DESC
+    `);
+    const closedDueByCpf = new Map();
+    for (const row of closedInvoiceRows) {
+        if (!closedDueByCpf.has(row.cpf)) closedDueByCpf.set(row.cpf, { dueDate: row.due_date, amount: parseFloat(row.valor_total || 0) });
+    }
 
     let markedInadimplente = 0;
     let markedAdimplente = 0;
@@ -2921,41 +3665,58 @@ apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], bear
     const chargesDetail = [];
 
     for (const u of users) {
-        if (!u.credit_card_invoice_due_date) continue;
+        const closedInvoiceData = closedDueByCpf.get(u.cpf);
+        if (!closedInvoiceData) continue;
 
-        const dueDate    = new Date(u.credit_card_invoice_due_date);
-        const diffMs     = today - dueDate;
+        const dueDate = new Date(closedInvoiceData.dueDate);
+        dueDate.setHours(0, 0, 0, 0);
+        const todayMidnight = new Date(today);
+        todayMidnight.setHours(0, 0, 0, 0);
+        
+        const diffMs = todayMidnight - dueDate;
         const daysOverdue = diffMs > 0 ? Math.floor(diffMs / 86400000) : 0;
-        const newStatus  = daysOverdue > Number(cfg.grace_period_days) ? 'inadimplente' : 'adimplente';
+        
+        // Regra atualizada: Se passou de meia noite do vencimento (daysOverdue >= 1), já é inadimplente
+        const newStatus = daysOverdue >= 1 ? 'inadimplente' : 'adimplente';
 
-        // Gerar encargos só na transição → inadimplente (evita duplicatas por ciclo)
-        if (newStatus === 'inadimplente' && u.account_status !== 'inadimplente') {
-            const invoiceAmount = Math.max(0,
-                parseFloat(u.credit_card_total_limit) - parseFloat(u.credit_card_available_limit)
-            );
+        console.log(`[DEBUG] CPF: ${u.cpf}, dueDate: ${dueDate}, today: ${todayMidnight}, diffMs: ${diffMs}, daysOverdue: ${daysOverdue}, newStatus: ${newStatus}`);
+
+        // Recalcular encargos diariamente enquanto em atraso (multa 2%, IOF 0,38% + 0,0082%/dia,
+        // juros remuneratórios 15,39% a.m., juros de mora 1% a.m.)
+        if (daysOverdue > 0) {
+            // Usa o valor_total da fatura fechada para calcular os encargos
+            const invoiceAmount = Math.max(0, parseFloat(closedInvoiceData.amount || 0));
             if (invoiceAmount > 0) {
-                const existing = await databricksService.executeQuery(`
-                    SELECT id FROM ${databricksService.fq('billing_charges')}
+                // Limpar encargos pendentes anteriores deste ciclo
+                await databricksService.executeQuery(`
+                    DELETE FROM ${databricksService.fq('billing_charges')}
                     WHERE cpf = '${u.cpf}' AND invoice_reference = '${cycle.invoiceRef}' AND status = 'pending'
                 `);
-                if (!existing.length) {
-                    const { multa, juros } = calcCharges(invoiceAmount, daysOverdue);
-                    const idBase = `${u.cpf}_${cycle.invoiceRef}`;
 
-                    await databricksService.executeQuery(`
-                        INSERT INTO ${databricksService.fq('billing_charges')}
-                        (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
-                        VALUES
-                        ('${idBase}_multa', '${u.cpf}', '${cycle.invoiceRef}', 'multa', ${multa}, ${daysOverdue}, ${invoiceAmount}),
-                        ('${idBase}_juros', '${u.cpf}', '${cycle.invoiceRef}', 'juros_mora', ${juros}, ${daysOverdue}, ${invoiceAmount})
-                    `);
-                    chargesGenerated += 2;
-                    chargesDetail.push({
-                        cpf: u.cpf, invoiceRef: cycle.invoiceRef,
-                        invoiceAmount, multa, juros,
-                        total: Math.round((multa + juros) * 100) / 100
-                    });
-                }
+                // Fórmulas exatas do extrato
+                const multa = Math.round(invoiceAmount * 0.02 * 100) / 100;
+                const iofAdicional = Math.round(invoiceAmount * 0.0038 * 100) / 100;
+                const iofDiario = Math.round(invoiceAmount * 0.000082 * daysOverdue * 100) / 100;
+                const iofTotal = Math.round((iofAdicional + iofDiario) * 100) / 100;
+
+                const jurosRem = Math.round(invoiceAmount * 0.00513 * daysOverdue * 100) / 100;
+                const jurosMora = Math.round(invoiceAmount * 0.000333 * daysOverdue * 100) / 100;
+
+                const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}`;
+                await databricksService.executeQuery(`
+                    INSERT INTO ${databricksService.fq('billing_charges')} (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
+                    VALUES
+                    ('${idBase}_multa', '${u.cpf}', '${cycle.invoiceRef}', 'multa', ${multa}, ${daysOverdue}, ${invoiceAmount}),
+                    ('${idBase}_iof', '${u.cpf}', '${cycle.invoiceRef}', 'iof', ${iofTotal}, ${daysOverdue}, ${invoiceAmount}),
+                    ('${idBase}_juros_rem', '${u.cpf}', '${cycle.invoiceRef}', 'juros_remuneratorios', ${jurosRem}, ${daysOverdue}, ${invoiceAmount}),
+                    ('${idBase}_juros_mora', '${u.cpf}', '${cycle.invoiceRef}', 'juros_mora', ${jurosMora}, ${daysOverdue}, ${invoiceAmount})
+                `);
+                chargesGenerated += 4;
+                chargesDetail.push({
+                    cpf: u.cpf, invoiceRef: cycle.invoiceRef,
+                    invoiceAmount, multa, iof: iofTotal, jurosRem, jurosMora,
+                    total: Math.round((multa + iofTotal + jurosRem + jurosMora) * 100) / 100
+                });
             }
         }
 
@@ -2970,7 +3731,7 @@ apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], bear
         }
     }
 
-    res.json({
+    return {
         success: true,
         message: `Validação concluída. ${markedInadimplente} inadimplentes, ${markedAdimplente} adimplentes, ${chargesGenerated} encargos gerados.`,
         cycle: {
@@ -2980,7 +3741,13 @@ apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], bear
         },
         updated: { inadimplente: markedInadimplente, adimplente: markedAdimplente },
         charges: { generated: chargesGenerated, detail: chargesDetail }
-    });
+    };
+}
+
+// POST /admin/billing/validate-all  (alias: /admin/billing/run-cycle)
+apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], asyncHandler(async (req, res) => {
+    const result = await runBillingValidation();
+    res.json(result);
 }));
 
 // GET /admin/billing/account/:cpf/status — status detalhado de uma conta
@@ -2997,8 +3764,7 @@ apiRouter.get('/admin/billing/account/:cpf/status', bearerAuth(), authenticateAd
                COALESCE(account_status,'adimplente') AS account_status,
                COALESCE(days_overdue, 0) AS days_overdue,
                credit_card_invoice_due_date, credit_card_available_limit, credit_card_total_limit,
-               invoice_last_closed_date
-        FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}' AND role = 'customer'
+        FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'
     `);
     if (!userRows.length) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
     const u = userRows[0];
@@ -3081,15 +3847,153 @@ apiRouter.get('/billing/invoice-status', bearerAuth(), asyncHandler(async (req, 
 }));
 
 // --- Cartões (via repositório) ---
+
+// Valor devido da fatura FECHADA não paga mais recente: valores congelados no fechamento
+// (compras à vista + parcelas do ciclo + encargos consolidados nas colunas valor_*),
+// líquido de pagamentos parciais feitos após o fechamento. Não depende de linhas
+// INVOICE_INSTALLMENT em transactions — compras à vista (SHOP_CREDIT) não geram parcelas.
+async function getClosedInvoiceDebt(cpf) {
+    const { esc } = repoContext;
+    const rows = await databricksService.executeQuery(`
+        SELECT id, due_date, created_at, valor_total, saldo_anterior, valor_iof,
+               valor_multa, valor_juros_remuneratorios, valor_juros_mora
+        FROM ${databricksService.fq('invoices')}
+        WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
+        ORDER BY due_date DESC LIMIT 1
+    `);
+    if (!rows.length) return null;
+    const invoice = rows[0];
+    const gross = ['valor_total', 'saldo_anterior', 'valor_iof', 'valor_multa', 'valor_juros_remuneratorios', 'valor_juros_mora']
+        .reduce((sum, field) => sum + parseFloat(invoice[field] || 0), 0);
+
+    const closedAtIso = new Date(invoice.created_at).toISOString();
+    const paidRows = await databricksService.executeQuery(`
+        SELECT amount FROM ${databricksService.fq('transactions')}
+        WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT' AND date > ${esc(closedAtIso)}
+    `);
+    const paid = paidRows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
+
+    return { invoice, owed: Math.max(0, Math.round((gross - paid) * 100) / 100) };
+}
+
+// Quitação da fatura FECHADA (pagamento total ou refinanciamento via parcelamento):
+// marca data_pagamento em TODAS as faturas fechadas não pagas do CPF — o valor devido
+// inclui saldo_anterior, que encadeia faturas antigas — para que a validação diária de
+// atraso pare de acumular encargos, e normaliza o status da conta.
+async function settleClosedInvoices(cpf, paidAtIso) {
+    const { esc } = repoContext;
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('invoices')}
+        SET data_pagamento = ${esc(paidAtIso)}, updated_at = CURRENT_TIMESTAMP
+        WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
+    `);
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET account_status = 'adimplente', days_overdue = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE cpf = ${esc(cpf)}
+    `);
+}
+
+// Opções de parcelamento (2x-12x) para a fatura FECHADA não paga, com encargos reais do motor de cobrança
+apiRouter.get('/cards/invoice/installment-options', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf } = req.user;
+    const closedDebt = await getClosedInvoiceDebt(cpf);
+    if (!closedDebt || closedDebt.owed <= 0) {
+        return res.status(400).json({ success: false, message: 'Nenhuma fatura fechada para parcelar.' });
+    }
+    res.json({ success: true, amount: closedDebt.owed, options: buildInstallmentOptions(closedDebt.owed) });
+}));
+
 apiRouter.post('/cards/invoice/parcel', bearerAuth(), asyncHandler(async (req, res) => {
-    const { cpf, amount, installments, pin } = req.body || {};
-    if (!cpf || cpf.length !== 11 || typeof amount !== 'number' || amount <= 0 || !Number.isInteger(installments) || installments < 2 || installments > 24 || !pin || pin.length !== 4) {
+    const { cpf, installments, pin } = req.body || {};
+    if (!cpf || cpf.length !== 11 || !Number.isInteger(installments) || installments < 2 || installments > 12 || !pin || pin.length !== 4) {
         return res.status(400).json({ success: false, message: 'Payload invalido.' });
     }
     if (req.user.cpf !== cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
 
-    await cardRepo.createInstallments({ cpf, amount, installments });
-    res.json({ success: true, message: 'Parcelamento realizado' });
+    const user = await usersRepo.findByCpf(cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+    const { esc } = repoContext;
+
+    // Mesma base de /cards/invoice/pay e /cards/invoice/installment-options: valor devido
+    // da fatura FECHADA não paga (não a soma de INVOICE_INSTALLMENT, que é vazia quando a
+    // fatura vem de compras à vista no crédito).
+    const closedDebt = await getClosedInvoiceDebt(cpf);
+
+    let cutoff = closedDebt
+        ? new Date(closedDebt.invoice.due_date)
+        : (user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date());
+    if (isNaN(cutoff.getTime())) cutoff = new Date();
+    cutoff.setUTCHours(23, 59, 59, 999);
+    const cutoffIso = cutoff.toISOString();
+
+    let principal;
+    if (closedDebt) {
+        principal = closedDebt.owed;
+    } else {
+        // Legado (sem registro em invoices): soma das parcelas vencidas
+        const dueRows = await databricksService.executeQuery(`
+            SELECT amount FROM ${databricksService.fq('transactions')}
+            WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
+        `);
+        principal = dueRows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
+    }
+    if (principal <= 0) {
+        return res.status(400).json({ success: false, message: 'Nenhuma fatura fechada para parcelar.' });
+    }
+
+    // O saldo antigo é refinanciado no novo plano: remove as parcelas/valor vencido
+    // que estão sendo substituídas pelas novas parcelas com encargos.
+    await databricksService.executeQuery(`
+        DELETE FROM ${databricksService.fq('transactions')}
+        WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
+    `);
+
+    // Restaura limite e avança vencimento — equivalente a uma quitação integral da fatura fechada
+    const availableLimit = parseFloat(user.credit_card_available_limit || 0);
+    const totalLimit = parseFloat(user.credit_card_total_limit || 0);
+    const restoredLimit = Math.min(totalLimit, availableLimit + principal);
+    const currentInvDue = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
+    const nextInvDue = new Date(currentInvDue);
+    nextInvDue.setMonth(currentInvDue.getMonth() + 1);
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET credit_card_available_limit = ${restoredLimit.toFixed(2)},
+            credit_card_is_blocked = false,
+            credit_card_invoice_due_date = '${nextInvDue.toISOString()}'
+        WHERE cpf = '${cpf}'
+    `);
+
+    // Fatura fechada quitada via refinanciamento: sem isso, a fatura continuaria "não paga"
+    // e o valor refinanciado seria cobrado de novo em /cards/invoice/pay.
+    if (closedDebt) {
+        await settleClosedInvoices(cpf, new Date().toISOString());
+    }
+
+    const plan = await cardRepo.createInstallments({ cpf, amount: principal, installments });
+
+    await notificationsRepo.addNotification({
+        cpf,
+        title: 'Fatura parcelada',
+        message: `Fatura de R$ ${principal.toFixed(2)} parcelada em ${installments}x de R$ ${plan.installmentValue.toFixed(2)}.`,
+        actionUrl: '/dashboard'
+    });
+
+    res.json({
+        success: true,
+        message: 'Parcelamento realizado com sucesso.',
+        receipt: {
+            amount: principal,
+            installments,
+            installmentValue: plan.installmentValue,
+            totalAmount: plan.totalAmount,
+            iof: plan.iof,
+            juros: plan.juros,
+            firstDueDate: plan.firstDueDate,
+            transactionId: plan.planId
+        }
+    });
 }));
 
 apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res) => {
@@ -3102,30 +4006,46 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
     const user = await usersRepo.findByCpf(cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
 
-    let cutoff = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
+    const { esc } = repoContext;
+
+    // Valor devido = fatura FECHADA e ainda não paga (tabela invoices), não a soma de
+    // linhas INVOICE_INSTALLMENT: compras à vista no crédito (SHOP_CREDIT) não geram
+    // parcelas, então a soma seria 0 mesmo com a fatura devendo. O corte continua
+    // ancorado no vencimento da fatura FECHADA (não no credit_card_invoice_due_date do
+    // usuário, que rola para ciclos futuros a cada fechamento) para não varrer e apagar
+    // parcelas de ciclos ainda não faturados.
+    const closedDebt = await getClosedInvoiceDebt(cpf);
+
+    let cutoff = closedDebt
+        ? new Date(closedDebt.invoice.due_date)
+        : (user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date());
     if (isNaN(cutoff.getTime())) cutoff = new Date();
     cutoff.setUTCHours(23, 59, 59, 999);
     const cutoffIso = cutoff.toISOString();
 
-    const { esc } = repoContext;
-    const dueRows = await databricksService.executeQuery(`
-        SELECT amount FROM ${databricksService.fq('transactions')}
-        WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
-    `);
-    const totalDue = dueRows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
+    let totalDue;
+    if (closedDebt) {
+        totalDue = closedDebt.owed;
+    } else {
+        // Legado (sem registro em invoices): soma das parcelas vencidas
+        const dueRows = await databricksService.executeQuery(`
+            SELECT amount FROM ${databricksService.fq('transactions')}
+            WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
+        `);
+        totalDue = dueRows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
+    }
     if (totalDue <= 0) {
-        return res.status(400).json({ success: false, message: 'Nenhuma parcela vencida para pagamento.' });
+        return res.status(400).json({ success: false, message: 'Nenhuma fatura em aberto para pagamento.' });
     }
 
     const balance = parseFloat(user.balance || 0);
-    const minPayment = Math.max(totalDue * 0.15, 10);
+    const minPayment = Math.max(totalDue * 0.10, 10);
     const effectiveMin = balance > 0 ? Math.min(balance, minPayment) : minPayment;
     const requestedAmount = typeof amount === 'number' && amount > 0 ? amount : totalDue;
     const payAmount = Math.min(requestedAmount, totalDue);
 
-    if (payAmount < effectiveMin - 0.01) {
-        return res.status(400).json({ success: false, message: `Valor mínimo de pagamento é R$ ${effectiveMin.toFixed(2)}.` });
-    }
+    // Valor mínimo é apenas sugestão de UI — o usuário pode pagar menos, mais, ou o total.
+    // Pagar abaixo do mínimo mantém saldo devedor e encargos via fluxo de pagamento parcial abaixo.
     if (balance < payAmount) return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
 
     const availableLimit = parseFloat(user.credit_card_available_limit || 0);
@@ -3173,8 +4093,9 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
         return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining, charges: { multa, juros } });
     }
 
-    // Pagamento total: deletar parcelas, restaurar limite, avançar vencimento
-    const result = await cardRepo.payDueInstallments({ cpf, cutoffIso });
+    // Pagamento total: registrar pagamento pelo valor devido da fatura, limpar parcelas
+    // do ciclo fechado, restaurar limite, avançar vencimento
+    const result = await cardRepo.payDueInstallments({ cpf, cutoffIso, amount: totalDue });
     await usersRepo.updateBalance(cpf, (balance - result.totalDue).toFixed(2));
     const restoredLimit = Math.min(totalLimit, availableLimit + result.totalDue);
     const currentInvDue = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
@@ -3187,6 +4108,10 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
             credit_card_invoice_due_date = '${nextInvDue.toISOString()}'
         WHERE cpf = '${cpf}'
     `);
+    // Sem marcar data_pagamento a fatura seguiria "não paga" e poderia ser cobrada de novo
+    if (closedDebt) {
+        await settleClosedInvoices(cpf, new Date().toISOString());
+    }
     await notificationsRepo.addNotification({
         cpf,
         title: 'Pagamento de fatura',
@@ -3195,6 +4120,202 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
     });
     res.json({ success: true, message: 'Fatura paga com sucesso.' });
 }));
+
+// Resumo detalhado da fatura (fechada ou aberta) com encargos itemizados
+apiRouter.get('/credit/invoices/summary/:type', bearerAuth(), asyncHandler(async (req, res) => {
+    const { type } = req.params;
+    const { cpf } = req.user;
+    const { esc } = repoContext;
+
+    const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+    const cfg = configRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3 };
+    const cycle = computeCurrentCycle(cfg);
+
+    const fmtDate = (d) => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ de /g, '/');
+
+    if (type === 'fechada') {
+        const closed = (await databricksService.executeQuery(`
+            SELECT * FROM ${databricksService.fq('invoices')}
+            WHERE cpf = ${esc(cpf)} AND status = 'FECHADA'
+            ORDER BY due_date DESC LIMIT 1
+        `))[0];
+
+        if (!closed) {
+            return res.json({ success: true, summary: null });
+        }
+
+        // Fatura FECHADA é imutável: mostra apenas os valores congelados no fechamento
+        // (valor_total + encargos consolidados nas colunas valor_*). Encargos acumulando
+        // durante o atraso NÃO entram aqui — aparecem como demonstrativo no resumo da
+        // fatura ABERTA e só são cobrados quando ela cortar (consolidação).
+        const iof = parseFloat(closed.valor_iof || 0);
+        const multa = parseFloat(closed.valor_multa || 0);
+        const jurosRem = parseFloat(closed.valor_juros_remuneratorios || 0);
+        const jurosMora = parseFloat(closed.valor_juros_mora || 0);
+        const saldoAnterior = parseFloat(closed.saldo_anterior || 0);
+        const totalPurchases = parseFloat(closed.valor_total || 0);
+        const finalBalance = totalPurchases + iof + multa + jurosRem + jurosMora + saldoAnterior;
+
+        return res.json({
+            success: true,
+            summary: {
+                saldoAnterior,
+                jurosRemuneratorios: jurosRem,
+                iof,
+                jurosMora,
+                multa,
+                totalDespesas: totalPurchases,
+                totalPagamentos: closed.data_pagamento ? finalBalance : 0,
+                totalCreditos: 0.00,
+                saldoFinal: finalBalance,
+                // Regra única do projeto: mínimo = 10% do saldo (piso R$ 10), em centavos
+                pagamentoMinimo: closed.data_pagamento ? 0 : Math.round(Math.max(finalBalance * 0.10, 10.00) * 100) / 100,
+                dataVencimento: fmtDate(closed.due_date),
+                melhorDataCompra: fmtDate(new Date(new Date(closed.due_date).setDate(new Date(closed.due_date).getDate() - 7)))
+            }
+        });
+    } else {
+        // Resumo da Fatura Aberta = DEMONSTRATIVO da dívida em atraso, apenas informativo:
+        //   (+) Valor pendente  = saldo da fatura FECHADA ainda não paga
+        //   (+) encargos        = multa/IOF/juros que o motor acumula dia a dia (billing_charges)
+        //   (=) Saldo           = pendente + encargos — SÓ EXIBIÇÃO, não é cobrança;
+        //                         vira cobrança apenas quando esta fatura cortar (consolidação).
+        // As compras do mês NÃO entram neste resumo — elas aparecem no card "Valor Total"
+        // da tela da fatura aberta (creditCard.currentInvoice).
+        const overdueInvoice = (await databricksService.executeQuery(`
+            SELECT valor_total FROM ${databricksService.fq('invoices')}
+            WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
+            ORDER BY due_date DESC LIMIT 1
+        `))[0];
+        const valorPendente = overdueInvoice ? parseFloat(overdueInvoice.valor_total || 0) : 0;
+
+        const pendingCharges = await databricksService.executeQuery(`
+            SELECT charge_type, SUM(amount) as amount FROM ${databricksService.fq('billing_charges')}
+            WHERE cpf = ${esc(cpf)} AND invoice_reference = ${esc(cycle.invoiceRef)} AND status = 'pending'
+            GROUP BY charge_type
+        `);
+        const getPending = (t) => parseFloat(pendingCharges.find(c => c.charge_type === t)?.amount || 0);
+
+        const saldoAnterior = 0;
+        const iof = getPending('iof');
+        const multa = getPending('multa');
+        const jurosRem = getPending('juros_remuneratorios');
+        const jurosMora = getPending('juros_mora');
+        const saldoDemonstrativo = Math.round((valorPendente + iof + multa + jurosRem + jurosMora) * 100) / 100;
+
+        const userRow = (await databricksService.executeQuery(`
+            SELECT credit_card_invoice_due_date FROM ${databricksService.fq('users')} WHERE cpf = ${esc(cpf)}
+        `))[0];
+
+        let actualDueDate = cycle.dueDate;
+        let actualCloseDate = cycle.closeDate;
+
+        if (userRow?.credit_card_invoice_due_date) {
+            const userDueDate = new Date(userRow.credit_card_invoice_due_date);
+            if (!isNaN(userDueDate.getTime())) {
+                actualDueDate = userDueDate;
+                const calcClose = new Date(userDueDate);
+                calcClose.setDate(calcClose.getDate() - 7);
+                actualCloseDate = calcClose;
+            }
+        } else {
+            if (cycle.cycleStatus === 'inadimplente' || cycle.cycleStatus === 'vencida') {
+                const nextDue = new Date(cycle.dueDate);
+                nextDue.setMonth(nextDue.getMonth() + 1);
+                actualDueDate = nextDue;
+
+                const nextClose = new Date(cycle.closeDate);
+                nextClose.setMonth(nextClose.getMonth() + 1);
+                actualCloseDate = nextClose;
+            }
+        }
+
+        return res.json({
+            success: true,
+            summary: {
+                saldoAnterior,
+                jurosRemuneratorios: jurosRem,
+                iof,
+                jurosMora,
+                multa,
+                totalDespesas: valorPendente,
+                totalPagamentos: 0.00,
+                totalCreditos: 0.00,
+                saldoFinal: saldoDemonstrativo,
+                pagamentoMinimo: saldoDemonstrativo > 0 ? Math.round(Math.max(saldoDemonstrativo * 0.10, 10.00) * 100) / 100 : 0,
+                dataVencimento: fmtDate(actualDueDate),
+                melhorDataCompra: fmtDate(actualCloseDate)
+            }
+        });
+    }
+}));
+
+// Histórico das últimas faturas (fechadas + ciclo aberto)
+apiRouter.get('/credit/invoices/history', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf } = req.user;
+    const { esc } = repoContext;
+    const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+    const cfg = configRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3 };
+    const cycle = computeCurrentCycle(cfg);
+    const closeDay = parseInt(cfg.close_day) || 20;
+
+    // Valor da fatura aberta = soma das compras do ciclo corrente (mesma regra do
+    // endpoint /summary/aberta). Não usar total_limit - available_limit: o limite
+    // bloqueado inclui saldo de fatura fechada e encargos, que não pertencem à aberta.
+    const _histCardTx = await databricksService.executeQuery(`
+        SELECT amount, type, date FROM ${databricksService.fq('transactions')}
+        WHERE cpf = ${esc(cpf)} AND type IN ('SHOP_CREDIT', 'CREDIT', 'INVOICE_INSTALLMENT')
+    `);
+    const _histPrevCloseMs = new Date(cycle.closeDate).setMonth(cycle.closeDate.getMonth() - 1);
+    const openAmount = _histCardTx.filter(tx => {
+        const txDate = new Date(tx.date).getTime();
+        return txDate > _histPrevCloseMs && txDate <= cycle.dueDate.getTime();
+    }).reduce((sum, tx) => sum + Math.abs(parseFloat(tx.amount || 0)), 0);
+
+    const closed = await databricksService.executeQuery(`
+        SELECT * FROM ${databricksService.fq('invoices')}
+        WHERE cpf = ${esc(cpf)} AND status = 'FECHADA'
+        ORDER BY due_date DESC
+    `);
+
+    const history = [];
+
+    // Fatura aberta (ciclo corrente) — usando close_day da billing_config
+    history.push({
+        month: cycle.dueDate.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.', ''),
+        amount: openAmount,
+        status: 'Fatura aberta',
+        period: `${new Date(new Date(cycle.closeDate).setMonth(cycle.closeDate.getMonth() - 1)).toLocaleDateString('pt-BR')} a ${cycle.closeDate.toLocaleDateString('pt-BR')}`
+    });
+
+    for (const inv of closed) {
+        const iof = parseFloat(inv.valor_iof || 0);
+        const multa = parseFloat(inv.valor_multa || 0);
+        const jurosRem = parseFloat(inv.valor_juros_remuneratorios || 0);
+        const jurosMora = parseFloat(inv.valor_juros_mora || 0);
+        const saldoAnterior = parseFloat(inv.saldo_anterior || 0);
+        const purchases = parseFloat(inv.valor_total || 0);
+        const total = purchases + iof + multa + jurosRem + jurosMora + saldoAnterior;
+
+        const due = new Date(inv.due_date);
+        // Data de corte usa o close_day configurado, não uma heurística de dueDate - 7 dias
+        const closeDate = new Date(due);
+        closeDate.setMonth(closeDate.getMonth() - 1);
+        closeDate.setDate(closeDay);
+        const prevCloseDate = new Date(closeDate);
+        prevCloseDate.setMonth(prevCloseDate.getMonth() - 1);
+
+        history.push({
+            month: due.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.', ''),
+            amount: total,
+            status: inv.data_pagamento ? `R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'Esta fatura',
+            period: `${prevCloseDate.toLocaleDateString('pt-BR')} a ${closeDate.toLocaleDateString('pt-BR')}`
+        });
+    }
+
+    res.json({ success: true, history });
+}));
+
 
 // Rota para obter fatura aberta do cartão de crédito
 apiRouter.get('/credit/invoices/open', bearerAuth(), asyncHandler(async (req, res) => {
@@ -3717,6 +4838,42 @@ async function initializeDatabase() {
             }
         }
         
+        // Garantir colunas de encargos/resumo na tabela invoices
+        try {
+            const invoiceCols = await databricksService.executeQuery(`
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = 'fintech' AND table_name = 'invoices'
+                AND column_name IN ('saldo_anterior','valor_iof','valor_juros_remuneratorios','valor_juros_mora','itemized_transactions')
+            `);
+            const hasInvCols = invoiceCols.map(c => c.column_name);
+            if (!hasInvCols.includes('saldo_anterior')) {
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('invoices')} ADD COLUMN saldo_anterior DECIMAL(15,2) DEFAULT 0.00`);
+                console.log('✅ Coluna saldo_anterior adicionada em invoices.');
+            }
+            if (!hasInvCols.includes('valor_iof')) {
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('invoices')} ADD COLUMN valor_iof DECIMAL(15,2) DEFAULT 0.00`);
+                console.log('✅ Coluna valor_iof adicionada em invoices.');
+            }
+            if (!hasInvCols.includes('valor_juros_remuneratorios')) {
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('invoices')} ADD COLUMN valor_juros_remuneratorios DECIMAL(15,2) DEFAULT 0.00`);
+                console.log('✅ Coluna valor_juros_remuneratorios adicionada em invoices.');
+            }
+            if (!hasInvCols.includes('valor_juros_mora')) {
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('invoices')} ADD COLUMN valor_juros_mora DECIMAL(15,2) DEFAULT 0.00`);
+                console.log('✅ Coluna valor_juros_mora adicionada em invoices.');
+            }
+            if (!hasInvCols.includes('itemized_transactions')) {
+                // Snapshot JSON das compras/parcelas que compunham a fatura no momento do fechamento.
+                // Necessário porque pagar/antecipar parcelas APAGA as linhas de transactions
+                // (cardRepo.payDueInstallments/anticipateInstallments), o que faria a lista de
+                // compras da fatura fechada sumir mesmo com o valor_total preservado.
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('invoices')} ADD COLUMN itemized_transactions TEXT`);
+                console.log('✅ Coluna itemized_transactions adicionada em invoices.');
+            }
+        } catch (error) {
+            console.warn('⚠️  Erro ao verificar/adicionar colunas de encargos em invoices:', error.message);
+        }
+
         console.log('💡 Certifique-se de ter executado schema_pg.sql no seu banco Postgres.');
         return;
     }

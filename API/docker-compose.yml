@@ -8,6 +8,8 @@ services:
       POSTGRES_PASSWORD: "pwd123"
     ports:
       - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
     networks:
       - skynet
       
@@ -24,6 +26,12 @@ services:
     networks:
       - skynet
 
-networks: 
+networks:
   skynet:
     driver: bridge
+
+volumes:
+  pgdata:
+    # Volume pré-existente com o banco fintechbank (dados reais) — não recriar
+    external: true
+    name: 674168372df3aea2f62e43566e4c4b8e5e546a12f770cf4197b6a7f94861d081

@@ -8,7 +8,7 @@
  */
 
 // IP fixado no momento do build (fallback caso o menu oculto nunca seja usado)
-export const API_DEFAULT_URL = 'http://192.168.0.107:3001';
+export const API_DEFAULT_URL = 'http://192.168.0.111:3001';
 
 // Sub-redes candidatas para descoberta automatica quando o IP mudar por DHCP.
 export const PROBE_SUBNETS = ['192.168.0', '192.168.1', '10.0.0', '10.0.1'];

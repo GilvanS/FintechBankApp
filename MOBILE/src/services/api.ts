@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
-import { User, PixContact, SignUpData, PasswordResetRequest, LimitIncreaseRequest } from '../types';
+import { User, PixContact, SignUpData, PasswordResetRequest, LimitIncreaseRequest, Transaction } from '../types';
 import { API_BASE_URL, PROBE_SUBNETS, API_PORT } from '../apiConfig';
 
 // URL da API para APK - sempre usar URL absoluta
@@ -593,6 +593,135 @@ export async function getUserMe(): Promise<{ success: boolean; message?: string;
 // Alias para compatibilidade
 export const getProfile = getUserMe;
 
+// ========== CARTÕES REAIS (fintech.cards) ==========
+// Número exibido SEMPRE truncado no app (numberMasked); revelar exige PIN
+
+export interface ApiCard {
+    id: string;
+    number: string;
+    numberMasked: string;
+    type: 'physical' | 'virtual';
+    brand: string;
+    expiry: string;
+    expiryShort: string;
+    cvv: string;
+    pin: string;
+    isActivated: boolean;
+    isBlocked: boolean;
+    nickname: string | null;
+    createdAt: string;
+}
+
+export const getMyCards = async (): Promise<{ success: boolean; cards?: ApiCard[] }> => {
+    try {
+        const res = await api.get('/cards/my-cards', { headers: getAuthHeaders('none') });
+        return res.data?.success ? { success: true, cards: res.data.cards } : { success: false };
+    } catch {
+        return { success: false };
+    }
+};
+
+export const revealCard = async (cardId: string, pin: string): Promise<{ success: boolean; message?: string; cardNumber?: string; cvv?: string }> => {
+    try {
+        const res = await api.post('/cards/reveal', { cardId, pin }, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error.response?.data?.message || 'Erro ao revelar dados' };
+    }
+};
+
+// ── Resumo e histórico de faturas ──────────────────────────────────────────
+export interface InvoiceSummary {
+    saldoAnterior: number;
+    jurosRemuneratorios: number;
+    iof: number;
+    jurosMora: number;
+    multa: number;
+    totalDespesas: number;
+    totalPagamentos: number;
+    totalCreditos: number;
+    saldoFinal: number;
+    pagamentoMinimo: number;
+    dataVencimento: string;
+    melhorDataCompra: string;
+}
+
+export interface InvoiceHistoryItem {
+    month: string;
+    amount: number;
+    status: string;
+    period: string;
+}
+
+export interface InstallmentPlan {
+    installments: number;
+    installmentValue: number;
+    totalAmount: number;
+    iof: number;
+    juros: number;
+    monthlyRate?: number;
+}
+
+export interface InstallmentReceipt extends InstallmentPlan {
+    amount: number;
+    firstDueDate: string;
+    transactionId: string;
+}
+
+export const getInvoiceInstallmentOptions = async (): Promise<{ success: boolean; amount?: number; options?: InstallmentPlan[]; message?: string }> => {
+    try {
+        const res = await api.get('/cards/invoice/installment-options', { headers: getAuthHeaders('none') });
+        return res.data?.success ? { success: true, amount: res.data.amount, options: res.data.options } : { success: false, message: res.data?.message };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao buscar opções de parcelamento' };
+    }
+};
+
+export const getInvoiceSummary = async (type: 'fechada' | 'aberta'): Promise<{ success: boolean; summary?: InvoiceSummary | null }> => {
+    try {
+        const res = await api.get(`/credit/invoices/summary/${type}`, { headers: getAuthHeaders('none') });
+        return res.data?.success ? { success: true, summary: res.data.summary } : { success: false };
+    } catch {
+        return { success: false };
+    }
+};
+
+export const getInvoiceHistory = async (): Promise<{ success: boolean; history?: InvoiceHistoryItem[] }> => {
+    try {
+        const res = await api.get('/credit/invoices/history', { headers: getAuthHeaders('none') });
+        return res.data?.success ? { success: true, history: res.data.history } : { success: false };
+    } catch {
+        return { success: false };
+    }
+};
+
+export const generateVirtualCard = async (nickname: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+        const res = await api.post('/cards/virtual/generate', { nickname }, { headers: getAuthHeaders('json') });
+        return { success: !!res.data?.success, message: res.data?.message };
+    } catch (e: any) {
+        return { success: false, message: e?.response?.data?.message || 'Erro ao gerar cartão virtual.' };
+    }
+};
+
+export const toggleBlockCard = async (cardId: string): Promise<{ success: boolean; isBlocked?: boolean; message?: string }> => {
+    try {
+        const res = await api.put(`/cards/${cardId}/toggle-block`, {}, { headers: getAuthHeaders('json') });
+        return { success: !!res.data?.success, isBlocked: res.data?.isBlocked, message: res.data?.message };
+    } catch (e: any) {
+        return { success: false, message: e?.response?.data?.message || 'Erro ao alterar bloqueio.' };
+    }
+};
+
+export const deleteVirtualCard = async (cardId: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+        const res = await api.delete(`/cards/${cardId}`, { headers: getAuthHeaders('none') });
+        return { success: !!res.data?.success, message: res.data?.message };
+    } catch (e: any) {
+        return { success: false, message: e?.response?.data?.message || 'Erro ao excluir cartão.' };
+    }
+};
+
 // ========== FUNÇÕES DE ADMIN ==========
 
 // Método: adminGetUserByCpf - Busca usuário por CPF (Admin)
@@ -1021,14 +1150,14 @@ export async function payCreditCardInvoice(cpf: string, pin: string, amount?: nu
 }
 
 // Método: parcelCreditCardInvoice - Parcelar fatura
-export async function parcelCreditCardInvoice(cpf: string, details: { amount: number, installments: number }, pin?: string): Promise<{ success: boolean; message: string; user?: User }> {
+export async function parcelCreditCardInvoice(cpf: string, details: { installments: number }, pin?: string): Promise<{ success: boolean; message: string; receipt?: InstallmentReceipt }> {
     try {
         const res = await api.post('/cards/invoice/parcel', { cpf, ...details, pin }, {
             headers: getAuthHeaders('json'),
         });
         const data = res.data;
         if (data?.success) {
-            return { success: true, message: data.message || 'Fatura parcelada com sucesso!', user: data.user };
+            return { success: true, message: data.message || 'Fatura parcelada com sucesso!', receipt: data.receipt };
         }
         return { success: false, message: data?.message || 'Falha ao parcelar fatura.' };
     } catch (error: any) {
@@ -1175,6 +1304,41 @@ export async function adminResetTestData(): Promise<{ success: boolean; message?
         return { success: !!res.data?.success };
     } catch (error: any) {
         return { success: false, message: error?.response?.data?.message || 'Erro ao resetar dados.' };
+    }
+}
+
+// ── Adapters de compatibilidade com componentes portados do WEB ──────────────
+
+export async function performPix(cpf: string, key: string, amount: number, description: string, pin: string, category?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; transaction?: Transaction }> {
+    try {
+        const res = await api.post('/pix/transfer', { cpf, key, amount, description, pin, category }, {
+            headers: getAuthHeaders('json'),
+        });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao realizar PIX' };
+    }
+}
+
+export async function performPixCreditInstallment(cpf: string, amount: number, installments: number, pin: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> {
+    try {
+        const res = await api.post('/pix/credit-installment', { cpf, amount, installments, pin }, {
+            headers: getAuthHeaders('json'),
+        });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao realizar PIX no crédito' };
+    }
+}
+
+export async function checkout(payload: { cpf: string; items: any[]; paymentMethod: string; cashbackUsed?: number; installments?: number; pin?: string }): Promise<{ success: boolean; message: string; purchase?: any }> {
+    try {
+        const res = await api.post('/shop/checkout', payload, {
+            headers: getAuthHeaders('json'),
+        });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao realizar checkout' };
     }
 }
 

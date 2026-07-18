@@ -12,6 +12,8 @@ export interface Transaction {
     merchant?: string; // Added for compatibility
     installments?: string; // Added for compatibility
     totalInstallments?: number; // Added for compatibility
+    /** Categoria derivada da descrição pela API (refeicao, mobilidade, cultura, saude, moradia, compras, educacao, outros) */
+    category?: string;
     currentInstallment?: number; // Added for compatibility
     category?: string; // Category for shop purchases (food, transport, shopping, etc.)
     toKey?: string; // PIX key for transfers
@@ -40,6 +42,8 @@ export interface CreditCard {
     totalLimit: number;
     pointsBalance: number;
     isBlocked: boolean;
+    deliveryStatus?: 'manufacturing' | 'shipping' | 'tracking' | 'delivered' | 'unlocked';
+    isActivated?: boolean;
     transactions: CardTransaction[];
     closedTransactions: CardTransaction[];
     futureInstallments?: Record<string, number>;
@@ -67,15 +71,25 @@ export interface LimitIncreaseRequest {
     status: 'pending' | 'approved' | 'denied';
 }
 
+export interface StoryStat {
+    label: string;
+    value: string;
+}
+
 export interface Story {
-    id: string;
+    id?: string;
     title: string;
     description: string;
     imageUrl?: string;
+    image?: string;
     icon?: string;
-    viewed: boolean;
-    expiresAt: string;
+    viewed?: boolean;
+    expiresAt?: string;
     url?: string;
+    badge?: string;
+    accent?: string;
+    stats?: StoryStat[];
+    status?: string;
 }
 
 export interface AppNotification {
@@ -95,6 +109,22 @@ export interface PurchasedItem {
     quantity?: number;
     purchaseDate?: string;
     pointsEarned?: number;
+    originalPrice?: number;
+    category?: string;
+    cashback?: string;
+    rating?: number;
+    reviews?: number;
+    isNew?: boolean;
+}
+
+export interface BillingCycle {
+    status: 'aberta' | 'fechada' | 'vencida' | 'inadimplente';
+    invoiceRef?: string;
+    ref?: string;
+    closeDate: string;
+    dueDate: string;
+    overdueDeadline?: string;
+    isActive?: boolean;
 }
 
 export interface FixedIncomeProduct {
@@ -111,6 +141,8 @@ export interface User {
     fullName: string;
     username?: string;
     profileDescription?: string;
+    profileMessage?: string;
+    createdAt?: string;
     email: string;
     password: string;
     balance: number;

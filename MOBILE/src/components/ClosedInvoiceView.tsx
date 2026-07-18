@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Transaction, User } from '../types';
 import ExtratoCompra from './ExtratoCompra';
+import InvoiceSummarySheet from './InvoiceSummarySheet';
+import { getInvoiceHistory, InvoiceHistoryItem } from '../services/api';
 
 interface ClosedInvoiceProps {
     user: User;
@@ -32,6 +34,19 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
     const [customAmount, setCustomAmount] = useState('');
     const [showCharges, setShowCharges] = useState(false);
     const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+    const [showSummarySheet, setShowSummarySheet] = useState(false);
+    const [historyData, setHistoryData] = useState<InvoiceHistoryItem[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+
+    useEffect(() => {
+        if (activeTab !== 'historico') return;
+        let active = true;
+        setHistoryLoading(true);
+        getInvoiceHistory()
+            .then((res) => { if (active) setHistoryData(res.history ?? []); })
+            .finally(() => { if (active) setHistoryLoading(false); });
+        return () => { active = false; };
+    }, [activeTab]);
 
     if (selectedTx) return <ExtratoCompra transaction={selectedTx} onBack={() => setSelectedTx(null)} />;
 
@@ -204,7 +219,26 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                 </div>
             </header>
 
+            <InvoiceSummarySheet
+                open={showSummarySheet}
+                onClose={() => setShowSummarySheet(false)}
+                type={activeTab === 'aberta' ? 'aberta' : 'fechada'}
+                title={activeTab === 'aberta' ? 'Resumo da fatura aberta' : 'Resumo da fatura'}
+            />
+
             <main className="flex-1 overflow-y-auto p-4 space-y-5 pb-8">
+
+                {/* Botão de resumo detalhado (abas fechada/aberta) */}
+                {(activeTab === 'fechada' || activeTab === 'aberta') && (
+                    <button
+                        onClick={() => setShowSummarySheet(true)}
+                        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold bg-surface-dark border border-white/10 text-volt-green transition-all active:scale-95"
+                        data-testid="btn-resumo-fatura"
+                    >
+                        <span className="material-symbols-outlined text-lg">description</span>
+                        Ver resumo detalhado
+                    </button>
+                )}
 
                 {/* FECHADA */}
                 {activeTab === 'fechada' && (
@@ -360,54 +394,50 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
 
                 {/* HISTÓRICO */}
                 {activeTab === 'historico' && (() => {
-                    const installmentTypes = ['INVOICE_INSTALLMENT', 'SHOP_CREDIT', 'PIX_CREDIT_SENT'];
-                    const isInstall = (t: any) => installmentTypes.includes(t.type) || !!t.installments || !!t.totalInstallments;
-                    const sumInstallments = closedTxs.filter(isInstall).reduce((s, t) => s + Math.abs(t.amount), 0);
-                    const sumOther = closedTxs.filter(t => !isInstall(t)).reduce((s, t) => s + Math.abs(t.amount), 0);
-                    return (
-                        <div className="space-y-3">
-                            {closedAmount > 0 && (
-                                <div className="bg-surface-dark rounded-2xl p-4 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">
-                                            {billingMonthLabel.charAt(0).toUpperCase() + billingMonthLabel.slice(1)}
-                                        </p>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${closedStatus.bg} ${closedStatus.color}`}>
-                                            {closedStatusKey.toUpperCase()}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-sm text-white/70">Total da fatura</span>
-                                        <span className="text-white font-bold text-lg">{fmt(closedAmount)}</span>
-                                    </div>
-                                    {(sumInstallments > 0 || sumOther > 0) && (
-                                        <div className="border-t border-white/10 pt-3 space-y-2">
-                                            {sumInstallments > 0 && (
-                                                <div className="flex justify-between items-center text-sm">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="material-symbols-outlined text-base text-yellow-400">event_repeat</span>
-                                                        <span className="text-white/70">Parcelas</span>
-                                                    </div>
-                                                    <span className="font-semibold text-yellow-400">{fmt(sumInstallments)}</span>
-                                                </div>
-                                            )}
-                                            {sumOther > 0 && (
-                                                <div className="flex justify-between items-center text-sm">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="material-symbols-outlined text-base text-white/50">shopping_bag</span>
-                                                        <span className="text-white/70">Compras e outros</span>
-                                                    </div>
-                                                    <span className="font-semibold text-white">{fmt(sumOther)}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            <div className="text-center py-6">
-                                <span className="material-symbols-outlined text-4xl text-gray-600">history</span>
-                                <p className="text-gray-500 mt-2 text-sm">Você visualizou todas as informações disponíveis.</p>
+                    if (historyLoading) {
+                        return (
+                            <div className="bg-surface-dark rounded-2xl p-5 text-center text-white/60">
+                                <p className="text-sm">Carregando histórico…</p>
                             </div>
+                        );
+                    }
+                    if (historyData.length === 0) {
+                        return (
+                            <div className="text-center py-6" data-testid="historico-empty">
+                                <span className="material-symbols-outlined text-4xl text-gray-600">receipt_long</span>
+                                <p className="text-gray-500 mt-2 text-sm">Nenhuma fatura disponível.</p>
+                            </div>
+                        );
+                    }
+                    return (
+                        <div className="bg-surface-dark rounded-2xl overflow-hidden" data-testid="historico-section">
+                            {/* Cabeçalho da tabela */}
+                            <div className="grid grid-cols-[auto_1fr_auto] gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-wider bg-white/5 text-white/50">
+                                <span>Mês</span>
+                                <span className="text-center">Período das compras</span>
+                                <span className="text-right">Pagamento</span>
+                            </div>
+                            {historyData.map((item, idx) => (
+                                <div
+                                    key={idx}
+                                    className="grid grid-cols-[auto_1fr_auto] gap-3 px-4 py-3 items-center border-t border-white/5"
+                                    data-testid={`historico-row-${idx}`}
+                                >
+                                    <span className="text-sm font-black text-white">{item.month}</span>
+                                    <span className="text-[11px] text-center text-white/50">{item.period || '—'}</span>
+                                    <span
+                                        className={`text-sm font-bold text-right ${
+                                            item.status === 'Fatura aberta'
+                                                ? 'text-blue-400'
+                                                : item.status === 'Esta fatura'
+                                                    ? 'text-white'
+                                                    : 'text-volt-green'
+                                        }`}
+                                    >
+                                        {item.amount > 0 ? fmt(item.amount) : item.status}
+                                    </span>
+                                </div>
+                            ))}
                         </div>
                     );
                 })()}

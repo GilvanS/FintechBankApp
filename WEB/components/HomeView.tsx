@@ -1,8 +1,12 @@
-import React, { useState, useMemo } from 'react';
-import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus, Mic } from 'lucide-react';
+import React, { useState, useMemo, useContext } from 'react';
+import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus, Mic, Barcode } from 'lucide-react';
+import InvoiceSummarySheet from './InvoiceSummarySheet';
 
-import type { User, Story } from '../types';
+import type { User, Story, RecurringBill, Transaction } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
+import { useAuth, AuthContext } from '../context/AuthContext';
+import { useAppState } from '../contexts/AppStateContext';
+import PasswordModal from './PasswordModal';
 import HomeBanners from './HomeBanners';
 import NewsSection from './NewsSection';
 import ShopOffersBanner from './ShopOffersBanner';
@@ -19,24 +23,65 @@ import { motion, AnimatePresence } from 'motion/react';
 const MOCK_STORIES: Story[] = [
   {
     title: 'App Volt',
-    description: 'Explore uma carteira digital com superpoderes: comandos de voz inteligentes, biometria facial, e análise de gastos para você nunca estourar o orçamento.',
-    icon: '⚡'
+    description: 'Explore uma carteira digital com superpoderes: comandos de voz inteligentes, biometria facial, e análise automatizada de gastos para você nunca mais estourar sua meta de orçamento.',
+    icon: '⚡',
+    badge: 'Seja bem-vindo ao Volt Hub!',
+    accent: 'bg-volt-lime',
+    visualType: 'app',
   },
   {
-    title: 'Chave Pix',
-    description: 'Toque em "Fazer Pix", informe uma chave CPF, E-mail ou celular para enviar dinheiro em segundos, com toda segurança.',
-    icon: '💠'
+    title: 'Status de Economia',
+    description: 'Seus gastos essenciais deste mês, organizados por categoria. Você fechou o mês gastando menos — continue nesse ritmo!',
+    icon: '📊',
+    badge: 'Visão 360º do seu dinheiro',
+    accent: 'bg-volt-lime',
+    stats: [
+      { label: 'Alimentação', value: 'R$ 480,00' },
+      { label: 'Transporte', value: 'R$ 150,00' },
+    ],
+    status: 'Caiu 12% vs. mês anterior',
+    visualType: 'insights',
   },
   {
-    title: 'Área Pix',
-    description: 'Cadastre suas chaves Pix Volt e receba transferências instantâneas de qualquer banco de forma gratuita.',
-    icon: '🔑'
+    title: 'Simulação de Chave Pix',
+    description: 'Informe uma chave CPF, e-mail ou celular, confirme o valor e pronto: o dinheiro cai na conta do destinatário na hora.',
+    icon: '💠',
+    badge: 'Transferência rápida em segundos',
+    accent: 'bg-volt-yellow',
+    visualType: 'pix',
   },
   {
-    title: 'Pagar Contas',
-    description: 'Automatize o pagamento de boletos e assinaturas mensais sem estresse utilizando o Volt IA Assistant.',
-    icon: '💵'
-  }
+    title: 'QR Code Dinâmico',
+    description: 'Gere um QR Code para receber qualquer valor. Suas chaves Pix ficam organizadas em um só lugar, prontas para uso.',
+    icon: '🔳',
+    badge: 'Organize suas chaves e receba',
+    accent: 'bg-[#7CE7FF]',
+    visualType: 'pix_receive',
+  },
+  {
+    title: 'Boleto Importado por DDA',
+    description: 'Suas contas chegam sozinhas pelo Débito Direto Autorizado. Aqui está a fatura da sua conta de luz, já quitada.',
+    icon: '📄',
+    badge: 'Importação automática por DDA',
+    accent: 'bg-[#FF9F5A]',
+    stats: [
+      { label: 'COELBA · Energia', value: 'R$ 214,90' },
+    ],
+    status: 'Pago',
+    visualType: 'payment',
+  },
+  {
+    title: 'Cronograma Inteligente',
+    description: 'Programe seus pagamentos recorrentes e escolha o melhor dia para cada um. Nunca mais perca um vencimento.',
+    icon: '📅',
+    badge: 'Agendamento flexível',
+    accent: 'bg-[#C6A2FF]',
+    stats: [
+      { label: 'Condomínio', value: 'Todo dia 28' },
+      { label: 'Internet', value: 'Todo dia 10' },
+    ],
+    visualType: 'payment_schedule',
+  },
 ];
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie } from 'recharts';
 import D3SparkLine from './charts/D3SparkLine';
@@ -59,22 +104,31 @@ interface HomeViewProps {
     setIsFinancialHealthOpen?: (open: boolean) => void;
     setIsAiRecurringModalOpen?: (open: boolean) => void;
     setActiveDrawer?: (drawer: 'balance' | 'analytics' | 'insights' | 'trends' | null) => void;
+    openBoletoModal?: () => void;
 }
 
-const HomeView: React.FC<HomeViewProps> = ({ 
-  user, 
-  onNavigate, 
+const HomeView: React.FC<HomeViewProps> = ({
+  user,
+  onNavigate,
   theme = 'midnight',
   setIsFinancialHealthOpen,
   setIsAiRecurringModalOpen,
-  setActiveDrawer
+  setActiveDrawer,
+  openBoletoModal
 }) => {
   const { showDialog } = useDialog();
+  const { checkRecurringBillNotifications } = useAppState();
+  const auth = useContext(AuthContext);
+  const updateUser = auth?.updateUser || (() => {});
   const biometricEnabled = localStorage.getItem('volt_biometric_enabled') === 'true';
   const [balanceIsVisible, setIsBalanceVisible] = useState(!biometricEnabled);
   const [isBiometricOpen, setIsBiometricOpen] = useState(false);
   const [isIntelligenceMenuOpen, setIsIntelligenceMenuOpen] = useState(false);
   const [isViewingStories, setIsViewingStories] = useState(false);
+  const [hideHomeInvoice, setHideHomeInvoice] = useState(false);
+  const [isInvoiceSummaryOpen, setIsInvoiceSummaryOpen] = useState(false);
+  const [pendingBillId, setPendingBillId] = useState<string | null>(null);
+  const [isPasswordVerifyOpen, setIsPasswordVerifyOpen] = useState(false);
 
   const showStoriesStatus = (() => {
     const localVal = localStorage.getItem('volt_show_home_stories_status');
@@ -235,7 +289,7 @@ const HomeView: React.FC<HomeViewProps> = ({
     }));
   };
 
-  // Obter despesas reais do mês atual (Junho/2026) por categoria
+  // Obter despesas reais do mês atual por categoria
   const categorySpendingCurrentMonth = useMemo(() => {
     const sums: Record<string, number> = {
       refeicao: 0,
@@ -244,15 +298,18 @@ const HomeView: React.FC<HomeViewProps> = ({
       saude: 0,
       outros: 0
     };
+    const now = new Date();
 
     transactions.forEach((tx) => {
       const txDate = new Date(tx.date);
       if (
-        txDate.getMonth() === 5 &&
-        txDate.getFullYear() === 2026 &&
+        txDate.getMonth() === now.getMonth() &&
+        txDate.getFullYear() === now.getFullYear() &&
         (tx.type === 'expense' || tx.amount < 0)
       ) {
-        const cat = tx.category || 'outros';
+        // Categorias da API fora das 5 monitoradas (ex: moradia, compras, educacao) contam em "outros"
+        const rawCat = tx.category || 'outros';
+        const cat = rawCat in sums ? rawCat : 'outros';
         sums[cat] = (sums[cat] || 0) + Math.abs(tx.amount);
       }
     });
@@ -264,9 +321,10 @@ const HomeView: React.FC<HomeViewProps> = ({
   const savingsCalculation = useMemo(() => {
     let income = 0;
     let expenses = 0;
+    const now = new Date();
     transactions.forEach((tx) => {
       const txDate = new Date(tx.date);
-      if (txDate.getMonth() === 5 && txDate.getFullYear() === 2026) {
+      if (txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear()) {
         if (tx.amount > 0) {
           income += tx.amount;
         } else {
@@ -277,9 +335,8 @@ const HomeView: React.FC<HomeViewProps> = ({
 
     const savedSoFar = Math.max(0, income - expenses);
     const today = new Date();
-    const isJune2026 = today.getFullYear() === 2026 && today.getMonth() === 5;
-    const currentDay = isJune2026 ? today.getDate() : 26;
-    const daysInMonth = 30;
+    const currentDay = today.getDate();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
     const daysRemaining = Math.max(1, daysInMonth - currentDay);
 
     const remainingToSave = Math.max(0, savingsTarget - savedSoFar);
@@ -299,12 +356,23 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   // Cálculo da ofensiva semanal
   const weeklyStreakCalculation = useMemo(() => {
-    const weeksList = [
-      { id: 1, name: 'Semana 1', start: new Date('2026-06-01T00:00:00.000Z'), end: new Date('2026-06-07T23:59:59.999Z'), label: '01/06 - 07/06' },
-      { id: 2, name: 'Semana 2', start: new Date('2026-06-08T00:00:00.000Z'), end: new Date('2026-06-14T23:59:59.999Z'), label: '08/06 - 14/06' },
-      { id: 3, name: 'Semana 3', start: new Date('2026-06-15T00:00:00.000Z'), end: new Date('2026-06-21T23:59:59.999Z'), label: '15/06 - 21/06' },
-      { id: 4, name: 'Semana 4', start: new Date('2026-06-22T00:00:00.000Z'), end: new Date('2026-06-28T23:59:59.999Z'), label: '22/06 - 28/06' },
-    ];
+    // Semanas do mês vigente (1-7, 8-14, 15-21, 22-28), geradas dinamicamente para
+    // acompanhar as transações reais da API em qualquer mês (antes eram fixas em jun/2026).
+    const _ref = new Date();
+    const _y = _ref.getFullYear();
+    const _m = _ref.getMonth();
+    const _pad = (n: number) => String(n).padStart(2, '0');
+    const weeksList = [1, 2, 3, 4].map((id) => {
+      const startDay = (id - 1) * 7 + 1;
+      const endDay = id * 7;
+      return {
+        id,
+        name: `Semana ${id}`,
+        start: new Date(_y, _m, startDay, 0, 0, 0, 0),
+        end: new Date(_y, _m, endDay, 23, 59, 59, 999),
+        label: `${_pad(startDay)}/${_pad(_m + 1)} - ${_pad(endDay)}/${_pad(_m + 1)}`,
+      };
+    });
 
     const results = weeksList.map((wk) => {
       const spending: Record<string, number> = {
@@ -322,7 +390,9 @@ const HomeView: React.FC<HomeViewProps> = ({
           txDate <= wk.end && 
           (tx.type === 'expense' || tx.amount < 0)
         ) {
-          const cat = tx.category || 'outros';
+          const rawCat = tx.category || 'outros';
+          // Categorias da API fora das 5 monitoradas (ex: moradia, compras, educacao) contam em "outros"
+          const cat = rawCat in spending ? rawCat : 'outros';
           spending[cat] = (spending[cat] || 0) + Math.abs(tx.amount);
         }
       });
@@ -381,11 +451,10 @@ const HomeView: React.FC<HomeViewProps> = ({
     const remainingAllowance: number = Math.max(0, totalBudgetLimit - totalBudgetSpent);
     
     const today = new Date();
-    const isJune2026 = today.getFullYear() === 2026 && today.getMonth() === 5;
-    const currentDay = isJune2026 ? today.getDate() : 26;
-    const daysInMonth = 30;
+    const currentDay = today.getDate();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
     const daysRemaining = Math.max(1, daysInMonth - currentDay);
-    
+
     const dailyAllowed = parseFloat((remainingAllowance / daysRemaining).toFixed(2));
     
     if (totalBudgetLimit === 0) {
@@ -463,13 +532,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [recurringBills, setRecurringBills] = useState<RecurringBill[]>(() => {
     const saved = localStorage.getItem('volt_recurring_bills');
     if (saved) return JSON.parse(saved);
-    return [
-      { id: 'rec_1', title: 'Spotify Premium', amount: -24.90, category: 'cultura', dueDate: '26/06/2026', status: 'pending' },
-      { id: 'rec_2', title: 'Netflix Ultra HD', amount: -55.90, category: 'cultura', dueDate: '27/06/2026', status: 'pending' },
-      { id: 'rec_3', title: 'Internet Volt Fibra', amount: -119.90, category: 'outros', dueDate: '28/06/2026', status: 'pending' },
-      { id: 'rec_4', title: 'Light Volt Energia', amount: -180.00, category: 'outros', dueDate: '20/06/2026', status: 'paid', paidAtDate: '20/06/2026' },
-      { id: 'rec_5', title: 'Gym Pass Academia', amount: -89.90, category: 'saude', dueDate: '30/06/2026', status: 'pending' },
-    ];
+    return [];
   });
 
   const handlePayRecurringBill = (billId: string) => {
@@ -487,23 +550,56 @@ const HomeView: React.FC<HomeViewProps> = ({
       return;
     }
 
-    const confirmPay = window.confirm(
-      `Confirmar o pagamento de ${bill.title} no valor de R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}?`
-    );
+    setPendingBillId(billId);
+    setIsPasswordVerifyOpen(true);
+  };
 
-    if (!confirmPay) return;
+  const handlePasswordConfirm = async (enteredPin: string) => {
+    setIsPasswordVerifyOpen(false);
+    if (enteredPin !== '9898') {
+      showDialog({ title: 'Erro', message: 'Senha PIN incorreta!' });
+      return;
+    }
 
+    if (!pendingBillId) return;
+    const billId = pendingBillId;
+    setPendingBillId(null);
+
+    const bill = recurringBills.find(b => b.id === billId);
+    if (!bill) return;
+
+    const absoluteAmount = Math.abs(bill.amount);
     const now = new Date();
     const formatNumber = (num: number) => String(num).padStart(2, '0');
     const formattedDateString = `${formatNumber(now.getDate())}/${formatNumber(now.getMonth() + 1)}/${now.getFullYear()}`;
-    const weekdays = [
-      'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'
-    ];
 
-    showDialog({ title: 'Sucesso', message: 'Conta paga com sucesso!' });
+    const getNextMonthDate = (dateStr: string) => {
+      const parts = dateStr.split('/');
+      if (parts.length !== 3) return dateStr;
+      let day = parseInt(parts[0], 10);
+      let month = parseInt(parts[1], 10);
+      let year = parseInt(parts[2], 10);
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+      const formatNumber = (num: number) => String(num).padStart(2, '0');
+      return `${formatNumber(day)}/${formatNumber(month)}/${year}`;
+    };
 
+    const nextBills: RecurringBill[] = [];
     const updatedBills = recurringBills.map(b => {
       if (b.id === billId) {
+        const nextId = b.id.includes('_next') ? b.id + 'x' : `${b.id}_next`;
+        nextBills.push({
+          ...b,
+          id: nextId,
+          dueDate: getNextMonthDate(b.dueDate),
+          status: 'pending' as const,
+          paidAtDate: undefined
+        });
+
         return {
           ...b,
           status: 'paid' as const,
@@ -513,8 +609,25 @@ const HomeView: React.FC<HomeViewProps> = ({
       return b;
     });
 
-    setRecurringBills(updatedBills);
-    localStorage.setItem('volt_recurring_bills', JSON.stringify(updatedBills));
+    const finalBills = [...updatedBills, ...nextBills];
+    setRecurringBills(finalBills);
+    localStorage.setItem('volt_recurring_bills', JSON.stringify(finalBills));
+    checkRecurringBillNotifications();
+
+    const newTx: Transaction = {
+      id: `rec-pay-${Date.now()}`,
+      type: 'payment',
+      amount: -absoluteAmount,
+      description: `Pagamento Recorrente: ${bill.title}`,
+      date: now.toISOString(),
+      category: bill.category || 'outros',
+    };
+
+    updateUser({
+      ...user,
+      balance: user.balance - absoluteAmount,
+      transactions: [newTx, ...(user.transactions || [])],
+    });
 
     showDialog({ title: 'Sucesso', message: `Sucesso! O pagamento de ${bill.title} de R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} foi realizado.` });
   };
@@ -584,10 +697,10 @@ const HomeView: React.FC<HomeViewProps> = ({
     show: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 300, damping: 24 } },
   };
 
-  // Generate the last 6 calendar months of spending (baseline Jun 2026 as per local time 2026-06-24)
+  // Generate the last 6 calendar months of spending
   const getChartData = () => {
     const data = [];
-    const now = new Date(2026, 5, 24); // June 24, 2026
+    const now = new Date();
     const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
     for (let i = 5; i >= 0; i--) {
@@ -624,9 +737,10 @@ const HomeView: React.FC<HomeViewProps> = ({
   const chartData = getChartData();
 
   const balanceHistoryData = useMemo(() => {
-    // Generate the last 30 days ending on June 24, 2026
-    const baseDate = new Date(2026, 5, 24, 23, 59, 59); // June 24, 2026
-    
+    // Generate the last 30 days ending today
+    const baseDate = new Date();
+    baseDate.setHours(23, 59, 59, 999);
+
     const days = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date(baseDate.getTime());
@@ -647,9 +761,8 @@ const HomeView: React.FC<HomeViewProps> = ({
         }
       });
       
-      const dayLabel = `${String(day.getDate()).padStart(2, '0')}/${String(day.getMonth() + 1).padStart(2, '0')}`;
       return {
-        date: dayLabel,
+        date: day.toISOString().split('T')[0],
         balance: parseFloat(computedBalance.toFixed(2)),
       };
     });
@@ -700,9 +813,10 @@ const HomeView: React.FC<HomeViewProps> = ({
   const currentMonthSpending = transactions
     .filter((tx) => {
       const txDate = new Date(tx.date);
+      const now = new Date();
       return (
-        txDate.getMonth() === 5 &&
-        txDate.getFullYear() === 2026 &&
+        txDate.getMonth() === now.getMonth() &&
+        txDate.getFullYear() === now.getFullYear() &&
         (tx.type === 'expense' || tx.amount < 0)
       );
     })
@@ -766,7 +880,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           SEU DASHBOARD
         </h2>
         <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 border-black font-black text-[9px] uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform active:scale-95 ${
-          isMidnight ? 'bg-[#003d25] text-[#00ff9d]' : 'bg-[#00ff9d] text-black'
+          isMidnight ? 'bg-[#003d25] text-volt-green' : 'bg-volt-green text-black'
         }`}>
           <div className="w-1.5 h-1.5 rounded-full bg-current" />
           PERSONALIZAR PAINEL
@@ -904,7 +1018,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             { label: 'PIX', icon: Bolt, action: () => onNavigate('pix'), highlight: true },
             { label: 'Shop', icon: ShoppingBag, action: () => onNavigate('shop'), highlight: false },
             { label: 'Cartões', icon: CreditCard, action: () => onNavigate('cards'), highlight: false },
-            { label: 'Contas', icon: Receipt, action: () => alert('Contas e boletos para pagamento serão importados automaticamente pelo seu DDA.'), highlight: false },
+            { label: 'Pagar Boleto', icon: Receipt, action: () => openBoletoModal?.(), highlight: true },
             { label: 'Extrato', icon: FileText, action: () => onNavigate('statement'), highlight: false },
           ].map((item, index) => {
             const Icon = item.icon;
@@ -918,7 +1032,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 <div
                   className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 border-black transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
                     item.highlight
-                      ? 'bg-[#00ff9d] text-black'
+                      ? 'bg-volt-green text-black'
                       : isMidnight
                         ? 'bg-zinc-900 text-white hover:bg-zinc-800'
                         : 'bg-white text-black hover:bg-gray-50'
@@ -1095,13 +1209,13 @@ const HomeView: React.FC<HomeViewProps> = ({
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-              isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#00E5FF] text-black'
+              isMidnight ? 'bg-volt-green text-black' : 'bg-[#00E5FF] text-black'
             }`}>
               🎯
             </div>
             <div>
               <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Visão Geral de Orçamentos</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Controle de limites mensais por categoria (Junho/2026)</p>
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Controle de limites mensais por categoria ({new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })})</p>
             </div>
           </div>
           <button
@@ -1176,7 +1290,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 type="button"
                 onClick={() => setIsEditingBudgets(false)}
                 className={`text-xs font-black uppercase tracking-wider py-1.5 rounded-xl transition-all border-2 border-black ${
-                  isMidnight ? 'bg-zinc-900 text-[#00ff9d] hover:bg-zinc-800 border-zinc-800' : 'btn-secondary'
+                  isMidnight ? 'bg-zinc-900 text-volt-green hover:bg-zinc-800 border-zinc-800' : 'btn-secondary'
                 }`}
               >
                 Cancelar
@@ -1184,7 +1298,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="submit"
                 className={`text-xs font-black uppercase tracking-wider py-1.5 rounded-xl transition-all border-2 border-black ${
-                  isMidnight ? 'bg-[#00ff9d] text-zinc-950 hover:bg-[#00e38b]' : 'btn-primary'
+                  isMidnight ? 'bg-volt-green text-zinc-950 hover:bg-volt-primary-dark' : 'btn-primary'
                 }`}
               >
                 Salvar Limites
@@ -1270,19 +1384,19 @@ const HomeView: React.FC<HomeViewProps> = ({
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm">💵</span>
-                    <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-[#00ff9d]' : 'text-green-600'}`}>
+                    <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-green-600'}`}>
                       Orçamento Diário Disponível
                     </span>
                   </div>
                   <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-black ${
-                    isMidnight ? 'bg-[#00ff9d] text-zinc-950' : 'bg-[#A2FF00] text-black'
+                    isMidnight ? 'bg-volt-green text-zinc-950' : 'bg-[#A2FF00] text-black'
                   }`}>
                     Sob Controle
                   </span>
                 </div>
                 
                 <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className={`text-xl font-black tracking-tight ${isMidnight ? 'text-[#00ff9d]' : 'text-green-600'}`}>
+                  <span className={`text-xl font-black tracking-tight ${isMidnight ? 'text-volt-green' : 'text-green-600'}`}>
                     R$ {dailyBudgetAlert.dailyAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
                   <span className="text-[10px] font-bold text-zinc-500">
@@ -1331,7 +1445,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                         isOverBudget ? (
                           <span className="text-red-500 font-extrabold">Excedeu R$ {(spent - limit).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                         ) : (
-                          <span className={isMidnight ? 'text-[#00ff9d]' : 'text-green-600'}>R$ {(limit - spent).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} restantes</span>
+                          <span className={isMidnight ? 'text-volt-green' : 'text-green-600'}>R$ {(limit - spent).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} restantes</span>
                         )
                       ) : (
                         <span className="text-gray-400">Sem limite configurado</span>
@@ -1361,12 +1475,12 @@ const HomeView: React.FC<HomeViewProps> = ({
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs">🚀</span>
-                  <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>
+                  <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-black'}`}>
                     Meta de Economia (Stretch Goal)
                   </span>
                 </div>
                 <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border border-black ${
-                  isMidnight ? 'bg-[#00ff9d] text-black border-zinc-800' : 'bg-[#FFED86] text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                  isMidnight ? 'bg-volt-green text-black border-zinc-800' : 'bg-[#FFED86] text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
                 }`}>
                   {savingsCalculation.percentReached}% Concluída
                 </span>
@@ -1490,7 +1604,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-              isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#FFD700] text-black'
+              isMidnight ? 'bg-volt-green text-black' : 'bg-[#FFD700] text-black'
             }`}>
               🎯
             </div>
@@ -1526,7 +1640,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             <button
               onClick={handleSaveGoal}
               className={`text-xs font-black uppercase tracking-wider border-2 border-black px-3 py-2 rounded-xl transition-all cursor-pointer ${
-                isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#A2FF00] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
               }`}
             >
               Salvar
@@ -1597,7 +1711,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
             <div>
               <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Saúde Financeira</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Resumo financeiro de Junho/2026</p>
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Resumo financeiro de {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p>
             </div>
           </div>
           <button
@@ -1637,7 +1751,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           </div>
           <span className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full ${
             juneSavingsRate >= 20
-              ? isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#A2FF00] text-black'
+              ? isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black'
               : juneSavingsRate >= 10
               ? 'bg-[#FFD700] text-black'
               : 'bg-[#FF5C8D] text-white'
@@ -1667,7 +1781,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </div>
           <span className={`text-[8px] font-black uppercase tracking-wider border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-            isMidnight ? 'bg-[#00ff9d] text-black' : 'bg-[#A2FF00] text-black'
+            isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black'
           }`}>Análises</span>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -1736,7 +1850,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </button>
           <button
-            onClick={() => showDialog({ title: 'Insights de Gastos', message: 'Role a tela para ver a análise completa de gastos por categoria com gráficos interativos.' })}
+            onClick={() => setActiveDrawer?.('insights')}
             className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
               isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
             }`}
@@ -1753,7 +1867,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </button>
           <button
-            onClick={() => showDialog({ title: 'Tendências e Previsões', message: 'Role a tela para ver as Tendências de Gastos dos últimos 6 meses com inteligência preditiva Volt.' })}
+            onClick={() => setActiveDrawer?.('trends')}
             className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
               isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,255,157,0.2)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
             }`}
@@ -1761,7 +1875,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             <div className="flex justify-between items-start w-full">
               <span className="text-lg">🔮</span>
               <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                isMidnight ? 'text-[#00ff9d] bg-[#00ff9d]/10' : 'text-[#00c97b] bg-[#00c97b]/10'
+                isMidnight ? 'text-volt-green bg-volt-green/10' : 'text-[#00c97b] bg-[#00c97b]/10'
               }`}>Volt Forecast™</span>
             </div>
             <div>
@@ -1794,7 +1908,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               <button
                 onClick={() => setIsAiRecurringModalOpen?.(true)}
                 className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-wider border-2 border-black px-2 py-1 rounded-full transition-all cursor-pointer ${
-                  isMidnight ? 'bg-zinc-900 text-[#00ff9d] border-zinc-700 hover:bg-zinc-800' : 'bg-[#A2FF00] text-black hover:bg-[#8fff00] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                  isMidnight ? 'bg-zinc-900 text-volt-green border-zinc-700 hover:bg-zinc-800' : 'bg-[#A2FF00] text-black hover:bg-[#8fff00] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
                 }`}
               >
                 <Sparkles size={9} /> IA
@@ -1921,49 +2035,105 @@ const HomeView: React.FC<HomeViewProps> = ({
         variants={itemVariants}
         className="bg-volt-surface rounded-2xl border border-white/5 overflow-hidden shadow-lg"
       >
-        <div className="p-5 flex flex-col gap-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2 text-white">
-              <CreditCard size={18} className="text-volt-green" />
-              <h3 className="font-bold text-sm">Cartão de Crédito</h3>
-            </div>
-            <span className="text-[10px] font-bold text-on-surface-variant bg-white/5 px-2.5 py-1 rounded-full uppercase">
-              Venc. 15 SET
-            </span>
-          </div>
+        {(() => {
+          const cc = user.creditCard;
+          const invoiceDue = cc?.invoiceDueDate ? new Date(cc.invoiceDueDate) : null;
+          const bestBuy = invoiceDue ? new Date(new Date(invoiceDue).setDate(invoiceDue.getDate() - 7)) : null;
+          const fmtShort = (d: Date | null) =>
+            d ? d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase() : '--';
+          const totalLimit = cc?.totalLimit || 0;
+          const availableLimit = cc?.availableLimit || 0;
+          const usedPct = totalLimit > 0 ? Math.min(100, Math.max(0, ((totalLimit - availableLimit) / totalLimit) * 100)) : 0;
+          return (
+            <div className="p-5 flex flex-col gap-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2 text-white">
+                  <CreditCard size={18} className="text-volt-green" />
+                  <h3 className="font-bold text-sm">Fatura aberta</h3>
+                </div>
+                <span className="text-[10px] font-bold text-on-surface-variant bg-white/5 px-2.5 py-1 rounded-full uppercase">
+                  Venc. {fmtShort(invoiceDue)}
+                </span>
+              </div>
 
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Fatura Atual</span>
-            <span className="text-2xl font-black text-volt-green drop-shadow-[0_0_8px_rgba(0,227,139,0.2)]">
-              R$ {(user.creditCard?.currentInvoice || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Fatura Atual</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-black text-volt-green drop-shadow-[0_0_8px_rgba(0,227,139,0.2)]">
+                    {hideHomeInvoice
+                      ? 'R$ ••••'
+                      : `R$ ${(cc?.currentInvoice || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  </span>
+                  <button
+                    onClick={() => setHideHomeInvoice((v) => !v)}
+                    className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-on-surface-variant hover:bg-white/10"
+                    aria-label={hideHomeInvoice ? 'Mostrar valor' : 'Ocultar valor'}
+                  >
+                    {hideHomeInvoice ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
 
-          <div className="flex flex-col gap-1.5">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-on-surface-variant">Limite Disponível</span>
-              <span className="font-bold text-white">R$ 3.349,00</span>
-            </div>
-            {/* Progress Bar */}
-            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: '0%' }}
-                animate={{ width: '35%' }}
-                transition={{ duration: 1, ease: 'easeOut' }}
-                className="h-full bg-volt-green rounded-full shadow-[0_0_10px_rgba(0,227,139,0.5)]"
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-white/5 rounded-xl px-3 py-2">
+                  <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider">Melhor dia de compra</p>
+                  <p className="text-xs font-black text-white mt-0.5">{fmtShort(bestBuy)}</p>
+                </div>
+                <div className="bg-white/5 rounded-xl px-3 py-2">
+                  <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider">Vencimento</p>
+                  <p className="text-xs font-black text-white mt-0.5">{fmtShort(invoiceDue)}</p>
+                </div>
+              </div>
 
-          <button
-            onClick={() => onNavigate('cards')}
-            className="w-full mt-1 py-3 px-4 bg-white/5 hover:bg-white/10 rounded-xl text-volt-green font-bold text-xs flex items-center justify-center gap-1 border border-volt-green/10 transition-all active:scale-95 cursor-pointer"
-          >
-            Ver fatura e limite
-            <ChevronRight size={14} />
-          </button>
-        </div>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-on-surface-variant">Limite Disponível</span>
+                  <span className="font-bold text-white">
+                    R$ {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: '0%' }}
+                    animate={{ width: `${usedPct}%` }}
+                    transition={{ duration: 1, ease: 'easeOut' }}
+                    className="h-full bg-volt-green rounded-full shadow-[0_0_10px_rgba(0,227,139,0.5)]"
+                  />
+                </div>
+              </div>
+
+              {/* Scroll lateral de ações rápidas */}
+              <div className="flex gap-2.5 overflow-x-auto hide-scrollbar py-1 -mx-1 px-1">
+                <button
+                  onClick={() => onNavigate('cards')}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
+                >
+                  <Barcode size={14} /> Pagar fatura
+                </button>
+                <button
+                  onClick={() => onNavigate('cards')}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
+                >
+                  <CreditCard size={14} /> Meus cartões
+                </button>
+                <button
+                  onClick={() => setIsInvoiceSummaryOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
+                >
+                  <FileText size={14} /> Resumo da fatura
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </motion.section>
+
+      <InvoiceSummarySheet
+        open={isInvoiceSummaryOpen}
+        onClose={() => setIsInvoiceSummaryOpen(false)}
+        type="aberta"
+        title="Resumo da fatura aberta"
+      />
 
       {/* Spending Analytics Section */}
       <motion.section
@@ -2360,7 +2530,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               {/* Texts */}
               <div className="space-y-1">
                 <span className={`text-[10px] font-black tracking-widest uppercase block ${
-                  isMidnight ? 'text-[#00ff9d]' : 'text-gray-700'
+                  isMidnight ? 'text-volt-green' : 'text-gray-700'
                 }`}>
                   Conquista de Poupança!
                 </span>
@@ -2405,7 +2575,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 onClick={() => setCelebrationMilestone(null)}
                 className={`w-full py-3 px-4 rounded-xl font-black text-sm border-2 border-black uppercase tracking-wider shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-colors cursor-pointer ${
                   isMidnight
-                    ? 'bg-[#00ff9d] text-black border-black hover:bg-[#00e38b]'
+                    ? 'bg-volt-green text-black border-black hover:bg-volt-primary-dark'
                     : 'bg-white text-black border-black hover:bg-gray-50'
                 }`}
               >
@@ -2433,7 +2603,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               <div className="flex justify-between items-center pb-2 border-b-2 border-dashed border-black/10 dark:border-white/10">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm">🔮</span>
-                  <span className={`text-[11px] font-black uppercase tracking-wider ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}>
+                  <span className={`text-[11px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-black'}`}>
                     Central de Painéis Volt
                   </span>
                 </div>
@@ -2577,10 +2747,10 @@ const HomeView: React.FC<HomeViewProps> = ({
           onClick={() => setIsIntelligenceMenuOpen(prev => !prev)}
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
-          className="w-14 h-14 rounded-full border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer pointer-events-auto bg-[#00ff9d] text-black relative group"
+          className="w-14 h-14 rounded-full border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer pointer-events-auto bg-volt-green text-black relative group"
         >
           {/* Pulsing aura */}
-          <span className="absolute inset-0 rounded-full bg-[#00ff9d] opacity-20 group-hover:animate-ping pointer-events-none" />
+          <span className="absolute inset-0 rounded-full bg-volt-green opacity-20 group-hover:animate-ping pointer-events-none" />
           
           <motion.div
             animate={{ rotate: isIntelligenceMenuOpen ? 45 : 0 }}
@@ -2596,6 +2766,14 @@ const HomeView: React.FC<HomeViewProps> = ({
           <StoryViewer stories={MOCK_STORIES} onClose={() => setIsViewingStories(false)} />
         )}
       </AnimatePresence>
+
+      <PasswordModal
+        isOpen={isPasswordVerifyOpen}
+        onClose={() => setIsPasswordVerifyOpen(false)}
+        onConfirm={handlePasswordConfirm}
+        title="Confirmar Pagamento Recorrente"
+        description="Digite seu PIN de 4 dígitos para autorizar o pagamento desta conta."
+      />
     </motion.div>
   );
 };

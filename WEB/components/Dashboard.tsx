@@ -1,13 +1,13 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { PurchasedItem, Transaction, User } from '../types';
-import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement } from '../services/api';
+import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement, InstallmentReceipt as InstallmentReceiptDetails } from '../services/api';
 import { useDialog } from '../contexts/GlobalDialogContext';
 import { useAppState } from '../contexts/AppStateContext';
 
 import HomeView from './HomeView';
 import Profile from './Profile';
-import PixModal from './PixModal';
+import PixView from './PixView';
 import Statement from './Statement';
 import StatementPaginated from './StatementPaginated';
 import CardDashboard from './CardDashboard';
@@ -15,11 +15,14 @@ import ShopView from './ShopView';
 import ShoppingCart from './ShoppingCart';
 import PaymentMethods from './PaymentMethods';
 import DepositModal from './DepositModal';
+import BoletoModal from './BoletoModal';
 import InstallmentModal from './InstallmentModal';
 import PurchaseConfirmation from './PurchaseConfirmation';
 import BottomNavBar from './BottomNavBar';
 import Admin from './Admin';
 import Investments from './Investments';
+import Wallet from './Wallet';
+import Loans from './Loans';
 import PointsDashboard from './PointsDashboard';
 import AnticipateInstallments from './AnticipateInstallments';
 import InstallmentReview from './InstallmentReview';
@@ -28,6 +31,7 @@ import PasswordModal from './PasswordModal';
 import Products from './Products';
 import ClosedInvoice from './ClosedInvoice';
 import InstallmentOptions from './InstallmentOptions';
+import InstallmentReceipt from './InstallmentReceipt';
 import CurrentInvoice from './CurrentInvoice';
 import InvoiceView from './InvoiceView';
 import Header from './Header';
@@ -74,7 +78,7 @@ const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; o
 };
 
 
-type View = 'home' | 'cards' | 'shop' | 'investments' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'currentInvoice' | 'limit';
+type View = 'home' | 'cards' | 'shop' | 'investments' | 'wallet' | 'loans' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'installmentReceipt' | 'currentInvoice' | 'limit';
 
 const Dashboard: React.FC = () => {
     const { user, updateUser, logout, view: topLevelView, navigateTo } = useAuth();
@@ -86,11 +90,10 @@ const Dashboard: React.FC = () => {
 
     const [cart, setCart] = useState<PurchasedItem[]>([]);
     const [currentItem, setCurrentItem] = useState<PurchasedItem | null>(null);
-    const [isPixModalOpen, setIsPixModalOpen] = useState(false);
     const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
+    const [isBoletoOpen, setIsBoletoOpen] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
     // Shop is now full-page
-    const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
     const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
     const [isHeaderHidden, setIsHeaderHidden] = useState(false);
 
@@ -130,8 +133,9 @@ const Dashboard: React.FC = () => {
     const [checkoutTotal, setCheckoutTotal] = useState(0);
     const [confirmationDetails, setConfirmationDetails] = useState<any>(null);
     const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
-    const [parcelDetails, setParcelDetails] = useState<{ amount: number, installments: number } | null>(null);
+    const [parcelDetails, setParcelDetails] = useState<{ amount: number, installments: number, installmentValue?: number, totalAmount?: number, iof?: number, juros?: number } | null>(null);
     const [invoicePaymentDetails, setInvoicePaymentDetails] = useState<any>(null);
+    const [installmentReceiptDetails, setInstallmentReceiptDetails] = useState<InstallmentReceiptDetails | null>(null);
     
     useEffect(() => {
         if (currentView === 'cards' && user?.creditCard.isBlocked) {
@@ -140,6 +144,22 @@ const Dashboard: React.FC = () => {
             setIsBlockedModalOpen(false);
         }
     }, [currentView, user]);
+
+    useEffect(() => {
+        if (topLevelView === 'admin' && user?.role === 'admin') {
+            setCurrentView('admin');
+        }
+    }, [topLevelView, user]);
+
+    // Mostra o popup de Saude Financeira automaticamente ao logar (uma vez por dia por usuario)
+    useEffect(() => {
+        if (!user?.cpf) return;
+        const today = new Date().toISOString().slice(0, 10);
+        const storageKey = `volt_health_popup_seen_${user.cpf}_${today}`;
+        if (localStorage.getItem(storageKey)) return;
+        localStorage.setItem(storageKey, 'true');
+        setFinancialHealthOpen(true);
+    }, [user?.cpf, setFinancialHealthOpen]);
 
     // Refresh automatico ao entrar em telas de cartoes
     useEffect(() => {
@@ -178,9 +198,9 @@ const Dashboard: React.FC = () => {
         return () => { cancelled = true; };
     }, [currentView, user]);
 
-    // Refresh extrato quando modal de statement abre
+    // Refresh extrato quando a view de statement abre
     useEffect(() => {
-        if (!isStatementModalOpen || !user) return;
+        if (currentView !== 'statement' || !user) return;
         let cancelled = false;
         getUserStatement(user.cpf).then(stmt => {
             if (stmt.success && stmt.transactions && !cancelled) {
@@ -188,7 +208,7 @@ const Dashboard: React.FC = () => {
             }
         });
         return () => { cancelled = true; };
-    }, [isStatementModalOpen]);
+    }, [currentView]);
     const handleGoToPaymentFromModal = () => {
         setIsBlockedModalOpen(false);
         handleNavigate('closedInvoice');
@@ -200,7 +220,8 @@ const Dashboard: React.FC = () => {
 
     const handleNavigate = useCallback((newView: View, item?: any) => {
         if (newView === 'pix') {
-            setIsPixModalOpen(true);
+            if (currentView !== 'pix') setPreviousView(currentView);
+            setCurrentView('pix');
             return;
         }
         if (newView === 'deposit') {
@@ -208,7 +229,8 @@ const Dashboard: React.FC = () => {
             return;
         }
         if (newView === 'admin') {
-            setIsAdminModalOpen(true);
+            setPreviousView(currentView);
+            setCurrentView('admin');
             return;
         }
         if (newView === 'shop') {
@@ -218,8 +240,8 @@ const Dashboard: React.FC = () => {
         }
 
         if (newView === 'statement') {
-            setCurrentView('home');
-            setIsStatementModalOpen(true);
+            if (currentView !== 'statement') setPreviousView(currentView);
+            setCurrentView('statement');
             return;
         }
         if (newView === 'limit') {
@@ -245,7 +267,7 @@ const Dashboard: React.FC = () => {
             transactions: [newTx, ...user.transactions],
         };
         updateUser(updatedUser);
-        triggerSmartAlertCheck(newTx.title || newTx.description, amount, 'outros');
+        triggerSmartAlertCheck(newTx.description ?? '', amount, 'outros');
     };
 
     const handleDepositComplete = (newTx: Transaction, amount: number) => {
@@ -256,6 +278,17 @@ const Dashboard: React.FC = () => {
             transactions: [newTx, ...user.transactions],
         };
         updateUser(updatedUser);
+    };
+
+    const handleBoletoComplete = (newTx: Transaction, amount: number) => {
+        if (!user) return;
+        const updatedUser = {
+            ...user,
+            balance: user.balance + amount,
+            transactions: [newTx, ...user.transactions],
+        };
+        updateUser(updatedUser);
+        triggerSmartAlertCheck(newTx.description ?? 'Pagamento de Boleto', amount, 'outros');
     };
 
     // --- Cart Logic ---
@@ -452,32 +485,37 @@ const Dashboard: React.FC = () => {
         handleNavigate('installmentOptions');
     };
     
-    const handleSelectInstallmentOption = (details: { amount: number, installments: number }) => {
+    const handleSelectInstallmentOption = (details: { amount: number, installments: number, installmentValue?: number, totalAmount?: number, iof?: number, juros?: number }) => {
         setParcelDetails(details);
         passwordActionPayload.current = details; // Also save to ref for the action
         handleNavigate('installmentReviewInvoice');
     };
-    
+
     const handleConfirmParcelInvoice = () => {
         setPasswordAction(() => () => executeParcelInvoice());
         setPasswordModalInfo({ title: 'Parcelar Fatura', description: 'Digite seu PIN para confirmar.' });
         setIsPasswordModalOpen(true);
     };
-    
+
     const executeParcelInvoice = async () => {
         const details = passwordActionPayload.current as { amount: number, installments: number } | null;
         if (!user || !details) return;
 
         setIsProcessing(true);
         const pin = (passwordActionPayload.current as any)?.pin;
-        const result = await parcelCreditCardInvoice(user.cpf, details, pin);
+        const result = await parcelCreditCardInvoice(user.cpf, { installments: details.installments }, pin);
         if (result.success) {
             const refreshed = await getUserByCpf(user.cpf);
             if (refreshed.success && refreshed.user) {
                 updateUser(refreshed.user);
             }
-            showDialog({ title: 'Aviso', message: result.message });
-            handleNavigate('cards');
+            if (result.receipt) {
+                setInstallmentReceiptDetails(result.receipt);
+                handleNavigate('installmentReceipt');
+            } else {
+                showDialog({ title: 'Aviso', message: result.message });
+                handleNavigate('cards');
+            }
         } else {
             showDialog({ title: 'Aviso', message: result.message });
         }
@@ -532,13 +570,14 @@ const Dashboard: React.FC = () => {
         switch (currentView) {
             case 'home':
                 return (
-                    <HomeView 
-                        user={user!} 
-                        onNavigate={handleNavigate} 
-                        theme={theme} 
+                    <HomeView
+                        user={user!}
+                        onNavigate={handleNavigate}
+                        theme={theme}
                         setIsFinancialHealthOpen={setFinancialHealthOpen}
                         setIsAiRecurringModalOpen={setAiRecurringModalOpen}
                         setActiveDrawer={setActiveDrawer}
+                        openBoletoModal={() => setIsBoletoOpen(true)}
                     />
                 );
             case 'cards':
@@ -565,11 +604,15 @@ const Dashboard: React.FC = () => {
                 return <PurchaseConfirmation details={confirmationDetails} onClose={() => handleNavigate('home')} />;
             case 'investments':
                 return <Investments onBack={() => handleNavigate('home')} />;
+            case 'wallet':
+                return <Wallet onBack={() => handleNavigate('home')} />;
+            case 'loans':
+                return <Loans onBack={() => handleNavigate('home')} />;
             case 'shop':
                 if (!user) return null;
                 return (
-                    <div className={`min-h-full pb-20 w-full max-w-4xl mx-auto ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-[#fafafa]'}`}>
-                        <div className={`flex items-center gap-3 p-4 border-b sticky top-0 z-50 ${theme === 'midnight' ? 'border-white/5 bg-[#0f0f0f]' : 'border-black/5 bg-[#fafafa]'}`}>
+                    <div className={`min-h-full pb-20 w-full max-w-4xl mx-auto ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
+                        <div className={`flex items-center gap-3 p-4 border-b sticky top-0 z-50 ${theme === 'midnight' ? 'border-white/5 bg-[#0f0f0f]' : 'border-black/5 bg-volt-yellow'}`}>
                             <button onClick={handleBack} className={`p-2 -ml-2 rounded-full transition-colors cursor-pointer ${theme === 'midnight' ? 'hover:bg-white/10 text-white' : 'hover:bg-black/10 text-black'}`}>
                                 <span className={`text-xl ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>←</span>
                             </button>
@@ -579,6 +622,31 @@ const Dashboard: React.FC = () => {
                             accountBalance={user.balance} 
                             onPurchaseComplete={handleTransactionCompleteLimit} 
                             theme={theme} 
+                        />
+                    </div>
+                );
+            case 'pix':
+                if (!user) return null;
+                return (
+                    <PixView onBack={handleBack} />
+                );
+            case 'statement':
+                if (!user) return null;
+                return (
+                    <div className={`min-h-full pb-20 w-full max-w-4xl mx-auto ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
+                        <div className={`flex items-center gap-3 p-4 border-b sticky top-0 z-50 ${theme === 'midnight' ? 'border-white/5 bg-[#0f0f0f]' : 'border-black/5 bg-volt-yellow'}`}>
+                            <button onClick={handleBack} className={`p-2 -ml-2 rounded-full transition-colors cursor-pointer ${theme === 'midnight' ? 'hover:bg-white/10 text-white' : 'hover:bg-black/10 text-black'}`}>
+                                <span className={`text-xl ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>←</span>
+                            </button>
+                            <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Extrato</h1>
+                        </div>
+                        <StatementPaginated
+                            user={user}
+                            onNavigate={(view) => {
+                                if (view !== 'home' && view !== 'statement') handleNavigate(view as View);
+                                else handleBack();
+                            }}
+                            onBack={handleBack}
                         />
                     </div>
                 );
@@ -592,6 +660,9 @@ const Dashboard: React.FC = () => {
             case 'invoicePaymentReceipt':
                 if (!invoicePaymentDetails) return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
                 return <PaymentReceipt details={invoicePaymentDetails} onClose={() => handleNavigate('home')} />;
+            case 'installmentReceipt':
+                if (!installmentReceiptDetails) return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
+                return <InstallmentReceipt details={installmentReceiptDetails} onClose={() => handleNavigate('home')} />;
              case 'products':
                 return <Products onNavigate={handleNavigate} />;
             case 'closedInvoice':
@@ -610,7 +681,7 @@ const Dashboard: React.FC = () => {
                             </button>
                             <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Fatura</h1>
                         </div>
-                        <InvoiceView invoiceAmount={user.creditCard.closedInvoice > 0 ? user.creditCard.closedInvoice : user.creditCard.currentInvoice} />
+                        <InvoiceView user={user} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />
                     </div>
                 );
             case 'limit':
@@ -635,7 +706,17 @@ const Dashboard: React.FC = () => {
                         </div>
                     </div>
                 );
-                return <HomeView user={user!} onNavigate={handleNavigate} theme={theme} />;
+            case 'admin':
+                return (
+                    <div className={`min-h-full pb-20 ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
+                        <Admin 
+                            onClose={() => {
+                                if (topLevelView === 'admin') navigateTo('dashboard');
+                                handleNavigate('home');
+                            }} 
+                        />
+                    </div>
+                );
         }
     };
 
@@ -700,7 +781,7 @@ const Dashboard: React.FC = () => {
             >
                 {renderContent()}
             </div>
-            {topLevelView !== 'admin' && ['home', 'products', 'profile', 'cards', 'limit'].includes(currentView) && !isStatementModalOpen && (
+            {topLevelView !== 'admin' && ['home', 'products', 'profile', 'cards', 'limit'].includes(currentView) && (
                  <BottomNavBar currentView={currentView} onNavigate={(view) => handleNavigate(view)} theme={theme} />
             )}
             
@@ -717,16 +798,17 @@ const Dashboard: React.FC = () => {
                 description={passwordModalInfo.description}
                 isLoading={isProcessing}
             />
-            {isPixModalOpen && (
-                <PixModal 
-                    isOpen={isPixModalOpen} 
-                    onClose={() => setIsPixModalOpen(false)} 
-                />
-            )}
             <DepositModal
                 isOpen={isDepositModalOpen}
                 onClose={() => setIsDepositModalOpen(false)}
                 onDepositComplete={handleDepositComplete}
+            />
+            <BoletoModal
+                isOpen={isBoletoOpen}
+                onClose={() => setIsBoletoOpen(false)}
+                accountBalance={user?.balance ?? 0}
+                onTransactionComplete={handleBoletoComplete}
+                theme={theme}
             />
             {currentItem && (
                 <InstallmentModal
@@ -740,20 +822,7 @@ const Dashboard: React.FC = () => {
                     }}
                 />
             )}
-            <Admin 
-                isOpen={isAdminModalOpen || (topLevelView === 'admin' && user?.role === 'admin')} 
-                onClose={() => {
-                    if (topLevelView === 'admin') navigateTo('dashboard');
-                    setIsAdminModalOpen(false);
-                }} 
-            />
-            {isFinancialHealthOpen && (
-                <FinancialHealthModal 
-                    isOpen={isFinancialHealthOpen} 
-                    onClose={() => setFinancialHealthOpen(false)} 
-                    transactions={user.transactions} 
-                />
-            )}
+
             {isAiModalOpen && (
                 <AiAssistantModal 
                     isOpen={isAiModalOpen} 
@@ -764,56 +833,6 @@ const Dashboard: React.FC = () => {
             )}
 
 
-
-            {/* ── Statement Modal ───────────────────────── */}
-            <AnimatePresence>
-                {isStatementModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 pt-16">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-                            onClick={() => setIsStatementModalOpen(false)}
-                        />
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full h-fit max-h-[85vh] bg-volt-surface border-2 border-volt-primary shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] rounded-3xl flex flex-col overflow-hidden"
-                        >
-                            {/* Modal Header */}
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
-                                        <span className="material-symbols-outlined text-white/80">receipt_long</span>
-                                    </div>
-                                    <div>
-                                        <h2 className="text-xl font-black text-white uppercase tracking-wider">Extrato</h2>
-                                        <p className="text-xs text-white/50 uppercase tracking-widest">Histórico de Movimentações</p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setIsStatementModalOpen(false)}
-                                    className="p-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
-                                >
-                                    <span className="material-symbols-outlined text-xl">close</span>
-                                </button>
-                            </div>
-                            <div className="flex-1 overflow-y-auto no-scrollbar relative bg-[#131313]">
-                                <StatementPaginated
-                                    user={user!}
-                                    onNavigate={(view) => {
-                                        setIsStatementModalOpen(false);
-                                        if (view !== 'home' && view !== 'statement') handleNavigate(view as View);
-                                    }}
-                                    onBack={() => setIsStatementModalOpen(false)}
-                                />
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
 
             {/* ── Limit Modal ───────────────────────────── */}
             <AnimatePresence>

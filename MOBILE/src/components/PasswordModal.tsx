@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Shield, ArrowLeft, X } from 'lucide-react';
+import { useAppState } from '../contexts/AppStateContext';
 
 interface PasswordModalProps {
     isOpen: boolean;
@@ -10,149 +13,239 @@ interface PasswordModalProps {
 }
 
 const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfirm, title, description, isLoading }) => {
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        onConfirm(password);
-    };
+    const { theme } = useAppState();
+    const isMidnight = theme === 'midnight';
     
+    const [pin, setPin] = useState<string[]>(['', '', '', '']);
+    const [focusedPinIndex, setFocusedPinIndex] = useState<number>(0);
+
+    const pinRef = useRef(pin);
+    const indexRef = useRef(focusedPinIndex);
+
+    useEffect(() => {
+        pinRef.current = pin;
+        indexRef.current = focusedPinIndex;
+    }, [pin, focusedPinIndex]);
+
+    // Reset PIN when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setPin(['', '', '', '']);
+            setFocusedPinIndex(0);
+        }
+    }, [isOpen]);
+
+    // Handle physical keyboard typing
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const currentPin = pinRef.current;
+            const currentIndex = indexRef.current;
+
+            if (e.key === 'Backspace') {
+                if (currentIndex > 0 && currentPin[currentIndex] === '') {
+                    const newPin = [...currentPin];
+                    newPin[currentIndex - 1] = '';
+                    setPin(newPin);
+                    setFocusedPinIndex(currentIndex - 1);
+                } else {
+                    const newPin = [...currentPin];
+                    newPin[currentIndex] = '';
+                    setPin(newPin);
+                }
+            } else if (e.key === 'Enter') {
+                if (currentPin.every(d => d !== '')) {
+                    onConfirm(currentPin.join(''));
+                }
+            } else if (/^[0-9]$/.test(e.key)) {
+                if (currentIndex < 4) {
+                    const newPin = [...currentPin];
+                    newPin[currentIndex] = e.key;
+                    setPin(newPin);
+                    if (currentIndex < 3) {
+                        setFocusedPinIndex(currentIndex + 1);
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onConfirm]);
+
+    const handlePinChange = (val: string) => {
+        const currentIndex = indexRef.current;
+        const currentPin = pinRef.current;
+        if (currentIndex < 4) {
+            const newPin = [...currentPin];
+            newPin[currentIndex] = val;
+            setPin(newPin);
+            if (currentIndex < 3) {
+                setFocusedPinIndex(currentIndex + 1);
+            }
+        }
+    };
+
+    const handlePinBackspace = () => {
+        const currentIndex = indexRef.current;
+        const currentPin = pinRef.current;
+        if (currentIndex > 0 && currentPin[currentIndex] === '') {
+            const newPin = [...currentPin];
+            newPin[currentIndex - 1] = '';
+            setPin(newPin);
+            setFocusedPinIndex(currentIndex - 1);
+        } else {
+            const newPin = [...currentPin];
+            newPin[currentIndex] = '';
+            setPin(newPin);
+        }
+    };
+
+    const handleSubmit = () => {
+        if (pin.every(d => d !== '')) {
+            onConfirm(pin.join(''));
+        }
+    };
+
     if (!isOpen) return null;
 
+    const cardClass = isMidnight
+        ? 'bg-volt-surface border-2 border-volt-primary'
+        : 'bg-white border-4 border-black';
+    const closeBtnClass = isMidnight ? 'text-white/50 hover:text-white' : 'text-black/50 hover:text-black';
+    const titleClass = isMidnight ? 'text-white' : 'text-black';
+    const descClass = isMidnight ? 'text-on-surface-variant' : 'text-black/60';
+    const iconBubbleClass = isMidnight ? 'bg-volt-primary/20' : 'bg-volt-lime/25';
+    const iconClass = isMidnight ? 'text-volt-primary' : 'text-black';
+    const pinBoxClass = isMidnight
+        ? 'bg-[#0a0a0a] text-volt-primary'
+        : 'bg-black/5 text-black';
+    const pinFocusClass = isMidnight
+        ? 'border-volt-primary ring-2 ring-volt-primary/20 shadow-[0_0_12px_rgba(0,255,157,0.3)]'
+        : 'border-black ring-2 ring-black/10';
+    const pinBlurClass = isMidnight ? 'border-white/10' : 'border-black/20';
+    const keyBtnClass = isMidnight
+        ? 'bg-white/5 hover:bg-white/10 text-white'
+        : 'bg-black/5 hover:bg-black/10 text-black';
+    const keyBtnMutedClass = isMidnight
+        ? 'bg-white/5 hover:bg-white/10 text-white/50'
+        : 'bg-black/5 hover:bg-black/10 text-black/50';
+    const submitDisabledClass = isMidnight
+        ? 'bg-white/5 text-white/30 cursor-not-allowed'
+        : 'bg-black/5 text-black/30 cursor-not-allowed';
+    const submitEnabledClass = isMidnight ? 'bg-volt-green text-black hover:opacity-90' : 'bg-volt-lime text-black border-2 border-black hover:opacity-90';
+
     return (
-        <div 
-            className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 test-modal-overlay"
-            id="password-modal-overlay"
-            data-testid="password-modal-overlay"
-            data-cy="password-modal-overlay"
-            data-playwright="password-modal-overlay"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="password-modal-title"
-            aria-describedby={description ? "password-modal-description" : undefined}
-        >
-            <div 
-                className="bg-surface-dark p-8 rounded-lg shadow-xl w-full max-w-sm test-modal"
-                id="password-modal"
-                data-testid="password-modal"
-                data-cy="password-modal"
-                data-playwright="password-modal"
-                role="document"
-            >
-                <h2 
-                    id="password-modal-title"
-                    className="text-2xl font-bold mb-2 text-white test-modal-title"
-                    data-testid="password-modal-title"
-                    data-cy="password-modal-title"
-                    data-playwright="password-modal-title"
+        <AnimatePresence>
+            <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm test-modal-overlay">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                    className={`w-full max-w-sm rounded-3xl p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] overflow-hidden relative test-modal ${cardClass}`}
                 >
-                    {title}
-                </h2>
-                {description && (
-                    <p 
-                        id="password-modal-description"
-                        className="text-subtle-dark mb-4 test-modal-description"
-                        data-testid="password-modal-description"
-                        data-cy="password-modal-description"
-                    >
-                        {description}
-                    </p>
-                )}
-                <form 
-                    onSubmit={handleSubmit} 
-                    className="space-y-4 test-modal-form" 
-                    id="password-modal-form"
-                    name="password-modal-form"
-                    data-testid="password-modal-form"
-                    data-cy="password-modal-form"
-                    data-playwright="password-modal-form"
-                    aria-label="Formulário de confirmação de senha"
-                >
-                    <div 
-                        className="test-field-password"
-                        id="password-modal-field-password"
-                        data-testid="password-modal-field-password"
-                        data-cy="password-modal-field-password"
-                    >
-                       <label 
-                           htmlFor="password-modal-input"
-                           className="text-sm font-medium text-subtle-dark"
-                       >
-                           Senha
-                       </label>
-                        <div className="relative mt-1">
-                            <input 
-                                id="password-modal-input"
-                                name="password"
-                                type={showPassword ? "text" : "password"}
-                                value={password}
-                                onChange={e => setPassword(e.target.value)} 
-                                inputMode="numeric"
-                                required 
-                                className="w-full bg-white/5 border border-white/20 rounded-lg py-3 px-4 pr-12 text-white placeholder:text-white/40 focus:ring-2 focus:ring-primary focus:border-primary transition-all test-input-password"
-                                data-testid="password-modal-input"
-                                data-cy="password-modal-input"
-                                data-playwright="password-modal-input"
-                                aria-label="Senha"
-                                aria-required="true"
-                                autoComplete="current-password"
-                                placeholder="Digite seu PIN (4 dígitos)"
-                                autoFocus
-                            />
+                    <button onClick={onClose} className={`absolute top-5 right-5 transition-colors ${closeBtnClass}`}>
+                        <X size={20} />
+                    </button>
+
+                    <div className="space-y-6 pt-2">
+                        {/* Header */}
+                        <div className="text-center space-y-2">
+                            <div className={`w-12 h-12 rounded-full mx-auto flex items-center justify-center mb-4 ${iconBubbleClass}`}>
+                                <Shield size={24} className={iconClass} />
+                            </div>
+                            <h2 className={`text-xl font-black uppercase tracking-wider test-modal-title ${titleClass}`}>
+                                {title}
+                            </h2>
+                            {description && (
+                                <p className={`text-sm test-modal-description ${descClass}`}>
+                                    {description}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Interactive PIN code inputs */}
+                        <div className="flex justify-center gap-3">
+                            {pin.map((digit, idx) => {
+                                const isFocused = idx === focusedPinIndex;
+                                return (
+                                    <input
+                                        key={idx}
+                                        type={idx < 3 ? 'password' : 'text'}
+                                        value={digit}
+                                        readOnly
+                                        onClick={() => setFocusedPinIndex(idx)}
+                                        placeholder={isFocused ? '|' : ''}
+                                        className={`w-14 h-16 border-b-2 text-center font-black text-2xl rounded-xl focus:outline-none transition-all placeholder:opacity-50
+                                            ${pinBoxClass} ${isFocused ? pinFocusClass : pinBlurClass}
+                                        `}
+                                    />
+                                );
+                            })}
+                        </div>
+
+                        {/* On-screen Keypad */}
+                        <div className="max-w-[260px] mx-auto grid grid-cols-3 gap-2 pt-4">
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                                <button
+                                    key={num}
+                                    type="button"
+                                    onClick={() => handlePinChange(num.toString())}
+                                    className={`h-14 rounded-xl font-black text-lg flex items-center justify-center cursor-pointer transition-all active:scale-95 ${keyBtnClass}`}
+                                >
+                                    {num}
+                                </button>
+                            ))}
                             <button
                                 type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle-dark hover:text-primary transition-colors test-toggle-visibility"
-                                id="btn-toggle-password"
-                                name="toggle-password"
-                                aria-label={showPassword ? "Ocultar PIN" : "Mostrar PIN"}
-                                data-testid="password-modal-toggle-visibility"
-                                data-cy="password-modal-toggle-visibility"
-                                data-playwright="password-modal-toggle-visibility"
+                                onClick={handlePinBackspace}
+                                className={`h-14 rounded-xl font-black text-sm flex items-center justify-center cursor-pointer transition-all active:scale-95 ${keyBtnMutedClass}`}
                             >
-                                <span className="material-symbols-outlined text-xl" aria-hidden="true">
-                                    {showPassword ? 'visibility_off' : 'visibility'}
-                                </span>
+                                ⌫
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handlePinChange('0')}
+                                className={`h-14 rounded-xl font-black text-lg flex items-center justify-center cursor-pointer transition-all active:scale-95 ${keyBtnClass}`}
+                            >
+                                0
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setPin(['3', '7', '1', '9']); // MOCK auto-fill
+                                    setFocusedPinIndex(3);
+                                }}
+                                className={`h-14 rounded-xl font-black text-[10px] uppercase tracking-tighter flex items-center justify-center cursor-pointer transition-all active:scale-95 ${keyBtnMutedClass}`}
+                            >
+                                Auto
+                            </button>
+                        </div>
+
+                        {/* Submit */}
+                        <div className="pt-2 test-modal-actions">
+                            <button
+                                onClick={handleSubmit}
+                                disabled={isLoading || pin.some(d => d === '')}
+                                className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer test-confirm-button ${
+                                    pin.some(d => d === '')
+                                        ? submitDisabledClass
+                                        : submitEnabledClass
+                                }`}
+                            >
+                                {isLoading ? (
+                                    <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                                ) : (
+                                    'Confirmar'
+                                )}
                             </button>
                         </div>
                     </div>
-                    <div 
-                        className="flex justify-end space-x-4 pt-2 test-modal-actions" 
-                        id="password-modal-actions"
-                        data-testid="password-modal-actions"
-                        data-cy="password-modal-actions"
-                    >
-                        <button 
-                            type="button" 
-                            onClick={onClose} 
-                            className="px-4 py-2 text-white bg-white/10 rounded-md hover:bg-white/20 test-cancel-button"
-                            id="btn-modal-cancel"
-                            name="modal-cancel"
-                            data-testid="password-modal-cancel-button"
-                            data-cy="password-modal-cancel-button"
-                            data-playwright="password-modal-cancel-button"
-                            aria-label="Cancelar"
-                        >
-                            Cancelar
-                        </button>
-                        <button 
-                            type="submit" 
-                            disabled={isLoading} 
-                            className="px-4 py-2 text-black bg-primary font-semibold rounded-md hover:bg-primary/90 disabled:opacity-50 test-confirm-button"
-                            id="btn-modal-confirm"
-                            name="modal-confirm"
-                            data-testid="password-modal-confirm-button"
-                            data-cy="password-modal-confirm-button"
-                            data-playwright="password-modal-confirm-button"
-                            aria-label={isLoading ? 'Confirmando...' : 'Confirmar'}
-                        >
-                            {isLoading ? 'Confirmando...' : 'Confirmar'}
-                        </button>
-                    </div>
-                </form>
+                </motion.div>
             </div>
-        </div>
+        </AnimatePresence>
     );
 };
 

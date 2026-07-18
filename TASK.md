@@ -1,3 +1,16 @@
+# Tarefas de Execução
+
+- [x] 1. Refatorar o `BoletoModal.tsx` na WEB (layout em tela cheia idêntico ao StoryViewer)
+- [x] 2. Refatorar o `BoletoModal.tsx` no MOBILE (layout em tela cheia)
+- [ ] 3. Refatorar `Admin.tsx` na WEB de Modal para View e aplicar ícones Lucide
+- [ ] 4. Atualizar o `Dashboard.tsx` na WEB para gerenciar a View do Admin
+- [ ] 5. Refatorar `Admin.tsx` no MOBILE de Modal para View e aplicar ícones Lucide
+- [ ] 6. Atualizar o `Dashboard.tsx` no MOBILE para gerenciar a View do Admin
+- [ ] 7. Corrigir contraste do Modo Escuro na WEB (`global.css` e Perfil)
+- [ ] 8. Corrigir contraste do Modo Escuro no MOBILE (`variables.css` e Perfil)
+- [ ] 9. Executar build de verificação
+
+---
 
 # Tarefas: Migração do Projeto WEB para MOBILE (Android)
 

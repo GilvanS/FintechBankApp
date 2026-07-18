@@ -12,7 +12,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
 
   return (
     <div 
-      className="font-display bg-background-dark text-text-dark antialiased min-h-screen flex flex-col items-center justify-between p-4 sm:p-6 lg:p-8 pb-24 safe-bottom"
+      className="font-display bg-volt-yellow text-black antialiased min-h-screen flex flex-col items-center justify-between p-4 sm:p-6 lg:p-8 pb-24 safe-bottom"
       data-testid="prelogin-screen"
       id="prelogin-screen"
     >
@@ -22,7 +22,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
         id="prelogin-header"
       >
         <h1 
-          className="text-2xl font-semibold text-text-dark"
+          className="text-2xl font-semibold text-black"
           data-testid="prelogin-title"
           id="prelogin-title"
           aria-label="Olá!"
@@ -41,13 +41,13 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
           data-testid="prelogin-features-grid"
         >
           <div 
-            className="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-dark/50 opacity-50"
+            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/70 border border-black/20"
             data-testid="prelogin-feature-pix"
             id="prelogin-feature-pix"
             aria-label="PIX e transferir"
           >
             <span 
-                className="material-symbols-outlined text-3xl text-primary mb-2" 
+                className="material-symbols-outlined text-3xl text-black mb-2" 
                 aria-hidden="true"
                 style={{ 
                     fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
@@ -56,16 +56,16 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
             >
                 swap_horiz
             </span>
-            <span className="text-xs sm:text-sm font-medium text-text-dark">PIX e transferir</span>
+            <span className="text-xs sm:text-sm font-medium text-black">PIX e transferir</span>
           </div>
           <div 
-            className="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-dark/50 opacity-50"
+            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/70 border border-black/20"
             data-testid="prelogin-feature-pay"
             id="prelogin-feature-pay"
             aria-label="Pagar"
           >
             <span 
-                className="material-symbols-outlined text-3xl text-primary mb-2" 
+                className="material-symbols-outlined text-3xl text-black mb-2" 
                 aria-hidden="true"
                 style={{ 
                     fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
@@ -74,16 +74,16 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
             >
                 barcode_scanner
             </span>
-            <span className="text-xs sm:text-sm font-medium text-text-dark">Pagar</span>
+            <span className="text-xs sm:text-sm font-medium text-black">Pagar</span>
           </div>
           <div 
-            className="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-dark/50 opacity-50"
+            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/70 border border-black/20"
             data-testid="prelogin-feature-statement"
             id="prelogin-feature-statement"
             aria-label="Extrato"
           >
             <span 
-                className="material-symbols-outlined text-3xl text-primary mb-2" 
+                className="material-symbols-outlined text-3xl text-black mb-2" 
                 aria-hidden="true"
                 style={{ 
                     fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
@@ -92,25 +92,25 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
             >
                 receipt_long
             </span>
-            <span className="text-xs sm:text-sm font-medium text-text-dark">Extrato</span>
+            <span className="text-xs sm:text-sm font-medium text-black">Extrato</span>
           </div>
           <div 
-            className="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-dark/50 opacity-50 col-span-2"
+            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/70 border border-black/20 col-span-2"
             data-testid="prelogin-feature-cards"
             id="prelogin-feature-cards"
             aria-label="Cartões"
           >
-            <span className="material-symbols-outlined text-3xl text-primary mb-2" aria-hidden="true">credit_card</span>
-            <span className="text-xs sm:text-sm font-medium text-text-dark">Cartões</span>
+            <span className="material-symbols-outlined text-3xl text-black mb-2" aria-hidden="true">credit_card</span>
+            <span className="text-xs sm:text-sm font-medium text-black">Cartões</span>
           </div>
           <div 
-            className="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-dark/50 opacity-50"
+            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/70 border border-black/20"
             data-testid="prelogin-feature-marketplace"
             id="prelogin-feature-marketplace"
             aria-label="Marketplace"
           >
-            <span className="material-symbols-outlined text-3xl text-primary mb-2" aria-hidden="true">storefront</span>
-            <span className="text-xs sm:text-sm font-medium text-text-dark">Marketplace</span>
+            <span className="material-symbols-outlined text-3xl text-black mb-2" aria-hidden="true">storefront</span>
+            <span className="text-xs sm:text-sm font-medium text-black">Marketplace</span>
           </div>
         </div>
       </main>
@@ -122,7 +122,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
       >
         <button 
           onClick={onNavigateToLogin} 
-          className="w-full max-w-xs px-8 py-4 font-semibold text-white transition-transform duration-300 transform rounded-lg shadow-lg bg-primary hover:scale-105 hover:shadow-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/50 mb-4"
+          className="w-full max-w-xs px-8 py-4 font-semibold text-black transition-transform duration-300 transform rounded-lg shadow-lg bg-volt-lime border-2 border-black hover:scale-105 hover:shadow-black/40 focus:outline-none focus:ring-4 focus:ring-black/30 mb-4"
           data-testid="prelogin-login-button"
           id="btn-prelogin-login"
           name="btn-prelogin-login"
@@ -133,7 +133,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
         </button>
         <button 
           onClick={onNavigateToSignUp} 
-          className="w-full max-w-xs px-8 py-3 font-semibold transition-colors duration-300 border border-subtle-dark/50 rounded-lg text-subtle-dark hover:text-primary hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          className="w-full max-w-xs px-8 py-3 font-semibold transition-colors duration-300 border border-black/60 rounded-lg text-black hover:text-black hover:border-black focus:outline-none focus:ring-2 focus:ring-black/30"
           data-testid="prelogin-signup-button"
           id="btn-prelogin-signup"
           name="btn-prelogin-signup"

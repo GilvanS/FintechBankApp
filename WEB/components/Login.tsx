@@ -32,14 +32,17 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
     const [logoClicks, setLogoClicks] = useState(0);
 
     const handleLogoClick = () => {
-        setLogoClicks(c => {
-            const newCount = c + 1;
-            if (newCount >= 3) {
-                setTheme(theme === 'yellow' ? 'midnight' : 'yellow');
-                return 0;
-            }
-            return newCount;
-        });
+        // Nao chamar setTheme dentro do updater de setLogoClicks: o updater roda
+        // na fase de render e atualizar o AppStateProvider ali dispara o warning
+        // "Cannot update a component while rendering a different component" (loop).
+        // Ambos os setState ficam no corpo do handler (onClick), que e o local correto.
+        const newCount = logoClicks + 1;
+        if (newCount >= 3) {
+            setLogoClicks(0);
+            setTheme(theme === 'yellow' ? 'midnight' : 'yellow');
+        } else {
+            setLogoClicks(newCount);
+        }
     };
 
     function mapLoginError(code?: string): string {

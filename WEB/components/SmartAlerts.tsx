@@ -30,29 +30,77 @@ const SmartAlerts: React.FC = () => {
             const hasChecked = localStorage.getItem(`volt_alerts_checked_${user.cpf}_${new Date().toDateString()}`);
             if (hasChecked) return;
             
-            // 1. Check Invoice Overdue or near
-            if (user.creditCard.closedInvoice > 0) {
-                const dueDate = new Date(user.creditCard.closedInvoiceDueDate || '');
-                const now = new Date();
-                const diffTime = Math.abs(dueDate.getTime() - now.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-                
-                if (now > dueDate) {
+            const now = new Date();
+
+            // Helper: calcula dias restantes para uma data
+            const daysUntil = (dateStr: string | Date | undefined | null): number | null => {
+                if (!dateStr) return null;
+                const d = new Date(dateStr);
+                if (isNaN(d.getTime())) return null;
+                const diff = d.getTime() - now.getTime();
+                return Math.ceil(diff / (1000 * 60 * 60 * 24));
+            };
+
+            // 1. Verificar Fatura FECHADA (vencida ou prestes a vencer)
+            if (user.creditCard?.closedInvoice && user.creditCard.closedInvoice > 0) {
+                const days = daysUntil(user.creditCard.closedInvoiceDueDate);
+                if (days !== null) {
+                    const valor = `R$ ${user.creditCard.closedInvoice.toFixed(2).replace('.', ',')}`;
+                    if (days < 0) {
+                        addAlert({
+                            type: 'error',
+                            message: `⚠️ Fatura ${valor} atrasada há ${Math.abs(days)} dia(s)! Pague agora para evitar juros.`,
+                            duration: 10000
+                        });
+                    } else if (days === 0) {
+                        addAlert({
+                            type: 'error',
+                            message: `🚨 Sua fatura de ${valor} vence HOJE! Não perca o prazo.`,
+                            duration: 10000
+                        });
+                    } else if (days === 1) {
+                        addAlert({
+                            type: 'warning',
+                            message: `⏰ Falta 1 dia para o vencimento da sua fatura de ${valor}. Pague agora!`,
+                            duration: 9000
+                        });
+                    } else if (days <= 3) {
+                        addAlert({
+                            type: 'warning',
+                            message: `📅 Sua fatura de ${valor} vence em ${days} dias. Programe seu pagamento.`,
+                            duration: 8000
+                        });
+                    }
+                }
+            }
+
+            // 2. Verificar Fatura ABERTA (próximo vencimento)
+            if (user.creditCard?.dueDay) {
+                const dueDay = user.creditCard.dueDay;
+                const closingDay = user.creditCard.closingDay || (dueDay - 7);
+                let openDueMonth = now.getUTCMonth();
+                let openDueYear = now.getUTCFullYear();
+                if (now.getUTCDate() > closingDay) {
+                    openDueMonth += 1;
+                    if (openDueMonth > 11) { openDueMonth = 0; openDueYear += 1; }
+                }
+                if (closingDay > dueDay) {
+                    openDueMonth += 1;
+                    if (openDueMonth > 11) { openDueMonth = 0; openDueYear += 1; }
+                }
+                const openDueDate = new Date(Date.UTC(openDueYear, openDueMonth, dueDay));
+                const daysToOpen = daysUntil(openDueDate);
+                const currentInvoice = user.creditCard?.currentInvoice || 0;
+                if (daysToOpen !== null && daysToOpen === 1 && currentInvoice > 0) {
                     addAlert({
-                        type: 'error',
-                        message: `Sua fatura de R$ ${user.creditCard.closedInvoice.toFixed(2)} está atrasada! Pague agora para evitar juros.`,
-                        duration: 8000
-                    });
-                } else if (diffDays <= 3) {
-                    addAlert({
-                        type: 'warning',
-                        message: `Sua fatura vence em ${diffDays} dias. Programe seu pagamento.`,
-                        duration: 8000
+                        type: 'info',
+                        message: `⏰ Falta 1 dia para o vencimento da fatura atual de R$ ${currentInvoice.toFixed(2).replace('.', ',')}.`,
+                        duration: 9000
                     });
                 }
             }
             
-            // 2. Predict Recurring Bills from Mock Transactions
+            // 3. Predict Recurring Bills from Mock Transactions
             const recentTx = user.transactions.slice(0, 10);
             const netflix = recentTx.find(tx => tx.description.toLowerCase().includes('netflix'));
             if (netflix) {
@@ -70,6 +118,7 @@ const SmartAlerts: React.FC = () => {
         const timeout = setTimeout(checkAlerts, 2000);
         return () => clearTimeout(timeout);
     }, [user, addAlert]);
+
 
     // Auto-remove timers
     useEffect(() => {
