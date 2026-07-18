@@ -1,82 +1,69 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Eye, EyeOff, QrCode, Split, FileText, Search, ShoppingBag, Utensils, Fuel, Tv, Car, Award, CheckCircle2 } from 'lucide-react';
+import { User, CardTransaction } from '../types';
 
-interface InvoiceExpense {
-  id: string;
-  title: string;
-  category: 'shopping' | 'dining' | 'transport' | 'entertainment' | 'services';
-  amount: number;
-  date: string;
-}
+const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 interface InvoiceViewProps {
-  invoiceAmount: number;
+  user: User;
+  onPayInvoice: (amount: number) => Promise<void>;
+  onParcel: () => void;
 }
 
-export default function InvoiceView({ invoiceAmount }: InvoiceViewProps) {
+export default function InvoiceView({ user, onPayInvoice, onParcel }: InvoiceViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<'fechada' | 'aberta' | 'historico' | 'proximas'>('fechada');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [redeemed, setRedeemed] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+  const [payStep, setPayStep] = useState<'idle' | 'pick'>('idle');
+  const [payMode, setPayMode] = useState<'total' | 'min' | 'custom'>('total');
+  const [customAmount, setCustomAmount] = useState('');
+  const [customError, setCustomError] = useState('');
 
-  const expenses: InvoiceExpense[] = [
-    { id: '1', title: 'Apple Store', category: 'shopping', amount: 499.00, date: '12 Out • 10:45' },
-    { id: '2', title: 'Gourmet Bistro', category: 'dining', amount: 256.50, date: '10 Out • 20:15' },
-    { id: '3', title: 'Posto Shell', category: 'transport', amount: 210.00, date: '08 Out • 14:30' },
-    { id: '4', title: 'Netflix Brasil', category: 'entertainment', amount: 55.90, date: '05 Out • 09:00' },
-    { id: '5', title: 'Uber *Uber Trip', category: 'transport', amount: 188.60, date: '03 Out • 18:20' },
-  ];
+  const invoiceAmount = user.creditCard.closedInvoice || 0;
+  const minPayment = invoiceAmount > 0 ? Math.max(invoiceAmount * 0.10, 10) : 0;
+  const effectiveMin = user.balance > 0 ? Math.min(user.balance, minPayment) : minPayment;
+  const minLabel = user.balance < minPayment ? 'Pagar o máximo possível' : 'Pagar mínimo (10%)';
 
-  const getFilteredExpenses = () => {
-    return expenses.filter(exp => 
-      exp.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+  const getFilteredExpenses = (): CardTransaction[] => {
+    const txs: CardTransaction[] = activeSubTab === 'fechada'
+      ? (user.creditCard.closedTransactions ?? [])
+      : activeSubTab === 'aberta'
+        ? (user.creditCard.transactions ?? [])
+        : [];
+    return txs.filter(exp => exp.merchant?.toLowerCase().includes(searchQuery.toLowerCase()));
   };
 
   const getSubTabAmount = () => {
     switch (activeSubTab) {
       case 'fechada':
-        return invoiceAmount; // Active invoice
+        return user.creditCard.closedInvoice || 0;
       case 'aberta':
-        return 432.10;
-      case 'historico':
-        return 1580.40;
-      case 'proximas':
-        return 185.00;
+        return user.creditCard.currentInvoice || 0;
       default:
-        return invoiceAmount;
+        return 0;
     }
   };
 
   const getSubTabDueDate = () => {
-    switch (activeSubTab) {
-      case 'fechada':
-        return 'Vencimento em 15 de Outubro';
-      case 'aberta':
-        return 'Vencimento em 15 de Novembro';
-      case 'historico':
-        return 'Fatura paga em 15 de Setembro';
-      case 'proximas':
-        return 'Vencimento em 15 de Dezembro';
-      default:
-        return 'Vencimento em 15 de Outubro';
+    if (activeSubTab === 'fechada' && user.creditCard.closedInvoiceDueDate) {
+      return `Vencimento em ${new Date(user.creditCard.closedInvoiceDueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}`;
     }
+    if (activeSubTab === 'aberta' && user.creditCard.invoiceDueDate) {
+      return `Vencimento em ${new Date(user.creditCard.invoiceDueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}`;
+    }
+    return '';
   };
 
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'shopping':
-        return <ShoppingBag className="text-on-surface-variant" size={18} />;
-      case 'dining':
-        return <Utensils className="text-on-surface-variant" size={18} />;
-      case 'transport':
-        return <Car className="text-on-surface-variant" size={18} />;
-      case 'entertainment':
-        return <Tv className="text-on-surface-variant" size={18} />;
-      default:
-        return <FileText className="text-on-surface-variant" size={18} />;
-    }
+  const getCategoryIcon = (tx: CardTransaction) => {
+    const m = tx.merchant?.toLowerCase() ?? '';
+    if (m.includes('mercado') || m.includes('loja')) return <ShoppingBag className="text-on-surface-variant" size={18} />;
+    if (m.includes('restaurante') || m.includes('lanchonete')) return <Utensils className="text-on-surface-variant" size={18} />;
+    if (m.includes('posto') || m.includes('uber')) return <Car className="text-on-surface-variant" size={18} />;
+    if (m.includes('netflix') || m.includes('spotify')) return <Tv className="text-on-surface-variant" size={18} />;
+    return <FileText className="text-on-surface-variant" size={18} />;
   };
 
   const handleRedeem = () => {
@@ -87,8 +74,25 @@ export default function InvoiceView({ invoiceAmount }: InvoiceViewProps) {
     }, 1500);
   };
 
-  const handleQuickAction = (action: string) => {
-    alert(`Ação de faturamento: ${action} iniciada. O código de barra ou QR code foi enviado para sua área de transferência.`);
+  const confirmPay = async () => {
+    let amt = invoiceAmount;
+    if (payMode === 'min') {
+      amt = effectiveMin;
+    } else if (payMode === 'custom') {
+      const parsed = parseFloat(String(customAmount).replace(',', '.'));
+      if (isNaN(parsed) || parsed <= 0) { setCustomError('Informe um valor válido.'); return; }
+      setCustomError('');
+      amt = Math.min(parsed, invoiceAmount);
+    }
+    setIsPaying(true);
+    try {
+      await onPayInvoice(amt);
+      setPayStep('idle');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsPaying(false);
+    }
   };
 
   return (
@@ -157,12 +161,66 @@ export default function InvoiceView({ invoiceAmount }: InvoiceViewProps) {
         </p>
       </div>
 
+      {/* Seletor de pagamento: total / mínimo / outro valor */}
+      {activeSubTab === 'fechada' && payStep === 'pick' && (
+        <div className="bg-volt-surface border border-white/5 rounded-2xl p-5 space-y-2">
+          <p className="text-xs font-medium text-on-surface-variant">Escolha o valor a pagar</p>
+          {([
+            { key: 'total', label: 'Pagar total', value: invoiceAmount },
+            { key: 'min', label: minLabel, value: effectiveMin },
+          ] as const).map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => { setPayMode(opt.key); setCustomError(''); }}
+              className={`w-full flex justify-between items-center p-3 rounded-lg border text-sm transition-colors ${
+                payMode === opt.key ? 'border-volt-primary bg-volt-primary/10' : 'border-white/10 hover:bg-white/5'
+              }`}
+            >
+              <span className={payMode === opt.key ? 'text-volt-primary font-medium' : 'text-white'}>{opt.label}</span>
+              <span className={`font-bold ${payMode === opt.key ? 'text-volt-primary' : 'text-white'}`}>{fmt(opt.value)}</span>
+            </button>
+          ))}
+          <button
+            onClick={() => { setPayMode('custom'); setCustomError(''); }}
+            className={`w-full p-3 rounded-lg border text-sm text-left transition-colors ${
+              payMode === 'custom' ? 'border-volt-primary bg-volt-primary/10 text-volt-primary font-medium' : 'border-white/10 text-white hover:bg-white/5'
+            }`}
+          >
+            Outro valor
+          </button>
+          {payMode === 'custom' && (
+            <>
+              <input
+                type="number"
+                value={customAmount}
+                onChange={(e) => { setCustomAmount(e.target.value); setCustomError(''); }}
+                placeholder={`Sugestão de mínimo: ${fmt(effectiveMin)}`}
+                className={`w-full text-sm p-3 rounded-lg border bg-volt-surface outline-none text-white ${customError ? 'border-red-400' : 'border-white/20 focus:border-volt-primary'}`}
+              />
+              {customError && <p className="text-xs text-red-400 mt-1">{customError}</p>}
+            </>
+          )}
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => { setPayStep('idle'); setCustomError(''); }} className="flex-1 py-2.5 rounded-lg border border-white/20 text-white text-sm">
+              Cancelar
+            </button>
+            <button
+              onClick={confirmPay}
+              disabled={isPaying || (payMode === 'custom' && !customAmount)}
+              className="flex-1 py-2.5 rounded-lg bg-volt-primary text-black font-semibold text-sm disabled:opacity-40"
+            >
+              {isPaying ? 'Pagando...' : 'Confirmar'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Quick Actions Panel */}
       <div className="grid grid-cols-3 gap-2.5">
         {[
-          { label: 'Pagar via Pix', icon: QrCode, action: () => handleQuickAction('Pix Copia e Cola') },
-          { label: 'Parcelar fatura', icon: Split, action: () => alert('Simulador de parcelas: Escolha parcelar em até 12x de R$ 115,30.') },
-          { label: 'Pagar via boleto', icon: FileText, action: () => handleQuickAction('Boleto Bancário PDF') },
+          { label: isPaying ? 'Processando...' : 'Pagar fatura', icon: QrCode, action: () => { setPayStep('pick'); setPayMode('total'); setCustomAmount(''); setCustomError(''); } },
+          { label: 'Parcelar fatura', icon: Split, action: () => onParcel() },
+          { label: 'Meus cartões', icon: FileText, action: () => alert('Meus cartões acessados.') },
         ].map((action, idx) => {
           const Icon = action.icon;
           return (
@@ -204,22 +262,24 @@ export default function InvoiceView({ invoiceAmount }: InvoiceViewProps) {
         {/* Transaction List Cards */}
         <div className="space-y-2">
           {getFilteredExpenses().length > 0 ? (
-            getFilteredExpenses().map((item) => (
+            getFilteredExpenses().map((tx) => (
               <div
-                key={item.id}
+                key={tx.id}
                 className="flex items-center justify-between p-3.5 bg-volt-surface border border-white/5 rounded-xl hover:border-volt-green/20 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-volt-surface-high rounded-xl flex items-center justify-center border border-white/5">
-                    {getCategoryIcon(item.category)}
+                    {getCategoryIcon(tx)}
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-white">{item.title}</p>
-                    <p className="text-[10px] text-on-surface-variant mt-0.5">{item.date}</p>
+                    <p className="text-xs font-bold text-white">{tx.merchant}</p>
+                    <p className="text-[10px] text-on-surface-variant mt-0.5">
+                      {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                    </p>
                   </div>
                 </div>
                 <p className="text-xs font-black text-white">
-                  R$ {item.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  R$ {Math.abs(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             ))

@@ -13,10 +13,11 @@ interface FinancialHealthModalProps {
 }
 
 export default function FinancialHealthModal({ isOpen, onClose, transactions, theme }: FinancialHealthModalProps) {
-  // Generate the last 6 calendar months of spending (baseline June 2026 as per local time)
+  // Generate the last 6 calendar months of spending, anchored on the current date
+  // (sincronizado com as transações reais da API — as sementes base deslizam com a janela)
   const monthlyData = useMemo(() => {
     const data = [];
-    const now = new Date(2026, 5, 24); // June 24, 2026
+    const now = new Date();
     const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
     // Baseline seeds for 6 months (Jan to Jun)

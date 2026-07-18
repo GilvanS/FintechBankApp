@@ -74,9 +74,9 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
     ? new Date(creditCard.closedInvoiceDueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
     : '--/--';
 
-  const minPayment = invoiceAmount > 0 ? Math.max(invoiceAmount * 0.15, 10) : 0;
+  const minPayment = invoiceAmount > 0 ? Math.max(invoiceAmount * 0.10, 10) : 0;
   const effectiveMin = balance > 0 ? Math.min(balance, minPayment) : minPayment;
-  const minLabel = balance < minPayment ? 'Pagar o máximo possível' : 'Pagar mínimo (15%)';
+  const minLabel = balance < minPayment ? 'Pagar o máximo possível' : 'Pagar mínimo (10%)';
 
   const closedTxs = isOpenInvoice
     ? (creditCard.transactions ?? [])
@@ -111,7 +111,6 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
     else if (payMode === 'custom') {
       const parsed = parseFloat(String(customAmount).replace(',', '.'));
       if (isNaN(parsed) || parsed <= 0) { setCustomError('Informe um valor válido.'); return; }
-      if (parsed < effectiveMin) { setCustomError(`Valor mínimo: ${fmt(effectiveMin)}`); return; }
       setCustomError('');
       amt = Math.min(parsed, invoiceAmount);
     }

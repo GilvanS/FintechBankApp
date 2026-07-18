@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { PurchasedItem, Transaction, User } from '../types';
-import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement } from '../services/api';
+import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement, InstallmentReceipt as InstallmentReceiptDetails } from '../services/api';
 import { useDialog } from '../contexts/GlobalDialogContext';
 import { useAppState } from '../contexts/AppStateContext';
 
@@ -31,6 +31,7 @@ import PasswordModal from './PasswordModal';
 import Products from './Products';
 import ClosedInvoice from './ClosedInvoice';
 import InstallmentOptions from './InstallmentOptions';
+import InstallmentReceipt from './InstallmentReceipt';
 import CurrentInvoice from './CurrentInvoice';
 import InvoiceView from './InvoiceView';
 import Header from './Header';
@@ -77,7 +78,7 @@ const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; o
 };
 
 
-type View = 'home' | 'cards' | 'shop' | 'investments' | 'wallet' | 'loans' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'currentInvoice' | 'limit';
+type View = 'home' | 'cards' | 'shop' | 'investments' | 'wallet' | 'loans' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'installmentReceipt' | 'currentInvoice' | 'limit';
 
 const Dashboard: React.FC = () => {
     const { user, updateUser, logout, view: topLevelView, navigateTo } = useAuth();
@@ -132,8 +133,9 @@ const Dashboard: React.FC = () => {
     const [checkoutTotal, setCheckoutTotal] = useState(0);
     const [confirmationDetails, setConfirmationDetails] = useState<any>(null);
     const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
-    const [parcelDetails, setParcelDetails] = useState<{ amount: number, installments: number } | null>(null);
+    const [parcelDetails, setParcelDetails] = useState<{ amount: number, installments: number, installmentValue?: number, totalAmount?: number, iof?: number, juros?: number } | null>(null);
     const [invoicePaymentDetails, setInvoicePaymentDetails] = useState<any>(null);
+    const [installmentReceiptDetails, setInstallmentReceiptDetails] = useState<InstallmentReceiptDetails | null>(null);
     
     useEffect(() => {
         if (currentView === 'cards' && user?.creditCard.isBlocked) {
@@ -483,32 +485,37 @@ const Dashboard: React.FC = () => {
         handleNavigate('installmentOptions');
     };
     
-    const handleSelectInstallmentOption = (details: { amount: number, installments: number }) => {
+    const handleSelectInstallmentOption = (details: { amount: number, installments: number, installmentValue?: number, totalAmount?: number, iof?: number, juros?: number }) => {
         setParcelDetails(details);
         passwordActionPayload.current = details; // Also save to ref for the action
         handleNavigate('installmentReviewInvoice');
     };
-    
+
     const handleConfirmParcelInvoice = () => {
         setPasswordAction(() => () => executeParcelInvoice());
         setPasswordModalInfo({ title: 'Parcelar Fatura', description: 'Digite seu PIN para confirmar.' });
         setIsPasswordModalOpen(true);
     };
-    
+
     const executeParcelInvoice = async () => {
         const details = passwordActionPayload.current as { amount: number, installments: number } | null;
         if (!user || !details) return;
 
         setIsProcessing(true);
         const pin = (passwordActionPayload.current as any)?.pin;
-        const result = await parcelCreditCardInvoice(user.cpf, details, pin);
+        const result = await parcelCreditCardInvoice(user.cpf, { installments: details.installments }, pin);
         if (result.success) {
             const refreshed = await getUserByCpf(user.cpf);
             if (refreshed.success && refreshed.user) {
                 updateUser(refreshed.user);
             }
-            showDialog({ title: 'Aviso', message: result.message });
-            handleNavigate('cards');
+            if (result.receipt) {
+                setInstallmentReceiptDetails(result.receipt);
+                handleNavigate('installmentReceipt');
+            } else {
+                showDialog({ title: 'Aviso', message: result.message });
+                handleNavigate('cards');
+            }
         } else {
             showDialog({ title: 'Aviso', message: result.message });
         }
@@ -653,6 +660,9 @@ const Dashboard: React.FC = () => {
             case 'invoicePaymentReceipt':
                 if (!invoicePaymentDetails) return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
                 return <PaymentReceipt details={invoicePaymentDetails} onClose={() => handleNavigate('home')} />;
+            case 'installmentReceipt':
+                if (!installmentReceiptDetails) return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
+                return <InstallmentReceipt details={installmentReceiptDetails} onClose={() => handleNavigate('home')} />;
              case 'products':
                 return <Products onNavigate={handleNavigate} />;
             case 'closedInvoice':
@@ -671,7 +681,7 @@ const Dashboard: React.FC = () => {
                             </button>
                             <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Fatura</h1>
                         </div>
-                        <InvoiceView user={user} onPayInvoice={handlePayInvoice} />
+                        <InvoiceView user={user} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />
                     </div>
                 );
             case 'limit':

@@ -289,7 +289,7 @@ const HomeView: React.FC<HomeViewProps> = ({
     }));
   };
 
-  // Obter despesas reais do mês atual (Junho/2026) por categoria
+  // Obter despesas reais do mês atual por categoria
   const categorySpendingCurrentMonth = useMemo(() => {
     const sums: Record<string, number> = {
       refeicao: 0,
@@ -298,15 +298,18 @@ const HomeView: React.FC<HomeViewProps> = ({
       saude: 0,
       outros: 0
     };
+    const now = new Date();
 
     transactions.forEach((tx) => {
       const txDate = new Date(tx.date);
       if (
-        txDate.getMonth() === 5 &&
-        txDate.getFullYear() === 2026 &&
+        txDate.getMonth() === now.getMonth() &&
+        txDate.getFullYear() === now.getFullYear() &&
         (tx.type === 'expense' || tx.amount < 0)
       ) {
-        const cat = tx.category || 'outros';
+        // Categorias da API fora das 5 monitoradas (ex: moradia, compras, educacao) contam em "outros"
+        const rawCat = tx.category || 'outros';
+        const cat = rawCat in sums ? rawCat : 'outros';
         sums[cat] = (sums[cat] || 0) + Math.abs(tx.amount);
       }
     });
@@ -318,9 +321,10 @@ const HomeView: React.FC<HomeViewProps> = ({
   const savingsCalculation = useMemo(() => {
     let income = 0;
     let expenses = 0;
+    const now = new Date();
     transactions.forEach((tx) => {
       const txDate = new Date(tx.date);
-      if (txDate.getMonth() === 5 && txDate.getFullYear() === 2026) {
+      if (txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear()) {
         if (tx.amount > 0) {
           income += tx.amount;
         } else {
@@ -331,9 +335,8 @@ const HomeView: React.FC<HomeViewProps> = ({
 
     const savedSoFar = Math.max(0, income - expenses);
     const today = new Date();
-    const isJune2026 = today.getFullYear() === 2026 && today.getMonth() === 5;
-    const currentDay = isJune2026 ? today.getDate() : 26;
-    const daysInMonth = 30;
+    const currentDay = today.getDate();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
     const daysRemaining = Math.max(1, daysInMonth - currentDay);
 
     const remainingToSave = Math.max(0, savingsTarget - savedSoFar);
@@ -353,12 +356,23 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   // Cálculo da ofensiva semanal
   const weeklyStreakCalculation = useMemo(() => {
-    const weeksList = [
-      { id: 1, name: 'Semana 1', start: new Date('2026-06-01T00:00:00.000Z'), end: new Date('2026-06-07T23:59:59.999Z'), label: '01/06 - 07/06' },
-      { id: 2, name: 'Semana 2', start: new Date('2026-06-08T00:00:00.000Z'), end: new Date('2026-06-14T23:59:59.999Z'), label: '08/06 - 14/06' },
-      { id: 3, name: 'Semana 3', start: new Date('2026-06-15T00:00:00.000Z'), end: new Date('2026-06-21T23:59:59.999Z'), label: '15/06 - 21/06' },
-      { id: 4, name: 'Semana 4', start: new Date('2026-06-22T00:00:00.000Z'), end: new Date('2026-06-28T23:59:59.999Z'), label: '22/06 - 28/06' },
-    ];
+    // Semanas do mês vigente (1-7, 8-14, 15-21, 22-28), geradas dinamicamente para
+    // acompanhar as transações reais da API em qualquer mês (antes eram fixas em jun/2026).
+    const _ref = new Date();
+    const _y = _ref.getFullYear();
+    const _m = _ref.getMonth();
+    const _pad = (n: number) => String(n).padStart(2, '0');
+    const weeksList = [1, 2, 3, 4].map((id) => {
+      const startDay = (id - 1) * 7 + 1;
+      const endDay = id * 7;
+      return {
+        id,
+        name: `Semana ${id}`,
+        start: new Date(_y, _m, startDay, 0, 0, 0, 0),
+        end: new Date(_y, _m, endDay, 23, 59, 59, 999),
+        label: `${_pad(startDay)}/${_pad(_m + 1)} - ${_pad(endDay)}/${_pad(_m + 1)}`,
+      };
+    });
 
     const results = weeksList.map((wk) => {
       const spending: Record<string, number> = {
@@ -376,7 +390,9 @@ const HomeView: React.FC<HomeViewProps> = ({
           txDate <= wk.end && 
           (tx.type === 'expense' || tx.amount < 0)
         ) {
-          const cat = tx.category || 'outros';
+          const rawCat = tx.category || 'outros';
+          // Categorias da API fora das 5 monitoradas (ex: moradia, compras, educacao) contam em "outros"
+          const cat = rawCat in spending ? rawCat : 'outros';
           spending[cat] = (spending[cat] || 0) + Math.abs(tx.amount);
         }
       });
@@ -435,11 +451,10 @@ const HomeView: React.FC<HomeViewProps> = ({
     const remainingAllowance: number = Math.max(0, totalBudgetLimit - totalBudgetSpent);
     
     const today = new Date();
-    const isJune2026 = today.getFullYear() === 2026 && today.getMonth() === 5;
-    const currentDay = isJune2026 ? today.getDate() : 26;
-    const daysInMonth = 30;
+    const currentDay = today.getDate();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
     const daysRemaining = Math.max(1, daysInMonth - currentDay);
-    
+
     const dailyAllowed = parseFloat((remainingAllowance / daysRemaining).toFixed(2));
     
     if (totalBudgetLimit === 0) {
@@ -517,13 +532,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [recurringBills, setRecurringBills] = useState<RecurringBill[]>(() => {
     const saved = localStorage.getItem('volt_recurring_bills');
     if (saved) return JSON.parse(saved);
-    return [
-      { id: 'rec_1', title: 'Spotify Premium', amount: -24.90, category: 'cultura', dueDate: '26/06/2026', status: 'pending' },
-      { id: 'rec_2', title: 'Netflix Ultra HD', amount: -55.90, category: 'cultura', dueDate: '27/06/2026', status: 'pending' },
-      { id: 'rec_3', title: 'Internet Volt Fibra', amount: -119.90, category: 'outros', dueDate: '28/06/2026', status: 'pending' },
-      { id: 'rec_4', title: 'Light Volt Energia', amount: -180.00, category: 'outros', dueDate: '20/06/2026', status: 'paid', paidAtDate: '20/06/2026' },
-      { id: 'rec_5', title: 'Gym Pass Academia', amount: -89.90, category: 'saude', dueDate: '30/06/2026', status: 'pending' },
-    ];
+    // Sem fallback mockado — só contas que o próprio usuário cadastrar
+    return [];
   });
 
   const handlePayRecurringBill = (billId: string) => {
@@ -688,10 +698,10 @@ const HomeView: React.FC<HomeViewProps> = ({
     show: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 300, damping: 24 } },
   };
 
-  // Generate the last 6 calendar months of spending (baseline Jun 2026 as per local time 2026-06-24)
+  // Generate the last 6 calendar months of spending, anchored on the current date
   const getChartData = () => {
     const data = [];
-    const now = new Date(2026, 5, 24); // June 24, 2026
+    const now = new Date();
     const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
     for (let i = 5; i >= 0; i--) {
@@ -728,9 +738,10 @@ const HomeView: React.FC<HomeViewProps> = ({
   const chartData = getChartData();
 
   const balanceHistoryData = useMemo(() => {
-    // Generate the last 30 days ending on June 24, 2026
-    const baseDate = new Date(2026, 5, 24, 23, 59, 59); // June 24, 2026
-    
+    // Generate the last 30 days ending today
+    const baseDate = new Date();
+    baseDate.setHours(23, 59, 59, 999);
+
     const days = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date(baseDate.getTime());
@@ -751,9 +762,9 @@ const HomeView: React.FC<HomeViewProps> = ({
         }
       });
       
-      const dayLabel = `${String(day.getDate()).padStart(2, '0')}/${String(day.getMonth() + 1).padStart(2, '0')}`;
       return {
-        date: dayLabel,
+        // ISO string — D3SparkLine faz new Date(d.date); "DD/MM" retorna Invalid Date
+        date: day.toISOString().split('T')[0],
         balance: parseFloat(computedBalance.toFixed(2)),
       };
     });
@@ -801,20 +812,31 @@ const HomeView: React.FC<HomeViewProps> = ({
     return data;
   }, [transactions, theme]);
 
-  const currentMonthSpending = transactions
-    .filter((tx) => {
-      const txDate = new Date(tx.date);
-      return (
-        txDate.getMonth() === 5 &&
-        txDate.getFullYear() === 2026 &&
-        (tx.type === 'expense' || tx.amount < 0)
-      );
-    })
-    .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+  const currentMonthSpending = (() => {
+    const now = new Date();
+    return transactions
+      .filter((tx) => {
+        const txDate = new Date(tx.date);
+        return (
+          txDate.getMonth() === now.getMonth() &&
+          txDate.getFullYear() === now.getFullYear() &&
+          (tx.type === 'expense' || tx.amount < 0)
+        );
+      })
+      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+  })();
 
   const goalConsumptionPercent = monthlyGoal > 0 ? Math.min(100, Math.round((currentMonthSpending / monthlyGoal) * 100)) : 0;
 
-  const juneIncome = useMemo(() => transactions.filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0), [transactions]);
+  const juneIncome = useMemo(() => {
+    const now = new Date();
+    return transactions
+      .filter((tx) => {
+        const txDate = new Date(tx.date);
+        return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear() && tx.amount > 0;
+      })
+      .reduce((sum, tx) => sum + tx.amount, 0);
+  }, [transactions]);
   const juneExpenses = currentMonthSpending;
   const juneSavingsRate = juneIncome > 0 ? Math.round(((juneIncome - juneExpenses) / juneIncome) * 100) : 0;
 
@@ -1205,7 +1227,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
             <div>
               <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Visão Geral de Orçamentos</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Controle de limites mensais por categoria (Junho/2026)</p>
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Controle de limites mensais por categoria ({new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })})</p>
             </div>
           </div>
           <button
@@ -1701,7 +1723,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
             <div>
               <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Saúde Financeira</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Resumo financeiro de Junho/2026</p>
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Resumo financeiro de {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p>
             </div>
           </div>
           <button
@@ -1840,7 +1862,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </button>
           <button
-            onClick={() => showDialog({ title: 'Insights de Gastos', message: 'Role a tela para ver a análise completa de gastos por categoria com gráficos interativos.' })}
+            onClick={() => setActiveDrawer?.('insights')}
             className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
               isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
             }`}
@@ -1857,7 +1879,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </button>
           <button
-            onClick={() => showDialog({ title: 'Tendências e Previsões', message: 'Role a tela para ver as Tendências de Gastos dos últimos 6 meses com inteligência preditiva Volt.' })}
+            onClick={() => setActiveDrawer?.('trends')}
             className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
               isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,255,157,0.2)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
             }`}

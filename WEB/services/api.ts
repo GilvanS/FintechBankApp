@@ -109,6 +109,17 @@ export const getMyCards = async (): Promise<{ success: boolean; cards?: ApiCard[
   }
 };
 
+export const revealCard = async (cardId: string, pin: string): Promise<{ success: boolean; message?: string; cardNumber?: string; cvv?: string }> => {
+  try {
+    return await apiCall<{ success: boolean; message?: string; cardNumber?: string; cvv?: string }>('/cards/reveal', {
+      method: 'POST',
+      body: JSON.stringify({ cardId, pin })
+    });
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao revelar dados' };
+  }
+};
+
 // ── Resumo e histórico de faturas ──────────────────────────────────────────
 export interface InvoiceSummary {
   saldoAnterior: number;
@@ -130,6 +141,21 @@ export interface InvoiceHistoryItem {
   amount: number;
   status: string;
   period: string;
+}
+
+export interface InstallmentPlan {
+  installments: number;
+  installmentValue: number;
+  totalAmount: number;
+  iof: number;
+  juros: number;
+  monthlyRate?: number;
+}
+
+export interface InstallmentReceipt extends InstallmentPlan {
+  amount: number;
+  firstDueDate: string;
+  transactionId: string;
 }
 
 export const getInvoiceSummary = async (type: 'fechada' | 'aberta'): Promise<{ success: boolean; summary?: InvoiceSummary | null }> => {
@@ -370,9 +396,17 @@ export const payCreditCardInvoice = async (cpf: string, pin: string, amount?: nu
   }
 };
 
-export const parcelCreditCardInvoice = async (cpf: string, details: { amount: number, installments: number }, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const getInvoiceInstallmentOptions = async (): Promise<{ success: boolean; amount?: number; options?: InstallmentPlan[]; message?: string }> => {
   try {
-    const result = await apiCall<{ success: boolean; message: string; user?: any }>('/cards/invoice/parcel', {
+    return await apiCall<{ success: boolean; amount: number; options: InstallmentPlan[] }>('/cards/invoice/installment-options');
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao buscar opções de parcelamento' };
+  }
+};
+
+export const parcelCreditCardInvoice = async (cpf: string, details: { installments: number }, pin?: string): Promise<{ success: boolean; message: string; receipt?: InstallmentReceipt }> => {
+  try {
+    const result = await apiCall<{ success: boolean; message: string; receipt?: InstallmentReceipt }>('/cards/invoice/parcel', {
       method: 'POST',
       body: JSON.stringify({ cpf, ...details, pin })
     });

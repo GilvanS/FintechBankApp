@@ -8,12 +8,20 @@ interface InvoiceSummarySheetProps {
   onClose: () => void;
   type: 'fechada' | 'aberta';
   title?: string;
+  /** Quando false, oculta o toggle interno Fechada/Aberta. Default: true */
+  showTypeToggle?: boolean;
 }
 
 const fmt = (v: number) =>
-  `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const InvoiceSummarySheet: React.FC<InvoiceSummarySheetProps> = ({ open, onClose, type, title }) => {
+const InvoiceSummarySheet: React.FC<InvoiceSummarySheetProps> = ({
+  open,
+  onClose,
+  type,
+  title,
+  showTypeToggle = true,
+}) => {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<InvoiceSummary | null>(null);
   const [activeType, setActiveType] = useState<'fechada' | 'aberta'>(type);
@@ -32,16 +40,18 @@ const InvoiceSummarySheet: React.FC<InvoiceSummarySheetProps> = ({ open, onClose
     return () => { active = false; };
   }, [open, activeType]);
 
+  // Linhas zeradas de encargos/saldo anterior são ocultadas — na fatura aberta o backend
+  // retorna tudo zerado (encargos só entram na fatura quando o ciclo fecha).
   const rows: { label: string; value: number; sign?: '+' | '=' }[] = summary
     ? [
-        { label: 'Saldo anterior', value: summary.saldoAnterior },
-        { label: 'Juros remuneratórios', value: summary.jurosRemuneratorios, sign: '+' },
-        { label: 'IOF', value: summary.iof, sign: '+' },
-        { label: 'Juros de mora', value: summary.jurosMora, sign: '+' },
-        { label: 'Multa por atraso', value: summary.multa, sign: '+' },
-        { label: 'Total despesas / débitos', value: summary.totalDespesas, sign: '+' },
-        { label: 'Saldo desta fatura', value: summary.saldoFinal, sign: '=' },
-      ]
+        { label: 'Saldo da fatura anterior', value: summary.saldoAnterior },
+        { label: 'Juros remuneratorios', value: summary.jurosRemuneratorios, sign: '+' as const },
+        { label: 'IOF', value: summary.iof, sign: '+' as const },
+        { label: 'Juros de mora', value: summary.jurosMora, sign: '+' as const },
+        { label: 'Multa', value: summary.multa, sign: '+' as const },
+        { label: 'Valor pendente', value: summary.totalDespesas, sign: '+' as const },
+        { label: 'Saldo desta fatura', value: summary.saldoFinal, sign: '=' as const },
+      ].filter((r) => r.sign === '=' || r.label === 'Valor pendente' || r.value > 0)
     : [];
 
   return (
@@ -76,29 +86,31 @@ const InvoiceSummarySheet: React.FC<InvoiceSummarySheetProps> = ({ open, onClose
               </button>
             </div>
 
-            {/* Toggle Aberta / Fechada */}
-            <div className="flex p-1 bg-black/20 rounded-xl mb-4 border border-white/5">
-              <button
-                onClick={() => setActiveType('fechada')}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${
-                  activeType === 'fechada'
-                    ? 'bg-volt-surface border border-white/10 text-white shadow-sm'
-                    : 'text-on-surface-variant hover:text-white'
-                }`}
-              >
-                Fechada
-              </button>
-              <button
-                onClick={() => setActiveType('aberta')}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${
-                  activeType === 'aberta'
-                    ? 'bg-volt-surface border border-white/10 text-white shadow-sm'
-                    : 'text-on-surface-variant hover:text-white'
-                }`}
-              >
-                Aberta
-              </button>
-            </div>
+            {/* Toggle Aberta / Fechada — exibido apenas quando showTypeToggle=true */}
+            {showTypeToggle && (
+              <div className="flex p-1 bg-black/20 rounded-xl mb-4 border border-white/5">
+                <button
+                  onClick={() => setActiveType('fechada')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                    activeType === 'fechada'
+                      ? 'bg-volt-surface border border-white/10 text-white shadow-sm'
+                      : 'text-on-surface-variant hover:text-white'
+                  }`}
+                >
+                  Fechada
+                </button>
+                <button
+                  onClick={() => setActiveType('aberta')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                    activeType === 'aberta'
+                      ? 'bg-volt-surface border border-white/10 text-white shadow-sm'
+                      : 'text-on-surface-variant hover:text-white'
+                  }`}
+                >
+                  Aberta
+                </button>
+              </div>
+            )}
 
             {loading ? (
               <div className="py-12 text-center text-on-surface-variant text-sm">Carregando resumo…</div>
@@ -146,13 +158,13 @@ const InvoiceSummarySheet: React.FC<InvoiceSummarySheetProps> = ({ open, onClose
                 <div className="grid grid-cols-2 gap-3 mb-1">
                   <div className="bg-white/5 rounded-xl p-3">
                     <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
-                      Vencimento
+                      Data de vencimento
                     </p>
                     <p className="text-sm font-black text-white">{summary.dataVencimento}</p>
                   </div>
                   <div className="bg-white/5 rounded-xl p-3">
                     <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
-                      Melhor dia de compra
+                      Melhor data para compra
                     </p>
                     <p className="text-sm font-black text-white">{summary.melhorDataCompra}</p>
                   </div>
@@ -160,7 +172,7 @@ const InvoiceSummarySheet: React.FC<InvoiceSummarySheetProps> = ({ open, onClose
 
                 {summary.pagamentoMinimo > 0 && (
                   <div className="mt-3 bg-volt-green/10 border border-volt-green/20 rounded-xl p-3 flex justify-between items-center">
-                    <span className="text-xs font-bold text-on-surface-variant">Pagamento mínimo</span>
+                    <span className="text-xs font-bold text-on-surface-variant">Pagamento minimo</span>
                     <span className="text-sm font-black text-volt-green">{fmt(summary.pagamentoMinimo)}</span>
                   </div>
                 )}

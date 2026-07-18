@@ -12,6 +12,8 @@ export interface Transaction {
     merchant?: string; // Added for compatibility
     installments?: string; // Added for compatibility
     totalInstallments?: number; // Added for compatibility
+    /** Categoria derivada da descrição pela API (refeicao, mobilidade, cultura, saude, moradia, compras, educacao, outros) */
+    category?: string;
     currentInstallment?: number; // Added for compatibility
     category?: string; // Category for shop purchases (food, transport, shopping, etc.)
     toKey?: string; // PIX key for transfers

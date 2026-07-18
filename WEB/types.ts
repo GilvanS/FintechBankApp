@@ -9,6 +9,8 @@ export interface Transaction {
     from?: string;
     recipientName?: string;
     senderName?: string;
+    /** Categoria derivada da descrição pela API (refeicao, mobilidade, cultura, saude, moradia, compras, educacao, outros) */
+    category?: string;
 }
 
 export interface CardTransaction {

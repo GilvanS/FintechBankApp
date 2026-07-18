@@ -621,6 +621,15 @@ export const getMyCards = async (): Promise<{ success: boolean; cards?: ApiCard[
     }
 };
 
+export const revealCard = async (cardId: string, pin: string): Promise<{ success: boolean; message?: string; cardNumber?: string; cvv?: string }> => {
+    try {
+        const res = await api.post('/cards/reveal', { cardId, pin }, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error.response?.data?.message || 'Erro ao revelar dados' };
+    }
+};
+
 // ── Resumo e histórico de faturas ──────────────────────────────────────────
 export interface InvoiceSummary {
     saldoAnterior: number;
@@ -643,6 +652,30 @@ export interface InvoiceHistoryItem {
     status: string;
     period: string;
 }
+
+export interface InstallmentPlan {
+    installments: number;
+    installmentValue: number;
+    totalAmount: number;
+    iof: number;
+    juros: number;
+    monthlyRate?: number;
+}
+
+export interface InstallmentReceipt extends InstallmentPlan {
+    amount: number;
+    firstDueDate: string;
+    transactionId: string;
+}
+
+export const getInvoiceInstallmentOptions = async (): Promise<{ success: boolean; amount?: number; options?: InstallmentPlan[]; message?: string }> => {
+    try {
+        const res = await api.get('/cards/invoice/installment-options', { headers: getAuthHeaders('none') });
+        return res.data?.success ? { success: true, amount: res.data.amount, options: res.data.options } : { success: false, message: res.data?.message };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao buscar opções de parcelamento' };
+    }
+};
 
 export const getInvoiceSummary = async (type: 'fechada' | 'aberta'): Promise<{ success: boolean; summary?: InvoiceSummary | null }> => {
     try {
@@ -1117,14 +1150,14 @@ export async function payCreditCardInvoice(cpf: string, pin: string, amount?: nu
 }
 
 // Método: parcelCreditCardInvoice - Parcelar fatura
-export async function parcelCreditCardInvoice(cpf: string, details: { amount: number, installments: number }, pin?: string): Promise<{ success: boolean; message: string; user?: User }> {
+export async function parcelCreditCardInvoice(cpf: string, details: { installments: number }, pin?: string): Promise<{ success: boolean; message: string; receipt?: InstallmentReceipt }> {
     try {
         const res = await api.post('/cards/invoice/parcel', { cpf, ...details, pin }, {
             headers: getAuthHeaders('json'),
         });
         const data = res.data;
         if (data?.success) {
-            return { success: true, message: data.message || 'Fatura parcelada com sucesso!', user: data.user };
+            return { success: true, message: data.message || 'Fatura parcelada com sucesso!', receipt: data.receipt };
         }
         return { success: false, message: data?.message || 'Falha ao parcelar fatura.' };
     } catch (error: any) {

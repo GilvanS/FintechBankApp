@@ -1,20 +1,34 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Eye, EyeOff, QrCode, Split, FileText, Search, ShoppingBag, Utensils, Fuel, Tv, Car, Award, CheckCircle2, CreditCard } from 'lucide-react';
+import InvoiceSummarySheet from './InvoiceSummarySheet';
 
 import { User, CardTransaction } from '../types';
+
+const fmtCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 interface InvoiceViewProps {
   user: User;
   onPayInvoice: (amount: number) => Promise<void>;
+  onParcel: () => void;
 }
 
-export default function InvoiceView({ user, onPayInvoice }: InvoiceViewProps) {
+export default function InvoiceView({ user, onPayInvoice, onParcel }: InvoiceViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<'fechada' | 'aberta' | 'historico' | 'proximas'>('fechada');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [redeemed, setRedeemed] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
+  const [showSummarySheet, setShowSummarySheet] = useState(false);
+  const [payStep, setPayStep] = useState<'idle' | 'pick'>('idle');
+  const [payMode, setPayMode] = useState<'total' | 'min' | 'custom'>('total');
+  const [customAmount, setCustomAmount] = useState('');
+  const [customError, setCustomError] = useState('');
+
+  const invoiceAmount = user.creditCard.closedInvoice || 0;
+  const minPayment = invoiceAmount > 0 ? Math.max(invoiceAmount * 0.10, 10) : 0;
+  const effectiveMin = user.balance > 0 ? Math.min(user.balance, minPayment) : minPayment;
+  const minLabel = user.balance < minPayment ? 'Pagar o máximo possível' : 'Pagar mínimo (10%)';
 
   const getFilteredExpenses = () => {
     let txs: CardTransaction[] = [];
@@ -115,21 +129,44 @@ export default function InvoiceView({ user, onPayInvoice }: InvoiceViewProps) {
     }, 1500);
   };
   const handleQuickAction = async (action: string) => {
-    if (action.includes('Pix Copia e Cola') || action.includes('Boleto')) {
+    if (action === 'Pagar fatura') {
       if (activeSubTab !== 'fechada') {
         alert('Apenas faturas fechadas podem ser pagas no momento.');
         return;
       }
-      setIsPaying(true);
-      try {
-        await onPayInvoice(getSubTabAmount());
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsPaying(false);
+      setPayStep('pick');
+      setPayMode('total');
+      setCustomAmount('');
+      setCustomError('');
+    } else if (action === 'Parcelar fatura') {
+      if (activeSubTab !== 'fechada') {
+        alert('Apenas faturas fechadas podem ser parceladas no momento.');
+        return;
       }
+      onParcel();
     } else {
       alert(`Ação de faturamento: ${action} iniciada.`);
+    }
+  };
+
+  const confirmPay = async () => {
+    let amt = invoiceAmount;
+    if (payMode === 'min') {
+      amt = effectiveMin;
+    } else if (payMode === 'custom') {
+      const parsed = parseFloat(String(customAmount).replace(',', '.'));
+      if (isNaN(parsed) || parsed <= 0) { setCustomError('Informe um valor válido.'); return; }
+      setCustomError('');
+      amt = Math.min(parsed, invoiceAmount);
+    }
+    setIsPaying(true);
+    try {
+      await onPayInvoice(amt);
+      setPayStep('idle');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsPaying(false);
     }
   };
 
@@ -300,12 +337,70 @@ export default function InvoiceView({ user, onPayInvoice }: InvoiceViewProps) {
             </div>
           </div>
 
+          {/* Seletor de pagamento: total / mínimo / outro valor */}
+          {activeSubTab === 'fechada' && payStep === 'pick' && (
+            <div className="bg-white border-4 border-black rounded-3xl p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-2">
+              <p className="text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Escolha o valor a pagar</p>
+              {([
+                { key: 'total', label: 'Pagar total', value: invoiceAmount },
+                { key: 'min', label: minLabel, value: effectiveMin },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => { setPayMode(opt.key); setCustomError(''); }}
+                  className={`w-full flex justify-between items-center p-3 rounded-xl border-2 text-sm transition-colors ${
+                    payMode === opt.key ? 'border-black bg-yellow-100' : 'border-black/10 hover:bg-black/5'
+                  }`}
+                >
+                  <span className="font-bold text-black">{opt.label}</span>
+                  <span className="font-black text-black">{fmtCurrency(opt.value)}</span>
+                </button>
+              ))}
+              <button
+                onClick={() => { setPayMode('custom'); setCustomError(''); }}
+                className={`w-full p-3 rounded-xl border-2 text-sm text-left font-bold transition-colors ${
+                  payMode === 'custom' ? 'border-black bg-yellow-100 text-black' : 'border-black/10 text-black hover:bg-black/5'
+                }`}
+              >
+                Outro valor
+              </button>
+              {payMode === 'custom' && (
+                <>
+                  <input
+                    type="number"
+                    value={customAmount}
+                    onChange={(e) => { setCustomAmount(e.target.value); setCustomError(''); }}
+                    placeholder={`Sugestão de mínimo: ${fmtCurrency(effectiveMin)}`}
+                    className={`w-full text-sm p-3 rounded-xl border-2 outline-none text-black ${customError ? 'border-red-500' : 'border-black/20 focus:border-black'}`}
+                  />
+                  {customError && <p className="text-xs text-red-500 mt-1">{customError}</p>}
+                </>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => { setPayStep('idle'); setCustomError(''); }}
+                  className="flex-1 py-2.5 rounded-xl border-2 border-black/20 text-black font-bold text-sm"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmPay}
+                  disabled={isPaying || (payMode === 'custom' && !customAmount)}
+                  className="flex-1 py-2.5 rounded-xl bg-[#00FF00] border-2 border-black text-black font-black text-sm disabled:opacity-40"
+                >
+                  {isPaying ? 'Pagando...' : 'Confirmar'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Quick Actions Panel (Scroll Lateral) */}
           <div className="flex overflow-x-auto gap-4 hide-scrollbar px-1 py-2">
             {[
-              { label: isPaying ? 'Processando...' : 'Pagar fatura', icon: QrCode, action: () => handleQuickAction('Pix Copia e Cola') },
+              { label: isPaying ? 'Processando...' : 'Pagar fatura', icon: QrCode, action: () => handleQuickAction('Pagar fatura') },
+              { label: 'Parcelar fatura', icon: Split, action: () => handleQuickAction('Parcelar fatura') },
               { label: 'Meus cartões', icon: CreditCard, action: () => alert('Meus cartões acessados.') },
-              { label: 'Resumo da fatura', icon: FileText, action: () => alert('Resumo da fatura acessado.') },
+              { label: 'Resumo da fatura', icon: FileText, action: () => setShowSummarySheet(true) },
             ].map((action, idx) => {
               const Icon = action.icon;
               return (
@@ -360,7 +455,14 @@ export default function InvoiceView({ user, onPayInvoice }: InvoiceViewProps) {
                           {getCategoryIcon(tx.category || 'other')}
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-black">{tx.merchant}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-black">{tx.merchant}</p>
+                            {tx.installments && (
+                              <span className="text-[10px] bg-black/5 text-gray-700 px-1.5 py-0.5 rounded-full font-bold">
+                                {tx.installments}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                             {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase()}
                           </p>
@@ -404,6 +506,15 @@ export default function InvoiceView({ user, onPayInvoice }: InvoiceViewProps) {
           </div>
         </>
       )}
+
+      {/* Modal de Resumo da Fatura */}
+      <InvoiceSummarySheet
+        open={showSummarySheet}
+        onClose={() => setShowSummarySheet(false)}
+        type={activeSubTab === 'fechada' ? 'fechada' : 'aberta'}
+        title={activeSubTab === 'fechada' ? 'Resumo da fatura fechada' : 'Resumo da fatura aberta'}
+        showTypeToggle={false}
+      />
     </div>
   );
 }
