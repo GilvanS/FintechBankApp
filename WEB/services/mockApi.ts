@@ -250,20 +250,18 @@ export const anticipateCreditCardInstallments = async (cpf: string, transactionI
 // FIX: Added implementations and exports for all missing functions to resolve errors.
 // --- Stubs for other functions that might be needed ---
 
-export const parcelCreditCardInvoice = async (cpf: string, details: { amount: number, installments: number }): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const parcelCreditCardInvoice = async (cpf: string, details: { installments: number }, _pin?: string): Promise<{ success: boolean; message: string; receipt?: InstallmentReceipt }> => {
     await delay(1500);
     const store = _getStore();
     const userIndex = store.users.findIndex(u => u.cpf === cpf);
     if (userIndex === -1) return { success: false, message: 'Usuário não encontrado.' };
 
     const user = store.users[userIndex];
-    const { amount, installments } = details;
+    const { installments } = details;
+    const amount = user.creditCard.closedInvoice;
 
-    if (user.creditCard.closedInvoice <= 0) {
+    if (amount <= 0) {
         return { success: false, message: 'Nenhuma fatura fechada para parcelar.' };
-    }
-    if (amount !== user.creditCard.closedInvoice) {
-        return { success: false, message: 'O valor do parcelamento não corresponde à fatura fechada.' };
     }
 
     // Unblock card if it was blocked
@@ -273,10 +271,10 @@ export const parcelCreditCardInvoice = async (cpf: string, details: { amount: nu
         _addNotification(cpf, 'Seu cartão foi desbloqueado após o parcelamento da fatura.');
     }
 
-    // 10% simple interest per month
-    const interestRate = 0.10;
-    const totalWithInterest = amount * (1 + (interestRate * installments));
-    const installmentValue = totalWithInterest / installments;
+    // Mesmas taxas do backend (tabela Price + IOF), ver API/utils/billing.js
+    const plan = _computeInstallmentPlan(amount, installments);
+    const totalWithInterest = plan.totalAmount;
+    const installmentValue = plan.installmentValue;
 
     // Update available limit: restore paid invoice amount, then subtract new total debt
     user.creditCard.availableLimit += user.creditCard.closedInvoice;
@@ -312,12 +310,22 @@ export const parcelCreditCardInvoice = async (cpf: string, details: { amount: nu
         .reduce((sum, tx) => sum + tx.amount, 0);
 
     _addNotification(cpf, `Sua fatura de ${amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} foi parcelada em ${installments}x.`);
-    
+
     store.users[userIndex] = user;
     _saveStore(store);
-    const { password, ...userWithoutPassword } = user;
+    const firstDue = new Date(parcelDate);
+    firstDue.setMonth(firstDue.getMonth() + 1);
     const successMessage = wasBlocked ? 'Fatura parcelada e cartão desbloqueado!' : 'Fatura parcelada com sucesso!';
-    return { success: true, message: successMessage, user: userWithoutPassword };
+    return {
+        success: true,
+        message: successMessage,
+        receipt: {
+            ...plan,
+            amount,
+            firstDueDate: firstDue.toISOString(),
+            transactionId: `mock-parcel-${Date.now()}`,
+        },
+    };
 };
 
 export const purchaseWithDebit = async (cpf: string, items: PurchasedItem[], cashbackUsed: number): Promise<{ success: boolean, message: string, user?: Omit<User, 'password'> }> => {
@@ -992,7 +1000,7 @@ export const getInvoiceSummary = async (
                 totalPagamentos: 0,
                 totalCreditos: 0,
                 saldoFinal: total,
-                pagamentoMinimo: Math.max(total * 0.15, 10),
+                pagamentoMinimo: Math.max(total * 0.10, 10),
                 dataVencimento: _fmtDate(dueDate),
                 melhorDataCompra: _fmtDate(bestBuy),
             },
@@ -1019,24 +1027,7 @@ export const getInvoiceSummary = async (
     };
 };
 
-export const getInvoiceHistory = async (): Promise<{ success: boolean; history?: any[] }> => {
-    await delay(300);
-    const user = _mockCurrentUser();
-    if (!user) return { success: false };
-    const cc = user.creditCard || {};
-    const dueDate = cc.invoiceDueDate ? new Date(cc.invoiceDueDate) : new Date();
-    const monthLabel = (offset: number) => {
-        const d = new Date(dueDate); d.setMonth(d.getMonth() + offset);
-        return d.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '');
-    };
-    const history = [
-        { month: monthLabel(0), amount: Number(cc.currentInvoice || 0), status: 'Fatura aberta', period: '' },
-    ];
-    if (Number(cc.closedInvoice || 0) > 0) {
-        history.push({ month: monthLabel(-1), amount: Number(cc.closedInvoice), status: 'Esta fatura', period: '' });
-    }
-    return { success: true, history };
-};
+// getInvoiceHistory removido do mock — implementação real em api.ts chama GET /credit/invoices/history
 
 export const getUserStatementPaginated = async (
     cpf: string,
@@ -1062,4 +1053,184 @@ export const getUserStatementPaginated = async (
 export const getProducts = async (): Promise<{ success: boolean; products?: PurchasedItem[]; message?: string }> => {
     await delay(300);
     return { success: true, products: MOCK_PRODUCTS };
+};
+
+// ─── Stubs do modo demo (GitHub Pages) ──────────────────────────────────────
+// Exports que em produção vêm de api.ts. No demo operam sobre o localStorage
+// ou retornam dados plausíveis — sem eles o build demo quebra no rollup
+// ("X is not exported by services/mockApi.ts").
+
+export interface InstallmentPlan {
+    installments: number;
+    installmentValue: number;
+    totalAmount: number;
+    iof: number;
+    juros: number;
+    monthlyRate?: number;
+}
+
+export interface InstallmentReceipt extends InstallmentPlan {
+    amount: number;
+    firstDueDate: string;
+    transactionId: string;
+}
+
+export interface InvoiceHistoryItem {
+    month: string;
+    amount: number;
+    status: string;
+    period: string;
+}
+
+export interface InvoiceSummary {
+    saldoAnterior: number;
+    jurosRemuneratorios: number;
+    iof: number;
+    jurosMora: number;
+    multa: number;
+    totalDespesas: number;
+    totalPagamentos: number;
+    totalCreditos: number;
+    saldoFinal: number;
+    pagamentoMinimo: number;
+    dataVencimento: string;
+    melhorDataCompra: string;
+}
+
+export interface ApiCard {
+    id: string;
+    number: string;
+    numberMasked: string;
+    type: 'physical' | 'virtual';
+    brand: string;
+    expiry: string;
+    expiryShort: string;
+    cvv: string;
+    pin: string;
+    isActivated: boolean;
+    isBlocked: boolean;
+    nickname: string | null;
+    createdAt: string;
+}
+
+// Mesmas taxas de API/utils/billing.js (juros remuneratórios 0,513%/dia + IOF, tabela Price)
+function _computeInstallmentPlan(principal: number, installments: number): InstallmentPlan {
+    const monthlyRate = 0.00513 * 30;
+    const iofFixo = Math.round(principal * 0.0038 * 100) / 100;
+    const iofDiario = Math.round(principal * 0.000082 * Math.min(installments * 30, 365) * 100) / 100;
+    const iof = Math.round((iofFixo + iofDiario) * 100) / 100;
+    const financiado = principal + iof;
+    const installmentValue = Math.round((financiado * monthlyRate / (1 - Math.pow(1 + monthlyRate, -installments))) * 100) / 100;
+    const totalAmount = Math.round(installmentValue * installments * 100) / 100;
+    const juros = Math.round((totalAmount - principal - iof) * 100) / 100;
+    return { installments, installmentValue, totalAmount, iof, juros, monthlyRate };
+}
+
+const _meUser = (): User | null => {
+    const token = localStorage.getItem('authToken');
+    if (!token) return null;
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.cpf ? (_findUser(payload.cpf) ?? null) : null;
+    } catch {
+        return null;
+    }
+};
+
+export const getInvoiceInstallmentOptions = async (): Promise<{ success: boolean; amount?: number; options?: InstallmentPlan[]; message?: string }> => {
+    await delay(300);
+    const user = _meUser();
+    const amount = Number(user?.creditCard?.closedInvoice || 0);
+    if (amount <= 0) return { success: false, message: 'Nenhuma fatura fechada para parcelar.' };
+    const options: InstallmentPlan[] = [];
+    for (let n = 2; n <= 12; n++) options.push(_computeInstallmentPlan(amount, n));
+    return { success: true, amount: Math.round(amount * 100) / 100, options };
+};
+
+export const getInvoiceHistory = async (): Promise<{ success: boolean; history?: InvoiceHistoryItem[] }> => {
+    await delay(300);
+    const user = _meUser();
+    if (!user) return { success: false };
+    const closed = Number(user.creditCard?.closedInvoice || 0);
+    const now = new Date();
+    const history: InvoiceHistoryItem[] = closed > 0 ? [{
+        month: now.toLocaleDateString('pt-BR', { month: 'long' }),
+        amount: closed,
+        status: 'Esta fatura',
+        period: now.toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' }),
+    }] : [];
+    return { success: true, history };
+};
+
+const _mockCards = (user: User): ApiCard[] => {
+    const cc = user.creditCard;
+    const last4 = (cc?.number || '5502094312341435').slice(-4);
+    return [{
+        id: `mock-card-${user.cpf}`,
+        number: cc?.number || '5502 0943 1234 1435',
+        numberMasked: `**** **** **** ${last4}`,
+        type: 'physical',
+        brand: 'Volt',
+        expiry: '06/2031',
+        expiryShort: '06/31',
+        cvv: '***',
+        pin: '****',
+        isActivated: cc?.isActivated ?? true,
+        isBlocked: cc?.isBlocked ?? false,
+        nickname: null,
+        createdAt: new Date().toISOString(),
+    }];
+};
+
+export const getMyCards = async (): Promise<{ success: boolean; cards?: ApiCard[] }> => {
+    await delay(300);
+    const user = _meUser();
+    if (!user) return { success: false };
+    return { success: true, cards: _mockCards(user) };
+};
+
+export const revealCard = async (_cardId: string, _pin: string): Promise<{ success: boolean; message?: string; cardNumber?: string; cvv?: string }> => {
+    await delay(500);
+    const user = _meUser();
+    if (!user) return { success: false, message: 'Não autenticado.' };
+    return { success: true, cardNumber: user.creditCard?.number || '5502 0943 1234 1435', cvv: '123' };
+};
+
+export const generateVirtualCard = async (_nickname: string): Promise<{ success: boolean; message?: string }> => {
+    await delay(500);
+    return { success: false, message: 'Cartões virtuais não estão disponíveis no modo demonstração.' };
+};
+
+export const toggleBlockCard = async (_cardId: string): Promise<{ success: boolean; isBlocked?: boolean; message?: string }> => {
+    await delay(300);
+    return { success: false, message: 'Bloqueio de cartão não está disponível no modo demonstração.' };
+};
+
+export const deleteVirtualCard = async (_cardId: string): Promise<{ success: boolean; message?: string }> => {
+    await delay(300);
+    return { success: false, message: 'Exclusão de cartão não está disponível no modo demonstração.' };
+};
+
+export const checkout = async (_payload: unknown): Promise<{ success: boolean; message: string; purchase?: unknown }> => {
+    await delay(500);
+    return { success: false, message: 'Checkout indisponível no modo demonstração. Use a compra via Shop.' };
+};
+
+export const adminSeedTestScenario = async (
+    _cpf: string | null,
+    _scenario: string,
+    _opts?: { daysOverdue?: number; invoiceAmount?: number }
+): Promise<{ success: boolean; message?: string; applied?: unknown[] }> => {
+    await delay(300);
+    return { success: false, message: 'Cenários de teste não estão disponíveis no modo demonstração.' };
+};
+
+export const adminSaveAsMock = async (_cpf: string): Promise<{ success: boolean; message?: string }> => {
+    await delay(300);
+    return { success: false, message: 'Indisponível no modo demonstração.' };
+};
+
+export const adminClearMockBaseline = async (_cpf: string): Promise<{ success: boolean; message?: string }> => {
+    await delay(300);
+    return { success: false, message: 'Indisponível no modo demonstração.' };
 };
