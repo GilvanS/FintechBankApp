@@ -29,6 +29,10 @@
       "description": "Cartão de crédito, faturas e parcelamentos"
     },
     {
+      "name": "Financeiro",
+      "description": "Assinaturas, contas recorrentes, extrato, saúde financeira e estorno/cancelamento de transações"
+    },
+    {
       "name": "Shop",
       "description": "Marketplace — produtos e checkout"
     },
@@ -39,6 +43,18 @@
     {
       "name": "Debug",
       "description": "Diagnóstico do sistema (requer role admin)"
+    },
+    {
+      "name": "Sistema",
+      "description": "Health check e utilitários gerais"
+    },
+    {
+      "name": "Social",
+      "description": "Stories e conteúdo social"
+    },
+    {
+      "name": "Outros",
+      "description": "Endpoints diversos ainda não categorizados"
     }
   ],
   "paths": {
@@ -49,7 +65,10 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "tags": [
+          "Sistema"
+        ]
       }
     },
     "/api/debug/tables": {
@@ -77,7 +96,10 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "tags": [
+          "Debug"
+        ]
       }
     },
     "/api/debug/user/{cpf}": {
@@ -113,7 +135,10 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "tags": [
+          "Debug"
+        ]
       },
       "delete": {
         "description": "",
@@ -153,7 +178,10 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "tags": [
+          "Debug"
+        ]
       }
     },
     "/api/test/reset": {
@@ -186,7 +214,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Debug"
+        ]
       }
     },
     "/api/auth/signup": {
@@ -228,7 +259,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/api/auth/login": {
@@ -267,7 +301,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/api/auth/logout": {
@@ -277,7 +314,10 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/api/auth/request-password-reset": {
@@ -307,7 +347,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/api/auth/reset-password": {
@@ -349,7 +392,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/api/users/me": {
@@ -374,7 +420,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/users/{cpf}": {
@@ -407,7 +456,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/user/me/{cpf}": {
@@ -443,7 +495,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/user/limits/pix-daily/{cpf}": {
@@ -490,7 +545,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/user/pix-daily-usage/{cpf}": {
@@ -523,7 +581,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/users/{cpf}/balance": {
@@ -559,7 +620,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/users/{cpf}/statement": {
@@ -613,7 +677,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/users/{cpf}/profile": {
@@ -672,7 +739,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/users/{cpf}/notifications": {
@@ -705,7 +775,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/users/{cpf}/notifications/{id}/read": {
@@ -749,7 +822,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/shop/products": {
@@ -762,7 +838,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Shop"
+        ]
       }
     },
     "/api/shop/checkout": {
@@ -822,7 +901,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Shop"
+        ]
       }
     },
     "/api/pix/contacts/{cpf}": {
@@ -855,7 +937,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       },
       "post": {
         "description": "",
@@ -906,7 +991,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       }
     },
     "/api/pix/contacts/{cpf}/{contactKey}": {
@@ -950,7 +1038,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       }
     },
     "/api/pix/recipient-info": {
@@ -992,7 +1083,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       },
       "post": {
         "description": "",
@@ -1038,7 +1132,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       }
     },
     "/api/pix/keys": {
@@ -1063,7 +1160,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       },
       "post": {
         "description": "",
@@ -1106,7 +1206,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       }
     },
     "/api/pix/keys/{key}": {
@@ -1139,7 +1242,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       }
     },
     "/api/pix/transfer": {
@@ -1190,7 +1296,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       }
     },
     "/api/pix/transfer-credit": {
@@ -1253,7 +1362,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       }
     },
     "/api/admin/users": {
@@ -1278,7 +1390,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/stats": {
@@ -1306,7 +1421,10 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/users/{cpf}": {
@@ -1342,7 +1460,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/users/{cpf}/deposit": {
@@ -1395,7 +1516,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/users/{cpf}/block": {
@@ -1428,7 +1552,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/users/{cpf}/unblock": {
@@ -1464,7 +1591,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/users/{cpf}/pix-limit": {
@@ -1514,7 +1644,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/users/{cpf}/credit-limit": {
@@ -1570,7 +1703,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/users/{cpf}/reset-password": {
@@ -1603,7 +1739,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/users/{cpf}/fix": {
@@ -1653,7 +1792,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/users/{cpf}/generate-temp-password": {
@@ -1689,7 +1831,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/users/{cpf}/card-details": {
@@ -1751,7 +1896,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/cards/physical/activate": {
@@ -1802,7 +1950,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/cards/my-cards": {
@@ -1827,7 +1978,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/admin/simulate-purchases": {
@@ -1875,7 +2029,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/cards/billing-cycle": {
@@ -1917,7 +2074,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/cards/virtual/generate": {
@@ -1962,7 +2122,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/cards/{id}/toggle-block": {
@@ -2001,7 +2164,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/cards/{id}": {
@@ -2040,7 +2206,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/admin/cards/{cpf}/delivery-status": {
@@ -2090,7 +2259,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/cards/physical/test-delivery-status": {
@@ -2132,7 +2304,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/admin/users/{cpf}/card/purchase/open": {
@@ -2191,7 +2366,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/users/{cpf}/card/purchase/closed": {
@@ -2250,7 +2428,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/invoices/{cpf}/{invoiceId}/status": {
@@ -2311,7 +2492,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/invoices/engine/force-cycle": {
@@ -2350,7 +2534,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/invoices/{cpf}/due-date": {
@@ -2400,7 +2587,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/pix/limit/request": {
@@ -2445,7 +2635,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       }
     },
     "/api/admin/requests/limit": {
@@ -2470,7 +2663,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/requests/limit/{cpf}/approve": {
@@ -2509,7 +2705,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/requests/limit/{cpf}/deny": {
@@ -2559,7 +2758,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/requests/password": {
@@ -2584,7 +2786,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/requests/password/{cpf}/approve": {
@@ -2617,7 +2822,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/requests/password/{cpf}/deny": {
@@ -2650,7 +2858,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/reset/users": {
@@ -2675,7 +2886,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/billing/config": {
@@ -2703,7 +2917,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       },
       "put": {
         "description": "",
@@ -2752,7 +2969,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/billing/seed-test-scenarios": {
@@ -2803,7 +3023,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/billing/save-as-mock": {
@@ -2845,7 +3068,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/billing/clear-mock-baseline": {
@@ -2887,7 +3113,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/admin/billing/account/{cpf}/status": {
@@ -2929,7 +3158,10 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/billing/invoice-status": {
@@ -2957,7 +3189,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       }
     },
     "/api/cards/invoice/installment-options": {
@@ -2985,7 +3220,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/cards/invoice/parcel": {
@@ -3036,7 +3274,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/cards/invoice/pay": {
@@ -3087,7 +3328,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/credit/invoices/summary/{type}": {
@@ -3117,7 +3361,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/credit/invoices/history": {
@@ -3142,7 +3389,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/credit/invoices/open": {
@@ -3170,7 +3420,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/cards/invoice/anticipate": {
@@ -3218,7 +3471,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Cards"
+        ]
       }
     },
     "/api/users/{cpf}/purchases": {
@@ -3251,7 +3507,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/stories": {
@@ -3276,7 +3535,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Social"
+        ]
       }
     },
     "/api/proxy/news": {
@@ -3301,7 +3563,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Outros"
+        ]
       }
     },
     "/api/pix/categorize": {
@@ -3343,7 +3608,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "PIX"
+        ]
       }
     },
     "/api/financial-health/{cpf}": {
@@ -3379,7 +3647,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       }
     },
     "/api/recurring-bills/{cpf}": {
@@ -3412,7 +3683,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       },
       "post": {
         "description": "",
@@ -3469,7 +3743,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       }
     },
     "/api/recurring-bills/{cpf}/{billId}": {
@@ -3542,7 +3819,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       },
       "delete": {
         "description": "",
@@ -3581,7 +3861,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       }
     },
     "/api/statement/export": {
@@ -3626,7 +3909,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       }
     },
     "/api/subscriptions/{cpf}": {
@@ -3659,7 +3945,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       },
       "post": {
         "description": "",
@@ -3722,7 +4011,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       }
     },
     "/api/subscriptions/{cpf}/{id}": {
@@ -3766,7 +4058,10 @@
           "404": {
             "description": "Not Found"
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       }
     },
     "/api/admin/transactions/simulate-mass": {
@@ -3814,7 +4109,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/api/transactions/{cpf}/{id}/cancel": {
@@ -3875,7 +4173,10 @@
               }
             }
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       }
     },
     "/api/vouchers/{cpf}": {
@@ -3908,7 +4209,10 @@
           "403": {
             "description": "Forbidden"
           }
-        }
+        },
+        "tags": [
+          "Financeiro"
+        ]
       }
     },
     "/api-docs/swagger.json": {
