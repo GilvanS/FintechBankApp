@@ -37,8 +37,20 @@
       "description": "Marketplace — produtos e checkout"
     },
     {
-      "name": "Admin",
-      "description": "Painel administrativo (requer role admin)"
+      "name": "Admin - Usuários",
+      "description": "Gerenciamento de contas: bloqueio, limites, senha, saldo, stats"
+    },
+    {
+      "name": "Admin - Cartões e Autorizações de Compra",
+      "description": "Simulação/autorização de compras em crédito e débito, detalhes de cartão, status de entrega"
+    },
+    {
+      "name": "Admin - Faturamento",
+      "description": "Ciclo de faturas, configuração de cobrança, cenários de teste"
+    },
+    {
+      "name": "Admin - Solicitações",
+      "description": "Aprovação/rejeição de pedidos de aumento de limite e reset de senha"
     },
     {
       "name": "Debug",
@@ -1392,7 +1404,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -1423,7 +1435,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -1462,7 +1474,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -1518,7 +1530,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -1554,7 +1566,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -1593,7 +1605,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -1646,7 +1658,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -1705,7 +1717,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -1741,7 +1753,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -1794,7 +1806,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -1833,7 +1845,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -1898,7 +1910,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Cartões e Autorizações de Compra"
         ]
       }
     },
@@ -2031,7 +2043,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Cartões e Autorizações de Compra"
         ]
       }
     },
@@ -2261,7 +2273,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Cartões e Autorizações de Compra"
         ]
       }
     },
@@ -2368,7 +2380,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Cartões e Autorizações de Compra"
         ]
       }
     },
@@ -2430,7 +2442,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Cartões e Autorizações de Compra"
         ]
       }
     },
@@ -2494,7 +2506,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Faturamento"
         ]
       }
     },
@@ -2536,7 +2548,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Faturamento"
         ]
       }
     },
@@ -2589,7 +2601,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Faturamento"
         ]
       }
     },
@@ -2665,7 +2677,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Solicitações"
         ]
       }
     },
@@ -2707,7 +2719,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Solicitações"
         ]
       }
     },
@@ -2760,7 +2772,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Solicitações"
         ]
       }
     },
@@ -2788,7 +2800,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Solicitações"
         ]
       }
     },
@@ -2824,7 +2836,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Solicitações"
         ]
       }
     },
@@ -2860,7 +2872,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Solicitações"
         ]
       }
     },
@@ -2888,7 +2900,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Usuários"
         ]
       }
     },
@@ -2919,7 +2931,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Faturamento"
         ]
       },
       "put": {
@@ -2971,7 +2983,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Faturamento"
         ]
       }
     },
@@ -3025,7 +3037,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Faturamento"
         ]
       }
     },
@@ -3070,7 +3082,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Faturamento"
         ]
       }
     },
@@ -3115,7 +3127,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Faturamento"
         ]
       }
     },
@@ -3160,7 +3172,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Faturamento"
         ]
       }
     },
@@ -4111,7 +4123,7 @@
           }
         },
         "tags": [
-          "Admin"
+          "Admin - Cartões e Autorizações de Compra"
         ]
       }
     },

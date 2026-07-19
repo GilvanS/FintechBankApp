@@ -62,7 +62,10 @@ const doc = {
         { name: 'Cards', description: 'Cartão de crédito, faturas e parcelamentos' },
         { name: 'Financeiro', description: 'Assinaturas, contas recorrentes, extrato, saúde financeira e estorno/cancelamento de transações' },
         { name: 'Shop', description: 'Marketplace — produtos e checkout' },
-        { name: 'Admin', description: 'Painel administrativo (requer role admin)' },
+        { name: 'Admin - Usuários', description: 'Gerenciamento de contas: bloqueio, limites, senha, saldo, stats' },
+        { name: 'Admin - Cartões e Autorizações de Compra', description: 'Simulação/autorização de compras em crédito e débito, detalhes de cartão, status de entrega' },
+        { name: 'Admin - Faturamento', description: 'Ciclo de faturas, configuração de cobrança, cenários de teste' },
+        { name: 'Admin - Solicitações', description: 'Aprovação/rejeição de pedidos de aumento de limite e reset de senha' },
         { name: 'Debug', description: 'Diagnóstico do sistema (requer role admin)' },
         { name: 'Sistema', description: 'Health check e utilitários gerais' },
         { name: 'Social', description: 'Stories e conteúdo social' },
@@ -96,15 +99,35 @@ const TAG_BY_PREFIX = {
     'financial-health': 'Financeiro',
     billing: 'Financeiro',
     shop: 'Shop',
-    admin: 'Admin',
     debug: 'Debug',
     stories: 'Social',
     proxy: 'Outros',
     test: 'Debug',
 };
 
+// Admin concentra o maior numero de rotas (33) com finalidades bem diferentes
+// entre si — sobretudo apos as novas rotas de autorizacao de compra em
+// credito/debito (simulate-purchases, card/purchase/open|closed,
+// transactions/simulate-mass). Em vez de um unico bloco "Admin", divide por
+// segundos segmentos do path em 4 subgrupos.
+function tagForAdminPath(segments) {
+    const rest = segments.slice(1); // remove 'admin'
+    if (rest.includes('requests')) return 'Admin - Solicitações';
+    if (rest.includes('invoices') || rest.includes('billing')) return 'Admin - Faturamento';
+    const isCardOrPurchaseAuth =
+        rest.includes('simulate-purchases') ||
+        rest.includes('transactions') ||
+        rest.includes('cards') ||
+        rest.includes('card-details') ||
+        (rest.includes('card') && rest.includes('purchase'));
+    if (isCardOrPurchaseAuth) return 'Admin - Cartões e Autorizações de Compra';
+    return 'Admin - Usuários';
+}
+
 function tagForPath(pathKey) {
-    const firstSegment = pathKey.replace(/^\/api\/?/, '').split('/')[0] || '';
+    const segments = pathKey.replace(/^\/api\/?/, '').split('/').filter(Boolean);
+    const firstSegment = segments[0] || '';
+    if (firstSegment === 'admin') return tagForAdminPath(segments);
     return TAG_BY_PREFIX[firstSegment] || 'Outros';
 }
 
