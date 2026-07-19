@@ -62,6 +62,7 @@ async function runEngine(targetCpf = null) {
           FROM ${db.fq('transactions')}
           WHERE cpf = ${esc(user.cpf)}
             AND type IN ('SHOP_CREDIT','CREDIT','INVOICE_INSTALLMENT','INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+            AND (status IS NULL OR status <> 'cancelled')
           ORDER BY date DESC
         `);
 

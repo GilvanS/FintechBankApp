@@ -34,6 +34,17 @@ async function updateBalance(cpf, newBalance) {
     `);
 }
 
+// Devolve valor ao limite disponível do cartão (usado no estorno de compra a
+// crédito cuja fatura de origem ainda está aberta).
+async function restoreAvailableLimit(cpf, amount) {
+    const db = getDb();
+    await db.executeQuery(`
+        UPDATE ${db.fq('users')}
+        SET credit_card_available_limit = COALESCE(credit_card_available_limit, 0) + ${esc(Number(amount).toFixed(2))}
+        WHERE cpf=${esc(cpf)}
+    `);
+}
+
 async function listUsers() {
     const db = getDb();
     return db.executeQuery(`
@@ -97,4 +108,4 @@ async function setTempPassword(cpf, tempPassword) {
     `);
 }
 
-module.exports = { findByCpf, upsertSeed, updateBalance, listUsers, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword };
+module.exports = { findByCpf, upsertSeed, updateBalance, restoreAvailableLimit, listUsers, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword };

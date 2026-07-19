@@ -47,6 +47,24 @@ CREATE TABLE IF NOT EXISTS transactions (
     to_user VARCHAR(255),
     to_key VARCHAR(255),
     date TIMESTAMP NOT NULL,
+    status VARCHAR(20),
+    reversal_of VARCHAR(255),
+    PRIMARY KEY (id)
+);
+
+-- Credit vouchers: gerados ao cancelar uma compra a credito cuja fatura de
+-- origem ja esta FECHADA (ver API/utils/transactionReversal.js)
+CREATE TABLE IF NOT EXISTS credit_vouchers (
+    id VARCHAR(255) NOT NULL,
+    cpf VARCHAR(11) NOT NULL,
+    amount DECIMAL(15,2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    source_transaction_id VARCHAR(255) NOT NULL,
+    source_invoice_id VARCHAR(255),
+    description VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    used_at TIMESTAMP,
+    used_in_transaction_id VARCHAR(255),
     PRIMARY KEY (id)
 );
 

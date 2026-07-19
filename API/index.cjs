@@ -27,6 +27,12 @@ const usersRepo = require('./repositories/usersRepo');
 const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword } = require('./repositories/usersRepo');
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions } = require('./utils/billing');
+const cardEngine = require('./utils/cardEngine');
+const subsUtil = require('./utils/subscriptions');
+const subscriptionsRepo = require('./repositories/subscriptionsRepo');
+const transactionReversal = require('./utils/transactionReversal');
+const transactionsRepo = require('./repositories/transactionsRepo');
+const vouchersRepo = require('./repositories/vouchersRepo');
 const { seedBillingMockData, applyScenario, saveAsMockBaseline, clearMockBaseline } = require('./utils/billingMockSeeder');
 const cardRepo = require('./repositories/cardRepo');
 const invoiceRepo = require('./repositories/invoiceRepo');
@@ -70,6 +76,15 @@ cron.schedule('0 0 * * *', async () => {
         console.log('[Cron] Validação de faturamento concluída:', result && result.message);
     } catch (e) {
         console.error('[Cron] Erro na validação de faturamento:', e);
+    }
+
+    // Cobrança recorrente de assinaturas vencidas (débito/crédito).
+    console.log('[Cron] Executando cobrança de assinaturas...');
+    try {
+        const result = await runSubscriptionBilling();
+        console.log('[Cron] Cobrança de assinaturas concluída:', result && result.message);
+    } catch (e) {
+        console.error('[Cron] Erro na cobrança de assinaturas:', e);
     }
 });
 
@@ -924,6 +939,7 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
         FROM ${databricksService.fq('transactions')}
         WHERE cpf = '${cpf}'
           AND type IN ('SHOP_CREDIT','CREDIT','INVOICE_INSTALLMENT','INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+          AND (status IS NULL OR status <> 'cancelled')
         ORDER BY date DESC
         LIMIT 100
     `);
@@ -934,7 +950,7 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
         if (!plan.remaining_installments || plan.remaining_installments <= 0) continue;
         const nextInstallmentNum = plan.installments - plan.remaining_installments + 1;
         const expectedDescPart = `(${nextInstallmentNum}/${plan.installments})`;
-        
+
         // Se next_due_date do plano cair no ciclo da fatura aberta atual
         const nextDueTime = plan.next_due_date ? new Date(plan.next_due_date).getTime() : 0;
         if (nextDueTime > _prevCloseMs && nextDueTime <= _closeMs) {
@@ -1259,6 +1275,7 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
         FROM ${databricksService.fq('transactions')}
         WHERE cpf = '${cpf}'
           AND type IN ('SHOP_CREDIT','CREDIT','INVOICE_INSTALLMENT','INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+          AND (status IS NULL OR status <> 'cancelled')
         ORDER BY date DESC
         LIMIT 100
     `);
@@ -2823,26 +2840,10 @@ apiRouter.post('/admin/users/:cpf/card-details', bearerAuth(), authenticateAdmin
 }));
 
 // Ativar cartão físico
-// ─── Utilitário: geração de número de cartão com Luhn ───────────────────────
-const generateCardNumber = (bin = '5981012') => {
-    // BIN 7 dígitos + 8 dígitos aleatórios + 1 dígito verificador Luhn = 16
-    const randomPart = Array.from({ length: 8 }, () => Math.floor(Math.random() * 10)).join('');
-    const partial = bin + randomPart; // 15 dígitos
-
-    // Algoritmo de Luhn para calcular o dígito verificador
-    let sum = 0;
-    for (let i = 0; i < partial.length; i++) {
-        let d = parseInt(partial[partial.length - 1 - i]);
-        if (i % 2 === 0) { d *= 2; if (d > 9) d -= 9; }
-        sum += d;
-    }
-    const checkDigit = (10 - (sum % 10)) % 10;
-    const raw = partial + checkDigit; // 16 dígitos
-
-    // Formatar: XXXX XXXX XXXX XXXX
-    const formatted = raw.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
-    return { raw, formatted };
-};
+// ─── Utilitário: geração de número de cartão (delega ao motor cardEngine) ────
+// Sorteia bandeira (Master/Visa/Elo) e um dos 12 BINs reais da whitelist.
+// `brand` é opcional; o BIN nunca é aceito cru do cliente.
+const generateCardNumber = (brand) => cardEngine.generateCardNumber(brand);
 
 const formatExpiry = (expiryShort) => {
     // Converte MM/YY → MM/AAAA   ex: 07/31 → 07/2031
@@ -2868,27 +2869,28 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
         return res.status(401).json({ success: false, message: 'CVV ou Validade incorretos.' });
     }
 
-    // Gerar número de cartão físico com BIN Mastercard 5981012
-    let cardRaw, cardFormatted;
+    // Gerar número de cartão físico com bandeira/BIN reais sorteados (Master/Visa/Elo)
+    let cardRaw, cardFormatted, cardBrand, cardBin;
     let attempts = 0;
     while (attempts < 10) {
-        const gen = generateCardNumber('5981012');
+        const gen = generateCardNumber();
         // Verificar unicidade no banco
         const [existing] = await databricksService.executeQuery(
-            `SELECT id FROM fintech.cards WHERE card_number_raw = '${gen.raw}'`
+            `SELECT id FROM fintech.cards WHERE card_number_raw = ${repoContext.esc(gen.raw)}`
         );
-        if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; break; }
+        if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; cardBrand = gen.brand; cardBin = gen.bin; break; }
         attempts++;
     }
     if (!cardRaw) return res.status(500).json({ success: false, message: 'Erro ao gerar número do cartão. Tente novamente.' });
 
     const expiryFull = formatExpiry(dbUser.card_expiry);
     const pin = '9898';
+    const { esc } = repoContext;
 
     // Salvar cartão na tabela fintech.cards
     await databricksService.executeQuery(`
         INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated)
-        VALUES ('${cpf}', '${cardFormatted}', '${cardRaw}', 'physical', 'mastercard', '5981012', '${expiryFull}', '${dbUser.card_expiry}', '${cvv}', '${pin}', true)
+        VALUES (${esc(cpf)}, ${esc(cardFormatted)}, ${esc(cardRaw)}, 'physical', ${esc(cardBrand)}, ${esc(cardBin)}, ${esc(expiryFull)}, ${esc(dbUser.card_expiry)}, ${esc(cvv)}, ${esc(pin)}, true)
     `);
 
     // Atualizar status do usuário
@@ -3095,15 +3097,15 @@ apiRouter.post('/cards/virtual/generate', bearerAuth(), asyncHandler(async (req,
         return res.status(403).json({ success: false, message: 'Ative o cartão físico antes de gerar cartões virtuais.' });
     }
 
-    // Gerar número virtual (mesmo BIN, novos dígitos)
-    let cardRaw, cardFormatted;
+    // Gerar número virtual com bandeira/BIN reais sorteados (Master/Visa/Elo)
+    let cardRaw, cardFormatted, cardBrand, cardBin;
     let attempts = 0;
     while (attempts < 10) {
-        const gen = generateCardNumber('5981012');
+        const gen = generateCardNumber();
         const [existing] = await databricksService.executeQuery(
-            `SELECT id FROM fintech.cards WHERE card_number_raw = '${gen.raw}'`
+            `SELECT id FROM fintech.cards WHERE card_number_raw = ${repoContext.esc(gen.raw)}`
         );
-        if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; break; }
+        if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; cardBrand = gen.brand; cardBin = gen.bin; break; }
         attempts++;
     }
     if (!cardRaw) return res.status(500).json({ success: false, message: 'Erro ao gerar cartão virtual.' });
@@ -3112,11 +3114,12 @@ apiRouter.post('/cards/virtual/generate', bearerAuth(), asyncHandler(async (req,
     const virtualCvv = String(Math.floor(Math.random() * 900) + 100);
     const expiryFull = formatExpiry(dbUser.card_expiry);
     const pin = '9898';
-    const safeNickname = nickname ? nickname.replace(/'/g, "''").substring(0, 100) : 'Cartão Virtual';
+    const safeNickname = nickname ? String(nickname).substring(0, 100) : 'Cartão Virtual';
+    const { esc } = repoContext;
 
     await databricksService.executeQuery(`
         INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated, nickname)
-        VALUES ('${cpf}', '${cardFormatted}', '${cardRaw}', 'virtual', 'mastercard', '5981012', '${expiryFull}', '${dbUser.card_expiry}', '${virtualCvv}', '${pin}', true, '${safeNickname}')
+        VALUES (${esc(cpf)}, ${esc(cardFormatted)}, ${esc(cardRaw)}, 'virtual', ${esc(cardBrand)}, ${esc(cardBin)}, ${esc(expiryFull)}, ${esc(dbUser.card_expiry)}, ${esc(virtualCvv)}, ${esc(pin)}, true, ${esc(safeNickname)})
     `);
 
     res.json({
@@ -4265,6 +4268,7 @@ apiRouter.get('/credit/invoices/history', bearerAuth(), asyncHandler(async (req,
     const _histCardTx = await databricksService.executeQuery(`
         SELECT amount, type, date FROM ${databricksService.fq('transactions')}
         WHERE cpf = ${esc(cpf)} AND type IN ('SHOP_CREDIT', 'CREDIT', 'INVOICE_INSTALLMENT')
+          AND (status IS NULL OR status <> 'cancelled')
     `);
     const _histPrevCloseMs = new Date(cycle.closeDate).setMonth(cycle.closeDate.getMonth() - 1);
     const openAmount = _histCardTx.filter(tx => {
@@ -4334,6 +4338,7 @@ apiRouter.get('/credit/invoices/open', bearerAuth(), asyncHandler(async (req, re
             WHERE cpf = '${cpf}'
               AND type IN ('SHOP_CREDIT', 'CREDIT', 'INVOICE_INSTALLMENT')
               AND date <= '${invoiceDueDate.toISOString()}'
+              AND (status IS NULL OR status <> 'cancelled')
         `);
         openInvoiceAmount = openTransactions.reduce((sum, tx) => sum + Math.abs(parseFloat(tx.amount || 0)), 0);
     }
@@ -5176,6 +5181,57 @@ async function initializeDatabase() {
             `);
             console.log('✅ Tabela billing_config verificada/criada com sucesso.');
 
+            // Tabela de assinaturas (cobrança recorrente)
+            await databricksService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${databricksService.fq('subscriptions')} (
+                    id VARCHAR(255) PRIMARY KEY,
+                    cpf VARCHAR(11) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    amount DECIMAL(15,2) NOT NULL,
+                    frequency VARCHAR(20) NOT NULL DEFAULT 'monthly',
+                    payment_method VARCHAR(20) NOT NULL DEFAULT 'credit',
+                    status VARCHAR(20) NOT NULL DEFAULT 'active',
+                    next_billing_date TIMESTAMP NOT NULL,
+                    last_billing_date TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('✅ Tabela subscriptions verificada/criada com sucesso.');
+
+            // Colunas de cancelamento/estorno na tabela transactions
+            const txCols = await databricksService.executeQuery(`
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'transactions' AND column_name IN ('status','reversal_of')
+            `);
+            const hasTxCols = txCols.map(c => c.column_name);
+            if (!hasTxCols.includes('status')) {
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('transactions')} ADD COLUMN status VARCHAR(20)`);
+                console.log('✅ Coluna status adicionada em transactions.');
+            }
+            if (!hasTxCols.includes('reversal_of')) {
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('transactions')} ADD COLUMN reversal_of VARCHAR(255)`);
+                console.log('✅ Coluna reversal_of adicionada em transactions.');
+            }
+
+            // Tabela de credit vouchers (estorno de compra a crédito cuja fatura de
+            // origem já está fechada — ver utils/transactionReversal.js)
+            await databricksService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${databricksService.fq('credit_vouchers')} (
+                    id VARCHAR(255) PRIMARY KEY,
+                    cpf VARCHAR(11) NOT NULL,
+                    amount DECIMAL(15,2) NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'active',
+                    source_transaction_id VARCHAR(255) NOT NULL,
+                    source_invoice_id VARCHAR(255),
+                    description VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    used_at TIMESTAMP,
+                    used_in_transaction_id VARCHAR(255)
+                )
+            `);
+            console.log('✅ Tabela credit_vouchers verificada/criada com sucesso.');
+
             // Garantir colunas de status na tabela users
             const billingCols = await databricksService.executeQuery(`
                 SELECT column_name FROM information_schema.columns
@@ -5348,6 +5404,223 @@ async function bootstrap() {
         process.exit(1);
     }
 }
+
+// ─── Assinaturas (cobrança recorrente) ──────────────────────────────────────
+
+// Aplica uma cobrança única de assinatura ao usuário (débito no saldo ou crédito
+// no cartão). Retorna { ok, reason }. Respeita bloqueios/saldo/limite.
+async function chargeSubscription(sub) {
+    const { esc } = repoContext;
+    const user = await usersRepo.findByCpf(sub.cpf);
+    if (!user) return { ok: false, reason: 'usuario-inexistente' };
+
+    const amount = Math.abs(parseFloat(sub.amount || 0));
+    const nowIso = new Date().toISOString();
+    const txId = databricksService.generateUUID();
+
+    if (sub.payment_method === 'debit') {
+        const balance = parseFloat(user.balance || 0);
+        if (balance < amount) return { ok: false, reason: 'saldo-insuficiente' };
+        await databricksService.executeQuery(`
+            INSERT INTO ${databricksService.fq('transactions')}
+            (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+            VALUES (${esc(txId)}, ${esc(sub.cpf)}, 'PAYMENT', ${esc((-amount).toFixed(2))}, ${esc(`Assinatura: ${sub.name}`)}, NULL, NULL, NULL, ${esc(nowIso)})
+        `);
+        await usersRepo.updateBalance(sub.cpf, (balance - amount).toFixed(2));
+        return { ok: true };
+    }
+
+    // crédito: respeita cartão bloqueado e limite disponível
+    if (user.credit_card_is_blocked) return { ok: false, reason: 'cartao-bloqueado' };
+    const available = parseFloat(user.credit_card_available_limit || 0);
+    if (available < amount) return { ok: false, reason: 'limite-insuficiente' };
+    await databricksService.executeQuery(`
+        INSERT INTO ${databricksService.fq('transactions')}
+        (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+        VALUES (${esc(txId)}, ${esc(sub.cpf)}, 'SHOP_CREDIT', ${esc((-amount).toFixed(2))}, ${esc(`Assinatura: ${sub.name}`)}, NULL, NULL, NULL, ${esc(nowIso)})
+    `);
+    await databricksService.executeQuery(`
+        UPDATE ${databricksService.fq('users')}
+        SET credit_card_available_limit = ${(available - amount).toFixed(2)}
+        WHERE cpf = ${esc(sub.cpf)}
+    `);
+    return { ok: true };
+}
+
+// Cron: cobra todas as assinaturas ativas vencidas (idempotente por dia).
+async function runSubscriptionBilling(now = new Date()) {
+    const due = await subscriptionsRepo.findDue(now.toISOString());
+    let charged = 0, skipped = 0;
+    for (const sub of due) {
+        if (!subsUtil.isSubscriptionDue(sub, now)) { skipped++; continue; }
+        const result = await chargeSubscription(sub);
+        if (result.ok) {
+            await subscriptionsRepo.markBilled({ id: sub.id, frequency: sub.frequency });
+            await notificationsRepo.addNotification({
+                cpf: sub.cpf,
+                title: 'Assinatura cobrada',
+                message: `${sub.name}: R$ ${Math.abs(parseFloat(sub.amount)).toFixed(2)} cobrado.`,
+                actionUrl: '/dashboard'
+            });
+            charged++;
+        } else {
+            skipped++;
+        }
+    }
+    return { message: `Assinaturas: ${charged} cobradas, ${skipped} ignoradas.`, charged, skipped };
+}
+
+// Listar assinaturas do usuário (posse obrigatória).
+apiRouter.get('/subscriptions/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    const subscriptions = await subscriptionsRepo.listByCpf(cpf);
+    res.json({ success: true, subscriptions });
+}));
+
+// Criar assinatura (posse + PIN + validação de payload).
+apiRouter.post('/subscriptions/:cpf', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    const { name, amount, frequency, payment_method } = req.body || {};
+    const errors = subsUtil.validateSubscriptionPayload({ name, amount, frequency, payment_method });
+    if (errors.length) return res.status(400).json({ success: false, message: errors.join(' ') });
+
+    // Pré-condição de negócio: crédito exige cartão desbloqueado e conta adimplente
+    const user = await usersRepo.findByCpf(cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    if (payment_method === 'credit' && (user.credit_card_is_blocked || user.account_status === 'inadimplente')) {
+        return res.status(403).json({ success: false, message: 'Cartão bloqueado ou conta inadimplente.' });
+    }
+
+    const subscription = await subscriptionsRepo.create({ cpf, name, amount, frequency, payment_method });
+    auditLog(req, 'subscription_create', 'info', { cpf, name, amount, frequency, payment_method });
+    res.json({ success: true, message: 'Assinatura criada com sucesso.', subscription });
+}));
+
+// Cancelar assinatura (posse do recurso verificada no repo).
+apiRouter.delete('/subscriptions/:cpf/:id', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf, id } = req.params;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    const result = await subscriptionsRepo.cancel({ id, cpf });
+    if (!result.cancelled) {
+        return res.status(result.notFound ? 404 : 403).json({ success: false, message: result.notFound ? 'Assinatura não encontrada.' : 'Acesso negado.' });
+    }
+    auditLog(req, 'subscription_cancel', 'warn', { cpf, id });
+    res.json({ success: true, message: 'Assinatura cancelada.' });
+}));
+
+// ─── Admin: simulação de transações em massa ────────────────────────────────
+const SIMULATE_MASS_CAP = 200;
+apiRouter.post('/admin/transactions/simulate-mass', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { esc } = repoContext;
+    const { targetCpf, count } = req.body || {};
+    if (!targetCpf || String(targetCpf).length !== 11) {
+        return res.status(400).json({ success: false, message: 'targetCpf (11 dígitos) é obrigatório.' });
+    }
+    const n = Math.min(Math.max(parseInt(count || 5, 10) || 5, 1), SIMULATE_MASS_CAP);
+
+    const user = await usersRepo.findByCpf(targetCpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuário alvo não encontrado.' });
+
+    const merchants = ['Volt Market', 'Gamer Store', 'Pet Volt', 'Streaming Plus', 'App Store'];
+    const created = [];
+    for (let i = 0; i < n; i++) {
+        const amount = Math.round((Math.random() * 190 + 10) * 100) / 100;
+        const id = databricksService.generateUUID();
+        const desc = `[SIM] ${merchants[i % merchants.length]}`;
+        await databricksService.executeQuery(`
+            INSERT INTO ${databricksService.fq('transactions')}
+            (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+            VALUES (${esc(id)}, ${esc(targetCpf)}, 'SHOP_CREDIT', ${esc((-amount).toFixed(2))}, ${esc(desc)}, NULL, NULL, NULL, ${esc(new Date().toISOString())})
+        `);
+        created.push({ id, amount, description: desc });
+    }
+    auditLog(req, 'admin.simulate-mass', 'warn', { targetCpf, count: created.length });
+    res.json({ success: true, message: `${created.length} transações simuladas para ${targetCpf}.`, transactions: created });
+}));
+
+// ─── Cancelamento/estorno de transações (débito e crédito) ─────────────────
+// Regra: crédito cuja fatura de origem já está FECHADA gera credit voucher
+// (não altera a fatura fechada); crédito ainda na fatura ABERTA e débito são
+// estornados diretamente (fatura/limite ou saldo). Sem janela de tempo — o
+// cancelamento é sempre permitido, mas nunca duas vezes na mesma transação.
+apiRouter.post('/transactions/:cpf/:id/cancel', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
+    const { cpf, id } = req.params;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+
+    const { esc } = repoContext;
+    const transaction = await transactionsRepo.findById(id);
+    if (!transaction || transaction.cpf !== cpf) {
+        return res.status(404).json({ success: false, message: 'Transação não encontrada.' });
+    }
+
+    // Compras parceladas têm plano próprio (installment_plans); cancelar a
+    // transação principal aqui deixaria o parcelamento cobrando um valor que
+    // já não existe mais — bloqueado nesta rota.
+    const activePlan = await databricksService.executeQuery(`
+        SELECT id FROM ${databricksService.fq('installment_plans')}
+        WHERE purchase_tx_id = ${esc(id)} AND status = 'ACTIVE'
+        LIMIT 1
+    `);
+    if (activePlan.length > 0) {
+        return res.status(400).json({ success: false, message: 'Compra parcelada não pode ser cancelada por esta rota. Cancele o parcelamento separadamente.' });
+    }
+
+    const closedInvoices = await transactionsRepo.findClosedInvoicesForCpf(cpf);
+    const plan = transactionReversal.computeReversalPlan({ transaction, closedInvoices });
+
+    if (!plan.ok) {
+        const statusByReason = { 'ja-cancelada': 409, 'tipo-nao-reversivel': 400 };
+        return res.status(statusByReason[plan.reason] || 400).json({ success: false, message: `Cancelamento não permitido: ${plan.reason}.` });
+    }
+
+    await transactionsRepo.markCancelled(id);
+
+    const reversalId = databricksService.generateUUID();
+    const nowIso = new Date().toISOString();
+    let voucher = null;
+
+    if (plan.kind === 'debit_refund') {
+        const user = await usersRepo.findByCpf(cpf);
+        const newBalance = parseFloat(user.balance || 0) + plan.amount;
+        await usersRepo.updateBalance(cpf, newBalance.toFixed(2));
+        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_DEBITO', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: id });
+    } else if (plan.kind === 'invoice_credit') {
+        await usersRepo.restoreAvailableLimit(cpf, plan.amount);
+        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_FATURA', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: id });
+    } else {
+        // voucher
+        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_VOUCHER', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: id });
+        voucher = await vouchersRepo.create({ cpf, amount: plan.amount, sourceTransactionId: id, sourceInvoiceId: plan.closedInvoiceId, description: plan.description });
+    }
+
+    auditLog(req, 'transaction_cancel', 'warn', { cpf, id, kind: plan.kind, amount: plan.amount });
+    res.json({
+        success: true,
+        message: 'Transação cancelada com sucesso.',
+        reversal: { id: reversalId, kind: plan.kind, amount: plan.amount, description: plan.description },
+        voucher: voucher || undefined,
+    });
+}));
+
+// Listar credit vouchers do usuário (ownership check — dono do recurso ou admin).
+apiRouter.get('/vouchers/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
+    const { cpf } = req.params;
+    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    }
+    const vouchers = await vouchersRepo.listByCpf(cpf);
+    res.json({ success: true, vouchers });
+}));
 
 app.use('/api', apiRouter);
 app.use('/api/v1', apiRouter);
