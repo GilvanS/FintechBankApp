@@ -254,6 +254,173 @@ components:
               amount:
                 type: number
 
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "uuid-xxxx"
+        cpf:
+          type: string
+          example: "11111111111"
+        name:
+          type: string
+          example: "Netflix"
+        amount:
+          type: number
+          format: float
+          example: 55.90
+        frequency:
+          type: string
+          enum: [monthly, yearly]
+          example: "monthly"
+        payment_method:
+          type: string
+          enum: [debit, credit]
+          example: "debit"
+        status:
+          type: string
+          enum: [active, cancelled]
+          example: "active"
+        next_billing_date:
+          type: string
+          format: date-time
+        last_billing_date:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SubscriptionRequest:
+      type: object
+      required: [name, amount, frequency, payment_method, pin]
+      properties:
+        name:
+          type: string
+          example: "Netflix"
+        amount:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 55.90
+        frequency:
+          type: string
+          enum: [monthly, yearly]
+          example: "monthly"
+        payment_method:
+          type: string
+          enum: [debit, credit]
+          example: "debit"
+        pin:
+          type: string
+          description: PIN de 4 dígitos (autorização financeira)
+          example: "9898"
+
+    SimulateMassRequest:
+      type: object
+      required: [targetCpf]
+      properties:
+        targetCpf:
+          type: string
+          pattern: '^[0-9]{11}$'
+          example: "11111111111"
+        count:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 5
+          description: Quantidade de transações a simular (máx. 200)
+          example: 3
+
+    SimulateMassResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "3 transações simuladas para 11111111111."
+        transactions:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              amount: { type: number, format: float }
+              description: { type: string }
+
+    TransactionCancelRequest:
+      type: object
+      required: [pin]
+      properties:
+        pin:
+          type: string
+          description: PIN de 4 dígitos (autorização financeira)
+          example: "9898"
+
+    TransactionCancelResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Transação cancelada com sucesso."
+        reversal:
+          type: object
+          properties:
+            id: { type: string }
+            kind:
+              type: string
+              enum: [invoice_credit, voucher, debit_refund]
+              description: |
+                invoice_credit: crédito lançado na fatura ainda aberta (fatura de origem não fechou).
+                voucher: fatura de origem já fechada — gera credit voucher em vez de alterar a fatura.
+                debit_refund: valor devolvido ao saldo da conta.
+            amount: { type: number, format: float }
+            description: { type: string }
+        voucher:
+          $ref: '#/components/schemas/CreditVoucher'
+
+    CreditVoucher:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "uuid-xxxx"
+        cpf:
+          type: string
+          example: "11111111111"
+        amount:
+          type: number
+          format: float
+          example: 120.00
+        status:
+          type: string
+          enum: [active, used, expired]
+          example: "active"
+        source_transaction_id:
+          type: string
+        source_invoice_id:
+          type: string
+          nullable: true
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        used_at:
+          type: string
+          format: date-time
+          nullable: true
+
 paths:
   /health:
     get:
@@ -994,6 +1161,224 @@ paths:
                       transactions: { type: array, items: { type: object } }
         '400':
           description: Formato ou dados inválidos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /subscriptions/{cpf}:
+    get:
+      tags: [Financeiro]
+      summary: Listar assinaturas (cobrança recorrente)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+      responses:
+        '200':
+          description: Lista de assinaturas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  subscriptions:
+                    type: array
+                    items: { $ref: '#/components/schemas/Subscription' }
+        '403':
+          description: Acesso negado (CPF de outro usuário sem ser admin)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    post:
+      tags: [Financeiro]
+      summary: Criar assinatura (cobrança recorrente mensal/anual, débito/crédito)
+      description: |
+        Requer PIN (autorização financeira). Valida bloqueio de cartão/conta
+        inadimplente quando payment_method=credit.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubscriptionRequest' }
+      responses:
+        '200':
+          description: Assinatura criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string }
+                  subscription: { $ref: '#/components/schemas/Subscription' }
+        '400':
+          description: Payload inválido (frequência/forma de pagamento fora da whitelist, valor <= 0)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Acesso negado, ou cartão bloqueado/conta inadimplente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /subscriptions/{cpf}/{id}:
+    delete:
+      tags: [Financeiro]
+      summary: Cancelar assinatura
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Assinatura cancelada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '404':
+          description: Assinatura não encontrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Acesso negado (assinatura não pertence ao CPF)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /admin/transactions/simulate-mass:
+    post:
+      tags: [Administração]
+      summary: Simular transações em massa para um usuário (Admin)
+      description: |
+        Cria N transações SHOP_CREDIT fictícias (prefixo "[SIM]") para testes.
+        Limitado a 200 por chamada. Gera log de auditoria.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SimulateMassRequest' }
+      responses:
+        '200':
+          description: Transações simuladas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimulateMassResponse' }
+        '400':
+          description: targetCpf ausente ou inválido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Usuário alvo não encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /transactions/{cpf}/{id}/cancel:
+    post:
+      tags: [Card]
+      summary: Cancelar/estornar transação (débito ou crédito)
+      description: |
+        Débito devolve o valor ao saldo. Crédito com fatura de origem ainda
+        aberta gera crédito direto na fatura atual; crédito com fatura de
+        origem já fechada gera credit voucher (a fatura fechada não é
+        alterada). Compras parceladas (installment_plans ativo) são bloqueadas
+        nesta rota. Sem janela de tempo, mas nunca duas vezes na mesma
+        transação. Requer PIN.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+          description: ID da transação original a cancelar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransactionCancelRequest' }
+      responses:
+        '200':
+          description: Transação cancelada/estornada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransactionCancelResponse' }
+        '400':
+          description: Tipo de transação não reversível, ou compra parcelada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Acesso negado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Transação não encontrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '409':
+          description: Transação já cancelada anteriormente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /vouchers/{cpf}:
+    get:
+      tags: [Card]
+      summary: Listar credit vouchers do usuário
+      description: |
+        Vouchers gerados ao cancelar uma compra a crédito cuja fatura de
+        origem já está fechada.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+      responses:
+        '200':
+          description: Lista de vouchers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  vouchers:
+                    type: array
+                    items: { $ref: '#/components/schemas/CreditVoucher' }
+        '403':
+          description: Acesso negado
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }

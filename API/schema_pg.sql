@@ -68,6 +68,22 @@ CREATE TABLE IF NOT EXISTS credit_vouchers (
     PRIMARY KEY (id)
 );
 
+-- Assinaturas (cobranca recorrente mensal/anual, debito/credito)
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id VARCHAR(255) NOT NULL,
+    cpf VARCHAR(11) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    amount DECIMAL(15,2) NOT NULL,
+    frequency VARCHAR(20) NOT NULL DEFAULT 'monthly',
+    payment_method VARCHAR(20) NOT NULL DEFAULT 'credit',
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    next_billing_date TIMESTAMP NOT NULL,
+    last_billing_date TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
 -- Tabela de contatos PIX
 CREATE TABLE IF NOT EXISTS pix_contacts (
     id VARCHAR(255) NOT NULL,
