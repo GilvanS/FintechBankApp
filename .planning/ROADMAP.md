@@ -32,11 +32,15 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The admin panel shows navigation across the four functional groups (Usuários, Cartões e Autorizações de Compra, Faturamento, Solicitações)
   4. Any state-changing action in the panel shows a confirmation prompt before executing and a success/error message after
   5. Rapidly double-clicking/double-tapping a mutating action executes it only once
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: yes
 
 Plans:
-- [ ] 01-01: TBD (refined during /gsd-plan-phase)
+- [ ] 01-01-PLAN.md — WEB: shared confirmation/mutation hook (useAdminAction + GlobalDialogContext danger variant), TDD
+- [ ] 01-02-PLAN.md — WEB: AdminPanel shell, role gate, 4-group nav, BottomNavBar + Dashboard wiring
+- [ ] 01-03-PLAN.md — MOBILE: port of 01-02 (AdminPanel shell, role gate, 4-group nav)
+- [ ] 01-04-PLAN.md — MOBILE: port of 01-01 (useAdminAction + GlobalDialogContext danger variant), TDD
+- [ ] 01-05-PLAN.md — Human-verify checkpoint: admin shell end-to-end on WEB + MOBILE
 
 ### Phase 2: Busca de Usuário e Controle de Acesso
 **Goal**: Admin can find any user by CPF and manage their access/identity (view details, block/unblock, reset password) from within the panel.
@@ -124,7 +128,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Admin Shell + Shared Action Infrastructure | 0/TBD | Not started | - |
+| 1. Admin Shell + Shared Action Infrastructure | 0/5 | Not started | - |
 | 2. Busca de Usuário e Controle de Acesso | 0/TBD | Not started | - |
 | 3. Ajustes Financeiros do Usuário | 0/TBD | Not started | - |
 | 4. Cartões e Autorizações de Compra | 0/TBD | Not started | - |
