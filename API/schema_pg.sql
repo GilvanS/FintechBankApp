@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     date TIMESTAMP NOT NULL,
     status VARCHAR(20),
     reversal_of VARCHAR(255),
+    subscription_id VARCHAR(255),
     PRIMARY KEY (id)
 );
 

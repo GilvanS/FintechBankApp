@@ -5202,7 +5202,7 @@ async function initializeDatabase() {
             // Colunas de cancelamento/estorno na tabela transactions
             const txCols = await databricksService.executeQuery(`
                 SELECT column_name FROM information_schema.columns
-                WHERE table_name = 'transactions' AND column_name IN ('status','reversal_of')
+                WHERE table_name = 'transactions' AND column_name IN ('status','reversal_of','subscription_id')
             `);
             const hasTxCols = txCols.map(c => c.column_name);
             if (!hasTxCols.includes('status')) {
@@ -5212,6 +5212,10 @@ async function initializeDatabase() {
             if (!hasTxCols.includes('reversal_of')) {
                 await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('transactions')} ADD COLUMN reversal_of VARCHAR(255)`);
                 console.log('✅ Coluna reversal_of adicionada em transactions.');
+            }
+            if (!hasTxCols.includes('subscription_id')) {
+                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('transactions')} ADD COLUMN subscription_id VARCHAR(255)`);
+                console.log('✅ Coluna subscription_id adicionada em transactions.');
             }
 
             // Tabela de credit vouchers (estorno de compra a crédito cuja fatura de
@@ -5423,8 +5427,8 @@ async function chargeSubscription(sub) {
         if (balance < amount) return { ok: false, reason: 'saldo-insuficiente' };
         await databricksService.executeQuery(`
             INSERT INTO ${databricksService.fq('transactions')}
-            (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-            VALUES (${esc(txId)}, ${esc(sub.cpf)}, 'PAYMENT', ${esc((-amount).toFixed(2))}, ${esc(`Assinatura: ${sub.name}`)}, NULL, NULL, NULL, ${esc(nowIso)})
+            (id, cpf, type, amount, description, from_user, to_user, to_key, date, subscription_id)
+            VALUES (${esc(txId)}, ${esc(sub.cpf)}, 'PAYMENT', ${esc((-amount).toFixed(2))}, ${esc(`Assinatura: ${sub.name}`)}, NULL, NULL, NULL, ${esc(nowIso)}, ${esc(sub.id)})
         `);
         await usersRepo.updateBalance(sub.cpf, (balance - amount).toFixed(2));
         return { ok: true };
@@ -5436,8 +5440,8 @@ async function chargeSubscription(sub) {
     if (available < amount) return { ok: false, reason: 'limite-insuficiente' };
     await databricksService.executeQuery(`
         INSERT INTO ${databricksService.fq('transactions')}
-        (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-        VALUES (${esc(txId)}, ${esc(sub.cpf)}, 'SHOP_CREDIT', ${esc((-amount).toFixed(2))}, ${esc(`Assinatura: ${sub.name}`)}, NULL, NULL, NULL, ${esc(nowIso)})
+        (id, cpf, type, amount, description, from_user, to_user, to_key, date, subscription_id)
+        VALUES (${esc(txId)}, ${esc(sub.cpf)}, 'SHOP_CREDIT', ${esc((-amount).toFixed(2))}, ${esc(`Assinatura: ${sub.name}`)}, NULL, NULL, NULL, ${esc(nowIso)}, ${esc(sub.id)})
     `);
     await databricksService.executeQuery(`
         UPDATE ${databricksService.fq('users')}
@@ -5502,8 +5506,11 @@ apiRouter.post('/subscriptions/:cpf', bearerAuth(), pinGuard('pin'), asyncHandle
     res.json({ success: true, message: 'Assinatura criada com sucesso.', subscription });
 }));
 
-// Cancelar assinatura (posse do recurso verificada no repo).
-apiRouter.delete('/subscriptions/:cpf/:id', bearerAuth(), asyncHandler(async (req, res) => {
+// Cancelar assinatura (posse do recurso verificada no repo). Além de parar as
+// cobranças futuras, estorna a última cobrança já feita (débito no saldo,
+// crédito na fatura aberta, ou credit voucher se a fatura já fechou) — usa a
+// mesma lógica de applyTransactionCancellation da rota de estorno avulso.
+apiRouter.delete('/subscriptions/:cpf/:id', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
     const { cpf, id } = req.params;
     if (req.user.cpf !== cpf && req.user.role !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
@@ -5512,8 +5519,21 @@ apiRouter.delete('/subscriptions/:cpf/:id', bearerAuth(), asyncHandler(async (re
     if (!result.cancelled) {
         return res.status(result.notFound ? 404 : 403).json({ success: false, message: result.notFound ? 'Assinatura não encontrada.' : 'Acesso negado.' });
     }
-    auditLog(req, 'subscription_cancel', 'warn', { cpf, id });
-    res.json({ success: true, message: 'Assinatura cancelada.' });
+
+    let reversal, voucher;
+    const lastCharge = await transactionsRepo.findLastChargeBySubscription(id);
+    if (lastCharge) {
+        const chargeResult = await applyTransactionCancellation({ cpf, transaction: lastCharge });
+        if (chargeResult.applied) {
+            reversal = chargeResult.reversal;
+            voucher = chargeResult.voucher;
+        }
+        // Se não aplicável (ex.: já estornada por outra via), o cancelamento da
+        // assinatura ainda é concluído normalmente — só não há estorno extra.
+    }
+
+    auditLog(req, 'subscription_cancel', 'warn', { cpf, id, reversedCharge: !!reversal });
+    res.json({ success: true, message: 'Assinatura cancelada.', reversal, voucher });
 }));
 
 // ─── Admin: simulação de transações em massa ────────────────────────────────
@@ -5551,6 +5571,36 @@ apiRouter.post('/admin/transactions/simulate-mass', bearerAuth(), authenticateAd
 // (não altera a fatura fechada); crédito ainda na fatura ABERTA e débito são
 // estornados diretamente (fatura/limite ou saldo). Sem janela de tempo — o
 // cancelamento é sempre permitido, mas nunca duas vezes na mesma transação.
+// Compartilhada pela rota abaixo e pelo cancelamento de assinatura (que
+// também estorna a última cobrança já feita).
+async function applyTransactionCancellation({ cpf, transaction }) {
+    const closedInvoices = await transactionsRepo.findClosedInvoicesForCpf(cpf);
+    const plan = transactionReversal.computeReversalPlan({ transaction, closedInvoices });
+    if (!plan.ok) return { applied: false, reason: plan.reason };
+
+    await transactionsRepo.markCancelled(transaction.id);
+
+    const reversalId = databricksService.generateUUID();
+    const nowIso = new Date().toISOString();
+    let voucher = null;
+
+    if (plan.kind === 'debit_refund') {
+        const user = await usersRepo.findByCpf(cpf);
+        const newBalance = parseFloat(user.balance || 0) + plan.amount;
+        await usersRepo.updateBalance(cpf, newBalance.toFixed(2));
+        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_DEBITO', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: transaction.id });
+    } else if (plan.kind === 'invoice_credit') {
+        await usersRepo.restoreAvailableLimit(cpf, plan.amount);
+        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_FATURA', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: transaction.id });
+    } else {
+        // voucher
+        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_VOUCHER', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: transaction.id });
+        voucher = await vouchersRepo.create({ cpf, amount: plan.amount, sourceTransactionId: transaction.id, sourceInvoiceId: plan.closedInvoiceId, description: plan.description });
+    }
+
+    return { applied: true, reversal: { id: reversalId, kind: plan.kind, amount: plan.amount, description: plan.description }, voucher };
+}
+
 apiRouter.post('/transactions/:cpf/:id/cancel', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
     const { cpf, id } = req.params;
     if (req.user.cpf !== cpf && req.user.role !== 'admin') {
@@ -5575,40 +5625,18 @@ apiRouter.post('/transactions/:cpf/:id/cancel', bearerAuth(), pinGuard('pin'), a
         return res.status(400).json({ success: false, message: 'Compra parcelada não pode ser cancelada por esta rota. Cancele o parcelamento separadamente.' });
     }
 
-    const closedInvoices = await transactionsRepo.findClosedInvoicesForCpf(cpf);
-    const plan = transactionReversal.computeReversalPlan({ transaction, closedInvoices });
-
-    if (!plan.ok) {
+    const result = await applyTransactionCancellation({ cpf, transaction });
+    if (!result.applied) {
         const statusByReason = { 'ja-cancelada': 409, 'tipo-nao-reversivel': 400 };
-        return res.status(statusByReason[plan.reason] || 400).json({ success: false, message: `Cancelamento não permitido: ${plan.reason}.` });
+        return res.status(statusByReason[result.reason] || 400).json({ success: false, message: `Cancelamento não permitido: ${result.reason}.` });
     }
 
-    await transactionsRepo.markCancelled(id);
-
-    const reversalId = databricksService.generateUUID();
-    const nowIso = new Date().toISOString();
-    let voucher = null;
-
-    if (plan.kind === 'debit_refund') {
-        const user = await usersRepo.findByCpf(cpf);
-        const newBalance = parseFloat(user.balance || 0) + plan.amount;
-        await usersRepo.updateBalance(cpf, newBalance.toFixed(2));
-        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_DEBITO', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: id });
-    } else if (plan.kind === 'invoice_credit') {
-        await usersRepo.restoreAvailableLimit(cpf, plan.amount);
-        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_FATURA', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: id });
-    } else {
-        // voucher
-        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_VOUCHER', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: id });
-        voucher = await vouchersRepo.create({ cpf, amount: plan.amount, sourceTransactionId: id, sourceInvoiceId: plan.closedInvoiceId, description: plan.description });
-    }
-
-    auditLog(req, 'transaction_cancel', 'warn', { cpf, id, kind: plan.kind, amount: plan.amount });
+    auditLog(req, 'transaction_cancel', 'warn', { cpf, id, kind: result.reversal.kind, amount: result.reversal.amount });
     res.json({
         success: true,
         message: 'Transação cancelada com sucesso.',
-        reversal: { id: reversalId, kind: plan.kind, amount: plan.amount, description: plan.description },
-        voucher: voucher || undefined,
+        reversal: result.reversal,
+        voucher: result.voucher || undefined,
     });
 }));
 

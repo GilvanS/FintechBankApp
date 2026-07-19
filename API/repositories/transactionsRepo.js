@@ -24,6 +24,20 @@ async function findClosedInvoicesForCpf(cpf) {
     `);
 }
 
+// Última cobrança (não cancelada) gerada por uma assinatura — usada ao
+// cancelar a assinatura para também estornar o que já foi cobrado.
+async function findLastChargeBySubscription(subscriptionId) {
+    const db = getDb();
+    const rows = await db.executeQuery(`
+        SELECT * FROM ${db.fq('transactions')}
+        WHERE subscription_id = ${esc(subscriptionId)}
+          AND (status IS NULL OR status <> 'cancelled')
+        ORDER BY date DESC
+        LIMIT 1
+    `);
+    return rows[0] || null;
+}
+
 async function markCancelled(id) {
     const db = getDb();
     await db.executeQuery(`
@@ -42,4 +56,4 @@ async function insertReversalTransaction({ id, cpf, type, amount, description, d
     `);
 }
 
-module.exports = { findById, findClosedInvoicesForCpf, markCancelled, insertReversalTransaction };
+module.exports = { findById, findClosedInvoicesForCpf, findLastChargeBySubscription, markCancelled, insertReversalTransaction };

@@ -13,7 +13,7 @@ const DatabaseFactory = require('../services/database/DatabaseFactory');
 
     const txCols = await db.executeQuery(`
         SELECT column_name FROM information_schema.columns
-        WHERE table_name = 'transactions' AND column_name IN ('status','reversal_of')
+        WHERE table_name = 'transactions' AND column_name IN ('status','reversal_of','subscription_id')
     `);
     const hasTxCols = txCols.map((c) => c.column_name);
     if (!hasTxCols.includes('status')) {
@@ -27,6 +27,12 @@ const DatabaseFactory = require('../services/database/DatabaseFactory');
         console.log('OK: coluna transactions.reversal_of adicionada.');
     } else {
         console.log('OK: transactions.reversal_of já existia.');
+    }
+    if (!hasTxCols.includes('subscription_id')) {
+        await db.executeQuery(`ALTER TABLE ${db.fq('transactions')} ADD COLUMN subscription_id VARCHAR(255)`);
+        console.log('OK: coluna transactions.subscription_id adicionada.');
+    } else {
+        console.log('OK: transactions.subscription_id já existia.');
     }
 
     await db.executeQuery(`

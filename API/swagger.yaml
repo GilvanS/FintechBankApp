@@ -1236,7 +1236,13 @@ paths:
   /subscriptions/{cpf}/{id}:
     delete:
       tags: [Financeiro]
-      summary: Cancelar assinatura
+      summary: Cancelar assinatura (estorna a última cobrança já feita)
+      description: |
+        Além de parar as cobranças futuras, estorna a última cobrança já feita
+        para essa assinatura: débito volta ao saldo; crédito volta como crédito
+        direto na fatura se ainda aberta, ou vira credit voucher se a fatura de
+        origem já fechou. Se a assinatura nunca foi cobrada, cancela sem
+        estorno. Requer PIN.
       security:
         - bearerAuth: []
       parameters:
@@ -1248,12 +1254,31 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransactionCancelRequest' }
       responses:
         '200':
-          description: Assinatura cancelada
+          description: Assinatura cancelada (com estorno, se havia cobrança anterior)
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SuccessResponse' }
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "Assinatura cancelada." }
+                  reversal:
+                    type: object
+                    nullable: true
+                    properties:
+                      id: { type: string }
+                      kind: { type: string, enum: [invoice_credit, voucher, debit_refund] }
+                      amount: { type: number, format: float }
+                      description: { type: string }
+                  voucher:
+                    $ref: '#/components/schemas/CreditVoucher'
         '404':
           description: Assinatura não encontrada
           content:
