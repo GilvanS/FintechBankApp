@@ -136,7 +136,10 @@ const Dashboard: React.FC = () => {
     const [parcelDetails, setParcelDetails] = useState<{ amount: number, installments: number, installmentValue?: number, totalAmount?: number, iof?: number, juros?: number } | null>(null);
     const [invoicePaymentDetails, setInvoicePaymentDetails] = useState<any>(null);
     const [installmentReceiptDetails, setInstallmentReceiptDetails] = useState<InstallmentReceiptDetails | null>(null);
-    
+    // Tela de onde o fluxo de parcelamento foi iniciado — para o "voltar" retornar à
+    // mesma tela de Fatura (ex: currentInvoice amarela) em vez de cair no closedInvoice.
+    const [parcelEntryView, setParcelEntryView] = useState<View>('currentInvoice');
+
     useEffect(() => {
         if (currentView === 'cards' && user?.creditCard.isBlocked) {
             setIsBlockedModalOpen(true);
@@ -482,6 +485,7 @@ const Dashboard: React.FC = () => {
     };
     
     const handleParcelInvoice = () => {
+        setParcelEntryView(currentView);
         handleNavigate('installmentOptions');
     };
     
@@ -670,7 +674,7 @@ const Dashboard: React.FC = () => {
                 return <ClosedInvoice user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
             case 'installmentOptions':
                 if (!user) return null;
-                return <InstallmentOptions user={user} onBack={() => handleNavigate('closedInvoice')} onSelectOption={handleSelectInstallmentOption} />;
+                return <InstallmentOptions user={user} onBack={() => handleNavigate(parcelEntryView)} onSelectOption={handleSelectInstallmentOption} />;
             case 'currentInvoice':
                 if (!user) return null;
                 return (
