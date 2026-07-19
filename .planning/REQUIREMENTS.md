@@ -76,22 +76,39 @@ Deferred — não fazem parte desta v1, mas ficaram registrados pela pesquisa.
 
 ## Traceability
 
-Preenchido pelo roadmapper na próxima etapa.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SHELL-01..06 | TBD | Pending |
-| USERS-01..07 | TBD | Pending |
-| CARDS-01..05 | TBD | Pending |
-| BILLING-01..04 | TBD | Pending |
-| REQUESTS-01..02 | TBD | Pending |
-| SECURITY-01 | TBD | Pending |
+| SHELL-01 | Phase 1 | Pending |
+| SHELL-02 | Phase 1 | Pending |
+| SHELL-03 | Phase 1 | Pending |
+| SHELL-04 | Phase 1 | Pending |
+| SHELL-05 | Phase 1 | Pending |
+| SHELL-06 | Phase 1 | Pending |
+| USERS-01 | Phase 2 | Pending |
+| USERS-02 | Phase 2 | Pending |
+| USERS-05 | Phase 2 | Pending |
+| USERS-07 | Phase 2 | Pending |
+| USERS-03 | Phase 3 | Pending |
+| USERS-04 | Phase 3 | Pending |
+| USERS-06 | Phase 3 | Pending |
+| CARDS-01 | Phase 4 | Pending |
+| CARDS-02 | Phase 4 | Pending |
+| CARDS-03 | Phase 4 | Pending |
+| CARDS-04 | Phase 4 | Pending |
+| CARDS-05 | Phase 4 | Pending |
+| SECURITY-01 | Phase 4 | Pending |
+| BILLING-01 | Phase 5 | Pending |
+| BILLING-02 | Phase 5 | Pending |
+| BILLING-03 | Phase 5 | Pending |
+| BILLING-04 | Phase 5 | Pending |
+| REQUESTS-01 | Phase 6 | Pending |
+| REQUESTS-02 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 25 total
-- Mapped to phases: 0 (pendente roadmap)
-- Unmapped: 25 ⚠️
+- Mapped to phases: 25/25 ✓
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-19*
-*Last updated: 2026-07-19 after initialization*
+*Last updated: 2026-07-19 after roadmap creation — 25/25 v1 requirements mapped across 6 phases (see .planning/ROADMAP.md)*
