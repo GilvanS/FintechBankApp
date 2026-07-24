@@ -27,7 +27,7 @@ export interface GeneratedMassData {
         state: string;
     };
     creditCard: {
-        brand: 'MASTERCARD' | 'VISA' | 'ELO' | 'AMEX';
+        brand: 'MASTERCARD' | 'VISA' | 'ELO' | 'AMEX' | 'HIPERCARD';
         cardNumber: string;
         cardNumberMasked: string;
         cvv: string;
@@ -290,29 +290,14 @@ export function generateRandomMassData(selectedCountry?: string, forceAgeConditi
     const rawCpf = generateValidCPF();
     const cpf = formatCpfDisplay(rawCpf);
 
-    // Calcular idade e data de nascimento
-    let age = Math.floor(Math.random() * 52) + 18; // 18 a 70 por padrão
-    if (forceAgeCondition === 'under18') {
-        age = Math.floor(Math.random() * 5) + 12; // 12 a 16 anos
-    } else if (forceAgeCondition === 'over80') {
-        age = Math.floor(Math.random() * 10) + 81; // 81 a 90 anos
-    }
+    // Idade sempre entre 18 e 80 (regra de tutor removida)
+    const age = Math.floor(Math.random() * 63) + 18; // 18 a 80
 
     const currentYear = new Date().getFullYear();
     const birthYear = currentYear - age;
     const birthMonth = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
     const birthDay = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
     const birthDate = `${birthYear}-${birthMonth}-${birthDay}`;
-
-    // Governança de Tutor
-    const requiresTutor = age < 18 || age > 80;
-    const tutorObj = requiresTutor
-        ? {
-            fullName: dataset.tutorNames[Math.floor(Math.random() * dataset.tutorNames.length)],
-            cpf: formatCpfDisplay(generateValidCPF()),
-            relationship: age < 18 ? 'Pai / Responsável Legal' : 'Tutor Curador Cadastrado'
-        }
-        : undefined;
 
     // Endereço
     const street = dataset.streets[Math.floor(Math.random() * dataset.streets.length)];
@@ -323,7 +308,7 @@ export function generateRandomMassData(selectedCountry?: string, forceAgeConditi
     const cep = dataset.ceps[Math.floor(Math.random() * dataset.ceps.length)];
 
     // Cartão Gerado com BIN e Algoritmo de Luhn Específico por Bandeira
-    const brands: ('MASTERCARD' | 'VISA' | 'ELO' | 'AMEX')[] = ['MASTERCARD', 'VISA', 'ELO', 'AMEX'];
+    const brands: ('MASTERCARD' | 'VISA' | 'ELO' | 'AMEX' | 'HIPERCARD')[] = ['MASTERCARD', 'VISA', 'ELO', 'AMEX', 'HIPERCARD'];
     const brand = brands[Math.floor(Math.random() * brands.length)];
     const dueDays = [5, 10, 15, 20, 25];
     const dueDay = dueDays[Math.floor(Math.random() * dueDays.length)];
@@ -338,13 +323,21 @@ export function generateRandomMassData(selectedCountry?: string, forceAgeConditi
     const limit = Math.round((Math.random() * 20000 + 2000) * 100) / 100;
     const dailyPixLimit = Math.round((Math.random() * 5000 + 1000) * 100) / 100;
 
+    // Validade randômica (MM/AA, 3–6 anos no futuro)
+    const expMonth = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
+    const expYear = String((currentYear + 3 + Math.floor(Math.random() * 4)) % 100).padStart(2, '0');
+    const expirationDate = `${expMonth}/${expYear}`;
+
+    // Estado randômico: apenas Adimplente (EM_DIA) ou Inadimplente (cenário padrão 15d)
+    const overdueState: OverdueState = Math.random() > 0.5 ? 'EM_DIA' : 'EM_ATRASO_15D';
+
     return {
         fullName: sanitizeToLatinUtf8(fullName),
         cpf,
         birthDate,
         age,
-        hasTutor: requiresTutor,
-        tutor: tutorObj,
+        hasTutor: false,
+        tutor: undefined,
         countryOrigin: country,
         address: {
             cep,
@@ -359,7 +352,7 @@ export function generateRandomMassData(selectedCountry?: string, forceAgeConditi
             cardNumber: cardGen.formatted,
             cardNumberMasked,
             cvv: cardGen.cvv,
-            expirationDate: '08/30',
+            expirationDate,
             dueDay,
             cardType,
             activationState: Math.random() > 0.5 ? 'ACTIVATED' : 'AWAITING_ACTIVATION',
@@ -367,6 +360,6 @@ export function generateRandomMassData(selectedCountry?: string, forceAgeConditi
         },
         balance,
         dailyPixLimit,
-        overdueState: 'EM_DIA'
+        overdueState
     };
 }

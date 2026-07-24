@@ -319,7 +319,9 @@ async function createMassUser(payload) {
             expiryFull = `${expM}/20${expY}`;
         }
         const cardType = (cardData.cardType || 'PHYSICAL').toLowerCase();
-        const isActivated = cardData.activationState === 'AWAITING_ACTIVATION' ? false : true;
+        // Ativação vem do payload (cardActivation) ou do objeto creditCard; padrão: ativado.
+        const activationState = payload.cardActivation || cardData.activationState;
+        const isActivated = activationState === 'AWAITING_ACTIVATION' ? false : true;
 
         // Se for PHYSICAL ou BOTH (ou padrão), grava cartão físico
         if (cardType === 'physical' || cardType === 'both' || cardType === 'fisico') {
@@ -379,16 +381,22 @@ async function createMassUser(payload) {
         console.warn('⚠️ Erro ao gerar chaves PIX da massa:', pixErr.message);
     }
 
-    // Geração de compras + fatura (aberta/fechada) coerente com o estado da massa.
-    try {
-        await seedMassBilling(db, cleanCpf, {
-            accountStatus: payload.accountStatus || 'adimplente',
-            daysOverdue: Number(payload.daysOverdue || 0),
-            overdueAmount: Number(payload.overdueAmount || 0),
-            creditLimit: Number(payload.creditLimit || 5000),
-        });
-    } catch (billingErr) {
-        console.warn('⚠️ Erro ao gerar faturamento da massa:', billingErr.message);
+    // Geração de compras + fatura SÓ quando o cartão está ativado (habilitado).
+    // Se o cartão for "AGUARDANDO ATIVAÇÃO", nenhuma compra/fatura é gerada.
+    const cardHabilitado = payload.cardActivation !== 'AWAITING_ACTIVATION';
+    if (cardHabilitado) {
+        try {
+            await seedMassBilling(db, cleanCpf, {
+                accountStatus: payload.accountStatus || 'adimplente',
+                daysOverdue: Number(payload.daysOverdue || 0),
+                overdueAmount: Number(payload.overdueAmount || 0),
+                creditLimit: Number(payload.creditLimit || 5000),
+            });
+        } catch (billingErr) {
+            console.warn('⚠️ Erro ao gerar faturamento da massa:', billingErr.message);
+        }
+    } else {
+        console.log(`[createMassUser] Cartão de ${cleanCpf} aguardando ativação — compras/fatura não geradas.`);
     }
 
     return { id, cpf: cleanCpf, fullName: payload.fullName };

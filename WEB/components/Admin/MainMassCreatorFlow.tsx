@@ -36,7 +36,6 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
     // Form State
     const [formData, setFormData] = useState<GeneratedMassData>(() => generateRandomMassData('Brasil'));
     const [isSaving, setIsSaving] = useState(false);
-    const [forceTutorAge, setForceTutorAge] = useState<'normal' | 'under18' | 'over80'>('normal');
 
     // Aesthetics Classes
     const cardClass = isMidnight
@@ -56,10 +55,11 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
         : 'border-2 border-black bg-white hover:bg-black/5 text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]';
 
     // Disparar Preenchimento Aleatório 🎲
-    const handleRandomFill = (country?: string, forceAge?: 'normal' | 'under18' | 'over80') => {
-        const random = generateRandomMassData(country || formData.countryOrigin, forceAge || forceTutorAge);
+    // Sem `country` → randomiza também o país. Com `country` (seletor) → gera para o país escolhido.
+    const handleRandomFill = (country?: string) => {
+        const random = generateRandomMassData(country);
         setFormData(random);
-        showToast(`🎲 Dados gerados com sucesso (${random.countryOrigin})!`, 'info');
+        showToast(`🎲 Dados gerados com sucesso (${random.countryOrigin})!`, 'success');
     };
 
     // Calcular idade quando muda a data de nascimento
@@ -69,15 +69,13 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
         const currentYear = new Date().getFullYear();
         const computedAge = Math.max(0, currentYear - birthYear);
 
-        const requiresTutor = computedAge < 18 || computedAge > 80;
+        // Regra de tutor removida — massas sempre sem tutor (faixa 18–80).
         setFormData((prev) => ({
             ...prev,
             birthDate: dateStr,
             age: computedAge,
-            hasTutor: requiresTutor,
-            tutor: requiresTutor
-                ? prev.tutor || { fullName: 'Maria Aparecida Santos (Responsavel)', cpf: '999.888.777-66', relationship: computedAge < 18 ? 'Pai / Responsavel' : 'Tutor Curador' }
-                : undefined
+            hasTutor: false,
+            tutor: undefined
         }));
     };
 
@@ -112,13 +110,14 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
                 overdueAmount: formData.overdueState === 'EM_DIA' ? 0 : OVERDUE_TIERS[formData.overdueState].amount,
                 birthDate: formData.birthDate,
                 age: formData.age,
-                hasTutor: formData.hasTutor,
-                tutor: formData.tutor,
+                hasTutor: false,
+                tutor: undefined,
                 address: formData.address,
                 countryOrigin: formData.countryOrigin,
                 cardBrand: formData.creditCard.brand,
                 dueDay: formData.creditCard.dueDay,
-                cardType: formData.creditCard.cardType
+                cardType: formData.creditCard.cardType,
+                cardActivation: formData.creditCard.activationState
             };
 
             const result = await adminCreateMassUser(payload);
@@ -319,31 +318,6 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
                             </div>
                         </div>
 
-                        {/* Botões de Toggle para Testar Trava de Tutor */}
-                        <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 flex flex-wrap gap-2 items-center text-xs">
-                            <span className="font-bold opacity-70">Atalho de Idade para Testes:</span>
-                            <button
-                                type="button"
-                                onClick={() => handleRandomFill(formData.countryOrigin, 'normal')}
-                                className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-600 dark:text-blue-300 font-bold hover:bg-blue-500/30"
-                            >
-                                🧑 Adulto (28a)
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handleRandomFill(formData.countryOrigin, 'under18')}
-                                className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-300 font-bold hover:bg-amber-500/30"
-                            >
-                                👶 Menor de 18 (14a)
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handleRandomFill(formData.countryOrigin, 'over80')}
-                                className="px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-600 dark:text-rose-300 font-bold hover:bg-rose-500/30"
-                            >
-                                👴 Maior de 80 (85a)
-                            </button>
-                        </div>
 
                         {/* CARD DE TUTOR LEGAL (Caso Idade < 18 ou > 80) */}
                         {formData.hasTutor && (
@@ -775,28 +749,21 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
                                     </div>
                                 </button>
 
-                                {(Object.keys(OVERDUE_TIERS) as Array<keyof typeof OVERDUE_TIERS>).map((tierKey) => {
-                                    const tier = OVERDUE_TIERS[tierKey];
-                                    const selected = formData.overdueState === tierKey;
-                                    return (
-                                        <button
-                                            key={tierKey}
-                                            type="button"
-                                            onClick={() => setFormData({ ...formData, overdueState: tierKey as OverdueState })}
-                                            className={`p-3.5 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
-                                                selected
-                                                    ? 'bg-rose-500/15 border-rose-500 ring-2 ring-rose-500/40 font-black'
-                                                    : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-rose-300'
-                                            }`}
-                                        >
-                                            <span className="text-xl">🔴</span>
-                                            <div className="text-left">
-                                                <p className="font-bold">Massa {tier.label}</p>
-                                                <p className="text-[10px] opacity-70">{tier.desc}</p>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, overdueState: 'EM_ATRASO_15D' })}
+                                    className={`p-3.5 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
+                                        formData.overdueState !== 'EM_DIA'
+                                            ? 'bg-rose-500/15 border-rose-500 ring-2 ring-rose-500/40 font-black'
+                                            : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-rose-300'
+                                    }`}
+                                >
+                                    <span className="text-xl">🔴</span>
+                                    <div className="text-left">
+                                        <p className="font-bold">Massa Inadimplente</p>
+                                        <p className="text-[10px] opacity-70">{OVERDUE_TIERS.EM_ATRASO_15D.desc}</p>
+                                    </div>
+                                </button>
                             </div>
                         </div>
 
