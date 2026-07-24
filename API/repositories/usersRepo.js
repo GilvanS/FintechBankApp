@@ -16,6 +16,30 @@ function splitAmount(total, parts) {
 }
 
 /**
+ * Cria chaves PIX para a massa (CPF + EMAIL), evitando duplicatas. PIX por chave
+ * é a funcionalidade central do app bancário — sem isso a tela "Minhas Chaves PIX"
+ * fica vazia e a massa não pode receber por chave EMAIL.
+ */
+async function seedMassPixKeys(db, cpf, email) {
+    const genId = () => (db.generateUUID ? db.generateUUID() : `pk-${cpf}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
+    const now = new Date().toISOString();
+    const keys = [{ type: 'CPF', key: cpf }];
+    if (email) keys.push({ type: 'EMAIL', key: String(email).toLowerCase().trim() });
+
+    for (const k of keys) {
+        const exists = await db.executeQuery(`
+            SELECT id FROM ${db.fq('pix_keys')} WHERE cpf=${esc(cpf)} AND type=${esc(k.type)} LIMIT 1
+        `);
+        if (!exists.length) {
+            await db.executeQuery(`
+                INSERT INTO ${db.fq('pix_keys')} (id, cpf, type, key, created_at)
+                VALUES (${esc(genId())}, ${esc(cpf)}, ${esc(k.type)}, ${esc(k.key)}, ${esc(now)})
+            `);
+        }
+    }
+}
+
+/**
  * Gera os dados de faturamento coerentes com o estado da massa recém-criada:
  *  - adimplente: compras a crédito no ciclo ATUAL (fatura aberta calculada on-the-fly)
  *  - inadimplente: compras no ciclo anterior + fatura FECHADA vencida com os 5 encargos
@@ -348,6 +372,13 @@ async function createMassUser(payload) {
         console.warn('⚠️ Erro ao registrar cartões na tabela fintech.cards:', cardErr.message);
     }
 
+    // Chaves PIX (CPF + EMAIL) — funcionalidade central do app bancário.
+    try {
+        await seedMassPixKeys(db, cleanCpf, payload.email);
+    } catch (pixErr) {
+        console.warn('⚠️ Erro ao gerar chaves PIX da massa:', pixErr.message);
+    }
+
     // Geração de compras + fatura (aberta/fechada) coerente com o estado da massa.
     try {
         await seedMassBilling(db, cleanCpf, {
@@ -363,4 +394,4 @@ async function createMassUser(payload) {
     return { id, cpf: cleanCpf, fullName: payload.fullName };
 }
 
-module.exports = { findByCpf, upsertSeed, updateBalance, restoreAvailableLimit, listUsers, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword, createMassUser };
+module.exports = { findByCpf, upsertSeed, updateBalance, restoreAvailableLimit, listUsers, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword, createMassUser, seedMassPixKeys, seedMassBilling };
