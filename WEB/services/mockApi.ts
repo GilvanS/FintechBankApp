@@ -28,9 +28,71 @@ const _saveStore = (store: AppStore) => {
     localStorage.setItem(STORE_KEY, JSON.stringify(store));
 };
 
+const _syncInstallmentCarryover = (creditCard: any) => {
+    if (!creditCard || !Array.isArray(creditCard.closedTransactions)) return;
+    if (!Array.isArray(creditCard.transactions)) creditCard.transactions = [];
+
+    creditCard.closedTransactions.forEach((closedTx: any) => {
+        let current = closedTx.currentInstallment;
+        let total = closedTx.totalInstallments;
+
+        if ((!current || !total) && closedTx.installments && typeof closedTx.installments === 'string') {
+            const match = closedTx.installments.match(/(\d+)\s*[\/de]+\s*(\d+)/i);
+            if (match) {
+                current = Number(match[1]);
+                total = Number(match[2]);
+            }
+        }
+
+        if (current && total && total > 1 && current < total) {
+            const nextNum = current + 1;
+            const nextInstallmentStr = `${nextNum}/${total}`;
+
+            const alreadyExists = creditCard.transactions.some((openTx: any) =>
+                openTx.merchant === closedTx.merchant &&
+                (openTx.installments === nextInstallmentStr || openTx.currentInstallment === nextNum)
+            );
+
+            if (!alreadyExists) {
+                const pastDate = (days: number): string => {
+                    const date = new Date();
+                    date.setDate(date.getDate() - days);
+                    return date.toISOString();
+                };
+
+                const totalAmount = closedTx.totalAmount || (closedTx.amount * total);
+
+                creditCard.transactions.unshift({
+                    id: `${closedTx.id}-next-${nextNum}`,
+                    date: pastDate(2),
+                    merchant: closedTx.merchant,
+                    amount: closedTx.amount,
+                    type: 'CREDIT',
+                    category: closedTx.category || 'shopping',
+                    installments: nextInstallmentStr,
+                    currentInstallment: nextNum,
+                    totalInstallments: total,
+                    totalAmount: totalAmount,
+                    cardNumber: closedTx.cardNumber || creditCard.number || '**** **** **** 1111',
+                    authorizationCode: closedTx.authorizationCode ? `${closedTx.authorizationCode}-${nextNum}` : `AUT-883920-${nextNum}`,
+                });
+            }
+        }
+    });
+
+    const calcCurrent = creditCard.transactions.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+    if (calcCurrent > 0) {
+        creditCard.currentInvoice = Math.round(calcCurrent * 100) / 100;
+    }
+};
+
 const _findUser = (cpf: string): User | undefined => {
     const store = _getStore();
-    return store.users.find(u => u.cpf === cpf);
+    const u = store.users.find(u => u.cpf === cpf);
+    if (u && u.creditCard) {
+        _syncInstallmentCarryover(u.creditCard);
+    }
+    return u;
 };
 
 const _addNotification = (cpf: string, message: string) => {
@@ -61,8 +123,40 @@ export const initializeMockUsers = async () => {
     MOCK_USERS.forEach(mockUser => {
         const userIndex = store.users.findIndex(u => u.cpf === mockUser.cpf);
         if (userIndex !== -1) {
-            // User exists, let's update it to ensure password and role are correct
-            store.users[userIndex] = { ...store.users[userIndex], ...mockUser };
+            // User exists, update password, role, and ensure creditCard transactions are synced
+            const currentCard = store.users[userIndex].creditCard || {};
+            store.users[userIndex] = {
+                ...store.users[userIndex],
+                ...mockUser,
+                creditCard: {
+                    ...mockUser.creditCard,
+                    ...currentCard,
+                    currentInvoice: currentCard.currentInvoice || mockUser.creditCard.currentInvoice,
+                    closedInvoice: currentCard.closedInvoice || mockUser.creditCard.closedInvoice,
+                    transactions: (() => {
+                        const existing = currentCard.transactions || [];
+                        const mockTxs = mockUser.creditCard.transactions || [];
+                        const merged = [...existing];
+                        mockTxs.forEach(mt => {
+                            if (!merged.some(e => e.id === mt.id || e.merchant === mt.merchant)) {
+                                merged.push(mt);
+                            }
+                        });
+                        return merged;
+                    })(),
+                    closedTransactions: (() => {
+                        const existing = currentCard.closedTransactions || [];
+                        const mockTxs = mockUser.creditCard.closedTransactions || [];
+                        const merged = [...existing];
+                        mockTxs.forEach(mt => {
+                            if (!merged.some(e => e.id === mt.id || e.merchant === mt.merchant)) {
+                                merged.push(mt);
+                            }
+                        });
+                        return merged;
+                    })(),
+                }
+            };
         } else {
             // User doesn't exist, add them
             store.users.push(JSON.parse(JSON.stringify(mockUser)));
@@ -594,10 +688,149 @@ export const adminGetUserByCpf = async (cpf: string): Promise<{ success: boolean
     await delay(500);
     const user = _findUser(cpf);
     if (user) {
-        return { success: true, message: 'Usuário encontrado.', user: JSON.parse(JSON.stringify(user)) };
+        const clonedUser = JSON.parse(JSON.stringify(user));
+        if (clonedUser.creditCard) {
+            if (!clonedUser.creditCard.currentInvoice || clonedUser.creditCard.currentInvoice === 0) {
+                clonedUser.creditCard.currentInvoice = 2365.05;
+            }
+            if (clonedUser.creditCard.closedInvoice > 0) {
+                const past7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+                if (!clonedUser.creditCard.invoiceDueDate || new Date(clonedUser.creditCard.invoiceDueDate).getTime() > Date.now()) {
+                    clonedUser.creditCard.invoiceDueDate = past7Days;
+                }
+                clonedUser.daysOverdue = clonedUser.daysOverdue || 7;
+            }
+        }
+        if (!clonedUser.cards || clonedUser.cards.length === 0) {
+            clonedUser.cards = [
+                {
+                    id: 'card-1111-phys',
+                    type: 'PHYSICAL',
+                    brand: 'MASTERCARD',
+                    name: 'Volt Black Physical',
+                    cardNumberMasked: '**** **** **** 1111',
+                    expirationDate: '08/30',
+                    isBlocked: clonedUser.creditCard?.isBlocked || false,
+                    limit: clonedUser.creditCard?.totalLimit || 5000,
+                    dueDay: 10,
+                },
+                {
+                    id: 'card-1111-virt',
+                    type: 'VIRTUAL',
+                    brand: 'VISA',
+                    name: 'Volt Digital Recurring',
+                    cardNumberMasked: '**** **** **** 8822',
+                    expirationDate: '12/28',
+                    isBlocked: false,
+                    limit: 2500,
+                    dueDay: 10,
+                }
+            ];
+        }
+        return { success: true, message: 'Usuário encontrado.', user: clonedUser };
     }
     return { success: false, message: 'Usuário não encontrado.' };
 };
+
+export interface AcquirerSimulatePayload {
+    cardNumber: string;
+    cvv: string;
+    expiry: string;
+    pin?: string;
+    amount: number;
+    type: 'CREDIT' | 'DEBIT' | 'SUBSCRIPTION';
+    installments?: number;
+    description?: string;
+    cpf?: string;
+    hasInterest?: boolean;
+}
+
+export const adminAcquirerSimulate = async (payload: AcquirerSimulatePayload): Promise<{ success: boolean; message: string }> => {
+    await delay(500);
+    const store = _getStore();
+    
+    // Procura o usuário pelo número do cartão (removendo espaços)
+    const cleanNumber = payload.cardNumber.replace(/\D/g, '');
+    let userIndex = store.users.findIndex((u: any) => {
+        const storedDigits = u.creditCard?.number?.replace(/\D/g, '');
+        if (!storedDigits) return false;
+        return cleanNumber.endsWith(storedDigits) || storedDigits.endsWith(cleanNumber);
+    });
+    
+    // Fallback: se o cartão não bater com ninguém no Mock, aplica no usuário pelo CPF se fornecido,
+    // ou no usuário "admin" / primeiro usuário.
+    if (userIndex === -1) {
+        if (payload.cpf) {
+            const cleanCpf = payload.cpf.replace(/\D/g, '');
+            userIndex = store.users.findIndex((u: any) => u.cpf === cleanCpf);
+        }
+        
+        if (userIndex === -1) {
+            userIndex = store.users.findIndex((u: any) => u.role === 'admin');
+            if (userIndex === -1 && store.users.length > 0) userIndex = 0;
+        }
+    }
+    
+    if (userIndex === -1) {
+        return { success: false, message: 'Cartão não encontrado ou dados inválidos (CVV/Validade).' };
+    }
+    
+    const user = store.users[userIndex];
+    
+    // Verifica limite se for crédito ou assinatura
+    if (payload.type === 'CREDIT' || payload.type === 'SUBSCRIPTION') {
+        const total = payload.amount;
+        if (user.creditCard.availableLimit < total) {
+            return { success: false, message: 'Compra Recusada: Limite indisponível.' };
+        }
+        
+        user.creditCard.availableLimit -= total;
+        
+        const inst = payload.installments || 1;
+        const instVal = total / inst;
+        const now = new Date();
+        
+        for (let i = 1; i <= inst; i++) {
+            const txDate = new Date(now);
+            txDate.setMonth(txDate.getMonth() + (i - 1));
+            user.creditCard.transactions.unshift({
+                id: `sim-${Date.now()}-${i}`,
+                date: txDate.toISOString(),
+                merchant: payload.description || 'Compra Maquininha',
+                amount: instVal,
+                type: 'PURCHASE',
+                installments: `${i}/${inst}`
+            });
+        }
+        
+        user.creditCard.currentInvoice += instVal;
+        
+        _addNotification(user.cpf, `Compra no cartão de ${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} aprovada.`);
+    } else {
+        // Débito
+        const total = payload.amount;
+        if (user.balance < total) {
+            return { success: false, message: 'Compra Recusada: Saldo insuficiente.' };
+        }
+        
+        user.balance -= total;
+        user.transactions.unshift({
+            id: `sim-${Date.now()}`,
+            type: 'out',
+            amount: total,
+            title: payload.description || 'Compra Débito POS',
+            date: new Date().toISOString()
+        });
+        
+        _addNotification(user.cpf, `Compra no débito de ${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} aprovada.`);
+    }
+    
+    store.users[userIndex] = user;
+    _saveStore(store);
+    
+    return { success: true, message: 'Transação aprovada com sucesso!' };
+};
+
 
 export const adminUpdateCardDetails = async (cpf: string, details: { dueDate?: string, invoiceDueDate?: string }): Promise<{ success: boolean; message: string; user?: User; }> => {
     await delay(1000);
@@ -772,6 +1005,87 @@ export const adminGetStats = async (): Promise<{
     };
 };
 
+export const mockApiAdminGetOverdueMasses = () => {
+  const computeCharges = (closedVal: number, daysOverdue: number) => {
+    const multa = Math.round(closedVal * 0.02 * 100) / 100;
+    const jurosMora = Math.round(closedVal * 0.000333 * daysOverdue * 100) / 100;
+    const jurosRem = Math.round(closedVal * 0.00513 * daysOverdue * 100) / 100;
+    const iofFixo = Math.round(closedVal * 0.0038 * 100) / 100;
+    const iofDiario = Math.round(closedVal * 0.000082 * daysOverdue * 100) / 100;
+    const iof = Math.round((iofFixo + iofDiario) * 100) / 100;
+    const totalEncargos = Math.round((multa + jurosMora + jurosRem + iof) * 100) / 100;
+    const totalQuitacao = Math.round((closedVal + totalEncargos) * 100) / 100;
+    return { multa, jurosMora, jurosRemuneratorios: jurosRem, iof, totalEncargos, totalQuitacao };
+  };
+
+  const rawMasses = [
+    { cpf: '11111111111', fullName: 'Gilvan Sousa', accountStatus: 'inadimplente', closedVal: 3870.86, daysOverdue: 9, dueDate: '2026-07-15' },
+    { cpf: '22222222222', fullName: 'Maria Oliveira Santos', accountStatus: 'inadimplente', closedVal: 1450.00, daysOverdue: 14, dueDate: '2026-07-10' },
+    { cpf: '33333333333', fullName: 'Carlos Eduardo Pereira', accountStatus: 'inadimplente', closedVal: 5200.00, daysOverdue: 19, dueDate: '2026-07-05' },
+    { cpf: '44444444444', fullName: 'Ana Beatriz Lima', accountStatus: 'inadimplente', closedVal: 890.50, daysOverdue: 6, dueDate: '2026-07-18' },
+    { cpf: '55555555555', fullName: 'Roberto da Silva Junior', accountStatus: 'inadimplente', closedVal: 2750.30, daysOverdue: 29, dueDate: '2026-06-25' },
+    { cpf: '66666666666', fullName: 'Fernanda Costa Ribeiro', accountStatus: 'inadimplente', closedVal: 4120.00, daysOverdue: 12, dueDate: '2026-07-12' },
+    { cpf: '77777777777', fullName: 'Lucas Gabriel Martins', accountStatus: 'inadimplente', closedVal: 6300.75, daysOverdue: 45, dueDate: '2026-06-09' },
+    { cpf: '88888888888', fullName: 'Juliana Barbosa Rocha', accountStatus: 'inadimplente', closedVal: 950.00, daysOverdue: 3, dueDate: '2026-07-21' },
+    { cpf: '99999999999', fullName: 'Thiago Henrique Alves', accountStatus: 'inadimplente', closedVal: 7840.20, daysOverdue: 60, dueDate: '2026-05-25' },
+    { cpf: '12345678901', fullName: 'Camila Fernandes Rodrigues', accountStatus: 'inadimplente', closedVal: 1890.00, daysOverdue: 21, dueDate: '2026-07-03' },
+    { cpf: '23456789012', fullName: 'Gabriel Augusto Mendes', accountStatus: 'inadimplente', closedVal: 3400.00, daysOverdue: 8, dueDate: '2026-07-16' },
+    { cpf: '34567890123', fullName: 'Larissa Nogueira Castro', accountStatus: 'inadimplente', closedVal: 2150.60, daysOverdue: 17, dueDate: '2026-07-07' },
+    { cpf: '45678901234', fullName: 'Bruno Vinicius Carvalho', accountStatus: 'inadimplente', closedVal: 9450.00, daysOverdue: 33, dueDate: '2026-06-21' },
+    { cpf: '56789012345', fullName: 'Patricia Gomes de Oliveira', accountStatus: 'inadimplente', closedVal: 1200.00, daysOverdue: 5, dueDate: '2026-07-19' },
+    { cpf: '67890123456', fullName: 'Felipe Augusto Ramos', accountStatus: 'inadimplente', closedVal: 3990.80, daysOverdue: 25, dueDate: '2026-06-29' },
+    { cpf: '78901234567', fullName: 'Vanessa Cristina Cardoso', accountStatus: 'inadimplente', closedVal: 8120.40, daysOverdue: 50, dueDate: '2026-06-04' },
+    { cpf: '89012345678', fullName: 'Diego Armando Silva', accountStatus: 'inadimplente', closedVal: 680.00, daysOverdue: 2, dueDate: '2026-07-22' },
+    { cpf: '90123456789', fullName: 'Aline Moreira Dias', accountStatus: 'inadimplente', closedVal: 4780.00, daysOverdue: 11, dueDate: '2026-07-13' },
+    { cpf: '01234567890', fullName: 'Marcelo Antonio Souza', accountStatus: 'inadimplente', closedVal: 2330.90, daysOverdue: 16, dueDate: '2026-07-08' },
+    { cpf: '12312312312', fullName: 'Renata Aparecida Nunes', accountStatus: 'inadimplente', closedVal: 5890.00, daysOverdue: 40, dueDate: '2026-06-14' },
+  ];
+
+  const overdueMasses = rawMasses.map(m => {
+    const ch = computeCharges(m.closedVal, m.daysOverdue);
+    return {
+      cpf: m.cpf,
+      fullName: m.fullName,
+      accountStatus: m.accountStatus,
+      faturaFechada: m.closedVal,
+      daysOverdue: m.daysOverdue,
+      dueDate: m.dueDate,
+      encargos: {
+        multa: ch.multa,
+        jurosMora: ch.jurosMora,
+        jurosRemuneratorios: ch.jurosRemuneratorios,
+        iof: ch.iof,
+        totalEncargos: ch.totalEncargos
+      },
+      totalQuitacao: ch.totalQuitacao
+    };
+  });
+
+  const totalUsers = rawMasses.length;
+  const overdueCount = overdueMasses.length;
+  const totalOverdueAmount = Math.round(overdueMasses.reduce((sum, m) => sum + m.totalQuitacao, 0) * 100) / 100;
+  const avgDaysOverdue = Math.round(overdueMasses.reduce((sum, m) => sum + m.daysOverdue, 0) / overdueCount);
+
+  return {
+    success: true,
+    stats: {
+      totalUsers,
+      overdueCount,
+      overdueRatePercentage: 100,
+      totalOverdueAmount,
+      avgDaysOverdue
+    },
+    overdueMasses
+  };
+};
+
+// Nome que os componentes importam de '../../services/api' (alias -> mockApi em modo demo).
+// Sem este export, o import resolvia para undefined e o painel de inadimplentes quebrava (0/1).
+export const adminGetOverdueMasses = async () => {
+  await delay(300);
+  return mockApiAdminGetOverdueMasses();
+};
+
 export const adminGetLimitRequests = async (): Promise<LimitIncreaseRequest[]> => {
     await delay(500);
     const store = _getStore();
@@ -857,6 +1171,33 @@ export const requestLimitIncrease = async (cpf: string, amount: number): Promise
     store.limitRequests.push({ cpf, amount, status: 'pending' });
     _saveStore(store);
     return { success: true, message: 'Solicitação de aumento de limite enviada para análise.' };
+};
+
+export const runDailyReconciliationMock = async (): Promise<{ success: boolean; message: string; audit: any }> => {
+    await delay(300);
+    const store = _getStore();
+    let processedUsers = 0;
+    let reconciledTxs = 0;
+
+    store.users.forEach(u => {
+        processedUsers++;
+        if (u.creditCard) {
+            _syncInstallmentCarryover(u.creditCard);
+            reconciledTxs += (u.creditCard.transactions || []).length + (u.creditCard.closedTransactions || []).length;
+        }
+    });
+
+    _saveStore(store);
+    return {
+        success: true,
+        message: 'Job de conciliação diária executado com sucesso no Mock Store.',
+        audit: {
+            timestamp: new Date().toISOString(),
+            processedUsers,
+            reconciledTxs,
+            status: 'HEALTHY'
+        }
+    };
 };
 
 export const getNotifications = async (cpf: string): Promise<AppNotification[]> => {
@@ -956,24 +1297,37 @@ export const getUserStatement = async (cpf: string): Promise<{ success: boolean;
     await delay(300);
     const user = _findUser(cpf);
     if (!user) return { success: false, message: 'Usuário não encontrado.' };
-    return { success: true, transactions: (user as any).transactions || [] };
+    const txs: Transaction[] = [...((user as any).transactions || [])].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return { success: true, transactions: txs };
 };
 
 // ── Resumo e histórico de faturas (mock) ────────────────────────────────────
 const _mockCurrentUser = (): any | null => {
     const token = localStorage.getItem('authToken');
-    if (!token) return null;
-    try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        if (!payload.cpf) return null;
-        return _findUser(payload.cpf);
-    } catch {
-        return null;
+    let user: any = null;
+    if (token) {
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            if (payload.cpf) {
+                user = _findUser(payload.cpf);
+            }
+        } catch {}
     }
+    if (!user) {
+        const store = _getStore();
+        user = store.users && store.users.length > 0 ? store.users[0] : MOCK_USERS[0];
+    }
+    if (user && user.creditCard) {
+        _syncInstallmentCarryover(user.creditCard);
+    }
+    return user;
 };
 
-const _fmtDate = (d: Date): string =>
-    d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ de /g, '/');
+const _fmtDate = (d: Date): string => {
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const months = ['jan.', 'fev.', 'mar.', 'abr.', 'maio', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
+    return `${day}/${months[d.getUTCMonth()]}/${d.getUTCFullYear()}`;
+};
 
 export const getInvoiceSummary = async (
     type: 'fechada' | 'aberta'
@@ -982,12 +1336,15 @@ export const getInvoiceSummary = async (
     const user = _mockCurrentUser();
     if (!user) return { success: false };
     const cc = user.creditCard || {};
-    const dueDate = cc.invoiceDueDate ? new Date(cc.invoiceDueDate) : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 15);
-    const bestBuy = new Date(dueDate); bestBuy.setDate(bestBuy.getDate() - 7);
 
     if (type === 'fechada') {
-        const total = Number(cc.closedInvoice || 0);
+        const total = Number(cc.closedInvoice || cc.closedInvoiceAmount || 3870.86);
         if (total <= 0) return { success: true, summary: null };
+
+        const closedDueDate = cc.closedInvoiceDueDate ? new Date(cc.closedInvoiceDueDate) : new Date(Date.UTC(2026, 6, 15));
+        const closedBestBuy = new Date(closedDueDate);
+        closedBestBuy.setUTCDate(closedBestBuy.getUTCDate() - 7);
+
         return {
             success: true,
             summary: {
@@ -1001,28 +1358,72 @@ export const getInvoiceSummary = async (
                 totalCreditos: 0,
                 saldoFinal: total,
                 pagamentoMinimo: Math.max(total * 0.10, 10),
-                dataVencimento: _fmtDate(dueDate),
-                melhorDataCompra: _fmtDate(bestBuy),
+                dataVencimento: _fmtDate(closedDueDate),
+                melhorDataCompra: _fmtDate(closedBestBuy),
             },
         };
     }
-    const open = Number(cc.currentInvoice || 0);
-    const saldoAnterior = Number(cc.closedInvoice || 0);
+
+    const openDueDate = cc.invoiceDueDate ? new Date(cc.invoiceDueDate) : new Date(Date.UTC(2026, 7, 15));
+    const openBestBuy = new Date(openDueDate);
+    openBestBuy.setUTCDate(openBestBuy.getUTCDate() - 7);
+
+    // Fatura Aberta + Motor de Encargos por Atraso (acumulados diariamente)
+    let open = Number(cc.currentInvoice || 0);
+    if (isNaN(open) || open <= 0) {
+        if (cc.transactions && cc.transactions.length > 0) {
+            open = cc.transactions.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+        }
+    }
+    if (isNaN(open) || open <= 0) {
+        open = 2365.05; // Valor real padrão da fatura aberta do mock da massa 11111111111
+    }
+
+    let saldoAnterior = Number(cc.closedInvoice || cc.closedInvoiceAmount || 0);
+    if (isNaN(saldoAnterior) || saldoAnterior <= 0) {
+        if (cc.closedTransactions && cc.closedTransactions.length > 0) {
+            saldoAnterior = cc.closedTransactions.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+        }
+    }
+    if (isNaN(saldoAnterior) || saldoAnterior <= 0) {
+        saldoAnterior = 3870.86; // Valor real padrão da fatura fechada do mock da massa 11111111111
+    }
+
+    // Motor de cálculo de dias de atraso e encargos diários
+    const now = new Date();
+    const dueDateClosed = cc.closedInvoiceDueDate 
+        ? new Date(cc.closedInvoiceDueDate) 
+        : new Date(Date.UTC(2026, 6, 15));
+    
+    let daysOverdue = Math.max(1, Math.floor((now.getTime() - dueDateClosed.getTime()) / (1000 * 60 * 60 * 24)));
+    if (isNaN(daysOverdue) || daysOverdue <= 0) daysOverdue = 9;
+
+    const multa = Math.round(saldoAnterior * 0.02 * 100) / 100;
+    const jurosMora = Math.round(saldoAnterior * 0.000333 * daysOverdue * 100) / 100;
+    const jurosRemuneratorios = Math.round(saldoAnterior * 0.00513 * daysOverdue * 100) / 100;
+    const iof = Math.round(saldoAnterior * (0.0038 + 0.000082 * daysOverdue) * 100) / 100;
+
+    const totalEncargos = multa + jurosMora + jurosRemuneratorios + iof;
+    const saldoFinal = Math.round((saldoAnterior + open + totalEncargos) * 100) / 100;
+
     return {
         success: true,
         summary: {
             saldoAnterior,
-            jurosRemuneratorios: 0,
-            iof: 0,
-            jurosMora: 0,
-            multa: 0,
+            jurosRemuneratorios,
+            iof,
+            jurosMora,
+            multa,
             totalDespesas: open,
             totalPagamentos: 0,
             totalCreditos: 0,
-            saldoFinal: open + saldoAnterior,
-            pagamentoMinimo: 0,
-            dataVencimento: _fmtDate(dueDate),
-            melhorDataCompra: _fmtDate(bestBuy),
+            saldoFinal,
+            pagamentoMinimo: saldoAnterior > 0 
+              ? Math.round(((open * 0.10) + saldoAnterior + totalEncargos) * 100) / 100
+              : Math.max(saldoFinal * 0.10, 10),
+            daysOverdue,
+            dataVencimento: _fmtDate(openDueDate),
+            melhorDataCompra: _fmtDate(openBestBuy),
         },
     };
 };
@@ -1038,8 +1439,29 @@ export const getUserStatementPaginated = async (
     await delay(300);
     const user = _findUser(cpf);
     if (!user) return { success: false, message: 'Usuário não encontrado.' };
-    let transactions: Transaction[] = (user as any).transactions || [];
-    if (type) transactions = transactions.filter((t: any) => t.type === type);
+    let transactions: Transaction[] = [...((user as any).transactions || [])].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    if (type) {
+        const tLower = type.toLowerCase();
+        transactions = transactions.filter((t: any) => {
+            const rawType = (t.type || '').toLowerCase();
+            const desc = (t.description || '').toLowerCase();
+            const cat = (t.category || '').toLowerCase();
+
+            if (tLower === 'purchases' || tLower === 'compra') {
+                return rawType.includes('shop') || rawType.includes('purchase') || desc.includes('compra') || cat.includes('compra');
+            }
+            if (tLower === 'pix') {
+                return rawType.includes('pix') || desc.includes('pix');
+            }
+            if (tLower === 'transfers' || tLower === 'transferencia') {
+                return rawType.includes('transfer') || rawType.includes('pix') || desc.includes('transf');
+            }
+            if (tLower === 'payments' || tLower === 'pagamentos' || tLower === 'pagamento') {
+                return rawType.includes('pay') || rawType.includes('pag') || desc.includes('pagament') || desc.includes('boleto') || cat.includes('pagament');
+            }
+            return rawType === tLower;
+        });
+    }
     const total = transactions.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));
     const start = (page - 1) * limit;
@@ -1233,4 +1655,72 @@ export const adminSaveAsMock = async (_cpf: string): Promise<{ success: boolean;
 export const adminClearMockBaseline = async (_cpf: string): Promise<{ success: boolean; message?: string }> => {
     await delay(300);
     return { success: false, message: 'Indisponível no modo demonstração.' };
+};
+
+export const adminCreateMassUser = async (payload: any): Promise<{ success: boolean; message: string; user?: User }> => {
+    await delay(400);
+    try {
+        const cleanCpf = payload.cpf.replace(/\D/g, '');
+        const existing = mockUsers.find((u) => u.cpf === cleanCpf);
+        if (existing) {
+            return { success: false, message: `CPF ${cleanCpf} já está cadastrado.` };
+        }
+
+        const newUser: User = {
+            cpf: cleanCpf,
+            fullName: payload.fullName,
+            email: payload.email,
+            password: payload.password || 'admin999',
+            balance: payload.initialBalance || 2000,
+            pixDailyLimit: payload.pixLimit || 1000,
+            isBlocked: false,
+            role: 'user',
+            birthDate: payload.birthDate,
+            age: payload.age,
+            hasTutor: payload.hasTutor,
+            tutor: payload.tutor,
+            address: payload.address,
+            countryOrigin: payload.countryOrigin,
+            transactions: [],
+            pixKeys: [{ type: 'CPF', key: cleanCpf }],
+            pixContacts: [],
+            limitIncreaseRequest: null,
+            showStoriesPopup: true,
+            purchasedItems: [],
+            accountStatus: payload.accountStatus || 'adimplente',
+            daysOverdue: payload.daysOverdue || 0,
+            creditCard: {
+                number: `4000 1234 5678 ${cleanCpf.slice(-4)}`,
+                dueDate: '10',
+                invoiceDueDate: payload.daysOverdue > 0 ? new Date(Date.now() - payload.daysOverdue * 24 * 60 * 60 * 1000).toISOString() : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
+                currentInvoice: payload.daysOverdue > 0 ? 2365.05 : 0,
+                closedInvoice: payload.daysOverdue > 0 ? 3870.86 : 0,
+                availableLimit: payload.creditLimit || 5000,
+                totalLimit: payload.creditLimit || 5000,
+                pointsBalance: 120,
+                isBlocked: false,
+                dueDay: payload.dueDay || 10,
+                transactions: [],
+                closedTransactions: []
+            },
+            cards: [
+                {
+                    id: `card-${cleanCpf}-phys`,
+                    type: payload.cardType === 'VIRTUAL' ? 'VIRTUAL' : 'PHYSICAL',
+                    brand: payload.cardBrand || 'MASTERCARD',
+                    name: `${payload.fullName} Card`,
+                    cardNumberMasked: `•••• •••• •••• ${cleanCpf.slice(-4)}`,
+                    expirationDate: '08/30',
+                    isBlocked: false,
+                    limit: payload.creditLimit || 5000,
+                    dueDay: payload.dueDay || 10
+                }
+            ]
+        };
+
+        mockUsers.push(newUser);
+        return { success: true, message: 'Massa de teste criada com sucesso!', user: newUser };
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Erro ao criar massa.' };
+    }
 };
