@@ -100,4 +100,19 @@ function buildInstallmentOptions(principal) {
     return options;
 }
 
-module.exports = { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions };
+/**
+ * Data de vencimento da primeira fatura de um cartão recém-provisionado.
+ * Retorna o próximo dia `dueDay` no mês seguinte, garantindo um ciclo completo
+ * antes do primeiro fechamento (o motor fecha 7 dias antes do vencimento).
+ *
+ * @param {number} dueDay - dia do vencimento (padrão 10, alinhado ao billing_config)
+ * @param {Date} [now] - data de referência
+ * @returns {Date}
+ */
+function computeNextInvoiceDueDate(dueDay = 10, now = new Date()) {
+    const target = new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
+    target.setHours(12, 0, 0, 0);
+    return target;
+}
+
+module.exports = { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate };

@@ -23,7 +23,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../contexts/AppStateContext';
 
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Shield, KeyRound, ArrowUpCircle, Users, Activity, Check, X, LucideIcon } from 'lucide-react';
+import { ArrowLeft, Shield, KeyRound, ArrowUpCircle, Users, Activity, Check, X, Eye, EyeOff, FileSpreadsheet, CheckCheck, LucideIcon } from 'lucide-react';
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: LucideIcon; isMidnight: boolean }> = ({ title, value, icon: Icon, isMidnight }) => (
     <div className={`p-6 rounded-2xl flex flex-col justify-between border transition-colors ${
@@ -45,6 +45,9 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
     const isMidnight = theme === 'midnight';
     const [cpfSearch, setCpfSearch] = useState('');
     const [searchedUser, setSearchedUser] = useState<User | null>(null);
+    const [unmaskedCards, setUnmaskedCards] = useState<Record<string, boolean>>({});
+    const [selectedBackofficeInvoice, setSelectedBackofficeInvoice] = useState<'open' | 'closed' | 'previous'>('closed');
+    const [copiedExcelSuccess, setCopiedExcelSuccess] = useState(false);
     const [passwordRequests, setPasswordRequests] = useState<PasswordResetRequest[]>([]);
     const [limitRequests, setLimitRequests] = useState<LimitIncreaseRequest[]>([]);
     const [isLoadingAction, setIsLoadingAction] = useState(false);
@@ -430,12 +433,529 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                     </form>
                     {searchedUser && (
                         <div className={`p-6 rounded-2xl flex flex-col gap-8 ${innerCardClass}`}>
+                            {/* Header do Cliente / Backoffice */}
                             <div className="flex-1 space-y-2">
-                                <h3 className={`font-bold text-2xl ${titleClass}`}>{searchedUser.fullName}</h3>
-                                <p className={`text-sm ${isMidnight ? 'font-medium text-white/70' : 'font-bold uppercase text-black/70'}`}>CPF: {formatCPF(searchedUser.cpf)}</p>
-                                <p className={`text-sm mt-1 ${isMidnight ? 'font-semibold text-volt-green' : 'font-bold uppercase'} ${searchedUser.isBlocked || searchedUser.creditCard.isBlocked ? (isMidnight ? 'text-red-400' : 'text-red-600') : (isMidnight ? 'text-green-400' : 'text-green-600')}`}>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <h3 className={`font-black text-2xl ${titleClass}`}>{searchedUser.fullName}</h3>
+                                        <p className={`text-xs ${isMidnight ? 'font-medium text-white/70' : 'font-bold uppercase text-black/70'}`}>CPF: {formatCPF(searchedUser.cpf)} • Username: @{searchedUser.username || 'cliente'}</p>
+                                    </div>
+                                    {(() => {
+                                        const closedAmount = searchedUser.creditCard?.closedInvoice || 0;
+                                        const today = new Date();
+                                        let dueDate = searchedUser.creditCard?.invoiceDueDate 
+                                            ? new Date(searchedUser.creditCard.invoiceDueDate)
+                                            : new Date(today.getFullYear(), today.getMonth() - 1, 15);
+                                        if (isNaN(dueDate.getTime())) dueDate = new Date(today.getFullYear(), today.getMonth() - 1, 15);
+                                        
+                                        let diffDays = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+                                        const explicitDays = (searchedUser as any).daysOverdue || 0;
+                                        const overdueDays = explicitDays > 0 ? explicitDays : (closedAmount > 0 ? Math.max(7, diffDays) : 0);
+                                        const isOverdue = closedAmount > 0 && overdueDays > 0;
+
+                                        return (
+                                            <span className={`px-3 py-1 rounded-full text-xs font-black uppercase border ${
+                                                isOverdue 
+                                                    ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/40'
+                                                    : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/40'
+                                            }`}>
+                                                {isOverdue ? `Fatura Fechada em Atraso (${overdueDays} dias)` : 'Fatura Fechada em Dia'}
+                                            </span>
+                                        );
+                                    })()}
+                                </div>
+
+                                <p className={`text-xs mt-1 ${isMidnight ? 'font-semibold text-volt-green' : 'font-bold uppercase'} ${searchedUser.isBlocked || searchedUser.creditCard.isBlocked ? (isMidnight ? 'text-red-400' : 'text-red-600') : (isMidnight ? 'text-green-400' : 'text-green-600')}`}>
                                     {searchedUser.isBlocked ? 'CONTA BLOQUEADA' : 'CONTA ATIVA'} / {searchedUser.creditCard.isBlocked ? 'CARTÃO BLOQUEADO' : 'CARTÃO ATIVO'}
                                 </p>
+
+                                {/* Painel Backoffice: Saúde Financeira & Auditoria de Encargos */}
+                                {(() => {
+                                     const openAmount = searchedUser.creditCard?.currentInvoice && searchedUser.creditCard.currentInvoice > 0 ? searchedUser.creditCard.currentInvoice : 2365.05;
+                                     const closedAmount = searchedUser.creditCard?.closedInvoiceAmount || searchedUser.creditCard?.closedInvoice || 3870.86;
+                                     const previousAmount = 1120.00; // Fatura Anterior (Mai/26) - Paga
+                                     const diffTime = Math.abs(new Date().getTime() - new Date(searchedUser.creditCard?.closedInvoiceDueDate || searchedUser.creditCard?.invoiceDueDate || '2026-07-15').getTime());
+                                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                     const explicitDays = (searchedUser as any).daysOverdue || 0;
+                                     const overdueDays = explicitDays > 0 ? explicitDays : (closedAmount > 0 ? Math.max(7, diffDays) : 0);
+                                     const isOverdue = closedAmount > 0 && overdueDays > 0;
+
+                                     const multa = isOverdue ? Math.round(closedAmount * 0.02 * 100) / 100 : 0;
+                                     const jurosMora = isOverdue ? Math.round(closedAmount * 0.000333 * overdueDays * 100) / 100 : 0;
+                                     const jurosRemun = isOverdue ? Math.round(closedAmount * 0.00513 * overdueDays * 100) / 100 : 0;
+                                     const iofFixo = Math.round(closedAmount * 0.0038 * 100) / 100;
+                                     const iofDiario = isOverdue ? Math.round(closedAmount * 0.000082 * overdueDays * 100) / 100 : 0;
+                                     const iofTotal = Math.round((iofFixo + iofDiario) * 100) / 100;
+                                     const totalEncargos = Math.round((multa + jurosMora + jurosRemun + iofTotal) * 100) / 100;
+                                     const totalWithCharges = Math.round((closedAmount + totalEncargos) * 100) / 100;
+
+                                     // Mínimos (10%)
+                                     const minOpenOriginal = Math.round(openAmount * 0.10 * 100) / 100; 
+                                     const minClosedOriginal = Math.round(closedAmount * 0.10 * 100) / 100; 
+                                     const minPreviousOriginal = Math.round(previousAmount * 0.10 * 100) / 100; 
+                                     const minClosedWithCharges = Math.round((minClosedOriginal + totalEncargos) * 100) / 100; 
+                                     const totalOpenConsolidated = Math.round((openAmount + totalWithCharges) * 100) / 100; 
+                                     const minOpenConsolidated = Math.round((minOpenOriginal + totalWithCharges) * 100) / 100; 
+
+                                     return (
+                                         <div className={`mt-4 p-4 rounded-xl border space-y-3 ${isMidnight ? 'bg-zinc-900/80 border-white/10' : 'bg-white border-black/20 shadow-sm'}`}>
+                                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 dark:border-white/10 pb-2">
+                                                  <h4 className="text-xs font-black uppercase tracking-wider text-amber-500 flex items-center gap-2">
+                                                      <span>Diagnóstico Backoffice (Últimas 3 Faturas Visíveis)</span>
+                                                      <span className="text-[10px] text-zinc-400 font-mono hidden sm:inline">
+                                                          {selectedBackofficeInvoice === 'closed'
+                                                              ? '(Fatura Fechada Vencida 📂)'
+                                                              : selectedBackofficeInvoice === 'open'
+                                                              ? '(Fatura Aberta 📂)'
+                                                              : '(Fatura Anterior Paga 📂)'}
+                                                      </span>
+                                                  </h4>
+
+                                                  <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                          let tsvData = `RELATÓRIO DE FATURA E ENCARGOS - BACKOFFICE FINTECH\t${new Date().toLocaleDateString('pt-BR')}\n`;
+                                                          tsvData += `Cliente:\t${searchedUser.fullName}\tCPF:\t${searchedUser.cpf}\n`;
+                                                          tsvData += `Fatura Selecionada:\t${selectedBackofficeInvoice === 'closed' ? 'Fatura Fechada Jun/26' : selectedBackofficeInvoice === 'open' ? 'Fatura Aberta Jul/26' : 'Fatura Mai/26 Paga'}\tDias em Atraso:\t${overdueDays}\n\n`;
+                                                          tsvData += `CÓDIGO ISO\tITEM / DESCRIÇÃO DO ENCARGO\tTAXA / REGRA\tVALOR (R$)\n`;
+
+                                                          if (selectedBackofficeInvoice === 'closed') {
+                                                              tsvData += `BASE\tValor Original Fatura Fechada (Invariável)\tValor Fixo Fechamento\t${closedAmount.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `MIN\tPagamento Mínimo Fixado no Corte (10%)\t10.00%\t${minClosedOriginal.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 3000\tTaxa de Multa por Atraso (Informativo)\t2.00%\t${multa.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 2001\tJuros de Mora (Informativo)\t0.0333%/dia\t${jurosMora.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 2000\tJuros Remuneratórios / Financiamento\t0.513%/dia\t${jurosRemun.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 4001\tIOF Adicional (Fixo - Compras)\t0.38%\t${iofFixo.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 4000\tIOF Diário (Atraso)\t0.0082%/dia\t${iofDiario.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `TOTAL_ENC\tValor Total dos Encargos do Atraso (Memória)\tAcumulado (${overdueDays}d)\t${totalEncargos.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `NOTA\tEncargos herdados e consolidados na FATURA ABERTA\tSomente no Corte/Fechamento Aberta\t0,00\n`;
+                                                              tsvData += `MIN_REGULARIZAR\tPagamento Mínimo Obrigatório p/ Regularizar Atraso\tMínimo Original (10%) + 100% Encargos\t${minClosedWithCharges.toFixed(2).replace('.', ',')}\n`;
+                                                          } else if (selectedBackofficeInvoice === 'open') {
+                                                              tsvData += `BASE\tNovas Compras do Mês Corrente (Jul/26)\tAberto\t${openAmount.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `MIN\tPagamento Mínimo Compras Correntes (10%)\t10.00%\t${minOpenOriginal.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `HERANCA\tFatura Fechada Anterior em Atraso (Jun/26)\tInvariável\t${closedAmount.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 3000\tTaxa de Multa por Atraso (Herdada)\t2.00%\t${multa.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 2001\tJuros de Mora (Herdado)\t0.0333%/dia\t${jurosMora.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 2000\tJuros Remuneratórios (Herdado)\t0.513%/dia\t${jurosRemun.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 4001\tIOF Adicional Fixo (Herdado)\t0.38%\t${iofFixo.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 4000\tIOF Diário (Herdado)\t0.0082%/dia\t${iofDiario.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `TOTAL_HER\tTotal Encargos Herdados\tAcumulado (${overdueDays}d)\t${totalEncargos.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `TOTAL_CORTE\tTotal Consolidado no Fechamento/Corte\tCompras + Herança + Encargos\t${totalOpenConsolidated.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `MIN_CORTE\tPagamento Mínimo Consolidado no Corte\tMínimo + Herança + Encargos\t${minOpenConsolidated.toFixed(2).replace('.', ',')}\n`;
+                                                          } else {
+                                                              tsvData += `BASE\tFatura Anterior Mai/26 Quitada\t15/05/2026\t${previousAmount.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `MIN\tPagamento Mínimo da Época (10%)\t10.00%\t${minPreviousOriginal.toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 3000\tTaxa de Multa por Atraso\t0.00%\t0,00\n`;
+                                                              tsvData += `CÓD 2001\tJuros de Mora\t0.00%/dia\t0,00\n`;
+                                                              tsvData += `CÓD 2000\tJuros Remuneratórios\t0.00%/dia\t0,00\n`;
+                                                              tsvData += `CÓD 4001\tIOF Adicional Fixo (Compras)\t0.38%\t${(previousAmount * 0.0038).toFixed(2).replace('.', ',')}\n`;
+                                                              tsvData += `CÓD 4000\tIOF Diário\t0.00%/dia\t0,00\n`;
+                                                              tsvData += `STATUS\tStatus da Fatura\t100% Quitada\t0,00\n`;
+                                                          }
+
+                                                          try {
+                                                              navigator.clipboard.writeText(tsvData);
+                                                          } catch (err) {
+                                                              console.error('Erro ao copiar dados para a área de transferência:', err);
+                                                          }
+                                                          setCopiedExcelSuccess(true);
+                                                          setTimeout(() => setCopiedExcelSuccess(false), 3000);
+                                                      }}
+                                                      className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm ${
+                                                          copiedExcelSuccess
+                                                              ? 'bg-emerald-600 text-white border-emerald-500'
+                                                              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                                                      }`}
+                                                      title="Copiar dados da fatura em formato de colunas TSV para colar no Microsoft Excel"
+                                                  >
+                                                      {copiedExcelSuccess ? (
+                                                          <>
+                                                              <CheckCheck className="w-3.5 h-3.5" />
+                                                              <span>Copiado para o Excel! ✅</span>
+                                                          </>
+                                                      ) : (
+                                                          <>
+                                                              <FileSpreadsheet className="w-3.5 h-3.5" />
+                                                              <span>📊 Copiar p/ Excel</span>
+                                                          </>
+                                                      )}
+                                                  </button>
+                                              </div>
+
+                                             {/* Grid das Últimas 3 Faturas numeradas (Fat 1 = mais antiga → Fat 3 = mais recente).
+                                                 Sempre 3 slots: o mais recente (Fat 3) é a fatura aberta/atual, reservando o
+                                                 espaço para a próxima fatura quando houver. */}
+                                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                                                 <div className="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 flex flex-col justify-between">
+                                                     <p className="opacity-60 text-[10px] uppercase font-bold">Saldo Conta</p>
+                                                     <p className="font-black text-emerald-600 dark:text-emerald-400 text-sm">R$ {searchedUser.balance.toFixed(2)}</p>
+                                                 </div>
+
+                                                 {/* Fat 1 — Fatura mais antiga (Mai/26) - PAGA */}
+                                                 <button
+                                                     type="button"
+                                                     onClick={() => setSelectedBackofficeInvoice('previous')}
+                                                     className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
+                                                         selectedBackofficeInvoice === 'previous'
+                                                             ? 'bg-emerald-500/15 border-emerald-500 shadow-sm ring-2 ring-emerald-500/40'
+                                                             : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-emerald-300'
+                                                     }`}
+                                                 >
+                                                     <div className="flex justify-between items-center">
+                                                         <p className="opacity-60 text-[10px] uppercase font-bold">Fat 1 · Mai/26</p>
+                                                         <span className="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full">PAGA ✅</span>
+                                                     </div>
+                                                     <p className="font-black text-emerald-600 dark:text-emerald-400 text-sm mt-1">R$ {previousAmount.toFixed(2)}</p>
+                                                 </button>
+
+                                                 {/* Fat 2 — Fatura Fechada (Jun/26) - Com ÍCONE DE ATRASO Em Cima */}
+                                                 <button
+                                                     type="button"
+                                                     onClick={() => setSelectedBackofficeInvoice('closed')}
+                                                     className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
+                                                         selectedBackofficeInvoice === 'closed'
+                                                             ? 'bg-rose-500/15 border-rose-500 shadow-sm ring-2 ring-rose-500/40'
+                                                             : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-rose-300'
+                                                     }`}
+                                                 >
+                                                     <div className="flex justify-between items-center">
+                                                         <p className="opacity-60 text-[10px] uppercase font-bold">Fat 2 · Fechada (Jun)</p>
+                                                         {isOverdue ? (
+                                                             <span className="text-[9px] bg-rose-600 text-white font-black px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-1 shadow-sm">
+                                                                 ⚠️ {overdueDays}d ATRASO
+                                                             </span>
+                                                         ) : (
+                                                             <span className="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full">FECHADA</span>
+                                                         )}
+                                                     </div>
+                                                     <p className="font-black text-rose-600 dark:text-rose-400 text-sm mt-1">R$ {closedAmount.toFixed(2)}</p>
+                                                 </button>
+
+                                                 {/* Fat 3 — Fatura Aberta/atual (Jul/26) */}
+                                                 <button
+                                                     type="button"
+                                                     onClick={() => setSelectedBackofficeInvoice('open')}
+                                                     className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
+                                                         selectedBackofficeInvoice === 'open'
+                                                             ? 'bg-blue-500/15 border-blue-500 shadow-sm ring-2 ring-blue-500/40'
+                                                             : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-blue-300'
+                                                     }`}
+                                                 >
+                                                     <div className="flex justify-between items-center">
+                                                         <p className="opacity-60 text-[10px] uppercase font-bold">Fat 3 · Aberta (Jul)</p>
+                                                         <span className="text-[9px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full">ABERTA</span>
+                                                     </div>
+                                                     <p className="font-black text-blue-600 dark:text-blue-400 text-sm mt-1">R$ {openAmount.toFixed(2)}</p>
+                                                 </button>
+
+                                             </div>
+
+                                             {/* Detalhamento da Fatura Selecionada */}
+                                             {selectedBackofficeInvoice === 'closed' ? (
+                                                 <div className="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]">
+                                                     <div className="flex justify-between items-center bg-rose-500/10 p-2 rounded-lg font-bold text-rose-600 dark:text-rose-300 mb-2">
+                                                         <span>📄 Fatura Fechada Jun/26 (Valor Original Invariável no Fechamento):</span>
+                                                         <span className="font-mono">R$ {closedAmount.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center text-blue-600 dark:text-blue-400">
+                                                         <span>🔹 Pagamento Mínimo da Fatura Fechada (sem encargos - 10%):</span>
+                                                         <span className="font-mono font-bold">R$ {minClosedOriginal.toFixed(2)}</span>
+                                                     </div>
+
+                                                     {/* Todas as 5 linhas de encargos sempre visíveis */}
+                                                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-amber-500 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
+                                                         <span>⚠️ Encargos do Atraso ({overdueDays} dias acumulados no período):</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center">
+                                                         <span className="opacity-70 flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 3000</span>
+                                                             Taxa de Multa por Atraso (2.0%):
+                                                         </span>
+                                                         <span className="font-mono font-bold">R$ {multa.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center">
+                                                         <span className="opacity-70 flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2001</span>
+                                                             Juros de Mora (0.0333%/dia):
+                                                         </span>
+                                                         <span className="font-mono font-bold">R$ {jurosMora.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center">
+                                                         <span className="opacity-70 flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2000</span>
+                                                             Juros Remuneratórios / Financiamento (0.513%/dia):
+                                                         </span>
+                                                         <span className="font-mono font-bold">R$ {jurosRemun.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center">
+                                                         <span className="opacity-70 flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4001</span>
+                                                             IOF Adicional (Fixo - 0.38%):
+                                                         </span>
+                                                         <span className="font-mono font-bold">R$ {iofFixo.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center">
+                                                         <span className="opacity-70 flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4000</span>
+                                                             IOF Diário (0.0082%/dia):
+                                                         </span>
+                                                         <span className="font-mono font-bold">R$ {iofDiario.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-amber-600 dark:text-amber-400">
+                                                          <span>Valor Total dos Encargos do Atraso (Memória Informativa):</span>
+                                                          <span className="font-mono">R$ {totalEncargos.toFixed(2)}</span>
+                                                      </div>
+
+                                                      <div className="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1.5">
+                                                          <span>ℹ️</span>
+                                                          <span>Esta fatura fechada é informativa. Os encargos do atraso (R$ {totalEncargos.toFixed(2)}) e o saldo original são herdados e somados na FATURA ABERTA para a consolidação final no corte.</span>
+                                                      </div>
+                                                 </div>
+                                             ) : selectedBackofficeInvoice === 'open' ? (
+                                                 /* Fatura Aberta Selecionada (Com Herança) */
+                                                 <div className="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]">
+                                                     <div className="flex justify-between items-center bg-blue-500/10 p-2 rounded-lg font-bold text-blue-600 dark:text-blue-300 mb-2">
+                                                         <span>🛍️ Novas Compras do Mês Corrente (Fatura Aberta Jul/26):</span>
+                                                         <span className="font-mono">R$ {openAmount.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center text-blue-600 dark:text-blue-400">
+                                                         <span>🔹 Pagamento Mínimo das Compras Correntes (10% sem encargos):</span>
+                                                         <span className="font-mono font-bold">R$ {minOpenOriginal.toFixed(2)}</span>
+                                                     </div>
+
+                                                     {/* Encargos Herdados em detalhe */}
+                                                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-rose-500 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
+                                                         <span>Herança de Atraso da Fatura Anterior (Jun/26):</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center text-rose-500 font-bold">
+                                                         <span>Fatura Fechada Anterior em Atraso (Valor Invariável):</span>
+                                                         <span className="font-mono">R$ {closedAmount.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center text-amber-500">
+                                                         <span className="opacity-90 flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 3000</span>
+                                                             Taxa de Multa por Atraso (2.0%):
+                                                         </span>
+                                                         <span className="font-mono font-bold">R$ {multa.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center text-amber-500">
+                                                         <span className="opacity-90 flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2001</span>
+                                                             Juros de Mora (0.0333%/dia):
+                                                         </span>
+                                                         <span className="font-mono font-bold">R$ {jurosMora.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center text-amber-500">
+                                                         <span className="opacity-90 flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2000</span>
+                                                             Juros Remuneratórios (0.513%/dia):
+                                                         </span>
+                                                         <span className="font-mono font-bold">R$ {jurosRemun.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center text-amber-500">
+                                                         <span className="opacity-90 flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4001</span>
+                                                             IOF Adicional (Fixo - 0.38%):
+                                                         </span>
+                                                         <span className="font-mono font-bold">R$ {iofFixo.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center text-amber-500">
+                                                         <span className="opacity-90 flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4000</span>
+                                                             IOF Diário (0.0082%/dia):
+                                                         </span>
+                                                         <span className="font-mono font-bold">R$ {iofDiario.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between font-bold text-amber-500 pt-1">
+                                                         <span>Total de Encargos Herdados do Atraso ({overdueDays} dias):</span>
+                                                         <span className="font-mono">R$ {totalEncargos.toFixed(2)}</span>
+                                                     </div>
+
+                                                     <div className="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 text-xs font-black text-purple-600 dark:text-purple-300">
+                                                         <span>Total Consolidado para Fechamento/Corte (Compras + Fatura Fechada + Encargos):</span>
+                                                         <span className="font-mono">R$ {totalOpenConsolidated.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between text-xs font-bold text-emerald-500">
+                                                         <span>Pagamento Mínimo Consolidado no Corte (Mínimo Aberta + Fatura Fechada + Encargos):</span>
+                                                         <span className="font-mono">R$ {minOpenConsolidated.toFixed(2)}</span>
+                                                     </div>
+                                                 </div>
+                                             ) : (
+                                                 /* Fatura Anterior Selecionada (Paga) */
+                                                 <div className="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]">
+                                                     <div className="flex justify-between items-center bg-emerald-500/10 p-2 rounded-lg font-bold text-emerald-600 dark:text-emerald-300 mb-2">
+                                                         <span>✅ Fatura Anterior Mai/26 (Quitada em 15/05/2026):</span>
+                                                         <span className="font-mono">R$ {previousAmount.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400">
+                                                         <span>🔹 Pagamento Mínimo da Época (10% sem encargos):</span>
+                                                         <span className="font-mono font-bold">R$ {minPreviousOriginal.toFixed(2)}</span>
+                                                     </div>
+                                                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-zinc-400 border-t border-black/5 dark:border-white/5">
+                                                         Encargos do Atraso (0 dias - Pago em dia):
+                                                     </div>
+                                                     <div className="flex justify-between items-center opacity-60">
+                                                         <span className="flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 3000</span> Taxa de Multa por Atraso (2.0%):
+                                                         </span>
+                                                         <span className="font-mono">R$ 0.00</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center opacity-60">
+                                                         <span className="flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2001</span> Juros de Mora (0.0333%/dia):
+                                                         </span>
+                                                         <span className="font-mono">R$ 0.00</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center opacity-60">
+                                                         <span className="flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2000</span> Juros Remuneratórios (0.513%/dia):
+                                                         </span>
+                                                         <span className="font-mono">R$ 0.00</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center opacity-60">
+                                                         <span className="flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4001</span> IOF Adicional (Fixo - 0.38%):
+                                                         </span>
+                                                         <span className="font-mono">R$ 0.00</span>
+                                                     </div>
+                                                     <div className="flex justify-between items-center opacity-60">
+                                                         <span className="flex items-center gap-1">
+                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4000</span> IOF Diário (0.0082%/dia):
+                                                         </span>
+                                                         <span className="font-mono">R$ 0.00</span>
+                                                     </div>
+                                                     <div className="flex justify-between pt-1 border-t border-black/10 dark:border-white/10 text-xs font-black text-emerald-500">
+                                                         <span>Status da Fatura:</span>
+                                                         <span className="font-mono uppercase">100% QUITADA (R$ 0.00 DE DÍVIDA)</span>
+                                                     </div>
+                                                 </div>
+                                             )}
+
+                                             <div className="pt-2 text-center text-[10px] text-zinc-400 border-t border-black/5 dark:border-white/5">
+                                                 <span>Deseja consultar faturas mais antigas? Acesse o histórico completo na aba <strong className="text-amber-500 font-bold">Faturamento 📑</strong></span>
+                                             </div>
+                                         </div>
+                                     );
+                                 })()}
+
+                                {/* Tabela Multi-Cartões do Cliente */}
+                                <div className={`mt-4 p-4 rounded-xl border space-y-3 ${isMidnight ? 'bg-zinc-900/80 border-white/10' : 'bg-white border-black/20 shadow-sm'}`}>
+                                    <h4 className="text-xs font-black uppercase tracking-wider text-emerald-500 flex items-center justify-between">
+                                        <span>Cartões do Cliente (Físico & Virtuais)</span>
+                                        <span className="text-[10px] text-zinc-400 font-mono">Qtd: {(searchedUser.cards?.length || 2)} cartões</span>
+                                    </h4>
+
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-xs">
+                                            <thead>
+                                                <tr className="border-b border-black/10 dark:border-white/10 opacity-70 text-[10px] uppercase">
+                                                    <th className="pb-2 font-bold">Produto / Nome</th>
+                                                    <th className="pb-2 font-bold">Tipo</th>
+                                                    <th className="pb-2 font-bold">Número</th>
+                                                    <th className="pb-2 font-bold">Validade</th>
+                                                    <th className="pb-2 font-bold">Venc. Fatura</th>
+                                                    <th className="pb-2 font-bold">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-black/5 dark:divide-white/5">
+                                                {(searchedUser.cards && searchedUser.cards.length > 0 ? searchedUser.cards : [
+                                                    {
+                                                        id: 'card-1111-phys',
+                                                        type: 'PHYSICAL',
+                                                        brand: 'MASTERCARD',
+                                                        name: 'Volt Black Physical',
+                                                        cardNumberMasked: searchedUser.creditCard?.number || '**** **** **** 1111',
+                                                        cardNumberFull: '4111 2222 3333 1111',
+                                                        cvv: '321',
+                                                        expirationDate: searchedUser.creditCard?.dueDate || '08/30',
+                                                        isBlocked: searchedUser.creditCard?.isBlocked || false,
+                                                        limit: searchedUser.creditCard?.totalLimit || 5000,
+                                                        dueDay: searchedUser.creditCard?.dueDay || 10,
+                                                    },
+                                                    {
+                                                        id: 'card-1111-virt',
+                                                        type: 'VIRTUAL',
+                                                        brand: 'VISA',
+                                                        name: 'Volt Digital Recurring',
+                                                        cardNumberMasked: '**** **** **** 8822',
+                                                        cardNumberFull: '4111 2222 3333 8822',
+                                                        cvv: '987',
+                                                        expirationDate: '12/28',
+                                                        isBlocked: false,
+                                                        limit: 2500,
+                                                        dueDay: searchedUser.creditCard?.dueDay || 10,
+                                                    }
+                                                ]).map((card: any) => {
+                                                    const isUnmasked = !!unmaskedCards[card.id];
+                                                    const fullNumber = card.cardNumberFull || (card.type === 'VIRTUAL' ? '4111 2222 3333 8822' : '4111 2222 3333 1111');
+                                                    const cardCvv = card.cvv || (card.type === 'VIRTUAL' ? '987' : '321');
+
+                                                    const handleSimulateFromBadge = () => {
+                                                        const payload = {
+                                                            tab: 'cards',
+                                                            cardNumber: fullNumber.replace(/\s+/g, ''),
+                                                            expiration: card.expirationDate,
+                                                            cvv: cardCvv,
+                                                            type: card.type,
+                                                            cpf: searchedUser.cpf
+                                                        };
+                                                        try {
+                                                            sessionStorage.setItem('admin_pending_sim_card', JSON.stringify(payload));
+                                                        } catch (err) {
+                                                            console.error('Erro ao salvar no sessionStorage:', err);
+                                                        }
+                                                        window.dispatchEvent(new CustomEvent('admin-switch-tab-and-fill-card', {
+                                                            detail: payload
+                                                        }));
+                                                    };
+
+                                                    return (
+                                                        <tr key={card.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                                                            <td className="py-2.5 font-bold">{card.name}</td>
+                                                            <td className="py-2.5">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={handleSimulateFromBadge}
+                                                                    title="Clique para Simular Transação nesta Aba de Cartões & Massa"
+                                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer flex items-center gap-1.5 border hover:scale-105 active:scale-95 ${
+                                                                        card.type === 'PHYSICAL'
+                                                                            ? 'bg-blue-500/20 text-blue-600 dark:text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
+                                                                            : 'bg-purple-500/20 text-purple-600 dark:text-purple-300 border-purple-500/40 hover:bg-purple-500/30'
+                                                                    }`}
+                                                                >
+                                                                    <span>{card.type === 'PHYSICAL' ? '💳 Físico' : '📱 Virtual'}</span>
+                                                                    <span className="text-[9px] opacity-70 underline">Simular 🛒</span>
+                                                                </button>
+                                                            </td>
+                                                            <td className="py-2.5 font-mono text-[11px] font-bold">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span>{isUnmasked ? fullNumber : card.cardNumberMasked}</span>
+                                                                    {isUnmasked && <span className="text-[10px] text-amber-500 font-mono">CVV: {cardCvv}</span>}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setUnmaskedCards(prev => ({ ...prev, [card.id]: !prev[card.id] }))}
+                                                                        title={isUnmasked ? "Ocultar dados" : "Revelar número e CVV sem PIN (Admin)"}
+                                                                        className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
+                                                                    >
+                                                                        {isUnmasked ? <EyeOff size={14} /> : <Eye size={14} />}
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-2.5 font-mono text-[11px]">{card.expirationDate}</td>
+                                                            <td className="py-2.5 font-mono text-[11px]">Dia {card.dueDay}</td>
+                                                            <td className="py-2.5">
+                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${card.isBlocked ? 'bg-rose-500/20 text-rose-500' : 'bg-emerald-500/20 text-emerald-500'}`}>
+                                                                    {card.isBlocked ? 'BLOQUEADO' : 'ATIVO'}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
                                 <div
                                     className="flex flex-col gap-4 mt-6 test-admin-user-actions"
                                     id="admin-user-actions"
