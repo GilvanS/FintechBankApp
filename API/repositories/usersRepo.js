@@ -118,6 +118,23 @@ async function seedMassBilling(db, cpf, { accountStatus, daysOverdue, overdueAmo
                 updated_at = CURRENT_TIMESTAMP
             WHERE cpf = ${esc(cpf)}
         `);
+
+        // Além da fatura FECHADA vencida, gera compras no ciclo ATUAL para que a
+        // fatura ABERTA (calculada on-the-fly) também tenha conteúdo.
+        const openParts = splitAmount(round2(300 + Math.random() * 500), 3); // R$ 300–800
+        let openGasto = 0;
+        for (const amt of openParts) {
+            const txDate = new Date();
+            txDate.setDate(txDate.getDate() - Math.floor(Math.random() * 6));
+            await insertPurchase(amt, pickMerchant(), txDate.toISOString());
+            openGasto += amt;
+        }
+        await db.executeQuery(`
+            UPDATE ${db.fq('users')}
+            SET credit_card_available_limit = GREATEST(0, COALESCE(credit_card_available_limit, ${Number(creditLimit) || 5000}) - ${openGasto.toFixed(2)}),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE cpf = ${esc(cpf)}
+        `);
     } else if (accountStatus === 'adimplente') {
         // Compras correntes no ciclo atual — a fatura aberta é calculada on-the-fly
         const parts = splitAmount(round2(400 + Math.random() * 600), 3); // R$ 400–1000

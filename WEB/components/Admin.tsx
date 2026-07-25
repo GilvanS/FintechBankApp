@@ -449,7 +449,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                                         if (isNaN(dueDate.getTime())) dueDate = new Date(today.getFullYear(), today.getMonth() - 1, 15);
                                         
                                         let diffDays = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-                                        const explicitDays = (searchedUser as any).daysOverdue || 0;
+                                        const explicitDays = (searchedUser as any).daysOverdue ?? (searchedUser.creditCard as any)?.daysOverdue ?? 0;
                                         const overdueDays = explicitDays > 0 ? explicitDays : (closedAmount > 0 ? Math.max(7, diffDays) : 0);
                                         const isOverdue = closedAmount > 0 && overdueDays > 0;
 
@@ -474,20 +474,22 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                                      const openAmount = searchedUser.creditCard?.currentInvoice && searchedUser.creditCard.currentInvoice > 0 ? searchedUser.creditCard.currentInvoice : 2365.05;
                                      const closedAmount = searchedUser.creditCard?.closedInvoiceAmount || searchedUser.creditCard?.closedInvoice || 3870.86;
                                      const previousAmount = 1120.00; // Fatura Anterior (Mai/26) - Paga
+                                     // Encargos autoritativos do backend (fonte única). Só recalcula no fallback.
+                                     const bkCharges: any = (searchedUser.creditCard as any)?.closedInvoiceCharges;
                                      const diffTime = Math.abs(new Date().getTime() - new Date(searchedUser.creditCard?.closedInvoiceDueDate || searchedUser.creditCard?.invoiceDueDate || '2026-07-15').getTime());
                                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                     const explicitDays = (searchedUser as any).daysOverdue || 0;
+                                     const explicitDays = (searchedUser as any).daysOverdue ?? (searchedUser.creditCard as any)?.daysOverdue ?? 0;
                                      const overdueDays = explicitDays > 0 ? explicitDays : (closedAmount > 0 ? Math.max(7, diffDays) : 0);
                                      const isOverdue = closedAmount > 0 && overdueDays > 0;
 
-                                     const multa = isOverdue ? Math.round(closedAmount * 0.02 * 100) / 100 : 0;
-                                     const jurosMora = isOverdue ? Math.round(closedAmount * 0.000333 * overdueDays * 100) / 100 : 0;
-                                     const jurosRemun = isOverdue ? Math.round(closedAmount * 0.00513 * overdueDays * 100) / 100 : 0;
+                                     const multa = bkCharges ? bkCharges.multa : (isOverdue ? Math.round(closedAmount * 0.02 * 100) / 100 : 0);
+                                     const jurosMora = bkCharges ? bkCharges.jurosMora : (isOverdue ? Math.round(closedAmount * 0.000333 * overdueDays * 100) / 100 : 0);
+                                     const jurosRemun = bkCharges ? bkCharges.jurosRemuneratorios : (isOverdue ? Math.round(closedAmount * 0.00513 * overdueDays * 100) / 100 : 0);
                                      const iofFixo = Math.round(closedAmount * 0.0038 * 100) / 100;
                                      const iofDiario = isOverdue ? Math.round(closedAmount * 0.000082 * overdueDays * 100) / 100 : 0;
-                                     const iofTotal = Math.round((iofFixo + iofDiario) * 100) / 100;
-                                     const totalEncargos = Math.round((multa + jurosMora + jurosRemun + iofTotal) * 100) / 100;
-                                     const totalWithCharges = Math.round((closedAmount + totalEncargos) * 100) / 100;
+                                     const iofTotal = bkCharges ? bkCharges.iof : Math.round((iofFixo + iofDiario) * 100) / 100;
+                                     const totalEncargos = bkCharges ? bkCharges.totalEncargos : Math.round((multa + jurosMora + jurosRemun + iofTotal) * 100) / 100;
+                                     const totalWithCharges = (searchedUser.creditCard as any)?.closedInvoiceTotal ?? Math.round((closedAmount + totalEncargos) * 100) / 100;
 
                                      // Mínimos (10%)
                                      const minOpenOriginal = Math.round(openAmount * 0.10 * 100) / 100; 

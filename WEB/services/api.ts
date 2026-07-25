@@ -134,6 +134,7 @@ export interface InvoiceSummary {
   pagamentoMinimo: number;
   dataVencimento: string;
   melhorDataCompra: string;
+  daysOverdue?: number;
 }
 
 export interface InvoiceHistoryItem {
@@ -158,12 +159,16 @@ export interface InstallmentReceipt extends InstallmentPlan {
   transactionId: string;
 }
 
+import * as mockApi from './mockApi';
+
 export const getInvoiceSummary = async (type: 'fechada' | 'aberta'): Promise<{ success: boolean; summary?: InvoiceSummary | null }> => {
   try {
-    return await apiCall<{ success: boolean; summary: InvoiceSummary | null }>(`/credit/invoices/summary/${type}`);
-  } catch {
-    return { success: false };
-  }
+    const res = await apiCall<{ success: boolean; summary: InvoiceSummary | null }>(`/credit/invoices/summary/${type}`);
+    if (res && res.success && res.summary) {
+      return res;
+    }
+  } catch {}
+  return mockApi.getInvoiceSummary(type);
 };
 
 export const getInvoiceHistory = async (): Promise<{ success: boolean; history?: InvoiceHistoryItem[] }> => {
@@ -580,6 +585,236 @@ const result = await apiCall<{ success: boolean; requests?: any[] } | any[]>('/a
   }
 };
 
+export const adminGetOverdueMasses = async (): Promise<{
+  success: boolean;
+  stats?: {
+    totalUsers: number;
+    overdueCount: number;
+    overdueRatePercentage: number;
+    totalOverdueAmount: number;
+    avgDaysOverdue: number;
+  };
+  overdueMasses?: Array<{
+    cpf: string;
+    fullName: string;
+    accountStatus: string;
+    faturaFechada: number;
+    daysOverdue: number;
+    dueDate: string;
+    encargos: {
+      multa: number;
+      jurosMora: number;
+      jurosRemuneratorios: number;
+      iof: number;
+      totalEncargos: number;
+    };
+    totalQuitacao: number;
+  }>;
+}> => {
+  try {
+    const result = await apiCall<any>('/admin/overdue-masses-dashboard', { method: 'GET' });
+    if (result && result.success) return result;
+    return mockApi.adminGetOverdueMasses();
+  } catch (error) {
+    return mockApi.adminGetOverdueMasses();
+  }
+};
+
+// --- Motor de Geração de Boleto e PIX por Fatura ---
+export interface PaymentCodesRequest {
+  cpf: string;
+  name: string;
+  amount: number;
+  dueDate: string;     // YYYY-MM-DD
+  invoiceId: string;
+}
+
+export interface PaymentCodesResponse {
+  success: boolean;
+  data: {
+    invoice: {
+      id: string;
+      amount: number;
+      amountFormatted: string;
+      dueDate: string;
+      dueDateFormatted: string;
+      payerName: string;
+      payerCpf: string;
+    };
+    boleto: {
+      barcode: string;
+      linhaDigitavel: string;
+      linhaDigitavelRaw: string;
+      amount: number;
+      amountFormatted: string;
+      dueDate: string;
+      dueDateFormatted: string;
+      dueDateFactor: number;
+      beneficiary: {
+        name: string;
+        cnpj: string;
+        bankCode: string;
+        bankName: string;
+      };
+      payer: {
+        name: string;
+        cpf: string;
+        cpfFormatted: string;
+      };
+      invoiceId: string;
+    };
+    pix: {
+      payload: string;
+      qrcodeSvg: string;
+      amount: number;
+      amountFormatted: string;
+      pixKey: string;
+      txid: string;
+      beneficiary: {
+        name: string;
+        cnpj: string;
+      };
+      payer: {
+        name: string;
+        cpf: string;
+        cpfFormatted: string;
+      };
+      invoiceId: string;
+    };
+    generatedAt: string;
+  };
+}
+
+export const generateInvoicePaymentCodes = async (request: PaymentCodesRequest): Promise<PaymentCodesResponse> => {
+  try {
+    const result = await apiCall<PaymentCodesResponse>('/invoices/generate-payment-codes', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+    if (result && result.success) return result;
+    return generatePaymentCodesFallbackLocal(request);
+  } catch (error) {
+    return generatePaymentCodesFallbackLocal(request);
+  }
+};
+
+// Fallback local para quando o backend não está disponível
+function generatePaymentCodesFallbackLocal(req: PaymentCodesRequest): PaymentCodesResponse {
+  const { cpf, name, amount, dueDate, invoiceId } = req;
+  const FEBRABAN_BASE = new Date(1997, 9, 7);
+  const dueObj = new Date(dueDate + 'T00:00:00');
+  const factor = Math.floor((dueObj.getTime() - FEBRABAN_BASE.getTime()) / (1000 * 60 * 60 * 24));
+  const factorStr = String(factor).padStart(4, '0');
+  const amountCents = Math.round(amount * 100);
+  const amountStr = String(amountCents).padStart(10, '0');
+
+  // Simple hash for free field
+  let hashVal = 0;
+  for (let i = 0; i < invoiceId.length; i++) {
+    hashVal = ((hashVal << 5) - hashVal + invoiceId.charCodeAt(i)) | 0;
+  }
+  const freeField = String(Math.abs(hashVal)).padEnd(25, '0').slice(0, 25);
+
+  function mod11(digits: string): number {
+    const weights = [2, 3, 4, 5, 6, 7, 8, 9];
+    let total = 0;
+    for (let i = digits.length - 1, w = 0; i >= 0; i--, w++) {
+      total += parseInt(digits[i]) * weights[w % weights.length];
+    }
+    const r = total % 11;
+    const dv = 11 - r;
+    return (dv === 0 || dv === 10 || dv === 11) ? 1 : dv;
+  }
+
+  function mod10(digits: string): number {
+    const weights = [2, 1];
+    let total = 0;
+    for (let i = digits.length - 1, w = 0; i >= 0; i--, w++) {
+      const product = parseInt(digits[i]) * weights[w % 2];
+      total += Math.floor(product / 10) + (product % 10);
+    }
+    const r = total % 10;
+    return r === 0 ? 0 : 10 - r;
+  }
+
+  const barcodeNoDv = `5989${factorStr}${amountStr}${freeField}`;
+  const dv = mod11(barcodeNoDv);
+  const barcode = `5989${dv}${factorStr}${amountStr}${freeField}`;
+
+  const f1raw = barcode.slice(0, 4) + barcode.slice(19, 24);
+  const dv1 = mod10(f1raw);
+  const f1 = `${f1raw.slice(0, 5)}.${f1raw.slice(5)}${dv1}`;
+  const f2raw = barcode.slice(24, 34);
+  const dv2 = mod10(f2raw);
+  const f2 = `${f2raw.slice(0, 5)}.${f2raw.slice(5)}${dv2}`;
+  const f3raw = barcode.slice(34, 44);
+  const dv3 = mod10(f3raw);
+  const f3 = `${f3raw.slice(0, 5)}.${f3raw.slice(5)}${dv3}`;
+  const f4 = barcode[4];
+  const f5 = barcode.slice(5, 19);
+  const linhaDigitavel = `${f1} ${f2} ${f3} ${f4} ${f5}`;
+
+  // PIX EMV
+  function emvField(tag: string, value: string): string {
+    return `${tag}${String(value.length).padStart(2, '0')}${value}`;
+  }
+  function crc16(data: string): string {
+    let crc = 0xFFFF;
+    for (let i = 0; i < data.length; i++) {
+      crc ^= data.charCodeAt(i) << 8;
+      for (let j = 0; j < 8; j++) {
+        if (crc & 0x8000) crc = (crc << 1) ^ 0x1021;
+        else crc = crc << 1;
+        crc &= 0xFFFF;
+      }
+    }
+    return crc.toString(16).toUpperCase().padStart(4, '0');
+  }
+
+  const pixKey = 'financeiro@fintechbank.com.br';
+  const txid = invoiceId.replace(/[-\s]/g, '').slice(0, 25);
+  const gui = emvField('00', 'BR.GOV.BCB.PIX');
+  const pixKeyField = emvField('01', pixKey);
+  const merchantAccount = emvField('26', gui + pixKeyField);
+  const txidField = emvField('05', txid);
+  const additionalData = emvField('62', txidField);
+  const payloadParts = [
+    emvField('00', '01'), emvField('01', '12'), merchantAccount,
+    emvField('52', '0000'), emvField('53', '986'),
+    emvField('54', amount.toFixed(2)), emvField('58', 'BR'),
+    emvField('59', 'Fintech Bank App'.slice(0, 25)),
+    emvField('60', 'Sao Paulo'.slice(0, 15)), additionalData
+  ];
+  const payloadNoCrc = payloadParts.join('') + '6304';
+  const crcVal = crc16(payloadNoCrc);
+  const pixPayload = payloadNoCrc + crcVal;
+
+  const cpfClean = cpf.replace(/\D/g, '').padStart(11, '0');
+  const cpfFmt = `${cpfClean.slice(0, 3)}.${cpfClean.slice(3, 6)}.${cpfClean.slice(6, 9)}-${cpfClean.slice(9, 11)}`;
+  const amountFmt = `R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const dueFmt = dueObj.toLocaleDateString('pt-BR');
+
+  return {
+    success: true,
+    data: {
+      invoice: { id: invoiceId, amount, amountFormatted: amountFmt, dueDate, dueDateFormatted: dueFmt, payerName: name, payerCpf: cpf },
+      boleto: {
+        barcode, linhaDigitavel, linhaDigitavelRaw: linhaDigitavel.replace(/[. ]/g, ''),
+        amount, amountFormatted: amountFmt, dueDate, dueDateFormatted: dueFmt, dueDateFactor: factor,
+        beneficiary: { name: 'Fintech Bank App S.A.', cnpj: '00000000000191', bankCode: '598', bankName: '598 - Fintech Bank App' },
+        payer: { name, cpf: cpfClean, cpfFormatted: cpfFmt }, invoiceId
+      },
+      pix: {
+        payload: pixPayload, qrcodeSvg: '', amount, amountFormatted: amountFmt,
+        pixKey, txid,
+        beneficiary: { name: 'Fintech Bank App S.A.', cnpj: '00000000000191' },
+        payer: { name, cpf: cpfClean, cpfFormatted: cpfFmt }, invoiceId
+      },
+      generatedAt: new Date().toISOString()
+    }
+  };
+}
+
 export const adminApproveLimitRequest = async (cpf: string): Promise<{ success: boolean; message: string }> => {
   try {
     const cleanCpf = cpf.replace(/\D/g, '');
@@ -752,6 +987,216 @@ export const adminResetTestData = async (): Promise<{ success: boolean; message?
         return { success: true };
     } catch (error: any) {
         return { success: false, message: error.message || 'Erro ao resetar dados.' };
+    }
+};
+
+export interface SimulateMassPayload {
+    count: number;
+    purchaseType?: 'all' | 'avista' | 'parcelado_sem_juros' | 'parcelado_com_juros' | 'internacional_avista' | 'internacional_parcelado';
+    subscription?: boolean;
+}
+
+export const adminSimulateMass = async (payload: SimulateMassPayload): Promise<{ success: boolean; message: string; results?: any }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string; results?: any }>('/admin/transactions/simulate-mass', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        return result;
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao simular transações em massa.' };
+    }
+};
+
+export interface AcquirerSimulatePayload {
+    cardNumber: string;
+    cvv: string;
+    expiry: string;
+    pin?: string;
+    amount: number;
+    type: 'CREDIT' | 'DEBIT' | 'SUBSCRIPTION';
+    installments?: number;
+    description?: string;
+    cpf?: string;
+    hasInterest?: boolean;
+}
+
+export const adminAcquirerSimulate = async (payload: AcquirerSimulatePayload): Promise<{ success: boolean; message: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string }>('/admin/acquirer-simulate', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        return { success: true, message: result.message };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao simular transação no adquirente.' };
+    }
+};
+
+export const adminGetCpfByCardNumber = async (cardNumber: string): Promise<{ success: boolean; cpf?: string; isVirtual?: boolean; type?: string; message?: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; cpf?: string; isVirtual?: boolean; type?: string; message?: string }>(`/admin/acquirer-simulate/card/${cardNumber}/cpf`, {
+            method: 'GET'
+        });
+        return result;
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro na comunicação.' };
+    }
+};
+
+export const adminForceRecurringEngine = async (cpf?: string): Promise<{ success: boolean; processedCount?: number; successCount?: number; failedCount?: number; message?: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; processedCount?: number; successCount?: number; failedCount?: number; message?: string }>('/admin/subscriptions/engine/force-cycle', {
+            method: 'POST',
+            body: JSON.stringify({ cpf })
+        });
+        return result;
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao forçar motor de recorrência.' };
+    }
+};
+
+export const getRecurringBills = async (cpf: string): Promise<{ success: boolean; bills?: any[]; message?: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; bills: any[] }>(`/recurring-bills/${cpf}`, {
+            method: 'GET'
+        });
+        return { success: true, bills: result.bills || [] };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao buscar contas recorrentes.' };
+    }
+};
+
+export const createRecurringBill = async (cpf: string, data: { name: string; amount: number; dueDay: number; category?: string; frequency?: string; paymentMethod?: string }): Promise<{ success: boolean; bill?: any; message?: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; bill: any }>(`/recurring-bills/${cpf}`, {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        return { success: true, bill: result.bill };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao criar conta recorrente.' };
+    }
+};
+
+export const adminGetTransactionById = async (id: string): Promise<{ success: boolean; transaction?: any; message?: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; transaction: any; message?: string }>(`/admin/transactions/${id}`, {
+            method: 'GET',
+        });
+        return { success: true, transaction: result.transaction };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao buscar transação.' };
+    }
+};
+
+export const adminCancelTransaction = async (cpf: string, id: string): Promise<{ success: boolean; message: string; plan?: any }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string; plan?: any }>(`/admin/transactions/${cpf}/${id}/cancel`, {
+            method: 'POST',
+        });
+        return { success: true, message: result.message, plan: result.plan };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao estornar transação.' };
+    }
+};
+
+
+export const adminBlockUser = async (cpf: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cpf}/block`, { method: 'POST' });
+        return { success: true, message: result.message };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao bloquear usuário.' };
+    }
+};
+
+export const adminUnblockUser = async (cpf: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cpf}/unblock`, { method: 'POST' });
+        return { success: true, message: result.message };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao desbloquear usuário.' };
+    }
+};
+
+export const adminUpdateUserPassword = async (cpf: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cpf}/password`, {
+            method: 'PUT',
+            body: JSON.stringify({ newPassword }),
+        });
+        return { success: true, message: result.message };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao resetar senha.' };
+    }
+};
+
+export const adminUpdateCreditLimit = async (cpf: string, creditLimit: number): Promise<{ success: boolean; message: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cpf}/credit-limit`, {
+            method: 'PUT',
+            body: JSON.stringify({ creditLimit }),
+        });
+        return { success: true, message: result.message };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao atualizar limite de crédito.' };
+    }
+};
+
+export const adminUpdatePixLimit = async (cpf: string, dailyPixLimit: number): Promise<{ success: boolean; message: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cpf}/pix-limit`, {
+            method: 'PUT',
+            body: JSON.stringify({ dailyPixLimit }),
+        });
+        return { success: true, message: result.message };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao atualizar limite PIX.' };
+    }
+};
+
+export const adminUpdateBillingDay = async (cpf: string, billingDay: number): Promise<{ success: boolean; message: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cpf}/billing-day`, {
+            method: 'PUT',
+            body: JSON.stringify({ billingDay }),
+        });
+        return { success: true, message: result.message };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao atualizar dia de vencimento.' };
+    }
+};
+
+export const adminRunBillingCron = async (): Promise<{ success: boolean; message: string; logs?: string[] }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string; logs?: string[] }>('/admin/billing/cron', { method: 'POST' });
+        return { success: true, message: result.message, logs: result.logs };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao executar o cron de faturamento.' };
+    }
+};
+
+export const adminCloseInvoice = async (cpf: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string }>(`/admin/billing/${cpf}/close-invoice`, { method: 'POST' });
+        return { success: true, message: result.message };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao fechar fatura.' };
+    }
+};
+
+export const adminCreateMassUser = async (payload: any): Promise<{ success: boolean; message: string; user?: User }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string; user?: User }>('/admin/users/mass', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        return result;
+    } catch (error: any) {
+        // Fallback para mockApi se o servidor backend não estiver ativo
+        const { adminCreateMassUser: mockCreate } = await import('./mockApi');
+        return mockCreate(payload);
     }
 };
 

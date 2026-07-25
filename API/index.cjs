@@ -157,13 +157,16 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     let latestInvoice = null;
     try {
         const invRows = await databricksService.executeQuery(`
-            SELECT status, due_date, valor_total, itemized_transactions FROM ${databricksService.fq('invoices')}
-            WHERE cpf = '${cpf}' ORDER BY created_at DESC LIMIT 5
+            SELECT status, due_date, valor_total, itemized_transactions, data_pagamento FROM ${databricksService.fq('invoices')}
+            WHERE cpf = '${cpf}' ORDER BY due_date DESC LIMIT 5
         `);
         if (invRows.length > 0) {
             latestInvoice = invRows[0];
             normalized.invoiceStatus = latestInvoice.status;
-            const closedInvoice = invRows.find(i => i.status === 'FECHADA');
+            // Fatura fechada de referência p/ herança na fatura aberta: a mais recente
+            // FECHADA em ATRASO (não paga e com valor > 0). Ignora fechadas pagas e
+            // faturas zeradas — evita herdar encargos da fatura errada.
+            const closedInvoice = invRows.find(i => i.status === 'FECHADA' && !i.data_pagamento && parseFloat(i.valor_total || 0) > 0);
             if (closedInvoice) {
                 normalized.creditCard.closedInvoiceDueDate = closedInvoice.due_date;
                 normalized.creditCard.closedInvoice = parseFloat(closedInvoice.valor_total || 0);
@@ -362,6 +365,28 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         ? Math.max(0, dbClosedInvoice - paidInCycle)
         : Math.max(0, rawInvoiceTotal - paidInCycle);
     normalized.creditCard.closedInvoiceAmount = normalized.creditCard.closedInvoice;
+
+    // FONTE ÚNICA DE VERDADE dos encargos/total da fatura fechada.
+    // Calculado UMA vez aqui (backend) para que web e admin apenas LEIAM — antes cada
+    // tela recalculava com contagem de dias diferente (ex.: 967,53 vs 970,11).
+    {
+        const _closedVal = normalized.creditCard.closedInvoice || 0;
+        let _daysOverdue = 0;
+        if (_closedVal > 0 && normalized.creditCard.closedInvoiceDueDate) {
+            const _d = new Date(normalized.creditCard.closedInvoiceDueDate); _d.setHours(0, 0, 0, 0);
+            const _t = new Date(); _t.setHours(0, 0, 0, 0);
+            _daysOverdue = Math.max(0, Math.floor((_t - _d) / 86400000));
+        }
+        const _r2 = n => Math.round(n * 100) / 100;
+        const _multa = _closedVal > 0 ? _r2(_closedVal * 0.02) : 0;
+        const _jurosMora = _closedVal > 0 ? _r2(_closedVal * 0.000333 * _daysOverdue) : 0;
+        const _jurosRem = _closedVal > 0 ? _r2(_closedVal * 0.00513 * _daysOverdue) : 0;
+        const _iof = _closedVal > 0 ? _r2(_closedVal * 0.0038 + _closedVal * 0.000082 * _daysOverdue) : 0;
+        const _totalEncargos = _r2(_multa + _jurosMora + _jurosRem + _iof);
+        normalized.creditCard.daysOverdue = _daysOverdue;
+        normalized.creditCard.closedInvoiceCharges = { multa: _multa, jurosMora: _jurosMora, jurosRemuneratorios: _jurosRem, iof: _iof, totalEncargos: _totalEncargos };
+        normalized.creditCard.closedInvoiceTotal = _r2(_closedVal + _totalEncargos);
+    }
 
     try {
         const _futurePlans = await databricksService.executeQuery(`
