@@ -1769,6 +1769,7 @@ apiRouter.get('/admin/notifications/abaixo', bearerAuth(), authenticateAdmin, as
 
 // ── Timeline de regularizações (últimos 7 dias) ──
 apiRouter.get('/admin/regularized-timeline', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    // Janela: últimos 7 dias.
     const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
     const rows = await databricksService.executeQuery(`
@@ -1781,22 +1782,25 @@ apiRouter.get('/admin/regularized-timeline', bearerAuth(), authenticateAdmin, as
         ORDER BY data_pagamento ASC
     `).catch(() => []);
 
-    // Agrupar por dia
+    // Agrupar por dia (UTC). O driver Postgres pode devolver Date OU string ISO,
+    // por isso normalizamos com `new Date(...)` antes de extrair a chave.
     const dayMap = new Map();
     for (const r of (rows || [])) {
         if (!r.data_pagamento) continue;
-        const day = String(r.data_pagamento).split('T')[0] || String(r.data_pagamento).slice(0, 10);
+        const d = r.data_pagamento instanceof Date ? r.data_pagamento : new Date(r.data_pagamento);
+        if (isNaN(d.getTime())) continue;
+        const day = d.toISOString().slice(0, 10); // YYYY-MM-DD em UTC
         if (!dayMap.has(day)) dayMap.set(day, { count: 0, totalAmount: 0 });
         const entry = dayMap.get(day);
         entry.count++;
         entry.totalAmount += parseFloat(r.valor_pago || r.valor_total || 0);
     }
 
-    // Preencher dias sem pagamentos com 0
+    // Preencher dias sem pagamentos com 0 — últimos 7 dias
     const timeline = [];
     for (let i = 6; i >= 0; i--) {
         const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-        const dayKey = d.toISOString().split('T')[0];
+        const dayKey = d.toISOString().slice(0, 10);
         const data = dayMap.get(dayKey);
         timeline.push({
             date: dayKey,
