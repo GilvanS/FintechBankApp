@@ -28,6 +28,7 @@ const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequeste
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate } = require('./utils/billing');
 const cardEngine = require('./utils/cardEngine');
+const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges } = require('./utils/invoiceMath');
 const subsUtil = require('./utils/subscriptions');
 const subscriptionsRepo = require('./repositories/subscriptionsRepo');
 const transactionReversal = require('./utils/transactionReversal');
@@ -86,6 +87,35 @@ cron.schedule('0 0 * * *', async () => {
         console.log('[Cron] Cobrança de assinaturas realizada:', result && result.processedCount, 'processadas');
     } catch (e) {
         console.error('[Cron] Erro na cobrança de assinaturas:', e);
+    }
+
+    // Sincronizar dias_atraso nas invoices fechadas não pagas (garantia extra
+    // mesmo se o runBillingValidation acima falhar ou pular a sync condicional).
+    console.log('[Cron] Sincronizando dias_atraso nas invoices...');
+    try {
+        const syncResult = await syncInvoiceDiasAtraso();
+        if (syncResult.success) {
+            console.log(`[Cron] Sincronização concluída: ${syncResult.updated} invoice(s) atualizada(s), ${syncResult.corretas}/${syncResult.total} consistentes`);
+        } else {
+            console.warn('[Cron] Falha na sincronização de dias_atraso:', syncResult.error);
+        }
+    } catch (e) {
+        console.error('[Cron] Erro ao sincronizar dias_atraso:', e);
+    }
+});
+// Cron semanal: corrige pagamentos órfãos automaticamente (domingo 3h da manhã)
+// Reutiliza a mesma função runOrphanPaymentFix() da rota POST /admin/fix-orphan-payments
+cron.schedule('0 3 * * 0', async () => {
+    console.log('[Cron-Semanal] Executando correção automática de pagamentos órfãos...');
+    try {
+        const result = await runOrphanPaymentFix();
+        const s = result.summary;
+        console.log(`[Cron-Semanal] Correção concluída: ${s.fixed} corrigido(s), ${s.errors} erro(s), ${s.usersScanned} usuário(s) escaneados`);
+        if (s.errors > 0 || s.fixed > 0) {
+            console.log('[Cron-Semanal] Detalhes:', JSON.stringify(result.details.filter(d => d.action !== 'ok')));
+        }
+    } catch (e) {
+        console.error('[Cron-Semanal] Erro na correção de pagamentos órfãos:', e);
     }
 });
 
@@ -157,7 +187,10 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     let latestInvoice = null;
     try {
         const invRows = await databricksService.executeQuery(`
-            SELECT status, due_date, valor_total, itemized_transactions, data_pagamento FROM ${databricksService.fq('invoices')}
+            SELECT status, due_date, valor_total, saldo_anterior, valor_iof, valor_multa,
+                   valor_juros_remuneratorios, valor_juros_mora,
+                   COALESCE(valor_pago, 0) AS valor_pago, itemized_transactions, data_pagamento
+            FROM ${databricksService.fq('invoices')}
             WHERE cpf = '${cpf}' ORDER BY due_date DESC LIMIT 5
         `);
         if (invRows.length > 0) {
@@ -166,14 +199,86 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             // Fatura fechada de referência p/ herança na fatura aberta: a mais recente
             // FECHADA em ATRASO (não paga e com valor > 0). Ignora fechadas pagas e
             // faturas zeradas — evita herdar encargos da fatura errada.
-            const closedInvoice = invRows.find(i => i.status === 'FECHADA' && !i.data_pagamento && parseFloat(i.valor_total || 0) > 0);
+            // ── Fatura Fechada (prioridade: não paga com saldo > 0) ──────────
+            // closedInvoice residual = valor_total - valor_pago (para cálculo de encargos)
+            // Para o Admin dashboard, também expomos valor_total e valor_pago originais
+            // para que a linha "Pagamento Realizado" apareça corretamente.
+            // Todas as fechadas ainda não pagas — o débito exibido tem que bater com o
+            // que /cards/invoice/pay cobra (getClosedInvoiceDebt), que soma todas elas.
+            const unpaidClosed = invRows.filter(i => i.status === 'FECHADA' && !i.data_pagamento && computeInvoiceGross(i) > 0);
+            const closedInvoice = unpaidClosed[0];
             if (closedInvoice) {
+                // Janela de transações da fatura fechada continua ancorada na mais recente
                 normalized.creditCard.closedInvoiceDueDate = closedInvoice.due_date;
-                normalized.creditCard.closedInvoice = parseFloat(closedInvoice.valor_total || 0);
+                // Saldo residual = valor_total (principal) - valor_pago, NÃO o gross (que já
+                // inclui encargos congelados do seed). Usar gross faria os encargos ao vivo
+                // serem calculados DUAS VEZES — uma nos encargos congelados (dentro do gross)
+                // e outra nos encargos ao vivo (calculados abaixo sobre _closedVal).
+                // O total final (principal + encargos ao vivo) = gross, o que é correto.
+                const _residualClosed = unpaidClosed.reduce(
+                    (sum, inv) => sum + Math.max(0, parseFloat(inv.valor_total || 0) - parseFloat(inv.valor_pago || 0)),
+                    0
+                );
+                // ── closedInvoice = VALOR ORIGINAL (imutável), não o residual ──
+                // O residual (saldo ainda devido) vai para closedInvoiceResidual.
+                // Isso garante que a fatura fechada nunca altere seu valor após
+                // pagamento parcial — o cliente vê sempre o valor original.
+                const _originalTotal = Math.round(unpaidClosed.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0) * 100) / 100;
+                normalized.creditCard.closedInvoice = _originalTotal;
+                normalized.creditCard.closedInvoiceResidual = Math.round(_residualClosed * 100) / 100;
+                // EXPOR valores originais para o Admin dashboard ("Pagamento Realizado")
+                // _closedInvoiceValorTotal = PRINCIPAL (valor_total), não o gross. O gross
+                // (computeInvoiceGross) inclui encargos congelados do seed, e mostrar o gross
+                // como "total original" confunde o cliente — a fatura fechada mostra um valor
+                // maior do que foi realmente pago. O principal é o valor_total da invoice.
+                normalized.creditCard._closedInvoiceValorTotal = Math.round(unpaidClosed.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0) * 100) / 100;
+                normalized.creditCard._closedInvoiceValorPago = Math.round(unpaidClosed.reduce((sum, inv) => sum + parseFloat(inv.valor_pago || 0), 0) * 100) / 100;
+                normalized.creditCard._closedInvoiceCount = unpaidClosed.length;
                 if (closedInvoice.itemized_transactions) {
                     try {
                         normalized.creditCard._closedInvoiceSnapshot = JSON.parse(closedInvoice.itemized_transactions);
                     } catch (_e) { /* snapshot invalido, cai no fallback ao vivo */ }
+                }
+            } else {
+                // ── Quando NÃO há fatura fechada não paga (todas quitadas ou zeradas) ──
+                // Ainda assim expomos valor_total e valor_pago para o Admin dashboard
+                // e setamos closedInvoice = 0 para refletir que não há dívida.
+                const latestFechada = invRows.find(i => i.status === 'FECHADA' && computeInvoiceGross(i) > 0);
+                if (latestFechada) {
+                    normalized.creditCard.closedInvoiceDueDate = latestFechada.due_date;
+                    // _closedInvoiceValorTotal = PRINCIPAL (valor_total), não o gross
+                    normalized.creditCard._closedInvoiceValorTotal = Math.round(parseFloat(latestFechada.valor_total || 0) * 100) / 100;
+                    normalized.creditCard._closedInvoiceValorPago = parseFloat(latestFechada.valor_pago || 0);
+                    normalized.creditCard._closedInvoiceDataPagamento = latestFechada.data_pagamento;
+                    // Fatura quitada — saldo devedor é zero
+                    normalized.creditCard.closedInvoice = 0;
+                    normalized.creditCard.closedInvoiceResidual = 0;
+                    // Sinaliza para a UI se closedInvoice=0 representa pagamento total
+                    const paidInfo = computeInvoicePaidInfo(latestFechada);
+                    normalized.creditCard.closedInvoiceIsPaid = paidInfo.isPaid;
+                    normalized.creditCard.closedInvoicePaidAt = paidInfo.paidAt;
+
+                    // ── Encargos herdados: se a fechada foi paga em atraso, os encargos
+                    // que incidiram entre o vencimento e o pagamento continuam devidos
+                    // na fatura aberta (não somem com a quitação do principal).
+                    // Cálculo usa valor_total original e período due→paid, não _closedVal (= 0).
+                    if (latestFechada.data_pagamento) {
+                        const _due = new Date(latestFechada.due_date); _due.setHours(0,0,0,0);
+                        const _paid = new Date(latestFechada.data_pagamento); _paid.setHours(0,0,0,0);
+                        const _lateDays = Math.max(0, Math.floor((_paid - _due) / 86400000));
+                        if (_lateDays > 0) {
+                            const _vt = parseFloat(latestFechada.valor_total || 0);
+                            const charges = calcAllCharges(_vt, _lateDays);
+                            normalized.creditCard._paidLateCharges = {
+                                days: _lateDays,
+                                multa: charges.multa,
+                                jurosMora: charges.jurosMora,
+                                jurosRemuneratorios: charges.jurosRemuneratorios,
+                                iof: charges.iof,
+                                total: charges.total
+                            };
+                        }
+                    }
                 }
             }
         }
@@ -308,7 +413,24 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             return { ...base, merchant: merchantName, type: 'INVOICE_INSTALLMENT', installments, currentInstallment, totalInstallments };
         }
         if (r.type === 'INVOICE_PAYMENT' || r.type === 'INVOICE_ANTICIPATION') {
-            const merchant = r.type === 'INVOICE_PAYMENT' ? 'Pagamento fatura' : 'Antecipacao de parcelas';
+            // Determina o tipo de pagamento a partir da descrição original da transação.
+            // O INSERT de pagamento total usa 'Pagamento fatura', enquanto pagamento parcial
+            // (incluindo mínimo) usa 'Pagamento parcial de fatura'. O merchant é enriquecido
+            // com o sufixo (Total / Parcial) para exibição clara no frontend.
+            // NOTA: 'desc' já está declarado no escopo externo (map callback, linha ~398).
+            let merchant;
+            if (r.type === 'INVOICE_ANTICIPATION') {
+                merchant = 'Antecipacao de parcelas';
+            } else {
+                const lowerDesc = (desc || '').toLowerCase();
+                if (lowerDesc.includes('parcial')) {
+                    merchant = 'Pagamento fatura (Parcial)';
+                } else if (lowerDesc.includes('minimo') || lowerDesc.includes('mínimo')) {
+                    merchant = 'Pagamento fatura (Mínimo)';
+                } else {
+                    merchant = 'Pagamento fatura (Total)';
+                }
+            }
             return { ...base, merchant, type: 'PAYMENT' };
         }
         return null;
@@ -323,11 +445,47 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         if (splitTxIds.has(tx.id)) return false;
         if (tx.type === 'INVOICE_INSTALLMENT') return true;
         if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT') return true;
+        if (tx.type === 'PAYMENT' || tx.type === 'INVOICE_PAYMENT' || tx.type === 'INVOICE_ANTICIPATION') return true;
         return false;
     });
 
+    // INVOICE_PAYMENT e INVOICE_ANTICIPATION aparecem na lista (visível para o cliente)
+    // mas NÃO inflam currentInvoice.
     normalized.creditCard.transactions = openTransactions;
-    normalized.creditCard.currentInvoice = openTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    normalized.creditCard.currentInvoice = openTransactions
+        .filter(tx => tx.type !== 'PAYMENT' && tx.type !== 'INVOICE_PAYMENT' && tx.type !== 'INVOICE_ANTICIPATION')
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
+    // ── paymentHistory (dedicado) ────────────────────────────────────────────
+    // Filtra as transações INVOICE_PAYMENT/INVOICE_ANTICIPATION das RAW rows
+    // (cardRows, antes do mapeamento) e as converte para PaymentEntry.
+    // O paymentHistory aparece no frontend como histórico de pagamentos do cliente.
+    // A lógica de determinação do paymentType (TOTAL/MINIMO/PARCIAL) é IDÊNTICA
+    // à do admin dashboard (linha ~2933) — mantém-se consistente entre as duas fontes.
+    try {
+        const _paymentEntries = (cardRows || [])
+            .filter(r => r.type === 'INVOICE_PAYMENT' || r.type === 'INVOICE_ANTICIPATION')
+            .map(r => {
+                const _desc = (r.description || '').toLowerCase();
+                let _paymentType = 'TOTAL';
+                if (r.type === 'INVOICE_ANTICIPATION') _paymentType = 'PARCIAL';
+                else if (_desc.includes('parcial')) _paymentType = 'PARCIAL';
+                else if (_desc.includes('minimo') || _desc.includes('mínimo')) _paymentType = 'MINIMO';
+                return {
+                    id: r.id,
+                    date: r.date,
+                    amount: Math.abs(parseFloat(r.amount || 0)),
+                    description: r.description || 'Pagamento de fatura',
+                    paymentType: _paymentType,
+                };
+            });
+        // Ordenar do mais recente para o mais antigo
+        _paymentEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+        normalized.creditCard.paymentHistory = _paymentEntries;
+    } catch (_e) {
+        // Fallback silencioso se cardRows não estiver disponível
+        normalized.creditCard.paymentHistory = [];
+    }
 
     const isBlocked = Boolean(normalized.creditCard?.isBlocked);
     const cutoff = invoiceDueDateEndOfDay && !isNaN(invoiceDueDateEndOfDay.getTime()) ? invoiceDueDateEndOfDay : new Date(new Date().setUTCHours(23, 59, 59, 999));
@@ -348,6 +506,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             if (splitTxIds.has(tx.id)) return false;
             if (tx.type === 'INVOICE_INSTALLMENT') return true;
             if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT') return true;
+            if (tx.type === 'PAYMENT' || tx.type === 'INVOICE_PAYMENT' || tx.type === 'INVOICE_ANTICIPATION') return true;
             return false;
         });
     }
@@ -356,37 +515,125 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     delete normalized.creditCard._closedInvoiceSnapshot;
     normalized.creditCard.closedTransactions = closedSnapshot || closedTransactions;
     const rawInvoiceTotal = normalized.creditCard.closedTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-    const paidInCycle = cardRows
-        .filter(r => r.type === 'INVOICE_PAYMENT' && new Date(r.date).getTime() > _closeMs)
-        .reduce((sum, r) => sum + Math.abs(parseFloat(r.amount || 0)), 0);
-
+    // paidInCycle removido — closedInvoice já usa valor_pago (saldo residual do DB).
+    // A subtração dupla (paidInCycle + valor_pago) causava double-counting.
+    // closedInvoice agora é fonte única: valor_total - valor_pago.
+    // rawInvoiceTotal (fallback) ainda funciona sem double-counting.
     const dbClosedInvoice = normalized.creditCard.closedInvoice;
+    const dbClosedResidual = normalized.creditCard.closedInvoiceResidual;
     normalized.creditCard.closedInvoice = dbClosedInvoice !== undefined && dbClosedInvoice !== null
-        ? Math.max(0, dbClosedInvoice - paidInCycle)
-        : Math.max(0, rawInvoiceTotal - paidInCycle);
+        ? Math.max(0, dbClosedInvoice)
+        : Math.max(0, rawInvoiceTotal);
+    normalized.creditCard.closedInvoiceResidual = dbClosedResidual !== undefined && dbClosedResidual !== null
+        ? Math.max(0, dbClosedResidual)
+        : Math.max(0, rawInvoiceTotal);
     normalized.creditCard.closedInvoiceAmount = normalized.creditCard.closedInvoice;
 
     // FONTE ÚNICA DE VERDADE dos encargos/total da fatura fechada.
     // Calculado UMA vez aqui (backend) para que web e admin apenas LEIAM — antes cada
     // tela recalculava com contagem de dias diferente (ex.: 967,53 vs 970,11).
+    //
+    // closedInvoice = valor ORIGINAL (imutável, o que foi fechado no ciclo anterior)
+    // closedInvoiceResidual = saldo ainda devido (valor_total - valor_pago)
+    // Para cálculos financeiros (encargos, total, mínimo), usa-se o RESIDUAL.
+    // Para exibição (fatura fechada), usa-se o ORIGINAL.
     {
-        const _closedVal = normalized.creditCard.closedInvoice || 0;
+        const _closedVal = normalized.creditCard.closedInvoiceResidual || 0;
+        const _isPaid = Boolean(normalized.creditCard.closedInvoiceIsPaid);
+
+        // FONTE ÚNICA de encargos: ler ACUMULADO REAL do billing_charges (inserido
+        // pelo runBillingValidation com incremento DIÁRIO). NÃO recalcular
+        // calcAllCharges(residual, daysOverdue) porque após pagamento parcial o residual
+        // é menor → calcAllCharges dá target < existing → encargos congelam.
+        // billing_charges preserva o histórico real independente do residual.
+        let _dailyCharges = null;
+        try {
+            const _chargeRows = await databricksService.executeQuery(`
+                SELECT charge_type, SUM(CAST(amount AS DECIMAL(15,2))) AS total
+                FROM ${databricksService.fq('billing_charges')}
+                WHERE cpf = '${cpf}' AND status = 'pending'
+                GROUP BY charge_type
+            `);
+            if (_chargeRows && _chargeRows.length > 0) {
+                const _byType = {};
+                for (const r of _chargeRows) _byType[r.charge_type] = parseFloat(r.total || 0);
+                _dailyCharges = {
+                    multa: _byType['multa'] || 0,
+                    jurosMora: _byType['juros_mora'] || 0,
+                    jurosRemuneratorios: _byType['juros_remuneratorios'] || 0,
+                    iof: _byType['iof'] || 0,
+                    totalEncargos: 0,
+                };
+                _dailyCharges.totalEncargos = round2(
+                    _dailyCharges.multa +
+                    _dailyCharges.jurosMora +
+                    _dailyCharges.jurosRemuneratorios +
+                    _dailyCharges.iof
+                );
+            }
+        } catch (_) { /* billing_charges table not available, fall through */ }
+
+        // daysOverdue sempre em tempo real (correto independente do residual)
         let _daysOverdue = 0;
-        if (_closedVal > 0 && normalized.creditCard.closedInvoiceDueDate) {
-            const _d = new Date(normalized.creditCard.closedInvoiceDueDate); _d.setHours(0, 0, 0, 0);
-            const _t = new Date(); _t.setHours(0, 0, 0, 0);
-            _daysOverdue = Math.max(0, Math.floor((_t - _d) / 86400000));
+        if (normalized.creditCard.closedInvoiceDueDate) {
+            const _d = new Date(normalized.creditCard.closedInvoiceDueDate);
+            _d.setHours(0, 0, 0, 0);
+            const _now = new Date();
+            _now.setHours(0, 0, 0, 0);
+            _daysOverdue = Math.max(0, Math.floor((_now - _d) / 86400000));
         }
-        const _r2 = n => Math.round(n * 100) / 100;
-        const _multa = _closedVal > 0 ? _r2(_closedVal * 0.02) : 0;
-        const _jurosMora = _closedVal > 0 ? _r2(_closedVal * 0.000333 * _daysOverdue) : 0;
-        const _jurosRem = _closedVal > 0 ? _r2(_closedVal * 0.00513 * _daysOverdue) : 0;
-        const _iof = _closedVal > 0 ? _r2(_closedVal * 0.0038 + _closedVal * 0.000082 * _daysOverdue) : 0;
-        const _totalEncargos = _r2(_multa + _jurosMora + _jurosRem + _iof);
-        normalized.creditCard.daysOverdue = _daysOverdue;
-        normalized.creditCard.closedInvoiceCharges = { multa: _multa, jurosMora: _jurosMora, jurosRemuneratorios: _jurosRem, iof: _iof, totalEncargos: _totalEncargos };
-        normalized.creditCard.closedInvoiceTotal = _r2(_closedVal + _totalEncargos);
+
+        // Se há billing_charges E a fatura NÃO foi paga: usar encargos REAIS.
+        // Caso contrário (fatura paga, ou sem billing_charges): fallback.
+        const _summary = (_dailyCharges && !_isPaid)
+            ? { ..._dailyCharges, daysOverdue: _daysOverdue }
+            : buildClosedInvoiceSummary({
+                closedVal: _closedVal,
+                isPaid: _isPaid,
+                dueDate: normalized.creditCard.closedInvoiceDueDate || null,
+                paidLateCharges: normalized.creditCard._paidLateCharges || null,
+            });
+        normalized.creditCard.daysOverdue = _summary.daysOverdue;
+        normalized.creditCard.closedInvoiceCharges = {
+            multa: _summary.multa,
+            jurosMora: _summary.jurosMora,
+            jurosRemuneratorios: _summary.jurosRemuneratorios,
+            iof: _summary.iof,
+            totalEncargos: _summary.totalEncargos,
+        };
+        // closedInvoiceTotal = APENAS o principal ORIGINAL (sem encargos e sem abater
+        // pagamento). A fatura fechada exibe o valor ORIGINAL (closedInvoice) que é
+        // imutável — o residual (closedInvoiceResidual) vai para a aberta.
+        // Os encargos de atraso da fechada são HERDADOS pela fatura aberta
+        // (currentInvoiceTotal), não somem com a quitação do principal.
+        normalized.creditCard.closedInvoiceTotal = round2(normalized.creditCard.closedInvoice || 0);
+
+        // FONTE ÚNICA DE VERDADE do total da fatura ABERTA (compras do ciclo + fechada
+        // vencida + encargos herdados). Web, resumo e admin apenas LEEM daqui.
+        //
+        // Regra: encargos de atraso (multa, juros, IOF) da fatura fechada NUNCA aparecem
+        // no total da fechada — eles são transferidos para a aberta como herança.
+        // Se o cliente pagar a fatura fechada em atraso, os encargos continuam devidos
+        // na fatura aberta (não somem com a quitação do principal).
+        //
+        // Base de compras = currentInvoice, a soma das transações do ciclo já filtradas
+        // acima (janela _prevCloseMs..vencimento, sem PAYMENT). NÃO usar a soma que o
+        // front monta: ele injeta linhas "Recorrência: X" vindas do localStorage
+        // (volt_recurring_bills) que são previsão de exibição, não compra lançada no
+        // cartão — somá-las cobrava do cliente valores que não existem no banco.
+        const _openPurchases = normalized.creditCard.currentInvoice || 0;
+        // currentInvoiceTotal = compras do ciclo + principal da fechada + encargos herdados
+        normalized.creditCard.currentInvoiceTotal = round2(_openPurchases + _closedVal + _summary.totalEncargos);
+        // Mínimo: 10% das compras do ciclo + 100% da fechada vencida + 100% dos encargos — não se
+        // parcela o que já está em atraso. Sem fechada, 10% do ciclo com piso de R$ 10.
+        // Se há encargos herdados de pagamento em atraso, inclui 100% deles no mínimo.
+        normalized.creditCard.currentInvoiceMinimo = (_closedVal > 0 || _summary.totalEncargos > 0)
+            ? round2(_openPurchases * 0.10 + _closedVal + _summary.totalEncargos)
+            : (_openPurchases > 0 ? round2(Math.max(_openPurchases * 0.10, 10)) : 0);
     }
+
+    // Limpar campo interno de cálculo (não expor ao frontend)
+    delete normalized.creditCard._paidLateCharges;
 
     try {
         const _futurePlans = await databricksService.executeQuery(`
@@ -1432,6 +1679,138 @@ apiRouter.post('/users/:cpf/notifications/:id/read', bearerAuth(), asyncHandler(
     const ok = await notificationsRepo.markRead(req.params.cpf, req.params.id);
     if (!ok) return res.status(404).json({ success: false, message: 'Usuario ou notificacao nao encontrada' });
     res.json({ success: true, message: 'Notificacao marcada como lida' });
+}));
+
+// ─── Admin: notificações de pagamento mínimo (últimas 24h) ───────────────────
+apiRouter.get('/admin/notifications/minimo', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { esc } = repoContext;
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const rows = await databricksService.executeQuery(`
+        SELECT n.id, n.cpf, n.title, n.message, n.created_at, n.is_read,
+               u.full_name
+        FROM ${databricksService.fq('notifications')} n
+        LEFT JOIN ${databricksService.fq('users')} u ON n.cpf = u.cpf
+        WHERE (n.title LIKE '%mínimo%' OR n.title LIKE '%minimo%')
+          AND n.created_at >= ${esc(cutoff)}
+        ORDER BY n.created_at DESC
+    `);
+
+    const list = (rows || []).map(r => ({
+        id: r.id,
+        cpf: r.cpf,
+        fullName: r.full_name || 'Desconhecido',
+        title: r.title,
+        message: r.message,
+        createdAt: r.created_at,
+        isRead: !!r.is_read,
+    }));
+
+    res.json({
+        success: true,
+        total: list.length,
+        periodo: {
+            inicio: cutoff,
+            fim: new Date().toISOString(),
+        },
+        notifications: list,
+    });
+}));
+
+// ── Rota Admin: Listar notificações ABAIXO do mínimo (últimas 24h) ──
+apiRouter.get('/admin/notifications/abaixo', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { esc } = repoContext;
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const rows = await databricksService.executeQuery(`
+        SELECT n.id, n.cpf, n.title, n.message, n.created_at, n.is_read,
+               u.full_name,
+               i.valor_total, COALESCE(i.valor_pago, 0) AS valor_pago,
+               i.dias_atraso, u.account_status, u.days_overdue
+        FROM ${databricksService.fq('notifications')} n
+        LEFT JOIN ${databricksService.fq('users')} u ON n.cpf = u.cpf
+        LEFT JOIN ${databricksService.fq('invoices')} i ON n.cpf = i.cpf
+          AND i.status = 'FECHADA' AND i.data_pagamento IS NULL
+        WHERE (n.title LIKE '%Abaixo%' OR n.title LIKE '%abaixo%' OR n.title LIKE '%crítico%' OR n.title LIKE '%critico%')
+          AND n.created_at >= ${esc(cutoff)}
+        ORDER BY n.created_at DESC
+    `);
+
+    // Agrupar por CPF (evitar duplicatas de JOIN com invoices)
+    const seenCpfs = new Set();
+    const list = (rows || []).filter(r => {
+        if (seenCpfs.has(r.cpf)) return false;
+        seenCpfs.add(r.cpf);
+        return true;
+    }).map(r => ({
+        id: r.id,
+        cpf: r.cpf,
+        fullName: r.full_name || 'Desconhecido',
+        title: r.title,
+        message: r.message,
+        createdAt: r.created_at,
+        isRead: !!r.is_read,
+        valorTotal: r.valor_total ? parseFloat(r.valor_total) : null,
+        valorPago: r.valor_pago ? parseFloat(r.valor_pago) : null,
+        diasAtraso: r.dias_atraso || r.days_overdue || 0,
+        accountStatus: r.account_status || 'desconhecido',
+    }));
+
+    res.json({
+        success: true,
+        total: list.length,
+        periodo: {
+            inicio: cutoff,
+            fim: new Date().toISOString(),
+        },
+        abaixo: list,
+    });
+}));
+
+// ── Timeline de regularizações (últimos 7 dias) ──
+apiRouter.get('/admin/regularized-timeline', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const rows = await databricksService.executeQuery(`
+        SELECT data_pagamento, valor_total, valor_pago
+        FROM ${databricksService.fq('invoices')}
+        WHERE status = 'FECHADA'
+          AND data_pagamento IS NOT NULL
+          AND data_pagamento >= '${seteDiasAtras}'
+          AND COALESCE(valor_pago, 0) > 0
+        ORDER BY data_pagamento ASC
+    `).catch(() => []);
+
+    // Agrupar por dia
+    const dayMap = new Map();
+    for (const r of (rows || [])) {
+        if (!r.data_pagamento) continue;
+        const day = String(r.data_pagamento).split('T')[0] || String(r.data_pagamento).slice(0, 10);
+        if (!dayMap.has(day)) dayMap.set(day, { count: 0, totalAmount: 0 });
+        const entry = dayMap.get(day);
+        entry.count++;
+        entry.totalAmount += parseFloat(r.valor_pago || r.valor_total || 0);
+    }
+
+    // Preencher dias sem pagamentos com 0
+    const timeline = [];
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+        const dayKey = d.toISOString().split('T')[0];
+        const data = dayMap.get(dayKey);
+        timeline.push({
+            date: dayKey,
+            label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+            count: data ? data.count : 0,
+            totalAmount: data ? Math.round(data.totalAmount * 100) / 100 : 0,
+        });
+    }
+
+    res.json({
+        success: true,
+        timeline,
+        total: rows ? rows.length : 0,
+    });
 }));
 
 // --- Rotas de Loja ---
@@ -2491,10 +2870,51 @@ apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin
     `).catch(() => []);
 
     const overdueInvoices = await databricksService.executeQuery(`
-        SELECT cpf, valor_total, due_date, valor_iof, valor_multa, valor_juros_remuneratorios, valor_juros_mora, saldo_anterior 
+        SELECT cpf, valor_total, due_date, valor_iof, valor_multa, valor_juros_remuneratorios, valor_juros_mora, saldo_anterior,
+               COALESCE(valor_pago, 0) AS valor_pago
         FROM ${databricksService.fq('invoices')}
         WHERE status = 'FECHADA' AND data_pagamento IS NULL
     `).catch(() => []);
+
+    // ── Massas regularizadas (pagaram fatura há < 24h) ──
+    // Estas massas saíram da inadimplência mas ainda aparecem no painel
+    // por 24 horas para o admin poder validar os dados.
+    const vinteQuatroHorasAtras = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const recentlyPaidInvoices = await databricksService.executeQuery(`
+        SELECT cpf, valor_total, valor_pago, due_date, data_pagamento,
+               valor_iof, valor_multa, valor_juros_remuneratorios, valor_juros_mora, saldo_anterior
+        FROM ${databricksService.fq('invoices')}
+        WHERE status = 'FECHADA' AND data_pagamento IS NOT NULL
+          AND data_pagamento >= '${vinteQuatroHorasAtras}'
+    `).catch(() => []);
+
+    // ── Encargos persistidos (fonte canônica) ──
+    // runBillingValidation grava o incremento diário em billing_charges com status
+    // 'pending'; o invoiceEngine marca 'paid' quando consolida na fatura fechada.
+    // Logo 'pending' = encargos ativos ainda não consolidados. Recalcular aqui com
+    // calcAllCharges divergiria do que foi efetivamente cobrado à massa.
+    const chargeRows = await databricksService.executeQuery(`
+        SELECT cpf, charge_type, COALESCE(SUM(amount), 0) AS total
+        FROM ${databricksService.fq('billing_charges')}
+        WHERE status = 'pending'
+        GROUP BY cpf, charge_type
+    `).catch(() => []);
+
+    const chargesByCpf = new Map();
+    (chargeRows || []).forEach(r => {
+        const acc = chargesByCpf.get(r.cpf) || { multa: 0, jurosMora: 0, jurosRemuneratorios: 0, iof: 0, total: 0 };
+        const amount = parseFloat(r.total || 0);
+        if (r.charge_type === 'multa') acc.multa += amount;
+        else if (r.charge_type === 'juros_mora') acc.jurosMora += amount;
+        else if (r.charge_type === 'juros_remuneratorios') acc.jurosRemuneratorios += amount;
+        else if (r.charge_type === 'iof') acc.iof += amount;
+        acc.total += amount;
+        chargesByCpf.set(r.cpf, acc);
+    });
+
+    // Encargos são agregados por CPF, não por fatura. Numa massa com várias faturas
+    // em aberto eles só podem entrar uma vez — este Set marca quem já consumiu.
+    const chargesConsumed = new Set();
 
     const usersMap = new Map();
     (allUsersResult || []).forEach(u => usersMap.set(u.cpf, u));
@@ -2524,31 +2944,58 @@ apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin
         // ou ignorar. Vamos manter apenas se daysOverdue >= 1 para ser estritamente "em atraso".
         if (daysOverdue < 1) return; 
 
-        // Tenta usar os encargos do banco (se já foram calculados pelo cron)
-        let multa = parseFloat(inv.valor_multa || 0);
-        let jurosMora = parseFloat(inv.valor_juros_mora || 0);
-        let jurosRem = parseFloat(inv.valor_juros_remuneratorios || 0);
-        let iof = parseFloat(inv.valor_iof || 0);
-        let saldoAnterior = parseFloat(inv.saldo_anterior || 0);
+        // ── Residual: o que a massa ainda deve desta fatura ──
+        // closedVal é o valor_total ORIGINAL (imutável, exibido como "Fatura Fechada").
+        // O que entra na quitação é o residual — pagamento parcial já abatido.
+        const valorPagoInv = parseFloat(inv.valor_pago || 0);
+        const residual = Math.max(0, Math.round((closedVal - valorPagoInv) * 100) / 100);
 
-        // Caso o banco ainda não tenha valores de encargos, ou caso queiramos cálculo EM TEMPO REAL:
-        // Como o usuário pediu os dados perfeitamente alinhados, recalcular em tempo real assegura 
-        // precisão no exato momento da visualização.
-        multa = Math.round(closedVal * 0.02 * 100) / 100;
-        jurosMora = Math.round(closedVal * 0.000333 * daysOverdue * 100) / 100;
-        jurosRem = Math.round(closedVal * 0.00513 * daysOverdue * 100) / 100;
-        const iofAdicional = Math.round(closedVal * 0.0038 * 100) / 100;
-        const iofDiario = Math.round(closedVal * 0.000082 * daysOverdue * 100) / 100;
-        iof = Math.round((iofAdicional + iofDiario) * 100) / 100;
-        
-        const totalEncargos = Math.round((multa + jurosMora + jurosRem + iof) * 100) / 100;
-        const totalQuitacao = Math.round((closedVal + totalEncargos + saldoAnterior) * 100) / 100;
+        // ── Encargos: billing_charges persistido, uma vez por CPF ──
+        // Fallback para calcAllCharges(residual) só quando o motor nunca rodou para
+        // esta massa — sinalizado por chargesSource p/ o admin não confundir valor
+        // cobrado com valor estimado.
+        const persisted = chargesConsumed.has(inv.cpf) ? null : chargesByCpf.get(inv.cpf);
+        chargesConsumed.add(inv.cpf);
+
+        let multa, jurosMora, jurosRem, iof, totalEncargos, chargesSource;
+        if (persisted && persisted.total > 0.005) {
+            multa = Math.round(persisted.multa * 100) / 100;
+            jurosMora = Math.round(persisted.jurosMora * 100) / 100;
+            jurosRem = Math.round(persisted.jurosRemuneratorios * 100) / 100;
+            iof = Math.round(persisted.iof * 100) / 100;
+            totalEncargos = Math.round(persisted.total * 100) / 100;
+            chargesSource = 'billing_charges';
+        } else if (persisted === null) {
+            // 2ª+ fatura da mesma massa: encargos já contabilizados na primeira
+            multa = jurosMora = jurosRem = iof = totalEncargos = 0;
+            chargesSource = 'already_counted';
+        } else {
+            const ch = calcAllCharges(residual, daysOverdue);
+            multa = ch.multa;
+            jurosMora = ch.jurosMora;
+            jurosRem = ch.jurosRemuneratorios;
+            iof = ch.iof;
+            totalEncargos = ch.total;
+            chargesSource = 'estimated';
+            console.warn(`[overdue-dashboard] CPF ${inv.cpf}: sem billing_charges pending — encargos ESTIMADOS via calcAllCharges. Motor de billing pode estar parado.`);
+        }
+
+        // saldo_anterior NÃO entra aqui: invoiceEngine.js:154 o preenche com o
+        // valor_total da fatura anterior não paga, e essa fatura continua na query
+        // de :2872 como linha própria — somá-lo contaria o mesmo débito duas vezes.
+        const totalQuitacao = Math.round((residual + totalEncargos) * 100) / 100;
 
         const dueDateStr = dueDate ? dueDate.toISOString().split('T')[0] : null;
         const existing = overdueByCpf.get(inv.cpf);
 
         if (!existing) {
-            overdueByCpf.set(inv.cpf, {
+            // Payment summary para dashboard de pagamentos
+        const _valorPago = parseFloat(inv.valor_pago || 0);
+        const _saldoRestante = Math.max(0, closedVal - _valorPago);
+        const _min10perc = Math.round(closedVal * 0.10 * 100) / 100;
+        const _statusMinimo = _valorPago >= _min10perc ? 'ACIMA' : (_valorPago > 0 ? 'ABAIXO' : 'SEM_PAG');
+
+        overdueByCpf.set(inv.cpf, {
                 cpf: inv.cpf,
                 fullName: u.full_name,
                 accountStatus: 'inadimplente',
@@ -2558,9 +3005,17 @@ apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin
                 // Mantém a data de vencimento mais antiga (fatura mais atrasada)
                 dueDate: dueDateStr,
                 encargos: { multa, jurosMora, jurosRemuneratorios: jurosRem, iof, totalEncargos },
-                totalQuitacao
+                // 'billing_charges' = valor real cobrado | 'estimated' = motor nunca rodou
+                chargesSource,
+                totalQuitacao,
+                paymentSummary: {
+                    totalPago: _valorPago,
+                    saldoRestante: _saldoRestante,
+                    statusMinimo: _statusMinimo,
+                }
             });
         } else {
+            const __valorPago = parseFloat(inv.valor_pago || 0);
             existing.faturaFechada = Math.round((existing.faturaFechada + closedVal) * 100) / 100;
             existing.daysOverdue += daysOverdue; // soma os dias de atraso das faturas da massa
             existing.invoiceCount += 1;
@@ -2571,26 +3026,213 @@ apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin
             existing.encargos.totalEncargos = Math.round((existing.encargos.totalEncargos + totalEncargos) * 100) / 100;
             existing.totalQuitacao = Math.round((existing.totalQuitacao + totalQuitacao) * 100) / 100;
             if (dueDateStr && (!existing.dueDate || dueDateStr < existing.dueDate)) existing.dueDate = dueDateStr;
+            // Acumular paymentSummary multi-invoice
+            if (existing.paymentSummary) {
+                existing.paymentSummary.totalPago = Math.round((existing.paymentSummary.totalPago + __valorPago) * 100) / 100;
+                existing.paymentSummary.saldoRestante = Math.round((existing.paymentSummary.saldoRestante + Math.max(0, closedVal - __valorPago)) * 100) / 100;
+                // Status mínimo: prioridade ABAIXO > SEM_PAG > ACIMA.
+                // Se QUALQUER fatura tiver pagamento abaixo de 10%, o status é ABAIXO.
+                // Se nenhuma tiver pagamento, SEM_PAG. Só ACIMA se todas ≥ 10%.
+                const _invMin = Math.round(closedVal * 0.10 * 100) / 100;
+                if (__valorPago > 0 && __valorPago < _invMin) {
+                    existing.paymentSummary.statusMinimo = 'ABAIXO';
+                } else if (__valorPago === 0 && existing.paymentSummary.totalPago === 0) {
+                    existing.paymentSummary.statusMinimo = 'SEM_PAG';
+                } else if (__valorPago >= _invMin && existing.paymentSummary.statusMinimo !== 'ABAIXO') {
+                    existing.paymentSummary.statusMinimo = 'ACIMA';
+                }
+            }
         }
     });
+
+    // ── Incluir massas regularizadas recentemente (< 24h) ──
+    // Cada uma aparece com accountStatus = 'regularizada' e regularizedAt
+    // para o frontend exibir badge verde "Regularizada há N horas".
+    // Não repete massas que já estão na lista de inadimplentes.
+    (recentlyPaidInvoices || []).forEach(inv => {
+        if (overdueByCpf.has(inv.cpf)) return; // já está como inadimplente (outra fatura não paga)
+        const u = usersMap.get(inv.cpf) || { full_name: 'Usuário DB' };
+        const closedVal = parseFloat(inv.valor_total || 0);
+        const paidAt = inv.data_pagamento;
+        const paidTime = paidAt ? new Date(paidAt).getTime() : 0;
+        const nowTime = Date.now();
+        const hoursAgo = paidTime > 0 ? Math.round((nowTime - paidTime) / (60 * 60 * 1000)) : 0;
+
+        let dueDate = null;
+        let daysOverdue = 0;
+        if (inv.due_date) {
+            const d = new Date(inv.due_date); d.setHours(0, 0, 0, 0);
+            daysOverdue = Math.max(0, Math.floor((todayMidnight - d) / 86400000));
+        }
+
+        const _valPago = parseFloat(inv.valor_pago || 0);
+        const _saldoRest = Math.max(0, closedVal - _valPago);
+        const _minP = Math.round(closedVal * 0.10 * 100) / 100;
+        const _statusMin = _valPago >= _minP ? 'ACIMA' : (_valPago > 0 ? 'ABAIXO' : 'SEM_PAG');
+
+        overdueByCpf.set(inv.cpf, {
+            cpf: inv.cpf,
+            fullName: u.full_name,
+            accountStatus: 'regularizada',
+            faturaFechada: closedVal,
+            daysOverdue,
+            invoiceCount: 1,
+            dueDate: inv.due_date ? new Date(inv.due_date).toISOString().split('T')[0] : null,
+            encargos: { multa: 0, jurosMora: 0, jurosRemuneratorios: 0, iof: 0, totalEncargos: 0 },
+            totalQuitacao: closedVal,
+            regularizedAt: paidAt,
+            hoursAgo,
+            paymentSummary: {
+                totalPago: _valPago,
+                saldoRestante: _saldoRest,
+                statusMinimo: _statusMin,
+            }
+        });
+    });
+
+    // ── Buscar histórico de pagamentos (INVOICE_PAYMENT) para cada CPF ──
+    try {
+        const allCpfs = Array.from(overdueByCpf.keys());
+        if (allCpfs.length > 0) {
+            // Buscar TODAS as transações INVOICE_PAYMENT destes CPFs de uma vez
+            const cpfList = allCpfs.map(c => `'${c}'`).join(',');
+            const paymentTxRows = await databricksService.executeQuery(`
+                SELECT cpf, id, amount, description, date
+                FROM ${databricksService.fq('transactions')}
+                WHERE cpf IN (${cpfList})
+                  AND type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+                ORDER BY date DESC
+                LIMIT 500
+            `).catch(() => []);
+
+            // Agrupar pagamentos por CPF
+            const paymentsByCpf = new Map();
+            for (const tx of (paymentTxRows || [])) {
+                if (!paymentsByCpf.has(tx.cpf)) paymentsByCpf.set(tx.cpf, []);
+                const desc = (tx.description || '').toLowerCase();
+                let paymentType = 'TOTAL';
+                if (desc.includes('parcial')) paymentType = 'PARCIAL';
+                else if (desc.includes('minimo') || desc.includes('mínimo')) paymentType = 'MINIMO';
+                paymentsByCpf.get(tx.cpf).push({
+                    id: tx.id,
+                    date: tx.date,
+                    amount: Math.abs(parseFloat(tx.amount || 0)),
+                    description: tx.description || 'Pagamento de fatura',
+                    paymentType
+                });
+            }
+
+            // Injetar paymentHistory em cada entry
+            for (const entry of overdueList) {
+                entry.paymentHistory = paymentsByCpf.get(entry.cpf) || [];
+            }
+        }
+    } catch (e) {
+        console.warn('[OverdueMasses] Erro ao buscar paymentHistory:', e.message);
+    }
 
     const overdueList = Array.from(overdueByCpf.values());
 
     const totalUsers = allUsersResult ? allUsersResult.length : overdueList.length;
-    const overdueCount = overdueList.length;
+    const overdueCount = overdueList.filter(m => m.accountStatus === 'inadimplente').length;
+    const regularizedCount = overdueList.filter(m => m.accountStatus === 'regularizada').length;
     const totalOverdueAmount = Math.round(overdueList.reduce((sum, item) => sum + item.totalQuitacao, 0) * 100) / 100;
-    const avgDaysOverdue = overdueCount > 0 ? Math.round(overdueList.reduce((sum, item) => sum + item.daysOverdue, 0) / overdueCount) : 0;
+    const avgDaysOverdue = overdueCount > 0 ? Math.round(overdueList.filter(m => m.accountStatus === 'inadimplente').reduce((sum, item) => sum + item.daysOverdue, 0) / overdueCount) : 0;
+
+    // ── Relatório detalhado das massas regularizadas ──
+    // Inclui valor pago, tipo de pagamento, tempo até regularização.
+    const regularizedReport = (recentlyPaidInvoices || []).map(inv => {
+        const u = usersMap.get(inv.cpf) || { full_name: 'Usuário DB' };
+        const closedVal = parseFloat(inv.valor_total || 0);
+        const valorPago = parseFloat(inv.valor_pago || 0);
+        const paidAt = inv.data_pagamento;
+        const paidTime = paidAt ? new Date(paidAt).getTime() : 0;
+        const nowTime = Date.now();
+        const hoursAgo = paidTime > 0 ? Math.round((nowTime - paidTime) / (60 * 60 * 1000)) : 0;
+
+        // Deduzir tipo de pagamento: TOTAL (>= 99% do total), MÍNIMO (>= 10%), PARCIAL (< 10%)
+        let paymentType = 'PARCIAL';
+        if (valorPago >= closedVal * 0.99) {
+            paymentType = 'TOTAL';
+        } else if (valorPago >= closedVal * 0.10) {
+            paymentType = 'MINIMO';
+        }
+
+        // Calcular horas entre vencimento e pagamento (tempo para regularizar)
+        let hoursToPay = null;
+        if (inv.due_date && paidAt) {
+            const due = new Date(inv.due_date).getTime();
+            const paid = new Date(paidAt).getTime();
+            hoursToPay = Math.round((paid - due) / (60 * 60 * 1000));
+        }
+
+        return {
+            cpf: inv.cpf,
+            fullName: u.full_name,
+            valorTotal: closedVal,
+            valorPago,
+            paymentType,
+            paidAt,
+            hoursAgo,
+            hoursToPay,
+            dueDate: inv.due_date ? new Date(inv.due_date).toISOString().split('T')[0] : null
+        };
+    });
 
     res.json({
         success: true,
         stats: {
             totalUsers,
             overdueCount,
+            regularizedCount,
             overdueRatePercentage: Math.round((overdueCount / totalUsers) * 100),
             totalOverdueAmount,
             avgDaysOverdue
         },
-        overdueMasses: overdueList
+        overdueMasses: overdueList,
+        regularizedReport
+    });
+}));
+
+// ── Polling de novas regularizações ──
+// O admin usa este endpoint para verificar periodicamente se novas massas
+// regularizaram desde o último check. Retorna apenas o delta.
+apiRouter.get('/admin/regularized/check', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const sinceParam = req.query.since;
+    const since = sinceParam ? new Date(String(sinceParam)) : new Date(Date.now() - 30 * 60 * 1000); // default: últimos 30 min
+    if (isNaN(since.getTime())) {
+        return res.status(400).json({ success: false, message: 'Parâmetro since inválido. Use formato ISO 8601.' });
+    }
+
+    const sinceISO = since.toISOString();
+    const newPaidInvoices = await databricksService.executeQuery(`
+        SELECT i.cpf, u.full_name, i.valor_total, i.valor_pago, i.data_pagamento, i.due_date
+        FROM ${databricksService.fq('invoices')} i
+        LEFT JOIN ${databricksService.fq('users')} u ON i.cpf = u.cpf
+        WHERE i.status = 'FECHADA' AND i.data_pagamento IS NOT NULL
+          AND i.data_pagamento >= '${sinceISO}'
+        ORDER BY i.data_pagamento DESC
+        LIMIT 50
+    `).catch(() => []);
+
+    const totalPaid = (newPaidInvoices || []).reduce((sum, inv) => sum + parseFloat(inv.valor_pago || 0), 0);
+    const count = (newPaidInvoices || []).length;
+
+    console.log(`[RegularizedCheck] ${count} nova(s) regularização(ões) desde ${sinceISO}`);
+
+    res.json({
+        success: true,
+        count,
+        totalPaid: Math.round(totalPaid * 100) / 100,
+        items: (newPaidInvoices || []).map(inv => ({
+            cpf: inv.cpf,
+            fullName: inv.full_name || 'Usuário DB',
+            valorTotal: parseFloat(inv.valor_total || 0),
+            valorPago: parseFloat(inv.valor_pago || 0),
+            paidAt: inv.data_pagamento,
+            dueDate: inv.due_date,
+        })),
+        checkedAt: new Date().toISOString(),
     });
 }));
 
@@ -3930,13 +4572,16 @@ async function runBillingValidation() {
     // então no dia do vencimento (e durante todo o período de atraso) esse campo já
     // aponta para um ciclo futuro, fazendo daysOverdue ficar sempre 0.
     const closedInvoiceRows = await databricksService.executeQuery(`
-        SELECT cpf, due_date, valor_total FROM ${databricksService.fq('invoices')}
+        SELECT cpf, due_date, valor_total, COALESCE(valor_pago, 0) AS valor_pago FROM ${databricksService.fq('invoices')}
         WHERE status = 'FECHADA' AND data_pagamento IS NULL
         ORDER BY due_date DESC
     `);
     const closedDueByCpf = new Map();
     for (const row of closedInvoiceRows) {
-        if (!closedDueByCpf.has(row.cpf)) closedDueByCpf.set(row.cpf, { dueDate: row.due_date, amount: parseFloat(row.valor_total || 0) });
+        if (!closedDueByCpf.has(row.cpf)) {
+            const residual = Math.max(0, parseFloat(row.valor_total || 0) - parseFloat(row.valor_pago || 0));
+            closedDueByCpf.set(row.cpf, { dueDate: row.due_date, amount: residual, valorTotal: parseFloat(row.valor_total || 0), valorPago: parseFloat(row.valor_pago || 0) });
+        }
     }
 
     let markedInadimplente = 0;
@@ -3964,39 +4609,196 @@ async function runBillingValidation() {
         // Recalcular encargos diariamente enquanto em atraso (multa 2%, IOF 0,38% + 0,0082%/dia,
         // juros remuneratórios 15,39% a.m., juros de mora 1% a.m.)
         if (daysOverdue > 0) {
-            // Usa o valor_total da fatura fechada para calcular os encargos
+            // Usa o saldo RESIDUAL da fatura fechada (valor_total - valor_pago) para calcular os encargos.
+            // Para massas com pagamento parcial, o encargo incide apenas sobre o que 
+            // efetivamente falta pagar — NÃO sobre o valor_total bruto.
+            // O residual é definido em closedDueByCpf.set(..., { amount: residual, ... }) na linha 4060.
             const invoiceAmount = Math.max(0, parseFloat(closedInvoiceData.amount || 0));
             if (invoiceAmount > 0) {
-                // Limpar encargos pendentes anteriores deste ciclo
-                await databricksService.executeQuery(`
-                    DELETE FROM ${databricksService.fq('billing_charges')}
+                // ── REGRA DE ACUMULAÇÃO DE ENCARGOS (INCREMENTO DIÁRIO) ──
+                // NÃO deletar encargos antigos! Cada execução do billing ADICIONA
+                // o incremento de 1 dia sobre o saldo residual atual. Após pagamento
+                // parcial o residual cai, e os incrementos diários passam a ser
+                // calculados sobre o novo residual menor — a penalidade já acumulada
+                // (encargos antigos) NÃO diminui, apenas os novos dias passam a
+                // render menos.
+                //
+                // Encargos de multa (2%) e IOF adicional (0,38%) são cobranças
+                // ÚNICAS — inseridas apenas na primeira execução, calculadas sobre
+                // o valor_total ORIGINAL (não o residual). Juros de mora, juros
+                // remuneratórios e IOF diário são incrementos DIÁRIOS sobre o
+                // residual — sempre inseridos a cada execução.
+                const existingCharges = await databricksService.executeQuery(`
+                    SELECT charge_type, COALESCE(SUM(amount), 0) AS total
+                    FROM ${databricksService.fq('billing_charges')}
                     WHERE cpf = '${u.cpf}' AND invoice_reference = '${cycle.invoiceRef}' AND status = 'pending'
+                    GROUP BY charge_type
                 `);
+                const getExisting = (type) => {
+                    const row = existingCharges.find(e => e.charge_type === type);
+                    return row ? parseFloat(row.total) : 0;
+                };
 
-                // Fórmulas exatas do extrato
-                const multa = Math.round(invoiceAmount * 0.02 * 100) / 100;
-                const iofAdicional = Math.round(invoiceAmount * 0.0038 * 100) / 100;
-                const iofDiario = Math.round(invoiceAmount * 0.000082 * daysOverdue * 100) / 100;
-                const iofTotal = Math.round((iofAdicional + iofDiario) * 100) / 100;
+                const originalValorTotal = parseFloat(closedInvoiceData.valorTotal || 0);
+                let totalLineCharges = 0;
 
-                const jurosRem = Math.round(invoiceAmount * 0.00513 * daysOverdue * 100) / 100;
-                const jurosMora = Math.round(invoiceAmount * 0.000333 * daysOverdue * 100) / 100;
+                // ── MULTA (2%): única vez sobre o valor_total ORIGINAL ──
+                if (getExisting('multa') < 0.005) {
+                    const multa = calcMulta(originalValorTotal);
+                    if (multa > 0.005) {
+                        const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_multa`;
+                        await databricksService.executeQuery(`
+                            INSERT INTO ${databricksService.fq('billing_charges')}
+                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
+                            VALUES
+                            ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'multa', ${multa}, ${daysOverdue}, ${invoiceAmount})
+                        `);
+                        chargesGenerated++;
+                        totalLineCharges += multa;
+                    }
+                } else {
+                    totalLineCharges += getExisting('multa');
+                }
 
-                const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}`;
-                await databricksService.executeQuery(`
-                    INSERT INTO ${databricksService.fq('billing_charges')} (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
-                    VALUES
-                    ('${idBase}_multa', '${u.cpf}', '${cycle.invoiceRef}', 'multa', ${multa}, ${daysOverdue}, ${invoiceAmount}),
-                    ('${idBase}_iof', '${u.cpf}', '${cycle.invoiceRef}', 'iof', ${iofTotal}, ${daysOverdue}, ${invoiceAmount}),
-                    ('${idBase}_juros_rem', '${u.cpf}', '${cycle.invoiceRef}', 'juros_remuneratorios', ${jurosRem}, ${daysOverdue}, ${invoiceAmount}),
-                    ('${idBase}_juros_mora', '${u.cpf}', '${cycle.invoiceRef}', 'juros_mora', ${jurosMora}, ${daysOverdue}, ${invoiceAmount})
-                `);
-                chargesGenerated += 4;
+                // ── IOF: primeira vez = adicional(única) + diário(acumulado);
+                //     subsequente = apenas IOF diário(1 dia) sobre o residual ──
+                if (getExisting('iof') < 0.005) {
+                    // Primeira cobrança: IOF adicional (única, sobre original) + IOF diário acumulado
+                    const iof = calcIof(originalValorTotal, daysOverdue);
+                    if (iof > 0.005) {
+                        const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_iof`;
+                        await databricksService.executeQuery(`
+                            INSERT INTO ${databricksService.fq('billing_charges')}
+                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
+                            VALUES
+                            ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'iof', ${iof}, ${daysOverdue}, ${invoiceAmount})
+                        `);
+                        chargesGenerated++;
+                        totalLineCharges += iof;
+                    }
+                } else {
+                    // Cobranças subsequentes: apenas IOF diário (1 dia) sobre o residual
+                    const dailyIof = calcIofDiario(invoiceAmount, 1);
+                    if (dailyIof > 0.005) {
+                        const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_iof`;
+                        await databricksService.executeQuery(`
+                            INSERT INTO ${databricksService.fq('billing_charges')}
+                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
+                            VALUES
+                            ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'iof', ${dailyIof}, ${daysOverdue}, ${invoiceAmount})
+                        `);
+                        chargesGenerated++;
+                        totalLineCharges += dailyIof;
+                    } else {
+                        totalLineCharges += getExisting('iof');
+                    }
+                }
+
+                // ── JUROS DE MORA: incremento diário sobre o residual ──
+                {
+                    const dailyJurosMora = calcJurosMora(invoiceAmount, 1);
+                    if (dailyJurosMora > 0.005) {
+                        const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_juros_mora`;
+                        await databricksService.executeQuery(`
+                            INSERT INTO ${databricksService.fq('billing_charges')}
+                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
+                            VALUES
+                            ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'juros_mora', ${dailyJurosMora}, ${daysOverdue}, ${invoiceAmount})
+                        `);
+                        chargesGenerated++;
+                        totalLineCharges += dailyJurosMora;
+                    } else {
+                        totalLineCharges += getExisting('juros_mora');
+                    }
+                }
+
+                // ── JUROS REMUNERATÓRIOS: incremento diário sobre o residual ──
+                {
+                    const dailyJurosRem = calcJurosRemuneratorios(invoiceAmount, 1);
+                    if (dailyJurosRem > 0.005) {
+                        const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_juros_rem`;
+                        await databricksService.executeQuery(`
+                            INSERT INTO ${databricksService.fq('billing_charges')}
+                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
+                            VALUES
+                            ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'juros_remuneratorios', ${dailyJurosRem}, ${daysOverdue}, ${invoiceAmount})
+                        `);
+                        chargesGenerated++;
+                        totalLineCharges += dailyJurosRem;
+                    } else {
+                        totalLineCharges += getExisting('juros_remuneratorios');
+                    }
+                }
                 chargesDetail.push({
                     cpf: u.cpf, invoiceRef: cycle.invoiceRef,
-                    invoiceAmount, multa, iof: iofTotal, jurosRem, jurosMora,
-                    total: Math.round((multa + iofTotal + jurosRem + jurosMora) * 100) / 100
+                    invoiceAmount,
+                    multa: getExisting('multa') || calcMulta(originalValorTotal),
+                    iof: getExisting('iof') || calcIof(invoiceAmount, daysOverdue),
+                    jurosRem: getExisting('juros_remuneratorios') || calcJurosRemuneratorios(invoiceAmount, 1),
+                    jurosMora: getExisting('juros_mora') || calcJurosMora(invoiceAmount, 1),
+                    total: round2(totalLineCharges)
                 });
+            }
+        }
+
+        // ── Notificação de Pagamento Mínimo Detectado ──
+        // Se o usuário fez pagamento mínimo (≥10% do total) mas ainda tem residual,
+        // multa e juros de mora estão estacionados — o sistema notifica isso 1x/dia.
+        if (closedInvoiceData.valorPago > 0 && closedInvoiceData.valorTotal > 0) {
+            const pctPago = closedInvoiceData.valorPago / closedInvoiceData.valorTotal;
+            const isMinimoDetectado = pctPago >= 0.10 && closedInvoiceData.amount > 0;
+            if (isMinimoDetectado) {
+                try {
+                    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+                    const recentNotifs = await databricksService.executeQuery(`
+                        SELECT id FROM ${databricksService.fq('notifications')}
+                        WHERE cpf = '${u.cpf}'
+                          AND title = 'Pagamento mínimo de fatura ✅'
+                          AND created_at > '${dayAgo}'
+                        LIMIT 1
+                    `);
+                    if (recentNotifs.length === 0) {
+                        await notificationsRepo.addNotification({
+                            cpf: u.cpf,
+                            title: 'Pagamento mínimo de fatura ✅',
+                            message: `R$ ${closedInvoiceData.valorPago.toFixed(2)} pagos (mínimo). Multa e juros de mora estacionados! Juros remuneratórios continuam sobre o saldo residual de R$ ${closedInvoiceData.amount.toFixed(2)}.`,
+                            actionUrl: '/dashboard'
+                        });
+                        console.log(`[Notif] Pagamento mínimo detectado para ${u.cpf} — notificação enviada.`);
+                    }
+                } catch (notifErr) {
+                    console.warn(`⚠️ Erro ao enviar notificação de pagamento mínimo para ${u.cpf}:`, notifErr.message);
+                }
+            }
+
+            // ── Notificação de Pagamento ABAIXO do Mínimo (⚠️ Crítico) ──
+            // Se o usuário pagou MAS o valor pago é INSUFICIENTE (abaixo de 10% do total),
+            // o saldo residual continua gerando encargos e a massa está em situação crítica.
+            // O admin precisa saber para priorizar ação de cobrança.
+            const isAbaixoCritico = pctPago > 0 && pctPago < 0.10 && closedInvoiceData.amount > 0;
+            if (isAbaixoCritico) {
+                try {
+                    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+                    const recentAbaixoNotifs = await databricksService.executeQuery(`
+                        SELECT id FROM ${databricksService.fq('notifications')}
+                        WHERE cpf = '${u.cpf}'
+                          AND (title LIKE '%Abaixo%' OR title LIKE '%abaixo%' OR title LIKE '%crítico%' OR title LIKE '%critico%')
+                          AND created_at > '${dayAgo}'
+                        LIMIT 1
+                    `);
+                    if (recentAbaixoNotifs.length === 0) {
+                        const minimoNeeded = round2(closedInvoiceData.valorTotal * 0.10);
+                        await notificationsRepo.addNotification({
+                            cpf: u.cpf,
+                            title: '⚠️ Pagamento abaixo do mínimo crítico',
+                            message: `Apenas R$ ${closedInvoiceData.valorPago.toFixed(2)} pagos (${(pctPago * 100).toFixed(0)}% do total). Mínimo necessário: R$ ${minimoNeeded.toFixed(2)}. Saldo residual: R$ ${closedInvoiceData.amount.toFixed(2)}. Encargos totais continuam!`,
+                            actionUrl: '/admin/requests'
+                        });
+                        console.log(`[Notif] ⚠️ ABAIXO crítico detectado para ${u.cpf} — pagou apenas ${(pctPago * 100).toFixed(0)}% do total.`);
+                    }
+                } catch (notifErr) {
+                    console.warn(`⚠️ Erro ao enviar notificação de ABAIXO crítico para ${u.cpf}:`, notifErr.message);
+                }
             }
         }
 
@@ -4011,6 +4813,21 @@ async function runBillingValidation() {
         }
     }
 
+    // ── Sincronizar dias_atraso nas invoices (sempre, não apenas quando users muda) ──
+    try {
+        await databricksService.executeQuery(`
+            UPDATE ${databricksService.fq('invoices')}
+            SET dias_atraso = GREATEST(0, (CURRENT_DATE - due_date::date)),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE status = 'FECHADA'
+              AND data_pagamento IS NULL
+              AND due_date < CURRENT_TIMESTAMP
+              AND COALESCE(dias_atraso, -1) != GREATEST(0, (CURRENT_DATE - due_date::date))
+        `);
+    } catch (invoiceSyncErr) {
+        console.warn('⚠️ Erro ao sincronizar dias_atraso nas invoices:', invoiceSyncErr.message);
+    }
+
     return {
         success: true,
         message: `Validação concluída. ${markedInadimplente} inadimplentes, ${markedAdimplente} adimplentes, ${chargesGenerated} encargos gerados.`,
@@ -4023,6 +4840,43 @@ async function runBillingValidation() {
         charges: { generated: chargesGenerated, detail: chargesDetail }
     };
 }
+
+// ── Sincronização autônoma de dias_atraso nas invoices ──
+// Função standalone que atualiza dias_atraso em TODAS as invoices FECHADAS não pagas
+// com base na data atual. Pode ser chamada via cron ou manualmente.
+// Diferente do sync embutido no runBillingValidation, esta função:
+// - É independente (não depende do status do usuário mudar)
+// - Retorna contagem de quantas invoices foram atualizadas
+// - Pode ser chamada a qualquer momento sem efeitos colaterais
+const syncInvoiceDiasAtraso = async () => {
+    try {
+        const result = await databricksService.executeQuery(`
+            UPDATE ${databricksService.fq('invoices')}
+            SET dias_atraso = GREATEST(0, (CURRENT_DATE - due_date::date)),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE status = 'FECHADA'
+              AND data_pagamento IS NULL
+              AND due_date < CURRENT_TIMESTAMP
+              AND COALESCE(dias_atraso, -1) != GREATEST(0, (CURRENT_DATE - due_date::date))
+        `);
+        const updatedCount = result?.rowCount || result?.length || 0;
+        
+        // Verificar quantas invoices totais existem
+        const verify = await databricksService.executeQuery(`
+            SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN COALESCE(dias_atraso, 0) = GREATEST(0, (CURRENT_DATE - due_date::date)) THEN 1 ELSE 0 END) AS corretas
+            FROM ${databricksService.fq('invoices')}
+            WHERE status = 'FECHADA' AND data_pagamento IS NULL AND due_date < CURRENT_TIMESTAMP
+        `);
+        const total = parseInt(verify?.[0]?.total || 0);
+        const corretas = parseInt(verify?.[0]?.corretas || 0);
+        
+        return { success: true, updated: updatedCount, total, corretas };
+    } catch (err) {
+        console.error('[syncInvoiceDiasAtraso] Erro:', err.message);
+        return { success: false, error: err.message, updated: 0 };
+    }
+};
 
 // POST /admin/billing/validate-all  (alias: /admin/billing/run-cycle)
 apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], asyncHandler(async (req, res) => {
@@ -4128,50 +4982,143 @@ apiRouter.get('/billing/invoice-status', bearerAuth(), asyncHandler(async (req, 
 
 // --- Cartões (via repositório) ---
 
-// Valor devido da fatura FECHADA não paga mais recente: valores congelados no fechamento
-// (compras à vista + parcelas do ciclo + encargos consolidados nas colunas valor_*),
-// líquido de pagamentos parciais feitos após o fechamento. Não depende de linhas
-// INVOICE_INSTALLMENT em transactions — compras à vista (SHOP_CREDIT) não geram parcelas.
+// Dívida consolidada de TODAS as faturas FECHADAS não pagas: valores congelados no
+// fechamento (compras à vista + parcelas do ciclo + encargos consolidados nas colunas
+// valor_*), líquidos de pagamentos parciais feitos após o fechamento. Não depende de
+// linhas INVOICE_INSTALLMENT em transactions — compras à vista (SHOP_CREDIT) não geram
+// parcelas.
+//
+// Retorna todas as faturas em aberto porque a distribuição de pagamento
+// (distributePaymentAmongInvoices) percorre todas elas: cobrar só a mais recente
+// deixava saldo devedor para trás enquanto settleClosedInvoices quitava o conjunto.
+//
+// `invoice` = a mais RECENTE em aberto e ancora o cutoff das parcelas (o corte precisa
+// cobrir todos os ciclos que estão sendo pagos). `oldest` ancora atraso/encargos.
 async function getClosedInvoiceDebt(cpf) {
     const { esc } = repoContext;
     const rows = await databricksService.executeQuery(`
         SELECT id, due_date, created_at, valor_total, saldo_anterior, valor_iof,
-               valor_multa, valor_juros_remuneratorios, valor_juros_mora
+               valor_multa, valor_juros_remuneratorios, valor_juros_mora,
+               COALESCE(valor_pago, 0) AS valor_pago
         FROM ${databricksService.fq('invoices')}
         WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
-        ORDER BY due_date DESC LIMIT 1
+        ORDER BY due_date ASC
     `);
     if (!rows.length) return null;
-    const invoice = rows[0];
-    const gross = ['valor_total', 'saldo_anterior', 'valor_iof', 'valor_multa', 'valor_juros_remuneratorios', 'valor_juros_mora']
-        .reduce((sum, field) => sum + parseFloat(invoice[field] || 0), 0);
 
-    const closedAtIso = new Date(invoice.created_at).toISOString();
-    const paidRows = await databricksService.executeQuery(`
-        SELECT amount FROM ${databricksService.fq('transactions')}
-        WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT' AND date > ${esc(closedAtIso)}
-    `);
-    const paid = paidRows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
+    const round2 = n => Math.round(n * 100) / 100;
+    const invoices = rows.map(row => {
+        // owed = valor_total - valor_pago (NÃO inclui encargos: multa, juros, IOF).
+        // Encargos são calculados separadamente em enrichUserCreditCardData para exibição
+        // (closedInvoiceCharges). Incluí-los no valor devido faz o pagamento "total"
+        // cobrar mais que a fatura — ex: R$ 4.284,94 em vez de R$ 3.870,86.
+        const gross = round2(computeInvoiceGross(row));
+        const residual = round2(parseFloat(row.valor_total || 0) - parseFloat(row.valor_pago || 0));
+        return { ...row, gross, owed: Math.max(0, residual) };
+    });
+    const owed = round2(invoices.reduce((sum, inv) => sum + inv.owed, 0));
 
-    return { invoice, owed: Math.max(0, Math.round((gross - paid) * 100) / 100) };
+    return {
+        invoice: invoices[invoices.length - 1],
+        invoices,
+        oldest: invoices[0],
+        owed
+    };
 }
 
-// Quitação da fatura FECHADA (pagamento total ou refinanciamento via parcelamento):
-// marca data_pagamento em TODAS as faturas fechadas não pagas do CPF — o valor devido
-// inclui saldo_anterior, que encadeia faturas antigas — para que a validação diária de
-// atraso pare de acumular encargos, e normaliza o status da conta.
-async function settleClosedInvoices(cpf, paidAtIso) {
+/**
+ * Distribui um pagamento proporcionalmente entre TODAS as faturas fechadas não pagas,
+ * da mais antiga (ASC due_date) para a mais recente.
+ *
+ * Em vez de adicionar o valor integral a cada fatura (multi-invoice bug), percorre
+ * cada invoice e aplica o pagamento sobre o saldo remanescente até exaurir o valor.
+ *
+ * @param {string} cpf
+ * @param {number} payAmount - valor total a distribuir
+ * @returns {{ applied: number, remaining: number, allPaid: boolean, invoices: Array }}
+ */
+async function fetchUnpaidClosedInvoices(cpf) {
     const { esc } = repoContext;
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('invoices')}
-        SET data_pagamento = ${esc(paidAtIso)}, updated_at = CURRENT_TIMESTAMP
+    // Da mais antiga para a mais recente: o pagamento amortiza a dívida mais velha primeiro
+    return databricksService.executeQuery(`
+        SELECT id, due_date, valor_total, saldo_anterior, valor_iof, valor_multa,
+               valor_juros_remuneratorios, valor_juros_mora, valor_pago, status
+        FROM ${databricksService.fq('invoices')}
         WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
+        ORDER BY due_date ASC
     `);
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
-        SET account_status = 'adimplente', days_overdue = 0, updated_at = CURRENT_TIMESTAMP
-        WHERE cpf = ${esc(cpf)}
-    `);
+}
+
+async function distributePaymentAmongInvoices(cpf, payAmount) {
+    const { esc } = repoContext;
+    const rows = await fetchUnpaidClosedInvoices(cpf);
+    const plan = planDistribution(rows, payAmount);
+
+    for (const inv of plan.invoices) {
+        if (inv.appliedAmount <= 0) continue;
+        await databricksService.executeQuery(`
+            UPDATE ${databricksService.fq('invoices')}
+            SET valor_pago = ${inv.newValorPago.toFixed(2)},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${esc(inv.id)} AND cpf = ${esc(cpf)}
+        `);
+    }
+
+    return plan;
+}
+
+// Marca data_pagamento em cada fatura FECHADA cujo valor_pago já cobre o valor bruto.
+// Por invoice, não em bloco: um pagamento que quita só a fatura mais antiga não pode
+// carimbar como paga a fatura seguinte, que continua devendo.
+// Quando não sobra nenhuma fechada em aberto, o usuário volta a adimplente.
+async function markFullyPaidInvoices(cpf, paidAtIso) {
+    const { esc } = repoContext;
+    const rows = await fetchUnpaidClosedInvoices(cpf);
+    const settled = [];
+    let stillOpen = 0;
+
+    for (const inv of rows) {
+        // Usa valor_total (sem encargos) como target de quitação, igual ao
+        // planDistribution e computeInvoicePaidInfo — encargos não são pagos,
+        // são herdados pela fatura aberta.
+        const target = Math.round(parseFloat(inv.valor_total || 0) * 100) / 100;
+        const pago = parseFloat(inv.valor_pago || 0);
+        if (pago >= target - 0.005) {
+            await databricksService.executeQuery(`
+                UPDATE ${databricksService.fq('invoices')}
+                SET data_pagamento = ${esc(paidAtIso)}, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${esc(inv.id)} AND cpf = ${esc(cpf)}
+            `);
+            settled.push(inv.id);
+        } else {
+            stillOpen++;
+        }
+    }
+
+    if (settled.length > 0 && stillOpen === 0) {
+        await databricksService.executeQuery(`
+            UPDATE ${databricksService.fq('users')}
+            SET account_status = 'adimplente', days_overdue = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE cpf = ${esc(cpf)}
+        `);
+    }
+
+    return { settled, stillOpen };
+}
+
+// Quitação da fatura FECHADA (pagamento total, parcial ou refinanciamento via
+// parcelamento): distribui o valor REALMENTE pago entre as faturas em aberto — da mais
+// antiga para a mais recente — e só então marca as que ficaram quitadas.
+//
+// Antes usava Number.MAX_SAFE_INTEGER, o que zerava a dívida de todas as faturas ainda
+// que o débito cobrado tivesse sido só o da fatura mais recente.
+async function settleClosedInvoices(cpf, paidAtIso, payAmount) {
+    if (!(typeof payAmount === 'number') || !(payAmount > 0)) {
+        throw new Error('settleClosedInvoices: payAmount deve ser um número positivo');
+    }
+    const distribution = await distributePaymentAmongInvoices(cpf, payAmount);
+    const marked = await markFullyPaidInvoices(cpf, paidAtIso);
+    return { ...distribution, ...marked };
 }
 
 // Opções de parcelamento (2x-12x) para a fatura FECHADA não paga, com encargos reais do motor de cobrança
@@ -4247,8 +5194,10 @@ apiRouter.post('/cards/invoice/parcel', bearerAuth(), asyncHandler(async (req, r
 
     // Fatura fechada quitada via refinanciamento: sem isso, a fatura continuaria "não paga"
     // e o valor refinanciado seria cobrado de novo em /cards/invoice/pay.
+    // O valor refinanciado é exatamente `principal` (= closedDebt.owed), então é ele que
+    // é distribuído entre as faturas em aberto.
     if (closedDebt) {
-        await settleClosedInvoices(cpf, new Date().toISOString());
+        await settleClosedInvoices(cpf, new Date().toISOString(), principal);
     }
 
     const plan = await cardRepo.createInstallments({ cpf, amount: principal, installments });
@@ -4332,13 +5281,19 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
     const totalLimit = parseFloat(user.credit_card_total_limit || 0);
 
     if (payAmount < totalDue - 0.01) {
+        // Se o valor pago é >= mínimo (10% do total), é pagamento MÍNIMO.
+        // Caso contrário, é pagamento PARCIAL. A descrição é usada pelo
+        // enrichUserCreditCardData para exibir o sufixo (Mínimo) ou (Parcial).
+        const payDescription = payAmount >= minPayment
+            ? 'Pagamento minimo de fatura'
+            : 'Pagamento parcial de fatura';
         // Pagamento parcial: registrar sem deletar parcelas
         const nowIso = new Date().toISOString();
         const payId = databricksService.generateUUID();
         await databricksService.executeQuery(`
             INSERT INTO ${databricksService.fq('transactions')}
             (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-            VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-payAmount).toFixed(2))}, 'Pagamento parcial de fatura', NULL, NULL, NULL, ${esc(nowIso)})
+            VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-payAmount).toFixed(2))}, ${esc(payDescription)}, NULL, NULL, NULL, ${esc(nowIso)})
         `);
         await usersRepo.updateBalance(cpf, (balance - payAmount).toFixed(2));
         const restoredLimit = Math.min(totalLimit, availableLimit + payAmount);
@@ -4347,6 +5302,10 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
             SET credit_card_available_limit = ${restoredLimit.toFixed(2)}
             WHERE cpf = '${cpf}'
         `);
+        // Distribui entre as faturas (mais antiga primeiro) e carimba data_pagamento nas
+        // que o pagamento parcial tiver quitado — um parcial pode zerar a fatura antiga
+        // mesmo sem cobrir a dívida consolidada.
+        await settleClosedInvoices(cpf, nowIso, payAmount);
         const remaining = totalDue - payAmount;
         const daysOverdue = parseInt(user.days_overdue || 0);
         const billingCfgForRef = (await databricksService.executeQuery(
@@ -4364,10 +5323,22 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
                 ('${chargeBase}_j', ${esc(cpf)}, ${esc(invoiceRef)}, 'juros_mora', ${juros}, ${daysOverdue}, ${remaining.toFixed(2)})
             `);
         }
+        // ── Notificação específica para ABAIXO do mínimo crítico ──
+        // Se pagou MENOS de 10% do total, é ABAIXO (crítico — alerta no admin).
+        // Se pagou entre 10% e < 100%, é mínimo (multa/juros mora estacionados).
+        const isPaymentAbaixo = payAmount < minPayment;
+        const notifTitle = isPaymentAbaixo
+            ? '⚠️ Pagamento abaixo do mínimo crítico'
+            : 'Pagamento mínimo de fatura ✅';
+        const notifMessage = isPaymentAbaixo
+            ? `Apenas R$ ${payAmount.toFixed(2)} pagos (${(payAmount / totalDue * 100).toFixed(0)}% do total). Mínimo necessário: R$ ${minPayment.toFixed(2)}. Saldo residual: R$ ${remaining.toFixed(2)}. Encargos TOTAIS continuam sobre o saldo!`
+            : `R$ ${payAmount.toFixed(2)} pagos (mínimo). Multa e juros de mora ESTACIONADOS! Juros remuneratórios continuam sobre o saldo devedor de R$ ${remaining.toFixed(2)}.`;
         await notificationsRepo.addNotification({
             cpf,
-            title: 'Pagamento parcial de fatura',
-            message: `R$ ${payAmount.toFixed(2)} pago. Saldo devedor: R$ ${remaining.toFixed(2)}. Encargos: R$ ${(multa + juros).toFixed(2)}.`,
+            title: notifTitle,
+            message: notifMessage,
+            // actionUrl sempre /dashboard para notificações do usuário final.
+            // Admin vê as ABAIXO via GET /admin/notifications/abaixo (rota dedicada).
             actionUrl: '/dashboard'
         });
         return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining, charges: { multa, juros } });
@@ -4378,19 +5349,22 @@ apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(async (req, res)
     const result = await cardRepo.payDueInstallments({ cpf, cutoffIso, amount: totalDue });
     await usersRepo.updateBalance(cpf, (balance - result.totalDue).toFixed(2));
     const restoredLimit = Math.min(totalLimit, availableLimit + result.totalDue);
-    const currentInvDue = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
-    const nextInvDue = new Date(currentInvDue);
-    nextInvDue.setMonth(currentInvDue.getMonth() + 1);
+    // NÃO avançar credit_card_invoice_due_date aqui — o motor de faturamento (invoiceEngine)
+    // o faz naturalmente no fechamento do ciclo. Avançar manualmente desloca as janelas de
+    // cálculo do enrichUserCreditCardData (close = due-7d, prevClose = close-1m), fazendo
+    // com que transações do ciclo atual caiam FORA da janela "aberta", sumindo do extrato
+    // e reduzindo currentInvoice incorretamente.
     await databricksService.executeQuery(`
         UPDATE ${databricksService.fq('users')}
         SET credit_card_available_limit = ${restoredLimit.toFixed(2)},
-            credit_card_is_blocked = false,
-            credit_card_invoice_due_date = '${nextInvDue.toISOString()}'
+            credit_card_is_blocked = false
         WHERE cpf = '${cpf}'
     `);
-    // Sem marcar data_pagamento a fatura seguiria "não paga" e poderia ser cobrada de novo
+    // Sem marcar data_pagamento a fatura seguiria "não paga" e poderia ser cobrada de novo.
+    // Distribui o valor efetivamente cobrado (totalDue = dívida consolidada), nunca mais
+    // que isso: quitar faturas sem ter recebido por elas é perda de receita.
     if (closedDebt) {
-        await settleClosedInvoices(cpf, new Date().toISOString());
+        await settleClosedInvoices(cpf, new Date().toISOString(), result.totalDue || totalDue);
     }
     await notificationsRepo.addNotification({
         cpf,
@@ -4430,29 +5404,37 @@ apiRouter.get('/credit/invoices/summary/:type', bearerAuth(), asyncHandler(async
     };
 
     if (type === 'fechada') {
-        const closed = (await databricksService.executeQuery(`
-            SELECT * FROM ${databricksService.fq('invoices')}
-            WHERE cpf = ${esc(cpf)} AND status = 'FECHADA'
-            ORDER BY due_date DESC LIMIT 1
-        `))[0];
-
-        if (!closed) {
+        // FONTE ÚNICA: mesmo bloco canônico de enrichUserCreditCardData que alimenta
+        // o painel admin e a tela de fatura. Resumo do cliente e admin devem mostrar
+        // EXATAMENTE os mesmos números — qualquer divergência aqui é bug.
+        const userRowFull = await usersRepo.findByCpf(cpf);
+        if (!userRowFull) {
             return res.json({ success: true, summary: null });
         }
+        const tempUser = normalizeUser(userRowFull);
+        await enrichUserCreditCardData(tempUser, cpf);
+        const canon = tempUser.creditCard || {};
 
-        const iof = parseFloat(closed.valor_iof || 0);
-        const multa = parseFloat(closed.valor_multa || 0);
-        const jurosRem = parseFloat(closed.valor_juros_remuneratorios || 0);
-        const jurosMora = parseFloat(closed.valor_juros_mora || 0);
-        const saldoAnterior = parseFloat(closed.saldo_anterior || 0);
-        const totalPurchases = parseFloat(closed.valor_total || 3870.86);
-        const finalBalance = totalPurchases + iof + multa + jurosRem + jurosMora + saldoAnterior;
+        const isPaid = !!canon.closedInvoiceIsPaid;
+        // Regra da fatura FECHADA no resumo do cliente WEB:
+        //   - Valor total e mínimo: SEMPRE mostra (igual admin) — usa o valor ORIGINAL
+        //     da fatura fechada (_closedInvoiceValorTotal), mesmo após pagamento.
+        //   - Encargos (multa, juros, IOF): ZERADOS no resumo do cliente.
+        //     São HERDADOS pela fatura ABERTA (já inclusos em currentInvoiceTotal).
+        //     Admin mantém como memória informativa para auditoria.
+        const closedVal = canon._closedInvoiceValorTotal ?? canon.closedInvoiceAmount ?? canon.closedInvoice ?? 0;
+        const multa = 0;
+        const jurosRem = 0;
+        const jurosMora = 0;
+        const iof = 0;
 
-        const closedDueDateStr = closed.due_date ? String(closed.due_date).split('T')[0] : '2026-07-15';
-        const parts = closedDueDateStr.split('-');
-        const year = parts.length === 3 ? parseInt(parts[0], 10) : 2026;
-        const month = parts.length === 3 ? parseInt(parts[1], 10) - 1 : 6;
-        const day = parts.length === 3 ? parseInt(parts[2], 10) : 15;
+        // Postgres provider pode retornar TIMESTAMP como Date object ou string ISO.
+        // Ambos os formatos precisam funcionar — converter pra Date primeiro.
+        const _closedRaw = canon.closedInvoiceDueDate || canon.invoiceDueDate || '2026-07-15';
+        const _closedDate = _closedRaw instanceof Date ? _closedRaw : new Date(String(_closedRaw));
+        const year = _closedDate.getUTCFullYear();
+        const month = _closedDate.getUTCMonth();
+        const day = _closedDate.getUTCDate();
 
         const closedDueDateObj = new Date(Date.UTC(year, month, day));
         const closedCloseDateObj = new Date(closedDueDateObj);
@@ -4466,85 +5448,65 @@ apiRouter.get('/credit/invoices/summary/:type', bearerAuth(), asyncHandler(async
                 iof,
                 jurosMora,
                 multa,
-                totalDespesas: totalPurchases,
-                totalPagamentos: closed.data_pagamento ? finalBalance : 0,
+                totalDespesas: closedVal,
+                totalPagamentos: isPaid ? closedVal : 0,
                 totalCreditos: 0.00,
-                saldoFinal: finalBalance,
-                pagamentoMinimo: closed.data_pagamento ? 0 : Math.round(Math.max(finalBalance * 0.10, 10.00) * 100) / 100,
+                saldoFinal: closedVal,
+                pagamentoMinimo: Math.round(Math.max(closedVal * 0.10, 10.00) * 100) / 100,
                 dataVencimento: fmtDateSafe(closedDueDateObj),
-                melhorDataCompra: fmtDateSafe(closedCloseDateObj)
+                melhorDataCompra: fmtDateSafe(closedCloseDateObj),
+                daysOverdue: canon.daysOverdue || 0
             }
         });
     } else {
-        const overdueInvoice = (await databricksService.executeQuery(`
-            SELECT valor_total FROM ${databricksService.fq('invoices')}
-            WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
-            ORDER BY due_date DESC LIMIT 1
-        `))[0];
-        const valorPendente = overdueInvoice ? parseFloat(overdueInvoice.valor_total || 0) : 0;
-
-        const pendingCharges = await databricksService.executeQuery(`
-            SELECT charge_type, SUM(amount) as amount FROM ${databricksService.fq('billing_charges')}
-            WHERE cpf = ${esc(cpf)} AND invoice_reference = ${esc(cycle.invoiceRef)} AND status = 'pending'
-            GROUP BY charge_type
-        `);
-        const getPending = (t) => parseFloat(pendingCharges.find(c => c.charge_type === t)?.amount || 0);
-
+        // Fatura ABERTA: TUDO vem do bloco canônico de enrichUserCreditCardData.
+        // Este endpoint recalculava por conta própria (saldo anterior sem descontar
+        // valor_pago, daysOverdue com piso chumbado de 9, encargos de billing_charges) e
+        // por isso divergia do painel admin e da tela de fatura. Sem recálculo local aqui:
+        // se o bloco canônico tiver um buraco, ele aparece igual nas três telas.
         const userRowFull = await usersRepo.findByCpf(cpf);
-        let openPurchases = 0;
-        if (userRowFull) {
-            const tempUser = normalizeUser(userRowFull);
-            await enrichUserCreditCardData(tempUser, cpf);
-            openPurchases = tempUser.creditCard?.currentInvoice || 0;
+        if (!userRowFull) {
+            return res.json({ success: true, summary: null });
         }
+        console.log('[DEBUG /credit/invoices/summary/aberta] userRowFull:', JSON.stringify(userRowFull, null, 2));
+        const tempUser = normalizeUser(userRowFull);
+        await enrichUserCreditCardData(tempUser, cpf);
+        console.log('[DEBUG /credit/invoices/summary/aberta] enrichUserCreditCardData result:', JSON.stringify(tempUser.creditCard, null, 2));
+        const canon = tempUser.creditCard || {};
 
-        const saldoAnterior = valorPendente;
-        let iof = getPending('iof');
-        let multa = getPending('multa');
-        let jurosRem = getPending('juros_remuneratorios');
-        let jurosMora = getPending('juros_mora');
+        const openPurchases = canon.currentInvoice || 0;
+        // saldoAnterior = VALOR ORIGINAL da fatura fechada (nunca muda)
+        const saldoAnterior = canon.closedInvoice || 0;
+        // closedInvoiceResidual = saldo ainda devido após pagamento parcial
+        const closedInvoiceResidual = canon.closedInvoiceResidual ?? 0;
+        const charges = canon.closedInvoiceCharges || { multa: 0, jurosMora: 0, jurosRemuneratorios: 0, iof: 0, totalEncargos: 0 };
+        const iof = charges.iof;
+        const multa = charges.multa;
+        const jurosRem = charges.jurosRemuneratorios;
+        const jurosMora = charges.jurosMora;
+        const daysOverdue = canon.daysOverdue || 0;
+        const totalEncargos = charges.totalEncargos;
+        const saldoFinal = canon.currentInvoiceTotal;
+        const pagamentoMinimo = canon.currentInvoiceMinimo;
 
-        let daysOverdue = 0;
-        if (saldoAnterior > 0) {
-            const explicitDays = userRowFull?.days_overdue || 0;
-            const closedDueDate = userRowFull?.credit_card_invoice_due_date ? new Date(userRowFull.credit_card_invoice_due_date) : new Date('2026-07-15');
-            const diffTime = Math.abs(new Date().getTime() - closedDueDate.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            daysOverdue = explicitDays > 0 ? explicitDays : Math.max(9, diffDays);
+        // Resumo da fatura ABERTA usa o MESMO vencimento que o admin painel mostra:
+        // credit_card_invoice_due_date direto. Postgres pode retornar TIMESTAMP como
+        // Date ou string ISO — normalizar para Date antes de extrair componentes.
+        const _openRaw = userRowFull?.credit_card_invoice_due_date || '2026-07-15';
+        const _openDate = _openRaw instanceof Date ? _openRaw : new Date(String(_openRaw));
+        const year = _openDate.getUTCFullYear();
+        const month = _openDate.getUTCMonth();
+        const day = _openDate.getUTCDate();
 
-            if (multa === 0) {
-                multa = Math.round(saldoAnterior * 0.02 * 100) / 100;
-            }
-            if (jurosMora === 0) {
-                jurosMora = Math.round(saldoAnterior * 0.000333 * daysOverdue * 100) / 100;
-            }
-            if (jurosRem === 0) {
-                jurosRem = Math.round(saldoAnterior * 0.00513 * daysOverdue * 100) / 100;
-            }
-            if (iof === 0) {
-                const iofFixo = Math.round(saldoAnterior * 0.0038 * 100) / 100;
-                const iofDiario = Math.round(saldoAnterior * 0.000082 * daysOverdue * 100) / 100;
-                iof = Math.round((iofFixo + iofDiario) * 100) / 100;
-            }
-        }
-        const totalEncargos = iof + multa + jurosRem + jurosMora;
-        const saldoFinal = Math.round((saldoAnterior + openPurchases + totalEncargos) * 100) / 100;
-
-        const baseDueDateStr = userRowFull?.credit_card_invoice_due_date ? String(userRowFull.credit_card_invoice_due_date).split('T')[0] : '2026-07-15';
-        const parts = baseDueDateStr.split('-');
-        const year = parts.length === 3 ? parseInt(parts[0], 10) : 2026;
-        const month = parts.length === 3 ? parseInt(parts[1], 10) - 1 : 6;
-        const day = parts.length === 3 ? parseInt(parts[2], 10) : 15;
-
-        // Fatura Aberta vence no mês seguinte (15/ago./2026)
-        const openDueDateObj = new Date(Date.UTC(year, month + 1, day));
+        const openDueDateObj = new Date(Date.UTC(year, month, day));
         const openCloseDateObj = new Date(openDueDateObj);
-        openCloseDateObj.setUTCDate(openCloseDateObj.getUTCDate() - 7); // 08/ago./2026
+        openCloseDateObj.setUTCDate(openCloseDateObj.getUTCDate() - 7);
 
         return res.json({
             success: true,
             summary: {
                 saldoAnterior,
+                closedInvoiceResidual,
                 jurosRemuneratorios: jurosRem,
                 iof,
                 jurosMora,
@@ -4554,9 +5516,7 @@ apiRouter.get('/credit/invoices/summary/:type', bearerAuth(), asyncHandler(async
                 totalPagamentos: 0.00,
                 totalCreditos: 0.00,
                 saldoFinal,
-                pagamentoMinimo: saldoAnterior > 0 
-                  ? Math.round(((openPurchases * 0.10) + saldoAnterior + totalEncargos) * 100) / 100
-                  : (saldoFinal > 0 ? Math.round(Math.max(saldoFinal * 0.10, 10.00) * 100) / 100 : 0),
+                pagamentoMinimo,
                 dataVencimento: fmtDateSafe(openDueDateObj),
                 melhorDataCompra: fmtDateSafe(openCloseDateObj)
             }
@@ -5902,6 +6862,772 @@ apiRouter.post('/admin/transactions/simulate-mass', bearerAuth(), authenticateAd
     }
     auditLog(req, 'admin.simulate-mass', 'warn', { targetCpf, count: created.length });
     res.json({ success: true, message: `${created.length} transações simuladas para ${targetCpf}.`, transactions: created });
+}));
+
+// ─── Admin: Correção automática de pagamentos órfãos ─────────────────────
+// Detecta e corrige discrepâncias entre INVOICE_PAYMENT (transactions) e
+// valor_pago (invoices). Útil quando pagamentos foram feitos antes da coluna
+// valor_pago existir ou quando houve erro de sincronia.
+//
+// GET  /admin/audit-orphan-payments  — apenas auditoria (read-only)
+// POST /admin/fix-orphan-payments    — detecta e corrige automaticamente
+
+/**
+ * Função reutilizável de correção de pagamentos órfãos.
+ * Usada tanto pela rota POST /admin/fix-orphan-payments quanto pelo cron semanal.
+ * @param {Object} opts
+ * @param {string|null} opts.cpfFilter  — filtra por CPF específico
+ * @param {function|null} opts.onComplete — callback(opts) chamado ao final com { cpfFilter, fixed, errors, usersScanned }
+ */
+async function runOrphanPaymentFix({ cpfFilter = null, onComplete = null } = {}) {
+    const { esc } = repoContext;
+    const round2 = n => Math.round(n * 100) / 100;
+    let fixed = 0;
+    let errors = 0;
+    const details = [];
+    const allowed = cpfFilter && typeof cpfFilter === 'string' && cpfFilter.replace(/\D/g, '').length === 11;
+    const filterCpf = allowed ? cpfFilter.replace(/\D/g, '') : null;
+
+    let sql = `
+        SELECT DISTINCT t.cpf, u.full_name
+        FROM ${databricksService.fq('transactions')} t
+        LEFT JOIN ${databricksService.fq('users')} u ON t.cpf = u.cpf
+        WHERE t.type = 'INVOICE_PAYMENT'
+    `;
+    if (filterCpf) sql += ` AND t.cpf = ${esc(filterCpf)}`;
+
+    const users = await databricksService.executeQuery(sql);
+
+    for (const user of users) {
+        const cpf = user.cpf;
+        const name = user.full_name || '(sem nome)';
+        const detail = { cpf, name, action: 'none', fixed: false };
+
+        try {
+            const paymentRows = await databricksService.executeQuery(`
+                SELECT id, amount, description, date
+                FROM ${databricksService.fq('transactions')}
+                WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT'
+                    AND (status IS NULL OR status <> 'cancelled')
+                ORDER BY date ASC
+            `);
+            const paymentTotal = paymentRows.reduce((sum, r) => sum + Math.abs(parseFloat(r.amount || 0)), 0);
+
+            const invoiceRows = await databricksService.executeQuery(`
+                SELECT id, due_date, status, valor_total, valor_pago, data_pagamento
+                FROM ${databricksService.fq('invoices')}
+                WHERE cpf = ${esc(cpf)} AND COALESCE(valor_pago, 0) > 0
+                ORDER BY due_date DESC
+            `);
+            const invoiceTotalPago = invoiceRows.reduce((sum, r) => sum + parseFloat(r.valor_pago || 0), 0);
+            const diff = round2(Math.abs(paymentTotal - invoiceTotalPago));
+
+            if (diff <= 0.02) { detail.action = 'ok'; details.push(detail); continue; }
+
+            // Caso A: Pagamentos > valor_pago
+            if (paymentTotal > invoiceTotalPago + 0.02) {
+                const missing = round2(paymentTotal - invoiceTotalPago);
+                const recentInvoice = await databricksService.executeQuery(`
+                    SELECT id, valor_total, valor_pago
+                    FROM ${databricksService.fq('invoices')}
+                    WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
+                    ORDER BY due_date DESC LIMIT 1
+                `);
+
+                if (recentInvoice.length > 0) {
+                    const inv = recentInvoice[0];
+                    const newValorPago = round2(parseFloat(inv.valor_pago || 0) + missing);
+                    const capped = Math.min(newValorPago, parseFloat(inv.valor_total || 0));
+                    await databricksService.executeQuery(`
+                        UPDATE ${databricksService.fq('invoices')}
+                        SET valor_pago = ${capped.toFixed(2)}, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ${esc(inv.id)}
+                    `);
+                    const excess = round2(newValorPago - capped);
+                    if (excess > 0.01) {
+                        await databricksService.executeQuery(`
+                            UPDATE ${databricksService.fq('users')}
+                            SET balance = COALESCE(balance, 0) + ${excess.toFixed(2)}, updated_at = CURRENT_TIMESTAMP
+                            WHERE cpf = ${esc(cpf)}
+                        `);
+                    }
+                    fixed++; detail.action = 'added_to_invoice'; detail.fixed = true;
+                    detail.missing = missing; detail.excessRefunded = excess > 0.01 ? excess : 0; detail.invoiceId = inv.id;
+                } else {
+                    const refundAmount = invoiceTotalPago > 0.01 ? missing : paymentTotal;
+                    const safeRefund = round2(refundAmount);
+                    await databricksService.executeQuery(`
+                        UPDATE ${databricksService.fq('users')}
+                        SET balance = COALESCE(balance, 0) + ${safeRefund.toFixed(2)}, updated_at = CURRENT_TIMESTAMP
+                        WHERE cpf = ${esc(cpf)}
+                    `);
+                    fixed++; detail.action = 'refunded_to_balance'; detail.fixed = true;
+                    detail.refundAmount = safeRefund; detail.missing = round2(missing);
+                    detail.invoiceTotalPago = round2(invoiceTotalPago);
+                }
+            }
+
+            // Caso B: valor_pago > pagamentos
+            if (invoiceTotalPago > paymentTotal + 0.02) {
+                const excess = round2(invoiceTotalPago - paymentTotal);
+                if (invoiceRows.length > 0) {
+                    const lastInv = invoiceRows[0];
+                    const newValorPago = round2(parseFloat(lastInv.valor_pago || 0) - excess);
+                    await databricksService.executeQuery(`
+                        UPDATE ${databricksService.fq('invoices')}
+                        SET valor_pago = ${Math.max(0, newValorPago).toFixed(2)}, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ${esc(lastInv.id)}
+                    `);
+                    fixed++; detail.action = 'reduced_invoice'; detail.fixed = true;
+                    detail.reduced = excess; detail.invoiceId = lastInv.id;
+                }
+            }
+        } catch (err) {
+            errors++; detail.action = 'error'; detail.error = err.message;
+        }
+        details.push(detail);
+    }
+
+    if (typeof onComplete === 'function') {
+        onComplete({ cpfFilter: filterCpf || 'all', fixed, errors, usersScanned: users.length, details });
+    }
+
+    return { success: true, summary: { usersScanned: users.length, fixed, errors }, details };
+}
+
+apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { esc } = repoContext;
+    const { cpf: cpfFilter } = req.query || {};
+    const allowed = cpfFilter && typeof cpfFilter === 'string' && cpfFilter.replace(/\D/g, '').length === 11;
+    const filterCpf = allowed ? cpfFilter.replace(/\D/g, '') : null;
+
+    // ── Paginação: limit (padrão 20) e offset (padrão 0) ──
+    const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
+    const rawOffset = parseInt(String(req.query?.offset ?? ''), 10);
+    const limit = !isNaN(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 100) : 20;
+    const offset = !isNaN(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
+
+    const round2 = n => Math.round(n * 100) / 100;
+
+    // 1. Contar TOTAL de usuários com INVOICE_PAYMENT (sem LIMIT/OFFSET) para metadata
+    let countSql = `
+        SELECT COUNT(DISTINCT t.cpf) AS total
+        FROM ${databricksService.fq('transactions')} t
+        LEFT JOIN ${databricksService.fq('users')} u ON t.cpf = u.cpf
+        WHERE t.type = 'INVOICE_PAYMENT'
+    `;
+    if (filterCpf) {
+        countSql += ` AND t.cpf = ${esc(filterCpf)}`;
+    }
+    const countResult = await databricksService.executeQuery(countSql);
+    const totalUsers = parseInt(countResult[0]?.total || 0, 10);
+    const totalPages = Math.ceil(totalUsers / limit) || 0;
+    const currentPage = Math.floor(offset / limit) + 1;
+    const hasMore = offset + limit < totalUsers;
+
+    // 2. Buscar usuários com INVOICE_PAYMENT (paginado)
+    let sql = `
+        SELECT DISTINCT t.cpf, u.full_name
+        FROM ${databricksService.fq('transactions')} t
+        LEFT JOIN ${databricksService.fq('users')} u ON t.cpf = u.cpf
+        WHERE t.type = 'INVOICE_PAYMENT'
+    `;
+    if (filterCpf) {
+        sql += ` AND t.cpf = ${esc(filterCpf)}`;
+    }
+    sql += ` ORDER BY u.full_name ASC LIMIT ${limit} OFFSET ${offset}`;
+
+    const users = await databricksService.executeQuery(sql);
+    const results = [];
+    let totalDiscrepancies = 0;
+
+    for (const user of users) {
+        const cpf = user.cpf;
+        const name = user.full_name || '(sem nome)';
+
+        // 3. Somar INVOICE_PAYMENT transactions
+        const paymentRows = await databricksService.executeQuery(`
+            SELECT id, amount, description, date
+            FROM ${databricksService.fq('transactions')}
+            WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT'
+                AND (status IS NULL OR status <> 'cancelled')
+            ORDER BY date ASC
+        `);
+
+        const paymentTotal = paymentRows.reduce((sum, r) => sum + Math.abs(parseFloat(r.amount || 0)), 0);
+        const paymentCount = paymentRows.length;
+
+        // 4. Somar valor_pago das invoices
+        const invoiceRows = await databricksService.executeQuery(`
+            SELECT id, due_date, status, valor_total, valor_pago, data_pagamento
+            FROM ${databricksService.fq('invoices')}
+            WHERE cpf = ${esc(cpf)} AND COALESCE(valor_pago, 0) > 0
+            ORDER BY due_date DESC
+        `);
+
+        const invoiceTotalPago = invoiceRows.reduce((sum, r) => sum + parseFloat(r.valor_pago || 0), 0);
+        const invoiceCount = invoiceRows.length;
+
+        // 5. Calcular discrepância
+        const diff = round2(Math.abs(paymentTotal - invoiceTotalPago));
+        const isDiscrepancy = diff > 0.02;
+
+        if (isDiscrepancy) totalDiscrepancies++;
+
+        // 6. Verificar pagamentos órfãos (transactions sem invoice)
+        const isOrphan = paymentCount > 0 && invoiceCount === 0;
+
+        const userResult = {
+            cpf,
+            name,
+            payments: {
+                count: paymentCount,
+                total: round2(paymentTotal),
+                items: paymentRows.map(r => ({
+                    id: r.id,
+                    amount: Math.abs(parseFloat(r.amount || 0)),
+                    description: (r.description || '').trim(),
+                    date: r.date
+                }))
+            },
+            invoices: {
+                count: invoiceCount,
+                totalPago: round2(invoiceTotalPago),
+                items: invoiceRows.map(r => ({
+                    id: r.id,
+                    dueDate: r.due_date,
+                    status: r.status,
+                    valorTotal: parseFloat(r.valor_total || 0),
+                    valorPago: parseFloat(r.valor_pago || 0),
+                    dataPagamento: r.data_pagamento
+                }))
+            },
+            discrepancy: isDiscrepancy ? round2(paymentTotal - invoiceTotalPago) : 0,
+            isOrphan,
+            isDiscrepancy
+        };
+
+        results.push(userResult);
+    }
+
+    // ── totalDiscrepancies de TODOS os CPFs (não só da página atual) ──
+    // O aggregate abaixo faz uma única query que cruza pagamentos com valor_pago
+    // em lote (sem o loop CPF a CPF), garantindo que o resumo seja preciso
+    // independente da paginação.
+    let aggDiscrepancies = 0;
+    try {
+        const aggSql = `
+            SELECT t.cpf
+            FROM ${databricksService.fq('transactions')} t
+            WHERE t.type = 'INVOICE_PAYMENT'
+                AND (t.status IS NULL OR t.status <> 'cancelled')
+                ${filterCpf ? `AND t.cpf = ${esc(filterCpf)}` : ''}
+            GROUP BY t.cpf
+            HAVING ABS(
+                COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) -
+                COALESCE((
+                    SELECT SUM(CAST(i.valor_pago AS DECIMAL(15,2)))
+                    FROM ${databricksService.fq('invoices')} i
+                    WHERE i.cpf = t.cpf AND COALESCE(i.valor_pago, 0) > 0
+                ), 0)
+            ) > 0.02
+        `;
+        const aggRows = await databricksService.executeQuery(aggSql);
+        aggDiscrepancies = aggRows.length;
+    } catch (_aggErr) {
+        console.warn('⚠️ [audit-orphan-payments] Aggregate de discrepâncias falhou, usando fallback:', _aggErr.message);
+        aggDiscrepancies = totalDiscrepancies;
+    }
+
+    const summary = {
+        totalUsers,
+        totalPages,
+        page: currentPage,
+        limit,
+        offset,
+        hasMore,
+        totalDiscrepancies: aggDiscrepancies
+    };
+
+    res.json({
+        success: true,
+        summary,
+        results
+    });
+}));
+
+// Auditoria consolidada READ-ONLY: pagamentos órfãos, saldo negativo, overpayment e
+// faturas pagas sem data_pagamento — os quatro num único retorno, para não obrigar o
+// painel a chamar três rotas. Mesma aritmética dos scripts scripts/audit_*.js.
+// Nada é corrigido aqui: correção é POST /admin/fix-orphan-payments ou os scripts
+// com --fix --confirm.
+apiRouter.get('/admin/audit-full', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { esc } = repoContext;
+    const round2 = n => Math.round(n * 100) / 100;
+
+    const rawCpf = typeof req.query?.cpf === 'string' ? req.query.cpf.replace(/\D/g, '') : '';
+    const filterCpf = rawCpf.length === 11 ? rawCpf : null;
+    const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
+    const limit = !isNaN(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 200) : 100;
+
+    const users = await databricksService.executeQuery(`
+        SELECT cpf, full_name, COALESCE(balance, 0) AS balance
+        FROM ${databricksService.fq('users')}
+        ${filterCpf ? `WHERE cpf = ${esc(filterCpf)}` : ''}
+        ORDER BY full_name ASC
+        LIMIT ${limit}
+    `);
+
+    const results = [];
+    const summary = {
+        usersScanned: users.length,
+        orphanPayments: 0,
+        negativeBalance: 0,
+        overpayment: 0,
+        missingPaymentDate: 0,
+        usersWithIssues: 0
+    };
+
+    for (const user of users) {
+        const cpf = user.cpf;
+        const balance = parseFloat(user.balance || 0);
+
+        const paymentRows = await databricksService.executeQuery(`
+            SELECT id, amount, description, date
+            FROM ${databricksService.fq('transactions')}
+            WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT'
+                AND (status IS NULL OR status <> 'cancelled')
+            ORDER BY date ASC
+        `);
+        const paymentTotal = round2(paymentRows.reduce((sum, r) => sum + Math.abs(parseFloat(r.amount || 0)), 0));
+
+        const invoiceRows = await databricksService.executeQuery(`
+            SELECT id, due_date, status, valor_total, saldo_anterior, valor_iof, valor_multa,
+                   valor_juros_remuneratorios, valor_juros_mora,
+                   COALESCE(valor_pago, 0) AS valor_pago, data_pagamento
+            FROM ${databricksService.fq('invoices')}
+            WHERE cpf = ${esc(cpf)}
+            ORDER BY due_date DESC
+        `);
+        const invoiceTotalPago = round2(invoiceRows.reduce((sum, r) => sum + parseFloat(r.valor_pago || 0), 0));
+
+        const issues = [];
+
+        // 1. Pagamento órfão: dinheiro debitado que não aparece em nenhuma invoice
+        const orphanDiff = round2(paymentTotal - invoiceTotalPago);
+        if (orphanDiff > 0.02) {
+            summary.orphanPayments++;
+            issues.push({
+                type: 'orphan_payment',
+                amount: orphanDiff,
+                detail: `INVOICE_PAYMENT soma ${paymentTotal.toFixed(2)} mas valor_pago das faturas soma ${invoiceTotalPago.toFixed(2)}`
+            });
+        }
+
+        // 2. Saldo negativo
+        if (balance < -0.005) {
+            summary.negativeBalance++;
+            issues.push({ type: 'negative_balance', amount: round2(balance), detail: 'balance do usuário está negativo' });
+        }
+
+        // 3. Overpayment: valor_pago acima do bruto congelado da fatura
+        for (const inv of invoiceRows) {
+            const gross = round2(computeInvoiceGross(inv));
+            const pago = parseFloat(inv.valor_pago || 0);
+            if (pago > gross + 0.02) {
+                summary.overpayment++;
+                issues.push({
+                    type: 'overpayment',
+                    invoiceId: inv.id,
+                    amount: round2(pago - gross),
+                    detail: `valor_pago ${pago.toFixed(2)} > gross ${gross.toFixed(2)} na fatura ${inv.due_date}`
+                });
+            }
+        }
+
+        // 4. Fatura quitada sem data_pagamento: some do histórico e volta a ser cobrada
+        for (const inv of invoiceRows) {
+            const gross = round2(computeInvoiceGross(inv));
+            const pago = parseFloat(inv.valor_pago || 0);
+            if (pago > 0.005 && !inv.data_pagamento && pago >= gross - 0.005) {
+                summary.missingPaymentDate++;
+                issues.push({
+                    type: 'missing_payment_date',
+                    invoiceId: inv.id,
+                    amount: pago,
+                    detail: `fatura quitada (valor_pago ${pago.toFixed(2)} >= gross ${gross.toFixed(2)}) sem data_pagamento`
+                });
+            }
+        }
+
+        if (issues.length === 0) continue;
+        summary.usersWithIssues++;
+        results.push({
+            cpf,
+            name: user.full_name || '(sem nome)',
+            balance: round2(balance),
+            paymentTotal,
+            invoiceTotalPago,
+            issues
+        });
+    }
+
+    res.json({ success: true, readOnly: true, summary, results });
+}));
+
+// ── Auditoria de consistência: users.days_overdue vs real-time ──
+// Compara users.days_overdue e invoices.dias_atraso com o cálculo
+// real-time (CURRENT_DATE - due_date::date) para detectar desatualizações.
+apiRouter.get('/admin/audit-consistency', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { esc } = repoContext;
+    const rawCpf = typeof req.query?.cpf === 'string' ? req.query.cpf.replace(/\D/g, '') : '';
+    const filterCpf = rawCpf.length === 11 ? rawCpf : null;
+    const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
+    const limit = !isNaN(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 200) : 100;
+
+    const rows = await databricksService.executeQuery(`
+        SELECT u.cpf, u.full_name, u.account_status,
+               COALESCE(u.days_overdue, 0) AS user_days_overdue,
+               i.id AS invoice_id, i.due_date,
+               COALESCE(i.dias_atraso, 0) AS invoice_dias_atraso,
+               GREATEST(0, (CURRENT_DATE - i.due_date::date)) AS real_time_days
+        FROM ${databricksService.fq('users')} u
+        JOIN ${databricksService.fq('invoices')} i ON i.cpf = u.cpf
+        WHERE i.status = 'FECHADA'
+          AND i.data_pagamento IS NULL
+          AND i.due_date < CURRENT_TIMESTAMP
+          ${filterCpf ? `AND u.cpf = ${esc(filterCpf)}` : ''}
+        ORDER BY u.full_name ASC
+        LIMIT ${limit}
+    `);
+
+    const consistencyResults = [];
+    const uniqueCpfs = new Set();
+    const cpfComIssue = new Set();
+    let invoiceOk = 0, invoiceDiff = 0;
+
+    for (const r of rows || []) {
+        uniqueCpfs.add(r.cpf);
+        const ud = parseInt(r.user_days_overdue || 0);
+        const rt = parseInt(r.real_time_days || 0);
+        const invD = parseInt(r.invoice_dias_atraso || 0);
+        const diffUser = ud - rt;
+        const diffInvoice = invD - rt;
+
+        const userConsistent = Math.abs(diffUser) <= 1;
+        const invoiceConsistent = Math.abs(diffInvoice) <= 0;
+
+        if (!userConsistent) cpfComIssue.add(r.cpf);
+        if (invoiceConsistent) invoiceOk++;
+        else invoiceDiff++;
+
+        if (!userConsistent || !invoiceConsistent) {
+            consistencyResults.push({
+                cpf: r.cpf,
+                name: r.full_name,
+                status: r.account_status,
+                dueDate: r.due_date,
+                userDaysOverdue: ud,
+                invoiceDiasAtraso: invD,
+                realTimeDays: rt,
+                diffUser,
+                diffInvoice
+            });
+        }
+    }
+
+    const totalScanned = uniqueCpfs.size;
+    const usersDesatualizados = cpfComIssue.size;
+
+    res.json({
+        success: true,
+        summary: {
+            totalScanned: uniqueCpfs.size,
+            usersConsistent: uniqueCpfs.size - cpfComIssue.size,
+            usersDesatualizados,
+            invoicesConsistent: invoiceOk,
+            invoicesDesatualizadas: invoiceDiff,
+            totalInvoices: invoiceOk + invoiceDiff
+        },
+        details: consistencyResults.slice(0, 50),
+        filters: {
+            cpf: filterCpf || null,
+            limit
+        },
+        tip: usersDesatualizados > 0 || invoiceDiff > 0
+            ? 'Execute POST /admin/billing/validate-all para sincronizar dados desatualizados.'
+            : undefined
+    });
+}));
+
+// GET /admin/audit/run-full — Auditoria completa (consistência + pagamentos) em uma chamada
+apiRouter.get('/admin/audit/run-full', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { esc } = repoContext;
+
+    // 1. Consistência (mesma query do /admin/audit-consistency)
+    const consistencyRows = await databricksService.executeQuery(`
+        SELECT u.cpf, u.full_name, u.account_status,
+               COALESCE(u.days_overdue, 0) AS user_days_overdue,
+               GREATEST(0, (CURRENT_DATE - i.due_date::date)) AS real_time_days,
+               COALESCE(i.dias_atraso, 0) AS invoice_dias_atraso
+        FROM ${databricksService.fq('users')} u
+        JOIN ${databricksService.fq('invoices')} i ON i.cpf = u.cpf
+        WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL AND i.due_date < CURRENT_TIMESTAMP
+        LIMIT 200
+    `);
+
+    const uniqueCpfs = new Set();
+    const cpfComIssue = new Set();
+    let invoiceOk = 0, invoiceDiff = 0;
+    const consistencyDetails = [];
+
+    for (const r of consistencyRows || []) {
+        uniqueCpfs.add(r.cpf);
+        const ud = parseInt(r.user_days_overdue || 0);
+        const rt = parseInt(r.real_time_days || 0);
+        const invD = parseInt(r.invoice_dias_atraso || 0);
+        const diffUser = ud - rt;
+        const diffInvoice = invD - rt;
+        if (Math.abs(diffUser) > 1) cpfComIssue.add(r.cpf);
+        if (Math.abs(diffInvoice) === 0) invoiceOk++; else invoiceDiff++;
+        if (Math.abs(diffUser) > 1 || Math.abs(diffInvoice) > 0) {
+            consistencyDetails.push({ cpf: r.cpf, name: r.full_name, userDaysOverdue: ud, realTimeDays: rt, invoiceDiasAtraso: invD, diffUser, diffInvoice });
+        }
+    }
+
+    // 2. Double-counting: INVOICE_PAYMENT vs valor_pago
+    const dcRows = await databricksService.executeQuery(`
+        SELECT t.cpf, COUNT(*) AS qtd, COALESCE(SUM(t.amount), 0) AS total_pago,
+               COALESCE((SELECT SUM(i.valor_pago) FROM ${databricksService.fq('invoices')} i WHERE i.cpf = t.cpf AND i.status = 'FECHADA'), 0) AS total_invoice
+        FROM ${databricksService.fq('transactions')} t
+        WHERE t.description LIKE '%INVOICE_PAYMENT%'
+        GROUP BY t.cpf
+        LIMIT 100
+    `);
+
+    let dcDiscrepancies = 0;
+    for (const r of dcRows || []) {
+        const diff = Math.abs(parseFloat(r.total_pago || 0) - parseFloat(r.total_invoice || 0));
+        if (diff > 0.01) dcDiscrepancies++;
+    }
+
+    // 3. Saldo negativo: valor_pago > valor_total
+    const nbRows = await databricksService.executeQuery(`
+        SELECT i.cpf, i.valor_pago, i.valor_total
+        FROM ${databricksService.fq('invoices')} i
+        WHERE i.valor_pago > i.valor_total
+        LIMIT 50
+    `);
+
+    let totalExcess = 0;
+    for (const r of nbRows || []) {
+        totalExcess += parseFloat(r.valor_pago || 0) - parseFloat(r.valor_total || 0);
+    }
+
+    res.json({
+        success: true,
+        message: 'Auditoria completa executada com sucesso.',
+        consistency: {
+            totalScanned: uniqueCpfs.size,
+            usersConsistent: uniqueCpfs.size - cpfComIssue.size,
+            usersDesatualizados: cpfComIssue.size,
+            invoicesConsistent: invoiceOk,
+            invoicesDesatualizadas: invoiceDiff,
+            totalInvoices: invoiceOk + invoiceDiff,
+            details: consistencyDetails.slice(0, 20)
+        },
+        payments: {
+            doubleCount: {
+                scanned: (dcRows || []).length,
+                discrepancies: dcDiscrepancies
+            },
+            negativeBalance: {
+                scanned: (nbRows || []).length,
+                issues: (nbRows || []).length,
+                totalExcess: Math.round(totalExcess * 100) / 100
+            }
+        },
+        tip: cpfComIssue.size > 0 || dcDiscrepancies > 0 || (nbRows || []).length > 0
+            ? 'Discrepâncias encontradas. Execute os scripts da pasta scripts/ para corrigir.'
+            : undefined
+    });
+}));
+
+// GET /admin/health/charges — Auditoria de consistência de encargos via calcAllCharges
+// Para cada massa inadimplente, recalcula os encargos com invoiceMath.js e compara
+// com os valores armazenados em billing_charges. Alerta se divergirem.
+apiRouter.get('/admin/health/charges', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 1. Buscar inadimplentes com suas faturas fechadas não pagas
+    const users = await databricksService.executeQuery(`
+        SELECT u.cpf, u.full_name, COALESCE(u.days_overdue, 0) AS days_overdue
+        FROM ${databricksService.fq('users')} u
+        WHERE u.account_status = 'inadimplente'
+        ORDER BY u.cpf
+    `);
+
+    const invoices = await databricksService.executeQuery(`
+        SELECT cpf, due_date, valor_total, COALESCE(valor_pago, 0) AS valor_pago
+        FROM ${databricksService.fq('invoices')}
+        WHERE status = 'FECHADA' AND data_pagamento IS NULL
+        ORDER BY cpf, due_date DESC
+    `);
+
+    const invoiceByCpf = new Map();
+    for (const inv of invoices) {
+        if (!invoiceByCpf.has(inv.cpf)) {
+            const residual = Math.max(0, parseFloat(inv.valor_total || 0) - parseFloat(inv.valor_pago || 0));
+            const due = new Date(inv.due_date);
+            const realDaysOverdue = Math.max(0, Math.floor((today - due) / 86400000));
+            invoiceByCpf.set(inv.cpf, { residual, daysOverdue: realDaysOverdue, dueDate: inv.due_date, realDaysOverdue, valorTotal: parseFloat(inv.valor_total || 0), valorPago: parseFloat(inv.valor_pago || 0) });
+        }
+    }
+
+    // 2. Buscar encargos armazenados no banco (billing_charges)
+    const storedCharges = await databricksService.executeQuery(`
+        SELECT cpf, charge_type, SUM(amount) AS amount
+        FROM ${databricksService.fq('billing_charges')}
+        WHERE status = 'pending'
+        GROUP BY cpf, charge_type
+        ORDER BY cpf
+    `);
+
+    const storedByCpf = new Map();
+    for (const ch of storedCharges) {
+        if (!storedByCpf.has(ch.cpf)) storedByCpf.set(ch.cpf, {});
+        storedByCpf.get(ch.cpf)[ch.charge_type] = parseFloat(ch.amount || 0);
+    }
+
+    // 3. Comparar
+    let totalOk = 0, totalDivergence = 0, totalNoInvoice = 0;
+    const details = [];
+
+    for (const u of users) {
+        const invData = invoiceByCpf.get(u.cpf);
+        if (!invData || invData.residual <= 0) {
+            totalNoInvoice++;
+            continue;
+        }
+
+        // Usar days_overdue do banco (já sincronizado pelo runBillingValidation)
+        // para evitar falsa divergência por timing (1 dia a mais entre execuções).
+        // invData.realDaysOverdue é mantido como referência informativa.
+        const daysForCalc = Math.max(0, parseInt(u.days_overdue || 0));
+        const computed = calcAllCharges(invData.residual, daysForCalc);
+        const stored = storedByCpf.get(u.cpf) || {};
+
+        const storedMulta = parseFloat(stored.multa || 0);
+        const storedJurosMora = parseFloat(stored.juros_mora || 0);
+        const storedJurosRem = parseFloat(stored.juros_remuneratorios || 0);
+        const storedIof = parseFloat(stored.iof || 0);
+        const storedTotal = Math.round((storedMulta + storedJurosMora + storedJurosRem + storedIof) * 100) / 100;
+
+        const diffMulta = Math.abs(computed.multa - storedMulta);
+        const diffJurosMora = Math.abs(computed.jurosMora - storedJurosMora);
+        const diffJurosRem = Math.abs(computed.jurosRemuneratorios - storedJurosRem);
+        const diffIof = Math.abs(computed.iof - storedIof);
+        const diffTotal = Math.abs(computed.total - storedTotal);
+
+        const hasDivergence = diffMulta > 0.01 || diffJurosMora > 0.01 || diffJurosRem > 0.01 || diffIof > 0.01;
+
+        if (hasDivergence) totalDivergence++;
+        else totalOk++;
+
+        details.push({
+            cpf: u.cpf,
+            name: u.full_name,
+            residual: invData.residual,
+            daysOverdue: daysForCalc,
+            realDaysOverdue: invData.realDaysOverdue,
+            computed: { multa: computed.multa, jurosMora: computed.jurosMora, jurosRem: computed.jurosRemuneratorios, iof: computed.iof, total: computed.total },
+            stored: { multa: storedMulta, jurosMora: storedJurosMora, jurosRem: storedJurosRem, iof: storedIof, total: storedTotal },
+            diff: { multa: Math.round(diffMulta * 100) / 100, jurosMora: Math.round(diffJurosMora * 100) / 100, jurosRem: Math.round(diffJurosRem * 100) / 100, iof: Math.round(diffIof * 100) / 100, total: Math.round(diffTotal * 100) / 100 },
+            divergence: hasDivergence
+        });
+    }
+
+    res.json({
+        success: true,
+        message: `Auditoria de encargos concluída. ${totalOk} consistentes, ${totalDivergence} divergentes, ${totalNoInvoice} sem fatura.`,
+        summary: {
+            totalUsers: users.length,
+            consistent: totalOk,
+            divergent: totalDivergence,
+            noInvoice: totalNoInvoice
+        },
+        details: details.slice(0, 100),
+        hasDivergence: totalDivergence > 0
+    });
+}));
+
+// Dry-run: como um pagamento de `amount` seria distribuído entre as faturas fechadas
+// em aberto. Não grava nada — mesma função pura que a rota de pagamento usa.
+apiRouter.get('/admin/invoice-payment-distribution/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const rawCpf = String(req.params.cpf || '').replace(/\D/g, '');
+    if (rawCpf.length !== 11) {
+        return res.status(400).json({ success: false, message: 'CPF invalido.' });
+    }
+
+    const invoices = await fetchUnpaidClosedInvoices(rawCpf);
+    const totalOwed = Math.round(invoices.reduce(
+        (sum, inv) => sum + Math.max(0, computeInvoiceGross(inv) - parseFloat(inv.valor_pago || 0)), 0
+    ) * 100) / 100;
+
+    const rawAmount = parseFloat(String(req.query?.amount ?? ''));
+    // Sem `amount`, simula a quitação integral da dívida consolidada
+    const amount = !isNaN(rawAmount) && rawAmount > 0 ? rawAmount : totalOwed;
+
+    const plan = planDistribution(invoices, amount);
+
+    res.json({
+        success: true,
+        dryRun: true,
+        cpf: rawCpf,
+        amount: Math.round(amount * 100) / 100,
+        totalOwed,
+        openInvoices: invoices.length,
+        applied: plan.applied,
+        leftover: plan.remaining,
+        allPaid: plan.allPaid,
+        distribution: plan.invoices
+    });
+}));
+
+apiRouter.post('/admin/fix-orphan-payments', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf: cpfFilter, confirm } = req.body || {};
+
+    if (confirm !== true) {
+        return res.status(400).json({
+            success: false,
+            message: 'Confirmação necessária. Envie { "confirm": true } no body para aplicar correções.'
+        });
+    }
+
+    const result = await runOrphanPaymentFix({
+        cpfFilter,
+        onComplete: (s) => {
+            auditLog(req, 'admin.fix-orphan-payments', 'warn', s);
+        }
+    });
+
+    res.json(result);
+}));
+
+// ─── Badge de cobertura de regras (shields.io compatible) ──────────────────
+apiRouter.get('/admin/badge/rules-coverage', asyncHandler(async (req, res) => {
+    try {
+        const { computeStats } = require('./scripts/statsUtils');
+        const stats = computeStats();
+        if (stats.error) {
+            return res.json({ schemaVersion: 1, label: 'regras', message: 'erro', color: 'red' });
+        }
+        res.json(stats);
+    } catch (err) {
+        console.error('[Badge] Erro ao obter stats:', err.message);
+        res.json({ schemaVersion: 1, label: 'regras', message: 'erro', color: 'red' });
+    }
 }));
 
 // ─── Cancelamento/estorno de transações (débito e crédito) ─────────────────
