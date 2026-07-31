@@ -1,7 +1,7 @@
 
 export interface Transaction {
     id: string;
-    type: 'PIX_SENT' | 'PIX_RECEIVED' | 'DEPOSIT' | 'PAYMENT' | 'PIX_CREDIT_SENT' | 'SHOP_DEBIT' | 'CASHBACK_CREDIT' | 'POINTS_EARNED';
+    type: 'PIX_SENT' | 'PIX_RECEIVED' | 'DEPOSIT' | 'PAYMENT' | 'INVOICE_PAYMENT' | 'PIX_CREDIT_SENT' | 'SHOP_DEBIT' | 'CASHBACK_CREDIT' | 'POINTS_EARNED';
     amount: number;
     date: string;
     description: string;
@@ -18,10 +18,24 @@ export interface CardTransaction {
     date: string;
     merchant: string;
     amount: number;
-    type: 'CREDIT' | 'PAYMENT' | 'INVOICE_INSTALLMENT';
+    type: 'CREDIT' | 'PAYMENT' | 'INVOICE_PAYMENT' | 'INVOICE_INSTALLMENT';
     installments?: string;
     totalInstallments?: number;
     currentInstallment?: number;
+    totalAmount?: number;
+    category?: string;
+    cardNumber?: string;
+    cardLast4?: string;
+    authorizationCode?: string;
+    paymentType?: 'TOTAL' | 'MINIMO' | 'PARCIAL';
+}
+
+export interface PaymentEntry {
+    id: string;
+    date: string;
+    amount: number;
+    description: string;
+    paymentType: 'TOTAL' | 'MINIMO' | 'PARCIAL';
 }
 
 export interface CreditCard {
@@ -37,10 +51,27 @@ export interface CreditCard {
     isBlocked: boolean;
     deliveryStatus?: 'manufacturing' | 'shipping' | 'tracking' | 'delivered' | 'unlocked';
     isActivated?: boolean;
+    daysOverdue?: number;
+    closedInvoiceCharges?: {
+        multa: number;
+        jurosMora: number;
+        jurosRemuneratorios: number;
+        iof: number;
+        totalEncargos: number;
+    };
+    closedInvoiceTotal?: number;
+    closedInvoiceIsPaid?: boolean;
+    /** Espelho de closedInvoice enviado pelo backend (saldo residual da fatura fechada). */
+    closedInvoiceAmount?: number;
+    currentInvoiceTotal?: number;
+    currentInvoiceMinimo?: number;
+    closedInvoiceIsPaid?: boolean;
+    closedInvoicePaidAt?: string | null;
     dueDay?: number;
     closingDay?: number;
     transactions: CardTransaction[];
     closedTransactions: CardTransaction[];
+    paymentHistory?: PaymentEntry[];
     futureInstallments?: Record<string, number>;
     futureInstallmentsDetail?: Record<string, { description: string; amount: number; num: number; total: number }[]>;
 }
@@ -86,6 +117,7 @@ export interface Story {
 
 export interface AppNotification {
     id: number;
+    title?: string;
     message: string;
     created_at: string;
     is_read: boolean;
@@ -125,10 +157,45 @@ export interface BillingCycle {
     overdueDeadline: string;
 }
 
+export interface CustomerCard {
+    id: string;
+    type: 'PHYSICAL' | 'VIRTUAL';
+    brand: 'MASTERCARD' | 'VISA' | 'ELO' | 'AMEX';
+    name: string;
+    cardNumberMasked: string;
+    expirationDate: string; // MM/AA
+    isBlocked: boolean;
+    limit: number;
+    dueDay: number;
+    createdAt?: string;
+}
+
+export interface Address {
+    cep: string;
+    street: string;
+    number: string;
+    complement?: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+}
+
+export interface LegalTutor {
+    fullName: string;
+    cpf: string;
+    relationship: string;
+}
+
 export interface User {
     cpf: string;
     fullName: string;
     username?: string;
+    birthDate?: string;
+    age?: number;
+    hasTutor?: boolean;
+    tutor?: LegalTutor;
+    address?: Address;
+    countryOrigin?: string;
     profileDescription?: string;
     profileMessage?: string;
     createdAt?: string;
@@ -145,6 +212,7 @@ export interface User {
     showStoriesPopup: boolean;
     purchasedItems: PurchasedItem[];
     creditCard: CreditCard;
+    cards?: CustomerCard[];
     accountStatus?: 'adimplente' | 'inadimplente' | 'suspenso';
     daysOverdue?: number;
     pendingCharges?: number;

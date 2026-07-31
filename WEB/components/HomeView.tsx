@@ -1,6 +1,8 @@
-import React, { useState, useMemo, useContext } from 'react';
-import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus, Mic, Barcode } from 'lucide-react';
+import React, { useState, useMemo, useContext, useEffect } from 'react';
+import { getRecurringBills, createRecurringBill } from '../services/api';
+import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus, Mic, Barcode, Building2, Globe } from 'lucide-react';
 import InvoiceSummarySheet from './InvoiceSummarySheet';
+import PaymentTimelineChart from './PaymentTimelineChart';
 
 import type { User, Story, RecurringBill, Transaction } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
@@ -86,14 +88,18 @@ const MOCK_STORIES: Story[] = [
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie } from 'recharts';
 import D3SparkLine from './charts/D3SparkLine';
 import D3RadialProgress from './charts/D3RadialProgress';
+import FinancialInsightsCarouselModal from './FinancialInsightsCarouselModal';
+import OverdueAlertModal from './OverdueAlertModal';
 interface RecurringBill {
   id: string;
   title: string;
   amount: number;
   category: 'refeicao' | 'mobilidade' | 'cultura' | 'saude' | 'outros';
   dueDate: string;
-  status: 'pending' | 'paid';
+  status: 'pending' | 'paid' | 'past_due' | 'active' | 'suspended';
   paidAtDate?: string;
+  frequency?: 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
+  paymentMethod?: 'CREDIT_CARD' | 'ACCOUNT_DEBIT';
 }
 
 
@@ -105,6 +111,7 @@ interface HomeViewProps {
     setIsAiRecurringModalOpen?: (open: boolean) => void;
     setActiveDrawer?: (drawer: 'balance' | 'analytics' | 'insights' | 'trends' | null) => void;
     openBoletoModal?: () => void;
+    openCardUnlockModal?: () => void;
 }
 
 const HomeView: React.FC<HomeViewProps> = ({
@@ -114,7 +121,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   setIsFinancialHealthOpen,
   setIsAiRecurringModalOpen,
   setActiveDrawer,
-  openBoletoModal
+  openBoletoModal,
+  openCardUnlockModal
 }) => {
   const { showDialog } = useDialog();
   const { checkRecurringBillNotifications } = useAppState();
@@ -129,6 +137,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [isInvoiceSummaryOpen, setIsInvoiceSummaryOpen] = useState(false);
   const [pendingBillId, setPendingBillId] = useState<string | null>(null);
   const [isPasswordVerifyOpen, setIsPasswordVerifyOpen] = useState(false);
+  const [isCarouselInsightsOpen, setIsCarouselInsightsOpen] = useState(false);
 
   const showStoriesStatus = (() => {
     const localVal = localStorage.getItem('volt_show_home_stories_status');
@@ -182,6 +191,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [newBillAmount, setNewBillAmount] = useState('');
   const [newBillCategory, setNewBillCategory] = useState<'refeicao' | 'mobilidade' | 'cultura' | 'saude' | 'outros'>('outros');
   const [newBillDueDate, setNewBillDueDate] = useState('');
+  const [newBillFrequency, setNewBillFrequency] = useState<'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL'>('MONTHLY');
+  const [newBillPaymentMethod, setNewBillPaymentMethod] = useState<'CREDIT_CARD' | 'ACCOUNT_DEBIT'>('CREDIT_CARD');
 
   const handleAddRecurringBill = () => {
     if (!newBillTitle.trim()) {
@@ -209,11 +220,25 @@ const HomeView: React.FC<HomeViewProps> = ({
       amount: -parsedAmount,
       category: newBillCategory,
       dueDate: formattedDueDate,
-      status: 'pending'
+      status: 'pending',
+      frequency: newBillFrequency,
+      paymentMethod: newBillPaymentMethod
     };
     const updatedBills = [...recurringBills, newBill];
     setRecurringBills(updatedBills);
     localStorage.setItem('volt_recurring_bills', JSON.stringify(updatedBills));
+
+    if (user?.cpf) {
+      createRecurringBill(user.cpf, {
+        name: newBillTitle,
+        amount: parsedAmount,
+        dueDay: parseInt(formattedDueDate.split('/')[0] || '1', 10),
+        category: newBillCategory,
+        frequency: newBillFrequency,
+        paymentMethod: newBillPaymentMethod
+      });
+    }
+
     setIsAddingBill(false);
     setNewBillTitle('');
     setNewBillAmount('');
@@ -535,23 +560,81 @@ const HomeView: React.FC<HomeViewProps> = ({
     return [];
   });
 
+  const [advancePaymentBill, setAdvancePaymentBill] = useState<RecurringBill | null>(null);
+  const [paymentChoiceBill, setPaymentChoiceBill] = useState<RecurringBill | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'ACCOUNT_DEBIT' | 'CREDIT_CARD'>('ACCOUNT_DEBIT');
+  const [pendingPaymentMethod, setPendingPaymentMethod] = useState<'ACCOUNT_DEBIT' | 'CREDIT_CARD'>('ACCOUNT_DEBIT');
+
+  const visibleRecurringBills = React.useMemo(() => {
+    const nowTs = Date.now();
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+    // 1. Ocultar contas pagas há mais de 24h
+    const nonExpired = recurringBills.filter((bill) => {
+      if (bill.status === 'paid') {
+        const paidTs = bill.paidTimestamp || (bill.paidAtDate ? new Date(bill.paidAtDate).getTime() : 0);
+        if (paidTs > 0 && (nowTs - paidTs > TWENTY_FOUR_HOURS)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // 2. Desduplicar itens com mesmo título, status e data
+    const seen = new Set<string>();
+    const result: RecurringBill[] = [];
+    for (const b of nonExpired) {
+      const key = `${b.title.trim().toLowerCase()}_${b.status}_${b.dueDate}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(b);
+      }
+    }
+    return result;
+  }, [recurringBills]);
+
+  useEffect(() => {
+    if (user?.cpf) {
+      getRecurringBills(user.cpf).then(res => {
+        if (res.success && res.bills && res.bills.length > 0) {
+          const apiBills: RecurringBill[] = res.bills.map(b => ({
+            id: b.id,
+            title: b.name,
+            amount: -Math.abs(parseFloat(b.amount)),
+            category: b.category || 'outros',
+            dueDate: b.dueDay ? `Dia ${b.dueDay}` : 'Em breve',
+            dueDay: b.dueDay || 25,
+            status: b.status === 'paid' ? 'paid' : 'pending',
+            frequency: b.frequency || 'MONTHLY',
+            paymentMethod: b.paymentMethod || b.payment_method || 'ACCOUNT_DEBIT',
+            nextBillingDate: b.nextBillingDate,
+            createdAt: b.createdAt || new Date().toISOString()
+          }));
+          setRecurringBills(apiBills);
+          try {
+            localStorage.setItem('volt_recurring_bills', JSON.stringify(apiBills));
+          } catch (e) {}
+        }
+      });
+    }
+  }, [user?.cpf]);
+
   const handlePayRecurringBill = (billId: string) => {
     const bill = recurringBills.find(b => b.id === billId);
     if (!bill) return;
 
-    if (bill.status === 'paid') {
-      showDialog({ title: 'Aviso', message: 'Esta conta já foi paga!' });
+    const isAlreadyPaid = bill.status === 'paid' || recurringBills.some(
+      b => b.title.trim().toLowerCase() === bill.title.trim().toLowerCase() && b.status === 'paid'
+    );
+
+    if (isAlreadyPaid) {
+      setAdvancePaymentBill(bill);
       return;
     }
 
-    const absoluteAmount = Math.abs(bill.amount);
-    if (accountBalance < absoluteAmount) {
-      showDialog({ title: 'Saldo insuficiente', message: `Saldo insuficiente! Seu saldo atual é R$ ${accountBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, mas o valor da conta é R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` });
-      return;
-    }
-
-    setPendingBillId(billId);
-    setIsPasswordVerifyOpen(true);
+    setPaymentChoiceBill(bill);
+    const initialMethod = bill.paymentMethod === 'CREDIT_CARD' || bill.paymentMethod === 'CREDIT' ? 'CREDIT_CARD' : 'ACCOUNT_DEBIT';
+    setSelectedPaymentMethod(initialMethod);
   };
 
   const handlePasswordConfirm = async (enteredPin: string) => {
@@ -569,6 +652,23 @@ const HomeView: React.FC<HomeViewProps> = ({
     if (!bill) return;
 
     const absoluteAmount = Math.abs(bill.amount);
+    const chosenMethod = pendingPaymentMethod || 'ACCOUNT_DEBIT';
+    const isAccountDebit = chosenMethod === 'ACCOUNT_DEBIT';
+
+    // Validações de Saldo / Limite antes do processamento
+    if (isAccountDebit) {
+      if (accountBalance < absoluteAmount) {
+        showDialog({ title: 'Saldo insuficiente', message: `Saldo insuficiente em conta! Seu saldo atual é R$ ${accountBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, mas o valor da conta é R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` });
+        return;
+      }
+    } else {
+      const availableLimit = user.creditCard?.availableLimit ?? 0;
+      if (availableLimit < absoluteAmount) {
+        showDialog({ title: 'Limite insuficiente', message: `Limite de cartão insuficiente! Seu limite disponível é R$ ${availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, mas o valor da conta é R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` });
+        return;
+      }
+    }
+
     const now = new Date();
     const formatNumber = (num: number) => String(num).padStart(2, '0');
     const formattedDateString = `${formatNumber(now.getDate())}/${formatNumber(now.getMonth() + 1)}/${now.getFullYear()}`;
@@ -584,52 +684,102 @@ const HomeView: React.FC<HomeViewProps> = ({
         month = 1;
         year += 1;
       }
-      const formatNumber = (num: number) => String(num).padStart(2, '0');
       return `${formatNumber(day)}/${formatNumber(month)}/${year}`;
     };
 
-    const nextBills: RecurringBill[] = [];
+    const nowTs = Date.now();
+    const nextDueDate = getNextMonthDate(bill.dueDate);
+
+    // 1. Atualiza conta recorrente atual e agenda próximo mês
     const updatedBills = recurringBills.map(b => {
       if (b.id === billId) {
-        const nextId = b.id.includes('_next') ? b.id + 'x' : `${b.id}_next`;
-        nextBills.push({
-          ...b,
-          id: nextId,
-          dueDate: getNextMonthDate(b.dueDate),
-          status: 'pending' as const,
-          paidAtDate: undefined
-        });
-
         return {
           ...b,
           status: 'paid' as const,
           paidAtDate: formattedDateString,
+          paidTimestamp: nowTs,
+          paymentMethod: chosenMethod,
         };
       }
       return b;
     });
 
-    const finalBills = [...updatedBills, ...nextBills];
-    setRecurringBills(finalBills);
-    localStorage.setItem('volt_recurring_bills', JSON.stringify(finalBills));
+    const nextAlreadyExists = updatedBills.some(
+      b => b.title.trim().toLowerCase() === bill.title.trim().toLowerCase() && (b.dueDate === nextDueDate || b.status === 'pending')
+    );
+
+    if (!nextAlreadyExists) {
+      const nextId = bill.id.includes('_next') ? bill.id + 'x' : `${bill.id}_next`;
+      updatedBills.push({
+        ...bill,
+        id: nextId,
+        dueDate: nextDueDate,
+        status: 'pending' as const,
+        paidAtDate: undefined,
+        paidTimestamp: undefined,
+        paymentMethod: chosenMethod,
+      });
+    }
+
+    setRecurringBills(updatedBills);
+    localStorage.setItem('volt_recurring_bills', JSON.stringify(updatedBills));
     checkRecurringBillNotifications();
+
+    // 2. Processamento Financeiro (Débito vs Crédito)
+    let newBalance = user.balance;
+    let updatedCreditCard = user.creditCard
+      ? { ...user.creditCard }
+      : { availableLimit: 0, totalLimit: 0, currentInvoice: 0, closedInvoice: 0, pointsBalance: 0, isBlocked: false, dueDate: '', invoiceDueDate: '', transactions: [], closedTransactions: [] };
+
+    const methodLabel = isAccountDebit ? 'Débito em Conta' : 'Faturado no Cartão de Crédito';
+
+    if (isAccountDebit) {
+      // Débito em Conta: Deduz do saldo em conta. Registra a transação zerada na fatura do cartão para atestar a quitação antecipada.
+      newBalance = user.balance - absoluteAmount;
+      const zeroCardTx: CardTransaction = {
+        id: `card-rec-debit-${Date.now()}`,
+        date: now.toISOString().split('T')[0],
+        merchant: `Recorrência: ${bill.title}`,
+        amount: 0,
+        type: 'CREDIT',
+        installments: 'Quitado no Débito'
+      };
+      updatedCreditCard.transactions = [zeroCardTx, ...(updatedCreditCard.transactions || [])];
+    } else {
+      // Adiantar no Crédito: Lança na fatura atual do cartão e consome limite. Saldo em conta permanece intacto.
+      updatedCreditCard.availableLimit = Math.max(0, (updatedCreditCard.availableLimit || 0) - absoluteAmount);
+      updatedCreditCard.currentInvoice = (updatedCreditCard.currentInvoice || 0) + absoluteAmount;
+      const newCardTx: CardTransaction = {
+        id: `card-rec-${Date.now()}`,
+        date: now.toISOString().split('T')[0],
+        merchant: `Recorrência: ${bill.title}`,
+        amount: absoluteAmount,
+        type: 'CREDIT',
+        installments: 'À vista'
+      };
+      updatedCreditCard.transactions = [newCardTx, ...(updatedCreditCard.transactions || [])];
+    }
 
     const newTx: Transaction = {
       id: `rec-pay-${Date.now()}`,
-      type: 'payment',
+      type: 'PAYMENT',
       amount: -absoluteAmount,
-      description: `Pagamento Recorrente: ${bill.title}`,
+      description: `Pagamento Recorrente: ${bill.title} (${methodLabel})`,
       date: now.toISOString(),
-      category: bill.category || 'outros',
+      category: bill.category || 'pagamentos',
     };
 
     updateUser({
       ...user,
-      balance: user.balance - absoluteAmount,
+      balance: newBalance,
+      creditCard: updatedCreditCard,
       transactions: [newTx, ...(user.transactions || [])],
     });
 
-    showDialog({ title: 'Sucesso', message: `Sucesso! O pagamento de ${bill.title} de R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} foi realizado.` });
+    showDialog({
+      title: 'Sucesso!',
+      message: `O pagamento de ${bill.title} de R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} foi realizado com sucesso via ${methodLabel}.`
+    });
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -936,6 +1086,10 @@ const HomeView: React.FC<HomeViewProps> = ({
           <TrendingUp size={14} className="stroke-[3]" />
           <span>+2.5% este mês (Rendimento 110% CDI)</span>
         </div>
+        {/* Gráfico de pagamentos do cliente (7 dias) */}
+        <div className="mt-4">
+          <PaymentTimelineChart userCpf={user.cpf} />
+      </div>
 
         <div className={`grid grid-cols-3 gap-1.5 mt-4 pt-4 ${isMidnight ? 'border-t border-white/5' : 'border-t-2 border-black'}`}>
           <button
@@ -1016,9 +1170,9 @@ const HomeView: React.FC<HomeViewProps> = ({
         >
           {[
             { label: 'PIX', icon: Bolt, action: () => onNavigate('pix'), highlight: true },
-            { label: 'Shop', icon: ShoppingBag, action: () => onNavigate('shop'), highlight: false },
-            { label: 'Cartões', icon: CreditCard, action: () => onNavigate('cards'), highlight: false },
-            { label: 'Pagar Boleto', icon: Receipt, action: () => openBoletoModal?.(), highlight: true },
+            { label: 'Meus Cartões', icon: CreditCard, action: () => onNavigate('cards'), highlight: true },
+            { label: 'Faturas', icon: FileText, action: () => onNavigate('invoices'), highlight: false },
+            { label: 'Pagar', icon: Receipt, action: () => openBoletoModal?.(), highlight: true },
             { label: 'Extrato', icon: FileText, action: () => onNavigate('statement'), highlight: false },
           ].map((item, index) => {
             const Icon = item.icon;
@@ -1161,439 +1315,6 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </motion.section>
 
-      {/* Account Balance History (Last 30 Days Line Chart) */}
-      <motion.section
-        variants={itemVariants}
-        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
-          isMidnight ? 'bg-volt-surface text-white' : 'bg-white text-black'
-        }`}
-      >
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-volt-green border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs text-black">
-              📈
-            </div>
-            <div>
-              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Evolução do Saldo</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-gray-400' : 'text-gray-700'}`}>Histórico de saldo da conta (30d)</p>
-            </div>
-          </div>
-          <span className={`text-[9px] font-black uppercase tracking-wider text-black border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-            isMidnight ? 'bg-volt-green' : 'bg-[#00E5FF]'
-          }`}>
-            30 Dias
-          </span>
-        </div>
-
-        {/* D3 SparkLine container */}
-        <div className="w-full h-40 mt-2">
-          {balanceIsVisible ? (
-             <D3SparkLine data={balanceHistoryData} theme={theme} />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center border-2 border-dashed border-black/20 rounded-xl bg-black/5 p-4 text-center">
-              <span className="text-xl block mb-1">🔒</span>
-              <p className="text-[11px] font-black text-black">Saldo oculto por segurança</p>
-              <p className="text-[9px] text-gray-600">Toque no ícone de olho acima para revelar o histórico.</p>
-            </div>
-          )}
-        </div>
-      </motion.section>
-
-      {/* Visão Geral de Orçamentos (Bento Box brutalista - Task 3) */}
-      <motion.section
-        variants={itemVariants}
-        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
-          isMidnight ? 'bg-volt-surface text-white' : 'bg-white text-black'
-        }`}
-      >
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-              isMidnight ? 'bg-volt-green text-black' : 'bg-[#00E5FF] text-black'
-            }`}>
-              🎯
-            </div>
-            <div>
-              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Visão Geral de Orçamentos</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Controle de limites mensais por categoria ({new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })})</p>
-            </div>
-          </div>
-          <button
-            onClick={() => isEditingBudgets ? setIsEditingBudgets(false) : startEditingBudgets()}
-            className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full transition-all cursor-pointer ${
-              isMidnight
-                ? 'bg-zinc-900 text-white hover:bg-zinc-800 border-zinc-700'
-                : 'bg-[#FFED86] text-black hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            {isEditingBudgets ? 'Fechar' : 'Definir Limites'}
-          </button>
-        </div>
-
-        {isEditingBudgets ? (
-          <form onSubmit={handleSaveBudgets} className="flex flex-col gap-3">
-            <div className="grid grid-cols-1 gap-2.5">
-              {[
-                { key: 'refeicao', label: 'Refeição 🍔', color: '#FF5C8D' },
-                { key: 'mobilidade', label: 'Mobilidade 🚗', color: '#00E5FF' },
-                { key: 'cultura', label: 'Cultura 🎬', color: '#FFAA00' },
-                { key: 'saude', label: 'Saúde 💖', color: '#B026FF' },
-                { key: 'outros', label: 'Outros / Serviços 📦', color: '#A2FF00' },
-              ].map((cat) => (
-                <div key={cat.key} className="flex items-center justify-between gap-3 p-1">
-                  <span className={`text-[11px] font-black uppercase flex items-center gap-1.5 ${isMidnight ? 'text-zinc-200' : 'text-gray-800'}`}>
-                    <span className="w-2.5 h-2.5 rounded-full border border-black" style={{ backgroundColor: cat.color }}></span>
-                    {cat.label}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-[10px] font-black ${isMidnight ? 'text-white' : 'text-black'}`}>R$</span>
-                    <input
-                      type="number"
-                      step="1"
-                      min="0"
-                      value={editingBudgets[cat.key] || '0'}
-                      onChange={(e) => handleBudgetInputChange(cat.key, e.target.value)}
-                      className={`border-2 border-black rounded-lg px-2 py-1 text-xs font-bold w-24 text-right ${
-                        isMidnight ? 'bg-zinc-900 text-white border-zinc-700' : 'bg-white text-black'
-                      }`}
-                      required
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className={`mt-2 pt-3 border-t-2 border-dashed border-black ${isMidnight ? 'border-zinc-800' : 'border-black'}`}>
-              <div className="flex items-center justify-between gap-3 p-1">
-                <span className={`text-[11px] font-black uppercase flex items-center gap-1.5 ${isMidnight ? 'text-zinc-200' : 'text-gray-800'}`}>
-                  <span>🚀</span> Meta de Economia (Stretch Goal)
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[10px] font-black ${isMidnight ? 'text-white' : 'text-black'}`}>R$</span>
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={editingSavingsTarget}
-                    onChange={(e) => setEditingSavingsTarget(e.target.value)}
-                    className={`border-2 border-black rounded-lg px-2 py-1 text-xs font-bold w-24 text-right ${
-                      isMidnight ? 'bg-zinc-900 text-white border-zinc-700' : 'bg-white text-black'
-                    }`}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              <button
-                type="button"
-                onClick={() => setIsEditingBudgets(false)}
-                className={`text-xs font-black uppercase tracking-wider py-1.5 rounded-xl transition-all border-2 border-black ${
-                  isMidnight ? 'bg-zinc-900 text-volt-green hover:bg-zinc-800 border-zinc-800' : 'btn-secondary'
-                }`}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className={`text-xs font-black uppercase tracking-wider py-1.5 rounded-xl transition-all border-2 border-black ${
-                  isMidnight ? 'bg-volt-green text-zinc-950 hover:bg-volt-primary-dark' : 'btn-primary'
-                }`}
-              >
-                Salvar Limites
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className="space-y-4">
-            {/* Daily Budget Alert */}
-            {dailyBudgetAlert.status === 'inactive' ? (
-              <div className={`p-3 rounded-xl border-2 border-dashed flex flex-col gap-1 text-left ${
-                isMidnight ? 'bg-zinc-950 border-zinc-800 text-zinc-400' : 'bg-gray-50 border-gray-300 text-gray-500'
-              }`}>
-                <div className="flex items-center gap-1.5 font-black text-[10px] uppercase tracking-wide">
-                  <span>💡</span> Alerta de Orçamento Diário
-                </div>
-                <span className="text-[10px] font-medium leading-relaxed">
-                  Defina limites de gastos nas categorias abaixo para calcular sua média diária disponível para o restante do mês.
-                </span>
-              </div>
-            ) : dailyBudgetAlert.status === 'critical' ? (
-              <div className={`p-3.5 rounded-xl border-2 border-black flex flex-col gap-2 text-left transition-all ${
-                isMidnight ? 'bg-red-950/20 text-red-200 border-red-500/50' : 'bg-red-50 text-red-900 border-red-500 shadow-[3px_3px_0px_0px_rgba(239,68,68,1)]'
-              }`}>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm">🚨</span>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-red-500">
-                      Alerta de Orçamento Crítico
-                    </span>
-                  </div>
-                  <span className="bg-red-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-black animate-pulse">
-                    Crítico
-                  </span>
-                </div>
-                
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="text-xl font-black tracking-tight text-red-500">
-                    R$ {dailyBudgetAlert.dailyAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                  <span className="text-[10px] font-bold text-zinc-500">
-                    / dia restante
-                  </span>
-                </div>
-                
-                <p className={`text-[10px] font-medium leading-normal ${isMidnight ? 'text-zinc-400' : 'text-red-800/90'}`}>
-                  {dailyBudgetAlert.message} Restam <strong>{dailyBudgetAlert.daysRemaining} dias</strong> no mês com um saldo total disponível de R$ {dailyBudgetAlert.remainingAllowance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
-                </p>
-              </div>
-            ) : dailyBudgetAlert.status === 'warning' ? (
-              <div className={`p-3.5 rounded-xl border-2 border-black flex flex-col gap-2 text-left transition-all ${
-                isMidnight ? 'bg-amber-950/20 text-amber-200 border-amber-500/50' : 'bg-amber-50 text-amber-900 border-amber-500 shadow-[3px_3px_0px_0px_rgba(245,158,11,1)]'
-              }`}>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm">⚠️</span>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-500">
-                      Orçamento em Atenção
-                    </span>
-                  </div>
-                  <span className="bg-amber-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-black">
-                    Atenção
-                  </span>
-                </div>
-                
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="text-xl font-black tracking-tight text-amber-600 dark:text-amber-400">
-                    R$ {dailyBudgetAlert.dailyAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                  <span className="text-[10px] font-bold text-zinc-500">
-                    / dia restante
-                  </span>
-                </div>
-                
-                <p className={`text-[10px] font-medium leading-normal ${isMidnight ? 'text-zinc-400' : 'text-amber-800/95'}`}>
-                  {dailyBudgetAlert.message} Restam <strong>{dailyBudgetAlert.daysRemaining} dias</strong> de Junho. Seu limite total disponível é de R$ {dailyBudgetAlert.remainingAllowance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
-                </p>
-              </div>
-            ) : (
-              <div className={`p-3.5 rounded-xl border-2 border-black flex flex-col gap-2 text-left transition-all ${
-                isMidnight ? 'bg-zinc-950/80 text-white border-zinc-800' : 'bg-green-50/50 text-black border-black shadow-[3px_3px_0px_0px_rgba(0,229,255,1)]'
-              }`}>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm">💵</span>
-                    <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-green-600'}`}>
-                      Orçamento Diário Disponível
-                    </span>
-                  </div>
-                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-black ${
-                    isMidnight ? 'bg-volt-green text-zinc-950' : 'bg-[#A2FF00] text-black'
-                  }`}>
-                    Sob Controle
-                  </span>
-                </div>
-                
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className={`text-xl font-black tracking-tight ${isMidnight ? 'text-volt-green' : 'text-green-600'}`}>
-                    R$ {dailyBudgetAlert.dailyAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                  <span className="text-[10px] font-bold text-zinc-500">
-                    / dia restante
-                  </span>
-                </div>
-                
-                <p className={`text-[10px] font-medium leading-normal ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
-                  {dailyBudgetAlert.message} Você tem <strong>{dailyBudgetAlert.daysRemaining} dias</strong> para usufruir de R$ {dailyBudgetAlert.remainingAllowance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} sem estourar o limite planejado.
-                </p>
-              </div>
-            )}
-
-            {[
-              { key: 'refeicao', label: 'Refeição', emoji: '🍔', color: isMidnight ? '#FF5E5E' : '#FF5C8D' },
-              { key: 'mobilidade', label: 'Mobilidade', emoji: '🚗', color: isMidnight ? '#0084FF' : '#00E5FF' },
-              { key: 'cultura', label: 'Cultura', emoji: '🎬', color: isMidnight ? '#FFB800' : '#FFAA00' },
-              { key: 'saude', label: 'Saúde', emoji: '💖', color: isMidnight ? '#C278FF' : '#B026FF' },
-              { key: 'outros', label: 'Outros / Serviços', emoji: '📦', color: isMidnight ? '#00DF89' : '#A2FF00' },
-            ].map((cat) => {
-              const spent = categorySpendingCurrentMonth[cat.key] || 0;
-              const limit = budgets[cat.key] || 0;
-              const percent = limit > 0 ? Math.round((spent / limit) * 100) : 0;
-              const isOverBudget = spent > limit && limit > 0;
-
-              return (
-                <div key={cat.key} className="flex items-center gap-4 py-2 border-b border-dashed border-zinc-300 dark:border-zinc-800 last:border-0">
-                  <div>
-                    <D3RadialProgress value={spent} total={limit} theme={theme} size={40} />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <div className="flex justify-between items-center text-[10px] font-black uppercase">
-                      <span className="flex items-center gap-1.5">
-                        <span>{cat.emoji}</span>
-                        <span>{cat.label}</span>
-                      </span>
-                      <span className={isOverBudget ? 'text-red-500 font-extrabold' : 'text-zinc-500'}>
-                        R$ {spent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} /{' '}
-                        <span className="text-[9px] font-medium text-zinc-400">R$ {limit.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span>
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between items-center text-[9px] font-bold text-on-surface-variant">
-                      <span className={isMidnight ? 'text-zinc-400' : 'text-gray-600'}>{percent}% utilizado</span>
-                      {limit > 0 ? (
-                        isOverBudget ? (
-                          <span className="text-red-500 font-extrabold">Excedeu R$ {(spent - limit).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                        ) : (
-                          <span className={isMidnight ? 'text-volt-green' : 'text-green-600'}>R$ {(limit - spent).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} restantes</span>
-                        )
-                      ) : (
-                        <span className="text-gray-400">Sem limite configurado</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Weekly Streak Section */}
-            <hr className={`border-t-2 border-dashed my-4 ${isMidnight ? 'border-zinc-800' : 'border-black'}`} />
-            <WeeklyStreak
-              streakCount={weeklyStreakCalculation.streakCount}
-              weeks={weeklyStreakCalculation.weeks}
-              theme={theme}
-            />
-
-            {/* Savings Stretch Goal Section */}
-            <hr className={`border-t-2 border-dashed my-4 ${isMidnight ? 'border-zinc-800' : 'border-black'}`} />
-            
-            <div className={`p-4 rounded-xl border-2 border-black text-left flex flex-col gap-3 transition-all ${
-              isMidnight
-                ? 'bg-zinc-950/60 text-white shadow-[2px_2px_0px_0px_rgba(0,255,157,0.15)]'
-                : 'bg-green-50/40 text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-            }`}>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs">🚀</span>
-                  <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-black'}`}>
-                    Meta de Economia (Stretch Goal)
-                  </span>
-                </div>
-                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border border-black ${
-                  isMidnight ? 'bg-volt-green text-black border-zinc-800' : 'bg-[#FFED86] text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
-                }`}>
-                  {savingsCalculation.percentReached}% Concluída
-                </span>
-              </div>
-
-              {/* Progress bar */}
-              <div className="space-y-1">
-                <div className={`w-full h-3.5 border-2 border-black rounded-full overflow-hidden ${
-                  isMidnight ? 'bg-zinc-950' : 'bg-gray-100'
-                }`}>
-                  <motion.div
-                    className="h-full rounded-full border-r border-black bg-[#00DF89]"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${savingsCalculation.percentReached}%` }}
-                    transition={{ duration: 0.6, ease: 'easeOut' }}
-                  />
-                </div>
-                <div className="flex justify-between text-[9px] font-bold text-gray-500">
-                  <span>R$ {savingsCalculation.savedSoFar.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} economizados</span>
-                  <span>Meta: R$ {savingsTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                </div>
-              </div>
-
-              {/* Checkpoints timeline */}
-              <div className="mt-1 mb-1">
-                <span className={`text-[9px] font-black uppercase tracking-wider block mb-2 ${
-                  isMidnight ? 'text-zinc-400' : 'text-gray-600'
-                }`}>
-                  Marcos de Conquista (Toque para Celebrar)
-                </span>
-                <div className="flex justify-between items-center relative px-2 py-1">
-                  {/* Connective line behind */}
-                  <div className={`absolute left-4 right-4 h-0.5 border-b-2 border-dashed z-0 ${
-                    isMidnight ? 'border-zinc-800' : 'border-black/20'
-                  }`} />
-                  
-                  {[
-                    { percent: 25, label: '25%', emoji: '🥉', name: 'Bronze', color: 'bg-[#CD7F32]' },
-                    { percent: 50, label: '50%', emoji: '🥈', name: 'Prata', color: 'bg-[#C0C0C0]' },
-                    { percent: 75, label: '75%', emoji: '🥇', name: 'Ouro', color: 'bg-[#FFD700]' },
-                    { percent: 100, label: '100%', emoji: '🏆', name: 'Meta', color: 'bg-[#FFED86]' }
-                  ].map((m) => {
-                    const isReached = savingsCalculation.percentReached >= m.percent;
-                    return (
-                      <motion.button
-                        key={m.percent}
-                        whileHover={isReached ? { scale: 1.12, y: -2 } : {}}
-                        whileTap={isReached ? { scale: 0.95 } : {}}
-                        type="button"
-                        onClick={() => {
-                          if (isReached) {
-                            setCelebrationMilestone(null); // reset first to force rerun
-                            setTimeout(() => setCelebrationMilestone(m.percent), 50);
-                          }
-                        }}
-                        className={`relative z-10 w-11 h-11 rounded-full border-2 border-black flex flex-col items-center justify-center transition-all shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] ${
-                          isReached 
-                            ? `${m.color} text-black cursor-pointer` 
-                            : 'bg-zinc-200 text-zinc-400 opacity-40 cursor-not-allowed'
-                        }`}
-                      >
-                        <span className="text-sm -mt-0.5">{m.emoji}</span>
-                        <span className="text-[8px] font-black -mt-0.5">{m.label}</span>
-                        
-                        {/* Reached tiny indicator */}
-                        {isReached && (
-                          <span className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full p-0.5 border border-black text-[6px] font-extrabold flex items-center justify-center w-3.5 h-3.5">
-                            ✓
-                          </span>
-                        )}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Daily dynamic requirement card */}
-              <div className={`p-3 rounded-lg border-2 border-black flex flex-col gap-1 ${
-                isMidnight ? 'bg-zinc-900/80 text-white' : 'bg-white text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-              }`}>
-                <span className={`text-[9px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>
-                  Meta Diária de Economia Necessária
-                </span>
-                {savingsCalculation.remainingToSave > 0 ? (
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-sm font-black text-red-500">
-                        R$ {savingsCalculation.dailySavingsNeeded.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / dia
-                      </span>
-                      <span className={`text-[9px] font-bold ${isMidnight ? 'text-zinc-500' : 'text-gray-500'}`}>
-                        durante os próximos {savingsCalculation.daysRemaining} dias
-                      </span>
-                    </div>
-                    <p className={`text-[8px] font-bold leading-normal ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
-                      Faltam guardar R$ {savingsCalculation.remainingToSave.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para cumprir seu objetivo do mês.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-black text-[#00DF89]">
-                      ✨ R$ 0,00 / dia
-                    </span>
-                    <p className={`text-[8px] font-bold leading-normal ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
-                      Parabéns! Você já bateu sua meta de economia mensal! Continue assim.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </motion.section>
-
       {/* Meta de Gastos Section */}
       <motion.section
         variants={itemVariants}
@@ -1695,197 +1416,6 @@ const HomeView: React.FC<HomeViewProps> = ({
         )}
       </motion.section>
 
-      {/* Saúde Financeira Section */}
-      <motion.section
-        variants={itemVariants}
-        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
-          isMidnight ? 'bg-volt-surface' : 'bg-white'
-        }`}
-      >
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-              isMidnight ? 'bg-[#B026FF] text-white' : 'bg-[#FF5C8D] text-white'
-            }`}>
-              💖
-            </div>
-            <div>
-              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Saúde Financeira</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Resumo financeiro de {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsFinancialHealthOpen?.(true)}
-            className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full transition-all cursor-pointer ${
-              isMidnight ? 'bg-zinc-900 text-white hover:bg-zinc-800 border-zinc-700' : 'bg-[#FFED86] text-black hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            Ver Detalhes
-          </button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Entradas', value: juneIncome, color: '#00CC7A', icon: '📈' },
-            { label: 'Saídas', value: juneExpenses, color: '#FF5C8D', icon: '📉' },
-            { label: 'Poupança', value: Math.max(0, juneIncome - juneExpenses), color: isMidnight ? '#00ff9d' : '#A2FF00', icon: '💰' },
-          ].map(({ label, value, color, icon }) => (
-            <div key={label} className={`p-3 rounded-xl text-center ${
-              isMidnight ? 'bg-zinc-900 border border-zinc-800' : 'bg-[#FFED86] border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-            }`}>
-              <span className="text-base block mb-1">{icon}</span>
-              <p className={`text-[8px] font-black uppercase tracking-wider mb-1 ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>{label}</p>
-              <p className="text-[10px] font-black" style={{ color }}>R$ {value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className={`p-3 rounded-xl flex items-center justify-between ${
-          isMidnight ? 'bg-zinc-900 border border-zinc-800' : 'bg-gray-50 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-        }`}>
-          <div>
-            <p className={`text-[9px] font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>Taxa de poupança</p>
-            <p className={`text-lg font-black ${
-              juneSavingsRate >= 20 ? 'text-[#00CC7A]' : juneSavingsRate >= 10 ? 'text-[#FFD700]' : 'text-[#FF5C8D]'
-            }`}>{juneSavingsRate}%</p>
-          </div>
-          <span className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full ${
-            juneSavingsRate >= 20
-              ? isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black'
-              : juneSavingsRate >= 10
-              ? 'bg-[#FFD700] text-black'
-              : 'bg-[#FF5C8D] text-white'
-          }`}>
-            {juneSavingsRate >= 20 ? 'Excelente' : juneSavingsRate >= 10 ? 'Saudável' : juneSavingsRate >= 0 ? 'Equilibrado' : 'Atenção'}
-          </span>
-        </div>
-      </motion.section>
-
-      {/* Painel de Análise e Insights */}
-      <motion.section
-        variants={itemVariants}
-        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-3 ${
-          isMidnight ? 'bg-volt-surface' : 'bg-white'
-        }`}
-      >
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-              isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black'
-            }`}>
-              ⚡
-            </div>
-            <div>
-              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Painel de Análise e Insights</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Dados interativos e inteligência preditiva</p>
-            </div>
-          </div>
-          <span className={`text-[8px] font-black uppercase tracking-wider border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-            isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black'
-          }`}>Análises</span>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => setIsFinancialHealthOpen?.(true)}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,200,120,0.2)]' : 'bg-emerald-50 hover:bg-emerald-100 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">🏥</span>
-              <span className="text-[8px] font-black uppercase tracking-wider text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">Inteligência IA</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Saúde Financeira</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Diagnóstico IA Volt</span>
-            </div>
-          </button>
-          <button
-            onClick={() => setIsAiRecurringModalOpen?.(true)}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(100,100,255,0.2)]' : 'bg-indigo-50 hover:bg-indigo-100 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">🔄</span>
-              <span className="text-[8px] font-black uppercase tracking-wider text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded-md">Otimizador IA</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Assinaturas IA</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Detecção automática</span>
-            </div>
-          </button>
-          <button
-            onClick={() => onNavigate('statement')}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">📈</span>
-              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                isMidnight ? 'text-zinc-400 bg-zinc-800' : 'text-zinc-500 bg-zinc-100'
-              }`}>30d</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Evolução do Saldo</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Histórico financeiro</span>
-            </div>
-          </button>
-          <button
-            onClick={() => onNavigate('statement')}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">📊</span>
-              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                isMidnight ? 'text-zinc-400 bg-zinc-800' : 'text-zinc-500 bg-zinc-100'
-              }`}>6m</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Análise de Gastos</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Gastos consolidados</span>
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveDrawer?.('insights')}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">💡</span>
-              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                isMidnight ? 'text-zinc-400 bg-zinc-800' : 'text-zinc-500 bg-zinc-100'
-              }`}>Uso</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Insights de Gastos</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Uso por categoria</span>
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveDrawer?.('trends')}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,255,157,0.2)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">🔮</span>
-              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                isMidnight ? 'text-volt-green bg-volt-green/10' : 'text-[#00c97b] bg-[#00c97b]/10'
-              }`}>Volt Forecast™</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Tendências e Previsões</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Inteligência Preditiva</span>
-            </div>
-          </button>
-        </div>
-      </motion.section>
-
       {/* Recurring Payments Section */}
       <motion.section
         variants={itemVariants}
@@ -1923,20 +1453,20 @@ const HomeView: React.FC<HomeViewProps> = ({
               </button>
               {isMidnight ? (
                 <span className="text-[10px] font-black uppercase tracking-wider bg-zinc-900 text-white border border-zinc-800 px-2 py-1 rounded-full">
-                  {recurringBills.filter((b) => b.status === 'pending').length} PEND
+                  {visibleRecurringBills.filter((b) => b.status === 'pending').length} PEND
                 </span>
               ) : (
                 <span className="text-[9px] font-black uppercase tracking-wider bg-[#FFED86] text-black border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-                  {recurringBills.filter((b) => b.status === 'pending').length} Pend
+                  {visibleRecurringBills.filter((b) => b.status === 'pending').length} Pend
                 </span>
               )}
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { label: 'Estimado', value: recurringBills.reduce((a, b) => a + Math.abs(b.amount), 0), textColor: isMidnight ? 'text-white' : 'text-black' },
-              { label: 'Pago', value: recurringBills.filter(b => b.status === 'paid').reduce((a, b) => a + Math.abs(b.amount), 0), textColor: 'text-[#00CC7A]' },
-              { label: 'Pendente', value: recurringBills.filter(b => b.status === 'pending').reduce((a, b) => a + Math.abs(b.amount), 0), textColor: 'text-[#FF5C8D]' },
+              { label: 'Estimado', value: visibleRecurringBills.reduce((a, b) => a + Math.abs(b.amount), 0), textColor: isMidnight ? 'text-white' : 'text-black' },
+              { label: 'Pago', value: visibleRecurringBills.filter(b => b.status === 'paid').reduce((a, b) => a + Math.abs(b.amount), 0), textColor: 'text-[#00CC7A]' },
+              { label: 'Pendente', value: visibleRecurringBills.filter(b => b.status === 'pending').reduce((a, b) => a + Math.abs(b.amount), 0), textColor: 'text-[#FF5C8D]' },
             ].map(({ label, value, textColor }) => (
               <div key={label} className={`p-2.5 rounded-xl text-center ${
                 isMidnight ? 'bg-zinc-900 border border-zinc-800' : 'bg-[#FFED86] border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
@@ -1948,8 +1478,106 @@ const HomeView: React.FC<HomeViewProps> = ({
           </div>
         </div>
 
+        {isAddingBill && (
+          <div className={`p-4 rounded-2xl border-2 space-y-3 transition-all ${
+            isMidnight ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-black'
+          }`}>
+            <h4 className="font-black text-xs uppercase tracking-wider">Cadastrar Nova Conta Recorrente</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Nome da Conta / Assinatura</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Netflix, Spotify, Luz" 
+                  value={newBillTitle} 
+                  onChange={(e) => setNewBillTitle(e.target.value)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-black text-black'
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Valor (R$)</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="0.00" 
+                  value={newBillAmount} 
+                  onChange={(e) => setNewBillAmount(e.target.value)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-black text-black'
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Data de Vencimento</label>
+                <input 
+                  type="date" 
+                  value={newBillDueDate} 
+                  onChange={(e) => setNewBillDueDate(e.target.value)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-black text-black'
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Categoria</label>
+                <select 
+                  value={newBillCategory} 
+                  onChange={(e) => setNewBillCategory(e.target.value as any)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-black text-black'
+                  }`}
+                >
+                  <option value="cultura">Cultura / Streaming</option>
+                  <option value="refeicao">Alimentação</option>
+                  <option value="mobilidade">Transporte</option>
+                  <option value="saude">Saúde</option>
+                  <option value="outros">Outros</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Frequência</label>
+                <select 
+                  value={newBillFrequency} 
+                  onChange={(e) => setNewBillFrequency(e.target.value as any)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-black text-black'
+                  }`}
+                >
+                  <option value="MONTHLY">Mensal</option>
+                  <option value="QUARTERLY">Trimestral</option>
+                  <option value="SEMIANNUAL">Semestral</option>
+                  <option value="ANNUAL">Anual</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Método de Pagamento</label>
+                <select 
+                  value={newBillPaymentMethod} 
+                  onChange={(e) => setNewBillPaymentMethod(e.target.value as any)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-black text-black'
+                  }`}
+                >
+                  <option value="CREDIT_CARD">Cartão de Crédito</option>
+                  <option value="ACCOUNT_DEBIT">Débito Automático em Conta</option>
+                </select>
+              </div>
+            </div>
+            <button 
+              onClick={handleAddRecurringBill}
+              className={`w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider border-2 border-black transition-all cursor-pointer ${
+                isMidnight ? 'bg-volt-green text-black hover:bg-[#a3ff12]' : 'bg-[#FFED86] text-black hover:bg-[#ffe333] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+              }`}
+            >
+              Adicionar Conta Recorrente
+            </button>
+          </div>
+        )}
+
         <div className="space-y-3">
-          {recurringBills.map((bill) => {
+          {visibleRecurringBills.map((bill) => {
             const isPaid = bill.status === 'paid';
             const billAmountAbs = Math.abs(bill.amount);
             const iconColorClass = isMidnight ? "text-[#00DF89]" : "text-black";
@@ -1989,12 +1617,85 @@ const HomeView: React.FC<HomeViewProps> = ({
 
                   <div className="min-w-0 flex-1">
                     <h4 className={`text-xs font-black truncate ${isMidnight ? 'text-white' : 'text-black'}`}>{bill.title}</h4>
-                    <div className="flex items-center gap-1.5 text-[9px] font-bold mt-0.5 text-on-surface-variant">
-                      <span className="flex items-center gap-0.5">
-                        <Calendar size={10} />
-                        {isPaid ? `Pago em ${bill.paidAtDate}` : `Vence em ${bill.dueDate}`}
-                      </span>
-                    </div>
+                    
+                    {(() => {
+                      const isAccountDebit = bill.paymentMethod === 'ACCOUNT_DEBIT' || bill.paymentMethod === 'ACCOUNT' || bill.paymentMethod === 'DEBIT';
+                      const cutoffDay = bill.dueDay || (bill.dueDate ? parseInt(bill.dueDate.replace(/\D/g, ''), 10) : 25) || 25;
+
+                      // Data de autorização / lançamento
+                      const createdDate = bill.createdAt ? new Date(bill.createdAt) : new Date();
+                      const authDay = createdDate.getDate();
+                      const authDateFormatted = createdDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+                      // Regra de Corte da Fatura (Cartão de Crédito)
+                      const isBeforeCutoff = authDay <= cutoffDay;
+
+                      if (isPaid) {
+                        const methodBadge = isAccountDebit ? 'Débito em Conta' : 'Cartão de Crédito';
+                        return (
+                          <div className="flex flex-col gap-0.5 mt-0.5">
+                            <div className="flex items-center gap-1 text-[9.5px] font-bold text-[#00CC7A]">
+                              <Calendar size={10} />
+                              <span>Pago/Faturado em {bill.paidAtDate || authDateFormatted}</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-[8.5px] font-bold text-gray-600 dark:text-zinc-400">
+                              {isAccountDebit ? <Building2 size={9} /> : <CreditCard size={9} />}
+                              <span>Método: {methodBadge}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const isNextMonthBill = bill.id.includes('_next') || bill.dueDate.includes('/') || (bill.dueDate && !bill.dueDate.startsWith('Dia'));
+                      const targetDueDateLabel = bill.dueDate || `Dia ${cutoffDay}`;
+
+                      if (isAccountDebit) {
+                        return (
+                          <div className="flex flex-col gap-0.5 mt-0.5">
+                            <div className="flex items-center gap-1 text-[9.5px] font-bold text-emerald-600 dark:text-emerald-400 flex-wrap">
+                              <Building2 size={10} />
+                              <span>Débito Agendado: {targetDueDateLabel}</span>
+                              {isNextMonthBill && (
+                                <span className="text-[7.5px] px-1 py-0.2 rounded font-black border uppercase tracking-tighter bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30">
+                                  Próximo Mês
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[8.5px] opacity-70 font-semibold text-on-surface-variant flex items-center gap-1">
+                              <Calendar size={9} />
+                              <span>Débito automático direto na conta no vencimento</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Cartão de Crédito com Autorização + Regra de Corte do Faturamento
+                      return (
+                        <div className="flex flex-col gap-0.5 mt-0.5">
+                          <div className="flex items-center gap-1 text-[9.5px] font-bold text-blue-600 dark:text-blue-400 flex-wrap">
+                            <CreditCard size={10} />
+                            <span>Vencimento: {targetDueDateLabel}</span>
+                            {isNextMonthBill ? (
+                              <span className="text-[7.5px] px-1 py-0.2 rounded font-black border uppercase tracking-tighter bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30">
+                                Próximo Mês / Pendente
+                              </span>
+                            ) : (
+                              <span className={`text-[7.5px] px-1 py-0.2 rounded font-black border uppercase tracking-tighter ${
+                                isBeforeCutoff 
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30' 
+                                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30'
+                              }`}>
+                                {isBeforeCutoff ? 'Antes do Corte' : 'Após o Corte'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[8.5px] opacity-70 font-semibold text-on-surface-variant flex items-center gap-1">
+                            <Calendar size={9} />
+                            <span>Corte/Vencimento da Fatura: Dia {cutoffDay}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -2043,7 +1744,12 @@ const HomeView: React.FC<HomeViewProps> = ({
             d ? d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase() : '--';
           const totalLimit = cc?.totalLimit || 0;
           const availableLimit = cc?.availableLimit || 0;
-          const usedPct = totalLimit > 0 ? Math.min(100, Math.max(0, ((totalLimit - availableLimit) / totalLimit) * 100)) : 0;
+          const usedLimit = totalLimit - availableLimit;
+          const usedPct = totalLimit > 0 ? Math.min(100, Math.max(0, (usedLimit / totalLimit) * 100)) : 0;
+          // Limite online = sub-limite para compras digitais (40% do limite total, mínimo R$ 500)
+          const onlineLimit = totalLimit > 0 ? Math.max(500, totalLimit * 0.4) : 0;
+          const onlineAvailable = Math.min(onlineLimit, availableLimit);
+          const onlineUsedPct = onlineLimit > 0 ? Math.min(100, Math.max(0, ((onlineLimit - onlineAvailable) / onlineLimit) * 100)) : 0;
           return (
             <div className="p-5 flex flex-col gap-4">
               <div className="flex justify-between items-center">
@@ -2071,6 +1777,14 @@ const HomeView: React.FC<HomeViewProps> = ({
                   >
                     {hideHomeInvoice ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
+                  {/* Badge Fatura Paga — ao lado do eye, mostra se a fechada foi quitada */}
+                  {cc?.closedInvoiceIsPaid && (
+                    <span className="text-[10px] px-2 py-1 rounded-full font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      ✓ PAGA{cc.closedInvoicePaidAt
+                        ? ' ' + new Date(cc.closedInvoicePaidAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                        : ''}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -2085,20 +1799,59 @@ const HomeView: React.FC<HomeViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-on-surface-variant">Limite Disponível</span>
-                  <span className="font-bold text-white">
-                    R$ {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
+              {/* Limites - Total, Disponivel, Usado */}
+              <div className="flex flex-col gap-3">
+                {/* Limite de Credito Geral */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-on-surface-variant font-medium">Limite de Crédito</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-on-surface-variant/70">
+                        Utilizado: <span className="text-amber-400 font-bold">R$ {usedLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      </span>
+                      <span className="font-bold text-white">
+                        R$ {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: '0%' }}
+                      animate={{ width: `${usedPct}%` }}
+                      transition={{ duration: 1, ease: 'easeOut' }}
+                      className="h-full bg-volt-green rounded-full shadow-[0_0_10px_rgba(0,227,139,0.5)]"
+                    />
+                  </div>
+                  <div className="flex justify-between text-[9px] text-on-surface-variant/60 font-medium">
+                    <span>R$ 0</span>
+                    <span>Total: R$ {totalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: '0%' }}
-                    animate={{ width: `${usedPct}%` }}
-                    transition={{ duration: 1, ease: 'easeOut' }}
-                    className="h-full bg-volt-green rounded-full shadow-[0_0_10px_rgba(0,227,139,0.5)]"
-                  />
+
+                {/* Limite Online (sub-limite para compras digitais) */}
+                <div className="flex flex-col gap-1.5 border-t border-white/5 pt-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Globe size={11} className="text-blue-400" />
+                      <span className="text-on-surface-variant font-medium">Limite Online</span>
+                      <span className="text-[9px] bg-blue-500/15 text-blue-400 border border-blue-400/30 px-1.5 py-0.5 rounded-full font-bold">E-COMMERCE</span>
+                    </div>
+                    <span className="font-bold text-white">
+                      R$ {onlineAvailable.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: '0%' }}
+                      animate={{ width: `${onlineUsedPct}%` }}
+                      transition={{ duration: 1.2, ease: 'easeOut' }}
+                      className="h-full bg-blue-400 rounded-full"
+                    />
+                  </div>
+                  <div className="flex justify-between text-[9px] text-on-surface-variant/60 font-medium">
+                    <span>Para compras em lojas online e apps</span>
+                    <span>Limite: R$ {onlineLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
               </div>
 
@@ -2132,7 +1885,9 @@ const HomeView: React.FC<HomeViewProps> = ({
         open={isInvoiceSummaryOpen}
         onClose={() => setIsInvoiceSummaryOpen(false)}
         type="aberta"
-        title="Resumo da fatura aberta"
+        title="Resumo da Fatura"
+        showTypeToggle={true}
+        user={user}
       />
 
       {/* Spending Analytics Section */}
@@ -2767,12 +2522,194 @@ const HomeView: React.FC<HomeViewProps> = ({
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {advancePaymentBill && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className={`relative w-full max-w-sm rounded-3xl p-6 border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] ${
+                isMidnight ? 'bg-[#131313] text-white border-zinc-700' : 'bg-white text-black border-black'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-400 text-black border-2 border-black flex items-center justify-center text-xl font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  📅
+                </div>
+                <div>
+                  <h3 className="font-black text-xs uppercase tracking-wide">Adiantar Pagamento?</h3>
+                  <p className="text-[10px] font-bold text-gray-500 dark:text-zinc-400">Mês vigente já quitado</p>
+                </div>
+              </div>
+
+              <p className="text-xs font-extrabold leading-relaxed mb-3 text-gray-800 dark:text-zinc-200">
+                A conta <span className="font-black text-emerald-600 dark:text-volt-green">{advancePaymentBill.title}</span> já consta como paga para este período. Deseja adiantar o pagamento da próxima fatura/vencimento no valor de <span className="font-black">R$ {Math.abs(advancePaymentBill.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>?
+              </p>
+
+              <div className="mb-5 p-2.5 rounded-xl bg-gray-100 dark:bg-zinc-800/80 border border-black/10 dark:border-zinc-700 flex items-center justify-between text-[11px] font-extrabold">
+                <span className="text-gray-500 dark:text-zinc-400">Método de Cobrança:</span>
+                <span className="flex items-center gap-1.5 text-blue-600 dark:text-cyan-400 font-black">
+                  {advancePaymentBill.paymentMethod === 'ACCOUNT_DEBIT' || advancePaymentBill.paymentMethod === 'ACCOUNT' || advancePaymentBill.paymentMethod === 'DEBIT' ? (
+                    <>
+                      <Building2 size={12} /> Débito em Conta
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard size={12} /> Cartão de Crédito
+                    </>
+                  )}
+                </span>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAdvancePaymentBill(null)}
+                  className={`flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider border-2 border-black ${
+                    isMidnight ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-gray-200 text-black hover:bg-gray-300'
+                  }`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    setPaymentChoiceBill(advancePaymentBill);
+                    setSelectedPaymentMethod(advancePaymentBill.paymentMethod === 'CREDIT_CARD' || advancePaymentBill.paymentMethod === 'CREDIT' ? 'CREDIT_CARD' : 'ACCOUNT_DEBIT');
+                    setAdvancePaymentBill(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider border-2 border-black bg-[#A2FF00] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#8fff00] cursor-pointer"
+                >
+                  Sim, Adiantar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Payment Method Choice Modal (Débito em Conta vs Adiantar no Crédito) */}
+      <AnimatePresence>
+        {paymentChoiceBill && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className={`relative w-full max-w-md rounded-3xl p-6 border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] ${
+                isMidnight ? 'bg-[#131313] text-white border-zinc-700' : 'bg-white text-black border-black'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#00E5FF] text-black border-2 border-black flex items-center justify-center text-xl font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  💳
+                </div>
+                <div>
+                  <h3 className="font-black text-xs uppercase tracking-wide">Opção de Pagamento</h3>
+                  <p className="text-[10px] font-bold text-gray-500 dark:text-zinc-400">{paymentChoiceBill.title} • R$ {Math.abs(paymentChoiceBill.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+
+              <p className="text-xs font-bold leading-relaxed mb-4 text-gray-700 dark:text-zinc-300">
+                Como você deseja efetuar o pagamento da conta <span className="font-black text-black dark:text-white">{paymentChoiceBill.title}</span>?
+              </p>
+
+              <div className="space-y-3 mb-6">
+                {/* Opção 1: Débito em Conta */}
+                <div
+                  onClick={() => setSelectedPaymentMethod('ACCOUNT_DEBIT')}
+                  className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                    selectedPaymentMethod === 'ACCOUNT_DEBIT'
+                      ? isMidnight ? 'bg-emerald-950/40 border-volt-green text-white shadow-[3px_3px_0px_0px_rgba(0,229,255,1)]' : 'bg-emerald-50 border-emerald-600 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                      : isMidnight ? 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500' : 'bg-gray-50 border-gray-300 text-gray-600 hover:border-gray-400'
+                  }`}
+                >
+                  <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                    selectedPaymentMethod === 'ACCOUNT_DEBIT' ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-400'
+                  }`}>
+                    {selectedPaymentMethod === 'ACCOUNT_DEBIT' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 font-black text-xs uppercase tracking-wide">
+                      <Building2 size={14} className="text-emerald-500" />
+                      <span>Pagar no Débito (Saldo da Conta)</span>
+                    </div>
+                    <p className="text-[9.5px] font-semibold mt-1 text-gray-500 dark:text-zinc-400 leading-snug">
+                      Deduz R$ {Math.abs(paymentChoiceBill.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} do saldo imediatamente. A cobrança no cartão fica zerada para não cobrar indevidamente.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Opção 2: Adiantar no Crédito */}
+                <div
+                  onClick={() => setSelectedPaymentMethod('CREDIT_CARD')}
+                  className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                    selectedPaymentMethod === 'CREDIT_CARD'
+                      ? isMidnight ? 'bg-blue-950/40 border-cyan-400 text-white shadow-[3px_3px_0px_0px_rgba(0,229,255,1)]' : 'bg-blue-50 border-blue-600 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                      : isMidnight ? 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500' : 'bg-gray-50 border-gray-300 text-gray-600 hover:border-gray-400'
+                  }`}
+                >
+                  <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                    selectedPaymentMethod === 'CREDIT_CARD' ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-400'
+                  }`}>
+                    {selectedPaymentMethod === 'CREDIT_CARD' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 font-black text-xs uppercase tracking-wide">
+                      <CreditCard size={14} className="text-blue-500" />
+                      <span>Adiantar no Crédito (Lançar na Fatura)</span>
+                    </div>
+                    <p className="text-[9.5px] font-semibold mt-1 text-gray-500 dark:text-zinc-400 leading-snug">
+                      Lança R$ {Math.abs(paymentChoiceBill.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} na fatura do cartão de crédito. O saldo em conta permanece intacto agora.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPaymentChoiceBill(null)}
+                  className={`flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider border-2 border-black ${
+                    isMidnight ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-gray-200 text-black hover:bg-gray-300'
+                  }`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    setPendingBillId(paymentChoiceBill.id);
+                    setPendingPaymentMethod(selectedPaymentMethod);
+                    setPaymentChoiceBill(null);
+                    setIsPasswordVerifyOpen(true);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider border-2 border-black bg-[#A2FF00] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#8fff00] cursor-pointer"
+                >
+                  Continuar Pagamento
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <PasswordModal
         isOpen={isPasswordVerifyOpen}
         onClose={() => setIsPasswordVerifyOpen(false)}
         onConfirm={handlePasswordConfirm}
         title="Confirmar Pagamento Recorrente"
         description="Digite seu PIN de 4 dígitos para autorizar o pagamento desta conta."
+      />
+
+      <FinancialInsightsCarouselModal
+        isOpen={isCarouselInsightsOpen}
+        onClose={() => setIsCarouselInsightsOpen(false)}
+        onNavigate={onNavigate}
+        theme={theme === 'yellow' ? 'yellow' : 'midnight'}
+        userProfile={user}
+      />
+
+      <OverdueAlertModal
+        user={user}
+        onNavigate={onNavigate}
       />
     </motion.div>
   );

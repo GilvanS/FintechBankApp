@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:no-mock": "node scripts\\verify-no-mock.js"
+    "test:no-mock": "node scripts\\verify-no-mock.js",
+    "lint:jsx": "node scripts/lint-no-missing-jsx-brace.cjs",
+    "prepare": "husky"
   },
   "dependencies": {
     "d3": "^7.9.0",
@@ -29,10 +31,18 @@
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "@vitest/coverage-v8": "^4.0.8",
+    "husky": "^9.1.7",
     "jsdom": "^27.2.0",
+    "lint-staged": "^16.4.0",
     "tailwindcss": "^4.3.2",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vitest": "^4.0.8"
+  },
+  "lint-staged": {
+    "*.{tsx}": [
+      "tsc --noEmit",
+      "node scripts/lint-no-missing-jsx-brace.cjs"
+    ]
   }
 }

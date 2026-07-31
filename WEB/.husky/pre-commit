@@ -1,0 +1,4 @@
+# Lint JSX primeiro — barato e bloqueia o erro de sintaxe que trava o Vite.
+# lint-staged já está configurado em package.json para *.tsx e roda apenas
+# nos arquivos modificados pelo commit.
+npx lint-staged
