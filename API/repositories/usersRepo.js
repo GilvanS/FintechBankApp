@@ -415,6 +415,21 @@ async function createMassUser(payload) {
         console.warn('⚠️ Erro ao gerar faturamento da massa:', billingErr.message);
     }
 
+    // Inserir assinatura recorrente padrão (Spotify R$ 19,90 no crédito)
+    try {
+        const subId = db.generateUUID ? db.generateUUID() : `sub-${cleanCpf}-${Date.now()}`;
+        const nextBilling = new Date();
+        nextBilling.setMonth(nextBilling.getMonth() + 1);
+        await db.executeQuery(`
+            INSERT INTO ${db.fq('subscriptions')}
+            (id, cpf, name, amount, frequency, payment_method, status, next_billing_date, created_at, updated_at)
+            VALUES ('${subId}', '${cleanCpf}', 'Spotify', 19.90, 'monthly', 'credit', 'active', '${nextBilling.toISOString()}', '${now}', '${now}')
+        `);
+        console.log(`✅ Assinatura padrão Spotify (R$ 19,90) inserida para a massa ${cleanCpf}`);
+    } catch (subErr) {
+        console.warn('⚠️ Erro ao inserir assinatura padrão para a massa:', subErr.message);
+    }
+
     return { id, cpf: cleanCpf, fullName: payload.fullName };
 }
 
