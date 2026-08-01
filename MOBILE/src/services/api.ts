@@ -1342,4 +1342,99 @@ export async function checkout(payload: { cpf: string; items: any[]; paymentMeth
     }
 }
 
+export interface SimulateMassPayload {
+    count: number;
+    purchaseType?: 'all' | 'avista' | 'parcelado_sem_juros' | 'parcelado_com_juros' | 'internacional_avista' | 'internacional_parcelado';
+    subscription?: boolean;
+}
+
+export async function adminSimulateMass(payload: SimulateMassPayload): Promise<{ success: boolean; message: string; results?: any }> {
+    try {
+        const res = await api.post('/admin/transactions/simulate-mass', payload, {
+            headers: getAuthHeaders('json'),
+        });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao simular transações em massa' };
+    }
+}
+
+export interface AcquirerSimulatePayload {
+    cardNumber: string;
+    cvv: string;
+    expiry: string;
+    pin?: string;
+    amount: number;
+    type: 'CREDIT' | 'DEBIT' | 'SUBSCRIPTION';
+    installments?: number;
+    description?: string;
+}
+
+export async function adminAcquirerSimulate(payload: AcquirerSimulatePayload): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post('/admin/acquirer-simulate', payload, {
+            headers: getAuthHeaders('json'),
+        });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao simular transação no adquirente' };
+    }
+}
+
+export async function adminBlockUser(cpf: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post(`/admin/users/${cpf}/block`, {}, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao bloquear usuário.' };
+    }
+}
+
+export async function adminUnblockUser(cpf: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post(`/admin/users/${cpf}/unblock`, {}, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao desbloquear usuário.' };
+    }
+}
+
+export async function adminUpdateUserPassword(cpf: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.put(`/admin/users/${cpf}/password`, { newPassword }, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao resetar senha.' };
+    }
+}
+
+
+
+export async function adminUpdateBillingDay(cpf: string, billingDay: number): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.put(`/admin/users/${cpf}/billing-day`, { billingDay }, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao atualizar dia de vencimento.' };
+    }
+}
+
+export async function adminRunBillingCron(): Promise<{ success: boolean; message: string; logs?: string[] }> {
+    try {
+        const res = await api.post('/admin/billing/cron', {}, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao executar o cron de faturamento.' };
+    }
+}
+
+export async function adminCloseInvoice(cpf: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post(`/admin/billing/${cpf}/close-invoice`, {}, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao fechar fatura.' };
+    }
+}
+
 export default api;

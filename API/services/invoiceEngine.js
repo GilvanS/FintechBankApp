@@ -32,10 +32,8 @@ async function runEngine(targetCpf = null) {
       cutoffDate.setDate(cutoffDate.getDate() - 7);
       cutoffDate.setUTCHours(23, 59, 59, 999);
 
-      // Margem de teste: Se a data de corte for até o dia 8 de julho (vencimento 15/07), permitimos fechar hoje (dia 6/7)
-      const isTestOverride = cutoffDate.getTime() <= new Date('2026-07-08T23:59:59.999Z').getTime();
-
-      if (now > cutoffDate || isTestOverride) {
+      // Só fecha quando a data atual ultrapassa a data de corte (7 dias antes do vencimento)
+      if (now > cutoffDate) {
         // Passou da data de corte: fechar fatura atual e rolar vencimento para próximo mês
         console.log(`[InvoiceEngine] Fatura do CPF ${user.cpf} passou da data de corte (${cutoffDate.toISOString()}) ou override de teste. Fechando fatura...`);
 

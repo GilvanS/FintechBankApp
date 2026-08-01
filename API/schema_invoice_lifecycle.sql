@@ -96,6 +96,30 @@ BEGIN
         RAISE NOTICE 'Coluna valor_total_com_encargos adicionada.';
     END IF;
 
+    -- Adicionar valor_pago (rastreia pagamentos parciais)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'fintech' 
+        AND table_name = 'invoices' 
+        AND column_name = 'valor_pago'
+    ) THEN
+        ALTER TABLE "fintech"."invoices"
+        ADD COLUMN valor_pago DECIMAL(15,2) DEFAULT 0.00;
+        RAISE NOTICE 'Coluna valor_pago adicionada.';
+    END IF;
+
+    -- Adicionar data_ultimo_pagamento
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'fintech' 
+        AND table_name = 'invoices' 
+        AND column_name = 'data_ultimo_pagamento'
+    ) THEN
+        ALTER TABLE "fintech"."invoices"
+        ADD COLUMN data_ultimo_pagamento TIMESTAMP NULL;
+        RAISE NOTICE 'Coluna data_ultimo_pagamento adicionada.';
+    END IF;
+
     -- Tornar due_date NOT NULL se ainda não for
     IF EXISTS (
         SELECT 1 FROM information_schema.columns 

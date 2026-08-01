@@ -21,6 +21,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@api/*": [
+        "../API/*"
       ]
     },
     "allowImportingTsExtensions": true,

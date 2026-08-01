@@ -7,7 +7,7 @@ import {
   Truck, Package, MapPin, Calendar, Lock, Unlock,
   Flame, RefreshCw, HelpCircle, X, FileText
 } from 'lucide-react';
-import { CreditCard as CardType } from '../types';
+import { CreditCard as CardType, User } from '../types';
 import { getMyCards, generateVirtualCard, toggleBlockCard, deleteVirtualCard, ApiCard } from '../services/api';
 import PasswordModal from './PasswordModal';
 import CardDeliveryTracking, { DeliveryStatus, isDeliveryStatus } from './CardDeliveryTracking';
@@ -17,6 +17,7 @@ interface CardsViewProps {
   creditCard: CardType;
   updateCreditCard: (newCard: Partial<CardType>) => void;
   userName: string;
+  user: User;
   profileMessage?: string;
   onOpenInvoice: () => void;
   invoiceAmount: number;
@@ -44,6 +45,7 @@ export default function CardsView({
   creditCard,
   updateCreditCard,
   userName,
+  user,
   profileMessage,
   onOpenInvoice,
   invoiceAmount,
@@ -780,7 +782,13 @@ export default function CardsView({
                     maxLength={5}
                     placeholder="MM/AA"
                     value={unlockExpiry}
-                    onChange={(e) => setUnlockExpiry(e.target.value)}
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/\D/g, '');
+                      if (val.length >= 3) {
+                        val = `${val.slice(0, 2)}/${val.slice(2, 4)}`;
+                      }
+                      setUnlockExpiry(val);
+                    }}
                     className="w-full bg-black/40 border border-white/10 rounded-lg p-2.5 text-xs text-white font-mono placeholder:text-zinc-600 focus:outline-none focus:border-volt-green"
                   />
                 </div>
@@ -1002,29 +1010,14 @@ export default function CardsView({
       )}
 
       {/* Management Icons Bento Grid */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         {[
-          {
-            label: 'Ver fatura',
-            icon: CreditCard,
-            action: () => onOpenInvoice(),
-            disabled: activeType === 'physical' && !isPhysicalUnlocked,
-          },
           {
             label: 'Meus limites',
             icon: Sliders,
             action: () => {
               setTempLimit(creditCard.totalLimit);
               setShowLimitModal(true);
-            },
-            disabled: activeType === 'physical' && !isPhysicalUnlocked,
-          },
-          {
-            label: 'Ciclo de fatura',
-            icon: Calendar,
-            action: () => {
-              setTempDueDay(creditCard.dueDay || 15);
-              setShowBillingModal(true);
             },
             disabled: activeType === 'physical' && !isPhysicalUnlocked,
           },
@@ -1115,40 +1108,13 @@ export default function CardsView({
         </div>
       </div>
 
-      {/* Floating Invoice Summary & Payment Card at Bottom (Absolute positioning safe above navbar) */}
-      <div className="fixed bottom-24 left-0 w-full px-4 z-20">
-        <div className="max-w-md mx-auto bg-volt-surface border-4 border-black rounded-3xl p-4 flex justify-between items-center gap-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-black">Fatura Atual</p>
-            <p className="text-lg font-black text-white truncate">
-              R$ {invoiceAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setShowInvoiceSummary(true)}
-              className="flex items-center gap-1.5 border border-white/20 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs hover:bg-white/5 active:scale-95 transition-all cursor-pointer"
-              aria-label="Ver resumo da fatura"
-            >
-              <FileText size={13} />
-              Resumo
-            </button>
-            <button
-              onClick={onRequestPayInvoice}
-              className="bg-volt-green text-black px-5 py-2.5 rounded-xl font-bold text-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer"
-            >
-              Pagar
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Invoice Summary Bottom Sheet */}
       <InvoiceSummarySheet
         open={showInvoiceSummary}
         onClose={() => setShowInvoiceSummary(false)}
         type={creditCard.closedInvoice && creditCard.closedInvoice > 0 ? 'fechada' : 'aberta'}
         title={creditCard.closedInvoice && creditCard.closedInvoice > 0 ? 'Resumo da fatura' : 'Resumo da fatura aberta'}
+        user={user}
       />
 
       {/* --- CREATE VIRTUAL CARD MODAL --- */}
@@ -1324,7 +1290,7 @@ export default function CardsView({
                 <p className="text-xs text-on-surface-variant mt-1">Nunca compartilhe sua senha com ninguém.</p>
               </div>
               <div className="bg-white/5 border border-white/5 rounded-xl p-4 font-mono text-2xl font-bold tracking-widest text-volt-green">
-                1 9 8 4
+                { (apiPhysical?.pin || '9898').split('').join(' ') }
               </div>
               <p className="text-[10px] text-on-surface-variant leading-relaxed">
                 Esta senha é utilizada para compras físicas em estabelecimentos comerciais usando seu chip físico.

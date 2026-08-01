@@ -1,0 +1,23 @@
+{
+  "ranAt": "2026-07-26T19:07:34.305Z",
+  "flags": {
+    "quiet": true,
+    "allowFix": false,
+    "alertThreshold": 1
+  },
+  "summary": {
+    "anomalies": 0,
+    "fixed": 0,
+    "errors": 0,
+    "hasAlert": false,
+    "durationMs": 3599
+  },
+  "audits": {
+    "doubleCount": null,
+    "negativeBalance": null
+  },
+  "auditCompleto": {
+    "exitCode": 0,
+    "signal": null
+  }
+}

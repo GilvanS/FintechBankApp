@@ -20,7 +20,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 function normalizeUserShape(input: Partial<User>): User {
     const nowIso = new Date().toISOString();
     const defaultCard = {
-        number: '0000000000000000',
+        number: '5981 1475 1088 1435',
         dueDate: nowIso,
         invoiceDueDate: nowIso,
         closedInvoiceDueDate: nowIso,
@@ -39,9 +39,15 @@ function normalizeUserShape(input: Partial<User>): User {
     const toBool = (v: any) => Boolean(v);
     const toStr = (v: any) => (v == null ? '' : String(v));
 
+    const cardNumRaw = toStr(ccRaw.number || ccRaw.card_number || '');
+    const validCardNumber = (cardNumRaw && cardNumRaw !== '0000000000000000' && cardNumRaw !== '0000') 
+        ? cardNumRaw 
+        : '5981 1475 1088 1435';
+
     const creditCard = {
         ...defaultCard,
         ...(ccRaw || {}),
+        number: validCardNumber,
         dueDate: ccRaw.dueDate || ccRaw.due_date || defaultCard.dueDate,
         invoiceDueDate: ccRaw.invoiceDueDate || ccRaw.invoice_due_date || defaultCard.invoiceDueDate,
         closedInvoiceDueDate: ccRaw.closedInvoiceDueDate || ccRaw.closed_invoice_due_date || defaultCard.closedInvoiceDueDate,
@@ -86,7 +92,32 @@ function normalizeUserShape(input: Partial<User>): User {
 }
 
 function App() {
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<User | null>(() => {
+        try {
+            const savedSession = localStorage.getItem('fintech_user_session');
+            if (!savedSession) return null;
+            const parsed = JSON.parse(savedSession);
+            if (!parsed || !parsed.cpf) return null;
+
+            // Restaura sessao SO se houver token valido (nao expirado) cujo cpf bate
+            // com a sessao salva. Evita "voltar logado em massa aleatoria" no reload e
+            // sessao dessincronizada do token (causa do "Acesso negado" no admin).
+            const isAdmin = parsed.role === 'admin';
+            const token = localStorage.getItem(isAdmin ? 'adminToken' : 'authToken');
+            if (!token) return null;
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const expired = payload.exp && payload.exp * 1000 < Date.now();
+            if (!payload.cpf || payload.cpf !== parsed.cpf || expired) {
+                localStorage.removeItem('fintech_user_session');
+                return null;
+            }
+            return normalizeUserShape(parsed);
+        } catch (e) {
+            console.error('Erro ao restaurar sessão do usuário:', e);
+        }
+        return null;
+    });
+
     // 'view' kept only for Dashboard's internal admin sub-view check (topLevelView === 'admin')
     const [view, setView] = useState('');
     const navigate = useNavigate();
@@ -108,26 +139,59 @@ function App() {
         initializeMockUsers();
     }, []);
 
+    useEffect(() => {
+        if (user) {
+            try {
+                localStorage.setItem('fintech_user_session', JSON.stringify(user));
+            } catch (err) {
+                console.error('Erro ao salvar sessão no localStorage:', err);
+            }
+        }
+    }, [user]);
 
     const handleLogin = (loggedInUser: Omit<User, 'password'>) => {
         const normalized = normalizeUserShape(loggedInUser as Partial<User>);
+        try {
+            localStorage.setItem('fintech_user_session', JSON.stringify(normalized));
+        } catch (err) {
+            console.error('Erro ao salvar sessão no login:', err);
+        }
         setUser(normalized as User);
         navigate('/dashboard');
     };
 
     const handleLogout = () => {
         localStorage.removeItem('authToken');
+        localStorage.removeItem('adminToken');
+        localStorage.removeItem('fintech_user_session');
         setUser(null);
         navigate('/');
     };
-
-
 
     const handleUpdateUser = useCallback((updatedUserData: Partial<Omit<User, 'password'>>) => {
         setUser(prevUser => {
             if (!prevUser) return null;
             const merged = { ...prevUser, ...updatedUserData } as Partial<User>;
-            return normalizeUserShape(merged);
+            const normalized = normalizeUserShape(merged);
+
+            try {
+                localStorage.setItem('fintech_user_session', JSON.stringify(normalized));
+                const rawStore = localStorage.getItem('fintech_app_data');
+                if (rawStore) {
+                    const store = JSON.parse(rawStore);
+                    if (Array.isArray(store.users)) {
+                        const idx = store.users.findIndex((u: any) => u.cpf === normalized.cpf);
+                        if (idx !== -1) {
+                            store.users[idx] = { ...store.users[idx], ...normalized };
+                            localStorage.setItem('fintech_app_data', JSON.stringify(store));
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Erro ao sincronizar com localStorage fintech_app_data:', err);
+            }
+
+            return normalized;
         });
     }, []);
 
@@ -157,7 +221,7 @@ function App() {
             <AppStateProvider>
                 <DialogProvider>
                     <div className="h-screen w-screen bg-volt-dark font-sans overflow-hidden flex items-center justify-center">
-                    <div className="w-full h-full md:max-w-md overflow-hidden relative shadow-2xl bg-volt-dark">
+                    <div className="w-full h-full overflow-hidden relative shadow-2xl bg-volt-dark">
                         <DemoBanner />
                         {showOnboarding ? (
                             <Onboarding onComplete={handleOnboardingComplete} />

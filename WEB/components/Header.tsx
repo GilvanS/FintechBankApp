@@ -354,8 +354,7 @@ export default function Header({
     setIsCentralHubOpen(false);
     switch (card.actionType) {
       case 'financial_health':
-        onNavigate('home');
-        setIsFinancialHealthOpen(true);
+        onNavigate('limits');
         break;
       case 'recurring_bills':
         onNavigate('home');

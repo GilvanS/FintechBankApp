@@ -1693,7 +1693,7 @@ export const adminCreateMassUser = async (payload: any): Promise<{ success: bool
                 number: `4000 1234 5678 ${cleanCpf.slice(-4)}`,
                 dueDate: '10',
                 invoiceDueDate: payload.daysOverdue > 0 ? new Date(Date.now() - payload.daysOverdue * 24 * 60 * 60 * 1000).toISOString() : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
-                currentInvoice: payload.daysOverdue > 0 ? 2365.05 : 0,
+                currentInvoice: payload.currentInvoice !== undefined ? payload.currentInvoice : (payload.daysOverdue > 0 ? 2365.05 : 0),
                 closedInvoice: payload.daysOverdue > 0 ? 3870.86 : 0,
                 availableLimit: payload.creditLimit || 5000,
                 totalLimit: payload.creditLimit || 5000,

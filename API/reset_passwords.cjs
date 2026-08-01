@@ -16,22 +16,20 @@ const p = new Pool({
 });
 
 async function main() {
-  const newPassword = '12345678';
+  const newPassword = 'admin999';
   const hash = await bcrypt.hash(newPassword, 10);
   
-  console.log('\n🔐 Resetando senhas de todas as massas para: 12345678\n');
+  console.log('\n🔐 Resetando senhas de TODOS os usuários do sistema para: admin999\n');
   
   const { rows } = await p.query(`
     UPDATE fintech.users 
     SET password_hash = $1, updated_at = NOW()
-    WHERE role != 'admin'
-    RETURNING cpf, full_name
+    RETURNING cpf, full_name, role
   `, [hash]);
   
-  rows.forEach(u => console.log(`✅ ${u.full_name} (${u.cpf})`));
+  rows.forEach(u => console.log(`✅ ${u.full_name} (${u.cpf}) - Senha: admin999`));
   
-  console.log(`\n🎉 ${rows.length} usuários atualizados!`);
-  console.log('   Nova senha: 12345678\n');
+  console.log(`\n🎉 ${rows.length} usuários atualizados com a senha 'admin999'!\n`);
   
   await p.end();
 }

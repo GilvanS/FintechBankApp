@@ -1,0 +1,11 @@
+{
+  "ranAt": "2026-07-26T19:09:41.535Z",
+  "anomalies": 2,
+  "dcActive": 2,
+  "nbUniqueCpf": 0,
+  "fixed": 0,
+  "errors": 0,
+  "threshold": 1,
+  "hasAlert": true,
+  "durationMs": 3587
+}

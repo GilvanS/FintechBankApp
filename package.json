@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "validate:rules": "cd API && node scripts/validate_skill_rules.js",
+    "validate:anchors": "cd API && node scripts/validate_anchors.js"
+  },
   "dependencies": {
     "@capacitor/preferences": "^7.0.2",
     "@ionic/react": "^8.7.9",

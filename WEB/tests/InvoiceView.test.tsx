@@ -40,9 +40,8 @@ describe('InvoiceView Date Logic', () => {
     }
   };
 
-  const mockTransactions = [
-    { id: '1', date: '2026-07-12T00:00:00.000Z', amount: 10, description: 'Test', category: 'shopping' }
-  ];
+  // InvoiceView lê os lançamentos de user.creditCard.transactions — não recebe mais
+  // openTransactions/closedTransactions por prop.
 
   beforeEach(() => {
     // Mock the current date to July 13th, 2026
@@ -56,7 +55,7 @@ describe('InvoiceView Date Logic', () => {
   });
 
   it('deve calcular corretamente a data da fatura fechada baseada na data atual', () => {
-    render(<InvoiceView user={mockUser as any} openTransactions={mockTransactions} closedTransactions={mockTransactions} onPayInvoice={vi.fn()} />);
+    render(<InvoiceView user={mockUser as any} onPayInvoice={vi.fn()} onParcel={vi.fn()} />);
     // Initial state is "Fechada"
     
     // As today is July 13th, the open invoice is August (closing on Aug 9th, due on Aug 20th).
@@ -68,7 +67,7 @@ describe('InvoiceView Date Logic', () => {
   });
 
   it('deve calcular corretamente a data da fatura aberta baseada na data atual', () => {
-    render(<InvoiceView user={mockUser as any} openTransactions={mockTransactions} closedTransactions={mockTransactions} onPayInvoice={vi.fn()} />);
+    render(<InvoiceView user={mockUser as any} onPayInvoice={vi.fn()} onParcel={vi.fn()} />);
     
     // Clica no botão "Aberta"
     const abertaBtn = screen.getByText('Aberta');

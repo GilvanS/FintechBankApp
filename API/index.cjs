@@ -1,3 +1,6 @@
+// PRIMEIRA LINHA — antes de qualquer require. Node lê process.env.TZ na primeira operação de data.
+process.env.TZ = process.env.TZ || 'America/Sao_Paulo';
+
 const dotenv = require('dotenv');
 const path = require('path');
 
@@ -15,6 +18,8 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { products } = require('./data/mockSeed');
 const DatabaseFactory = require('./services/database/DatabaseFactory');
+
+const { nowDb } = require('./utils/timezone');
 
 // --- Repositórios / Contexto ---
 const repoContext = require('./repositories/context');
@@ -61,10 +66,13 @@ const databricksService = dbService;
 // --- Motor de Faturas ---
 const cron = require('node-cron');
 const { runEngine } = require('./services/invoiceEngine');
-// Agendar verificação diariamente à meia-noite
+const { assertTimezone } = require('./utils/timezone');
+
+// Agendar verificação diariamente à meia-noite (horário de Brasília)
 cron.schedule('0 0 * * *', async () => {
     console.log('[Cron] Executando Invoice Engine...');
     try {
+        await assertTimezone(databricksService);
         await runEngine();
     } catch (e) {
         console.error('[Cron] Erro no Invoice Engine:', e);
@@ -105,11 +113,12 @@ cron.schedule('0 0 * * *', async () => {
         console.error('[Cron] Erro ao sincronizar dias_atraso:', e);
     }
 });
-// Cron semanal: corrige pagamentos órfãos automaticamente (domingo 3h da manhã)
+// Cron semanal: corrige pagamentos órfãos automaticamente (domingo 3h da manhã, horário de Brasília)
 // Reutiliza a mesma função runOrphanPaymentFix() da rota POST /admin/fix-orphan-payments
 cron.schedule('0 3 * * 0', async () => {
     console.log('[Cron-Semanal] Executando correção automática de pagamentos órfãos...');
     try {
+        await assertTimezone(databricksService);
         const result = await runOrphanPaymentFix();
         const s = result.summary;
         console.log(`[Cron-Semanal] Correção concluída: ${s.fixed} corrigido(s), ${s.errors} erro(s), ${s.usersScanned} usuário(s) escaneados`);
@@ -1790,11 +1799,12 @@ apiRouter.get('/admin/regularized-timeline', bearerAuth(), authenticateAdmin, as
     // Agrupar por dia (UTC). O driver Postgres pode devolver Date OU string ISO,
     // por isso normalizamos com `new Date(...)` antes de extrair a chave.
     const dayMap = new Map();
+    const { dayKey } = require('./utils/timezone');
     for (const r of (rows || [])) {
         if (!r.data_pagamento) continue;
         const d = r.data_pagamento instanceof Date ? r.data_pagamento : new Date(r.data_pagamento);
         if (isNaN(d.getTime())) continue;
-        const day = d.toISOString().slice(0, 10); // YYYY-MM-DD em UTC
+        const day = dayKey(d); // YYYY-MM-DD no calendário de Brasília
         if (!dayMap.has(day)) dayMap.set(day, { count: 0, totalAmount: 0 });
         const entry = dayMap.get(day);
         entry.count++;
@@ -1805,13 +1815,13 @@ apiRouter.get('/admin/regularized-timeline', bearerAuth(), authenticateAdmin, as
     const timeline = [];
     for (let i = 6; i >= 0; i--) {
         const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-        const dayKey = d.toISOString().slice(0, 10);
-        const data = dayMap.get(dayKey);
+        const dayKey = dayKey(d);
+        const entry = dayMap.get(dayKey);
         timeline.push({
             date: dayKey,
             label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-            count: data ? data.count : 0,
-            totalAmount: data ? Math.round(data.totalAmount * 100) / 100 : 0,
+            count: entry ? entry.count : 0,
+            totalAmount: entry ? Math.round(entry.totalAmount * 100) / 100 : 0,
         });
     }
 
@@ -3533,7 +3543,7 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
         `);
         await databricksService.executeQuery(`
             INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
-            VALUES ('${txId}', '${user.cpf}', 'SHOP_DEBIT', -${numAmount}, '${description}', '${now.toISOString()}')
+            VALUES ('${txId}', '${user.cpf}', 'SHOP_DEBIT', -${numAmount}, '${description}', '${nowDb()}')
         `);
     } else if (type === 'SUBSCRIPTION' && paymentMethod === 'ACCOUNT_DEBIT') {
         // Débito Automático em Conta — NÃO afeta fatura do cartão nem limite de crédito
@@ -3541,7 +3551,7 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
         await databricksService.executeQuery(`
             INSERT INTO ${databricksService.fq('recurring_bills')} 
             (id, cpf, name, amount, due_day, category, status, frequency, payment_method, created_at, updated_at)
-            VALUES ('${billId}', '${user.cpf}', '${description}', ${numAmount}, ${now.getDate()}, 'outros', 'active', '${frequency}', 'ACCOUNT_DEBIT', '${now.toISOString()}', '${now.toISOString()}')
+            VALUES ('${billId}', '${user.cpf}', '${description}', ${numAmount}, ${now.getDate()}, 'outros', 'active', '${frequency}', 'ACCOUNT_DEBIT', '${nowDb()}', '${nowDb()}')
         `);
         return res.json({ success: true, message: 'Assinatura em Débito Automático (Saldo em Conta) cadastrada com sucesso.' });
     } else if (type === 'CREDIT' || type === 'SUBSCRIPTION') {
@@ -3574,7 +3584,7 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
         
         await databricksService.executeQuery(`
             INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
-            VALUES ('${txId}', '${user.cpf}', '${txType}', -${totalWithInterest}, '${description}', '${now.toISOString()}')
+            VALUES ('${txId}', '${user.cpf}', '${txType}', -${totalWithInterest}, '${description}', '${nowDb()}')
         `);
 
         if (type === 'SUBSCRIPTION') {
@@ -3582,7 +3592,7 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             await databricksService.executeQuery(`
                 INSERT INTO ${databricksService.fq('recurring_bills')} 
                 (id, cpf, name, amount, due_day, category, status, frequency, payment_method, created_at, updated_at)
-                VALUES ('${billId}', '${user.cpf}', '${description}', ${numAmount}, ${now.getDate()}, 'outros', 'active', '${frequency}', '${paymentMethod}', '${now.toISOString()}', '${now.toISOString()}')
+                VALUES ('${billId}', '${user.cpf}', '${description}', ${numAmount}, ${now.getDate()}, 'outros', 'active', '${frequency}', '${paymentMethod}', '${nowDb()}', '${nowDb()}')
             `);
         }
 
@@ -3596,7 +3606,7 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             await databricksService.executeQuery(`
                 INSERT INTO ${databricksService.fq('installment_plans')}
                 (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
-                VALUES ('${planId}', '${user.cpf}', '${txId}', '${description}', ${numAmount}, ${totalWithInterest}, ${totalWithInterest}, ${installments}, ${installmentAmount}, ${interestRate}, ${totalWithInterest}, ${installments}, '${nextDue.toISOString()}', 'ACTIVE', '${now.toISOString()}', '${now.toISOString()}')
+                VALUES ('${planId}', '${user.cpf}', '${txId}', '${description}', ${numAmount}, ${totalWithInterest}, ${totalWithInterest}, ${installments}, ${installmentAmount}, ${interestRate}, ${totalWithInterest}, ${installments}, '${nextDue.toISOString()}', 'ACTIVE', '${nowDb()}', '${nowDb()}')
             `);
         }
     }
@@ -3686,7 +3696,7 @@ apiRouter.post('/admin/simulate-purchases', bearerAuth(), authenticateAdmin, asy
     const txId1 = databricksService.generateUUID();
     await databricksService.executeQuery(`
         INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
-        VALUES ('${txId1}', '${targetCpf}', 'SHOP_CREDIT', -50.00, 'Compra à vista simulada', '${now.toISOString()}')
+        VALUES ('${txId1}', '${targetCpf}', 'SHOP_CREDIT', -50.00, 'Compra à vista simulada', '${nowDb()}')
     `);
 
     // Compra Parcelada em 3x
@@ -3696,12 +3706,12 @@ apiRouter.post('/admin/simulate-purchases', bearerAuth(), authenticateAdmin, asy
     nextDue3.setMonth(nextDue3.getMonth() + 1);
     await databricksService.executeQuery(`
         INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
-        VALUES ('${txId3}', '${targetCpf}', 'INVOICE_INSTALLMENT', -100.00, 'Compra 3x simulada (1/3)', '${now.toISOString()}')
+        VALUES ('${txId3}', '${targetCpf}', 'INVOICE_INSTALLMENT', -100.00, 'Compra 3x simulada (1/3)', '${nowDb()}')
     `);
     await databricksService.executeQuery(`
         INSERT INTO ${databricksService.fq('installment_plans')}
         (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
-        VALUES ('${planId3}', '${targetCpf}', '${txId3}', 'Compra 3x simulada', 300.00, 300.00, 300.00, 3, 100.00, 0, 200.00, 2, '${nextDue3.toISOString()}', 'ACTIVE', '${now.toISOString()}', '${now.toISOString()}')
+        VALUES ('${planId3}', '${targetCpf}', '${txId3}', 'Compra 3x simulada', 300.00, 300.00, 300.00, 3, 100.00, 0, 200.00, 2, '${nextDue3.toISOString()}', 'ACTIVE', '${nowDb()}', '${nowDb()}')
     `);
 
     // Compra Parcelada em 6x
@@ -3709,12 +3719,12 @@ apiRouter.post('/admin/simulate-purchases', bearerAuth(), authenticateAdmin, asy
     const planId6 = databricksService.generateUUID();
     await databricksService.executeQuery(`
         INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
-        VALUES ('${txId6}', '${targetCpf}', 'INVOICE_INSTALLMENT', -200.00, 'Compra 6x simulada (1/6)', '${now.toISOString()}')
+        VALUES ('${txId6}', '${targetCpf}', 'INVOICE_INSTALLMENT', -200.00, 'Compra 6x simulada (1/6)', '${nowDb()}')
     `);
     await databricksService.executeQuery(`
         INSERT INTO ${databricksService.fq('installment_plans')}
         (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
-        VALUES ('${planId6}', '${targetCpf}', '${txId6}', 'Compra 6x simulada', 1200.00, 1200.00, 1200.00, 6, 200.00, 0, 1000.00, 5, '${nextDue3.toISOString()}', 'ACTIVE', '${now.toISOString()}', '${now.toISOString()}')
+        VALUES ('${planId6}', '${targetCpf}', '${txId6}', 'Compra 6x simulada', 1200.00, 1200.00, 1200.00, 6, 200.00, 0, 1000.00, 5, '${nextDue3.toISOString()}', 'ACTIVE', '${nowDb()}', '${nowDb()}')
     `);
 
     // Conta Recorrente
@@ -5849,6 +5859,16 @@ async function bootstrap() {
         }
     } catch (error) {
         console.error("❌ Erro ao inicializar:", error.message);
+        process.exit(1);
+    }
+
+    // Guarda de fuso: aborta se o fuso do processo ou do banco divergir de America/Sao_Paulo
+    const { assertTimezone } = require('./utils/timezone');
+    try {
+        await assertTimezone(databricksService);
+        console.log('✅ [Timezone Guard] Fuso de processo e banco validados: America/Sao_Paulo');
+    } catch (err) {
+        console.error('❌ [Timezone Guard] ' + err.message);
         process.exit(1);
     }
 }

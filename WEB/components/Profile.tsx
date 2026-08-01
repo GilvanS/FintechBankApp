@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, HelpCircle, Info, Settings, Palette, Check, Edit2, Sun, Moon, Fingerprint, Bell, AlertTriangle, ArrowLeft, Sliders, Zap, Clock } from 'lucide-react';
+import { Shield, HelpCircle, Info, Settings, Palette, Check, Edit2, Sun, Moon, Fingerprint, Bell, AlertTriangle, ArrowLeft, Sliders, Zap, Clock, CreditCard, Calendar, FileText } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { AppVersion } from '../utils/AppVersion';
 import { useDialog } from '../contexts/GlobalDialogContext';
@@ -244,6 +244,74 @@ export default function Profile({ onNavigate }: ProfileProps) {
             </div>
           )}
         </div>
+
+        {/* Gestão de Faturas & Ciclo de Faturamento (Temporário) */}
+        <section className="bg-white dark:bg-zinc-900 border-4 border-black dark:border-zinc-800 rounded-3xl p-5 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-black dark:text-white">
+              <FileText size={16} className="text-volt-green" />
+              <h4 className="text-xs font-black uppercase tracking-wider">Faturas & Ciclo de Faturamento</h4>
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-wider bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded-full text-black dark:text-white">
+              Temporário
+            </span>
+          </div>
+
+          <p className="text-xs text-black/60 dark:text-white/60 font-medium">
+            Atalhos para consulta de faturas e ciclo de vencimento transferidos da tela de cartões.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => onNavigate('invoices')}
+              className="flex flex-col items-center justify-center gap-2 p-3 bg-white dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 rounded-2xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none active:scale-95 transition-all cursor-pointer"
+            >
+              <div className="w-9 h-9 rounded-full bg-volt-green/20 text-black dark:text-volt-green flex items-center justify-center border border-black dark:border-volt-green/30">
+                <CreditCard size={18} />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-black dark:text-white">
+                Ver Fatura
+              </span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('invoices')}
+              className="flex flex-col items-center justify-center gap-2 p-3 bg-white dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 rounded-2xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none active:scale-95 transition-all cursor-pointer"
+            >
+              <div className="w-9 h-9 rounded-full bg-volt-green/20 text-black dark:text-volt-green flex items-center justify-center border border-black dark:border-volt-green/30">
+                <Calendar size={18} />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-black dark:text-white">
+                Ciclo de Fatura
+              </span>
+            </button>
+          </div>
+
+          {/* Card da Fatura Atual com Pagar e Resumo */}
+          <div className="bg-volt-yellow dark:bg-zinc-950 border-3 border-black dark:border-zinc-700 rounded-2xl p-4 flex justify-between items-center gap-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] uppercase tracking-widest text-black/70 dark:text-zinc-400 font-black">Fatura Atual</p>
+              <p className="text-base font-black text-black dark:text-white truncate">
+                R$ {(user?.creditCard?.closedInvoice || user?.creditCard?.currentInvoice || 3870.86).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => onNavigate('invoices')}
+                className="flex items-center gap-1 border-2 border-black dark:border-white/20 bg-white dark:bg-zinc-800 text-black dark:text-white px-3 py-2 rounded-xl font-black text-xs hover:bg-gray-50 active:scale-95 transition-all cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              >
+                <FileText size={13} />
+                Resumo
+              </button>
+              <button
+                onClick={() => onNavigate('invoices')}
+                className="bg-volt-green text-black border-2 border-black px-4 py-2 rounded-xl font-black text-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              >
+                PAGAR
+              </button>
+            </div>
+          </div>
+        </section>
 
         {/* Real-Time Name Customizer Input */}
         <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">

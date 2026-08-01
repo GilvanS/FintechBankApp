@@ -1,0 +1,35 @@
+name: Validate Business Rules
+
+on:
+  pull_request:
+    paths:
+      - 'SKILL.md'
+      - 'API/index.cjs'
+      - 'docs/REGRAS-NEGOCIO-FATURA.md'
+      - 'API/utils/invoiceMath.js'
+      - 'API/scripts/validate_skill_rules.js'
+      - 'API/scripts/validate_anchors.js'
+
+jobs:
+  validate-rules:
+    name: Validate rules & anchors
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: API/package-lock.json
+
+      - name: Install API dependencies
+        run: cd API && npm ci
+
+      - name: Validate SKILL.md rules coverage
+        run: cd API && node scripts/validate_skill_rules.js
+
+      - name: Validate intra-doc anchors (REGRAS-NEGOCIO-FATURA.md)
+        run: cd API && node scripts/validate_anchors.js

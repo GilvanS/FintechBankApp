@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction, User } from '../types';
-import ExtratoCompra from './ExtratoCompra';
+import TransactionReceipt from './TransactionReceipt';
 import InvoiceSummarySheet from './InvoiceSummarySheet';
 import { getInvoiceHistory, InvoiceHistoryItem } from '../services/api';
 
@@ -48,7 +48,7 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
         return () => { active = false; };
     }, [activeTab]);
 
-    if (selectedTx) return <ExtratoCompra transaction={selectedTx} onBack={() => setSelectedTx(null)} />;
+    if (selectedTx) return <TransactionReceipt transaction={selectedTx} onBack={() => setSelectedTx(null)} />;
 
     const { creditCard } = user;
     const pendingCharges = user.pendingCharges ?? 0;
@@ -134,12 +134,11 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 sticky top-0 bg-background-dark py-1">{date}</p>
                         <div className="space-y-1">
                             {dayTxs.map(tx => {
-                                const isExp = expanded === tx.id;
                                 const isRefund = tx.amount < 0;
                                 const installLabel = tx.installments ?? (tx.currentInstallment && tx.totalInstallments ? `(${tx.currentInstallment}/${tx.totalInstallments})` : null);
                                 return (
                                     <div key={tx.id}>
-                                        <button onClick={() => setExpanded(isExp ? null : tx.id)}
+                                        <button onClick={() => setSelectedTx(tx)}
                                             className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-surface-dark/60 transition-colors text-left">
                                             <div className="shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                                                 <span className="material-symbols-outlined text-primary text-base">{categoryIcon(tx.type)}</span>
@@ -157,24 +156,6 @@ const ClosedInvoiceView: React.FC<ClosedInvoiceProps> = ({ user, onBack, onPayIn
                                                 {isRefund ? '+' : ''}{fmt(Math.abs(tx.amount))}
                                             </p>
                                         </button>
-                                        {isExp && (
-                                            <div className="mx-3 mb-2 rounded-xl bg-surface-dark/50 px-4 py-3 space-y-2">
-                                                {tx.category && (
-                                                    <div className="flex justify-between text-xs border-b border-white/5 pb-2">
-                                                        <span className="text-gray-400">Categoria</span>
-                                                        <span className="text-white capitalize">{tx.category}</span>
-                                                    </div>
-                                                )}
-                                                <div className="flex justify-between text-xs border-b border-white/5 pb-2">
-                                                    <span className="text-gray-400">Data</span>
-                                                    <span className="text-white">{new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
-                                                </div>
-                                                <div className="flex justify-between text-xs">
-                                                    <span className="text-gray-400">Valor</span>
-                                                    <span className={isRefund ? 'text-primary' : 'text-white'}>{fmt(Math.abs(tx.amount))}</span>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
                                 );
                             })}

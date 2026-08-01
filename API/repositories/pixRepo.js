@@ -1,4 +1,5 @@
 const { getDb, esc } = require('./context');
+const { nowDb } = require('../utils/timezone');
 
 async function listKeys(cpf) {
     const db = getDb();
@@ -13,7 +14,7 @@ async function listKeys(cpf) {
 async function addKey({ cpf, type, key }) {
     const db = getDb();
     const id = db.generateUUID();
-    const now = new Date().toISOString();
+    const now = nowDb();
     await db.executeQuery(`
         INSERT INTO ${db.fq('pix_keys')}
         (id, cpf, type, key, created_at)

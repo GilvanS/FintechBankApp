@@ -1,0 +1,1086 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao paga (18 dias em atraso) > SNAPSHOT: Estado 1 — Nao paga (18 dias em atraso) > estado1-nao-paga-18d-atraso 1`] = `
+<div>
+  <div
+    class="mt-4 p-4 rounded-xl border space-y-3 bg-white border-black/20 shadow-sm"
+  >
+    <div
+      class="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 dark:border-white/10 pb-2"
+    >
+      <h4
+        class="text-xs font-black uppercase tracking-wider text-amber-500 flex items-center gap-2"
+      >
+        <span>
+          Diagnóstico Backoffice (Últimas 3 Faturas Visíveis)
+        </span>
+        <span
+          class="text-[10px] text-zinc-400 font-mono hidden sm:inline"
+        >
+          (Fatura Fechada Vencida 📂)
+        </span>
+      </h4>
+      <button
+        class="px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
+        title="Copiar dados da fatura em formato de colunas TSV para colar no Microsoft Excel"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-file-spreadsheet w-3.5 h-3.5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"
+          />
+          <path
+            d="M14 2v5a1 1 0 0 0 1 1h5"
+          />
+          <path
+            d="M8 13h2"
+          />
+          <path
+            d="M14 13h2"
+          />
+          <path
+            d="M8 17h2"
+          />
+          <path
+            d="M14 17h2"
+          />
+        </svg>
+        <span>
+          📊 Copiar p/ Excel
+        </span>
+      </button>
+    </div>
+    <div
+      class="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs"
+    >
+      <div
+        class="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 flex flex-col justify-between"
+      >
+        <p
+          class="opacity-60 text-[10px] uppercase font-bold"
+        >
+          Saldo Conta
+        </p>
+        <p
+          class="font-black text-emerald-600 dark:text-emerald-400 text-sm"
+        >
+          R$ 
+          5000.00
+        </p>
+      </div>
+      <button
+        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-black/5 dark:bg-white/5 border-transparent hover:border-emerald-300"
+        type="button"
+      >
+        <div
+          class="flex justify-between items-center"
+        >
+          <p
+            class="opacity-60 text-[10px] uppercase font-bold"
+          >
+            Fat 1 · Mai/26
+          </p>
+          <span
+            class="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full"
+          >
+            PAGA ✅
+          </span>
+        </div>
+        <p
+          class="font-black text-emerald-600 dark:text-emerald-400 text-sm mt-1"
+        >
+          R$ 
+          1120.00
+        </p>
+      </button>
+      <button
+        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-rose-500/15 border-rose-500 shadow-sm ring-2 ring-rose-500/40"
+        type="button"
+      >
+        <div
+          class="flex justify-between items-center"
+        >
+          <p
+            class="opacity-60 text-[10px] uppercase font-bold"
+          >
+            Fat 2 · Fechada (Jun)
+          </p>
+          <span
+            class="text-[9px] bg-rose-600 text-white font-black px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-1 shadow-sm"
+          >
+            ⚠️ 
+            18
+            d ATRASO
+          </span>
+        </div>
+        <p
+          class="font-black text-rose-600 dark:text-rose-400 text-sm mt-1"
+        >
+          R$ 
+          3870.86
+        </p>
+      </button>
+      <button
+        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-black/5 dark:bg-white/5 border-transparent hover:border-blue-300"
+        type="button"
+      >
+        <div
+          class="flex justify-between items-center"
+        >
+          <p
+            class="opacity-60 text-[10px] uppercase font-bold"
+          >
+            Fat 3 · Aberta (Jul)
+          </p>
+          <span
+            class="text-[9px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full"
+          >
+            ABERTA
+          </span>
+        </div>
+        <p
+          class="font-black text-blue-600 dark:text-blue-400 text-sm mt-1"
+        >
+          R$ 
+          5490.98
+        </p>
+      </button>
+    </div>
+    <div
+      class="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]"
+    >
+      <div
+        class="flex justify-between items-center p-2 rounded-lg font-bold mb-2 bg-rose-500/10 text-rose-600 dark:text-rose-300"
+      >
+        <span
+          class="flex items-center gap-2"
+        >
+          📄 Fatura Fechada Jun/26 (Valor Original no Fechamento):
+        </span>
+        <span
+          class="font-mono"
+        >
+          R$ 
+          3870.86
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center text-blue-600 dark:text-blue-400"
+      >
+        <span>
+          🔹 Pagamento Mínimo da Fatura Fechada (sem encargos - 10%):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          387.09
+        </span>
+      </div>
+      <div
+        class="pt-2 font-bold text-[10px] uppercase tracking-wider border-t border-black/5 dark:border-white/5 flex items-center justify-between text-amber-500"
+      >
+        <span>
+          ⚠️
+           Encargos do Atraso (
+          18 dias acumulados no período
+          ):
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center "
+      >
+        <span
+          class="flex items-center gap-1 opacity-70"
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 3000
+          </span>
+          Taxa de Multa por Atraso (2.0%):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          77.42
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center "
+      >
+        <span
+          class="flex items-center gap-1 opacity-70"
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 2001
+          </span>
+          Juros de Mora (0.0333%/dia):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          23.20
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center "
+      >
+        <span
+          class="flex items-center gap-1 opacity-70"
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 2000
+          </span>
+          Juros Remuneratórios / Financiamento (0.513%/dia):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          357.44
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center "
+      >
+        <span
+          class="flex items-center gap-1 opacity-70"
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 4001
+          </span>
+          IOF Adicional (Fixo - 0.38%):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          14.71
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center "
+      >
+        <span
+          class="flex items-center gap-1 opacity-70"
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 4000
+          </span>
+          IOF Diário (0.0082%/dia):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          5.71
+        </span>
+      </div>
+      <div
+        class="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-amber-600 dark:text-amber-400"
+      >
+        <span>
+          Valor Total dos Encargos do Atraso (Memória Informativa):
+        </span>
+        <span
+          class="font-mono"
+        >
+          R$ 
+          478.48
+        </span>
+      </div>
+      <div
+        class="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1.5"
+      >
+        <span>
+          ℹ️
+        </span>
+        <span>
+          Esta fatura fechada é informativa. Os encargos do atraso (R$ 
+          478.48
+          ) e o saldo original são herdados e somados na FATURA ABERTA para a consolidação final no corte.
+        </span>
+      </div>
+    </div>
+    <div
+      class="pt-2 text-center text-[10px] text-zinc-400 border-t border-black/5 dark:border-white/5"
+    >
+      <span>
+        Deseja consultar faturas mais antigas? Acesse o histórico completo na aba 
+        <strong
+          class="text-amber-500 font-bold"
+        >
+          Faturamento 📑
+        </strong>
+      </span>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga em dia (sem encargos) > SNAPSHOT: Estado 2 — Paga em dia (sem encargos) > estado2-paga-em-dia 1`] = `
+<div>
+  <div
+    class="mt-4 p-4 rounded-xl border space-y-3 bg-white border-black/20 shadow-sm"
+  >
+    <div
+      class="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 dark:border-white/10 pb-2"
+    >
+      <h4
+        class="text-xs font-black uppercase tracking-wider text-amber-500 flex items-center gap-2"
+      >
+        <span>
+          Diagnóstico Backoffice (Últimas 3 Faturas Visíveis)
+        </span>
+        <span
+          class="text-[10px] text-zinc-400 font-mono hidden sm:inline"
+        >
+          (Fatura Fechada Vencida 📂)
+        </span>
+      </h4>
+      <button
+        class="px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
+        title="Copiar dados da fatura em formato de colunas TSV para colar no Microsoft Excel"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-file-spreadsheet w-3.5 h-3.5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"
+          />
+          <path
+            d="M14 2v5a1 1 0 0 0 1 1h5"
+          />
+          <path
+            d="M8 13h2"
+          />
+          <path
+            d="M14 13h2"
+          />
+          <path
+            d="M8 17h2"
+          />
+          <path
+            d="M14 17h2"
+          />
+        </svg>
+        <span>
+          📊 Copiar p/ Excel
+        </span>
+      </button>
+    </div>
+    <div
+      class="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs"
+    >
+      <div
+        class="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 flex flex-col justify-between"
+      >
+        <p
+          class="opacity-60 text-[10px] uppercase font-bold"
+        >
+          Saldo Conta
+        </p>
+        <p
+          class="font-black text-emerald-600 dark:text-emerald-400 text-sm"
+        >
+          R$ 
+          5000.00
+        </p>
+      </div>
+      <button
+        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-black/5 dark:bg-white/5 border-transparent hover:border-emerald-300"
+        type="button"
+      >
+        <div
+          class="flex justify-between items-center"
+        >
+          <p
+            class="opacity-60 text-[10px] uppercase font-bold"
+          >
+            Fat 1 · Mai/26
+          </p>
+          <span
+            class="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full"
+          >
+            PAGA ✅
+          </span>
+        </div>
+        <p
+          class="font-black text-emerald-600 dark:text-emerald-400 text-sm mt-1"
+        >
+          R$ 
+          1120.00
+        </p>
+      </button>
+      <button
+        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-rose-500/15 border-rose-500 shadow-sm ring-2 ring-rose-500/40"
+        type="button"
+      >
+        <div
+          class="flex justify-between items-center"
+        >
+          <p
+            class="opacity-60 text-[10px] uppercase font-bold"
+          >
+            Fat 2 · Fechada (Jun)
+          </p>
+          <span
+            class="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full"
+          >
+            FECHADA
+          </span>
+        </div>
+        <p
+          class="font-black text-rose-600 dark:text-rose-400 text-sm mt-1"
+        >
+          R$ 
+          3870.86
+        </p>
+      </button>
+      <button
+        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-black/5 dark:bg-white/5 border-transparent hover:border-blue-300"
+        type="button"
+      >
+        <div
+          class="flex justify-between items-center"
+        >
+          <p
+            class="opacity-60 text-[10px] uppercase font-bold"
+          >
+            Fat 3 · Aberta (Jul)
+          </p>
+          <span
+            class="text-[9px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full"
+          >
+            ABERTA
+          </span>
+        </div>
+        <p
+          class="font-black text-blue-600 dark:text-blue-400 text-sm mt-1"
+        >
+          R$ 
+          5490.98
+        </p>
+      </button>
+    </div>
+    <div
+      class="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]"
+    >
+      <div
+        class="flex justify-between items-center p-2 rounded-lg font-bold mb-2 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30"
+      >
+        <span
+          class="flex items-center gap-2"
+        >
+          📄 Fatura Fechada Jun/26 (Valor Original no Fechamento):
+          <span
+            class="px-1.5 py-0.5 rounded-full bg-emerald-600 text-white font-black text-[9px] uppercase shadow-sm"
+          >
+            PAGA ✅
+          </span>
+        </span>
+        <span
+          class="font-mono"
+        >
+          R$ 
+          3870.86
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center text-blue-600 dark:text-blue-400"
+      >
+        <span>
+          🔹 Pagamento Mínimo da Fatura Fechada (sem encargos - 10%):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          387.09
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 font-bold text-emerald-600 dark:text-emerald-400"
+      >
+        <span
+          class="flex items-center gap-1"
+        >
+          💰 Pagamento(s) Realizado(s) — abate diretamente do saldo devedor:
+        </span>
+        <span
+          class="font-mono"
+        >
+          R$ 
+          3870.86
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-semibold"
+      >
+        <span>
+          🔹 Saldo Devedor Restante (após pagamento):
+        </span>
+        <span
+          class="font-mono font-black"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="pt-2 font-bold text-[10px] uppercase tracking-wider border-t border-black/5 dark:border-white/5 flex items-center justify-between text-zinc-400"
+      >
+        <span>
+          📄
+           Encargos do Atraso (
+          0 dias - Pago em dia
+          ):
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center opacity-40"
+      >
+        <span
+          class="flex items-center gap-1 "
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 3000
+          </span>
+          Taxa de Multa por Atraso (2.0%):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center opacity-40"
+      >
+        <span
+          class="flex items-center gap-1 "
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 2001
+          </span>
+          Juros de Mora (0.0333%/dia):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center opacity-40"
+      >
+        <span
+          class="flex items-center gap-1 "
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 2000
+          </span>
+          Juros Remuneratórios / Financiamento (0.513%/dia):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center opacity-40"
+      >
+        <span
+          class="flex items-center gap-1 "
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 4001
+          </span>
+          IOF Adicional (Fixo - 0.38%):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center opacity-40"
+      >
+        <span
+          class="flex items-center gap-1 "
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 4000
+          </span>
+          IOF Diário (0.0082%/dia):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-zinc-400 opacity-60"
+      >
+        <span>
+          Valor Total dos Encargos do Atraso (Memória Informativa):
+        </span>
+        <span
+          class="font-mono"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="mt-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5"
+      >
+        <span>
+          ✅
+        </span>
+        <span>
+          Fatura quitada em 
+          2026-07-15
+          . Encargos zerados = não houve herança de fatura anterior.
+        </span>
+      </div>
+    </div>
+    <div
+      class="pt-2 text-center text-[10px] text-zinc-400 border-t border-black/5 dark:border-white/5"
+    >
+      <span>
+        Deseja consultar faturas mais antigas? Acesse o histórico completo na aba 
+        <strong
+          class="text-amber-500 font-bold"
+        >
+          Faturamento 📑
+        </strong>
+      </span>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga apos atraso (encargos herdados para aberta) > SNAPSHOT: Estado 3 — Paga apos atraso (encargos herdados) > estado3-paga-apos-atraso 1`] = `
+<div>
+  <div
+    class="mt-4 p-4 rounded-xl border space-y-3 bg-white border-black/20 shadow-sm"
+  >
+    <div
+      class="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 dark:border-white/10 pb-2"
+    >
+      <h4
+        class="text-xs font-black uppercase tracking-wider text-amber-500 flex items-center gap-2"
+      >
+        <span>
+          Diagnóstico Backoffice (Últimas 3 Faturas Visíveis)
+        </span>
+        <span
+          class="text-[10px] text-zinc-400 font-mono hidden sm:inline"
+        >
+          (Fatura Fechada Vencida 📂)
+        </span>
+      </h4>
+      <button
+        class="px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
+        title="Copiar dados da fatura em formato de colunas TSV para colar no Microsoft Excel"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-file-spreadsheet w-3.5 h-3.5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"
+          />
+          <path
+            d="M14 2v5a1 1 0 0 0 1 1h5"
+          />
+          <path
+            d="M8 13h2"
+          />
+          <path
+            d="M14 13h2"
+          />
+          <path
+            d="M8 17h2"
+          />
+          <path
+            d="M14 17h2"
+          />
+        </svg>
+        <span>
+          📊 Copiar p/ Excel
+        </span>
+      </button>
+    </div>
+    <div
+      class="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs"
+    >
+      <div
+        class="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 flex flex-col justify-between"
+      >
+        <p
+          class="opacity-60 text-[10px] uppercase font-bold"
+        >
+          Saldo Conta
+        </p>
+        <p
+          class="font-black text-emerald-600 dark:text-emerald-400 text-sm"
+        >
+          R$ 
+          5000.00
+        </p>
+      </div>
+      <button
+        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-black/5 dark:bg-white/5 border-transparent hover:border-emerald-300"
+        type="button"
+      >
+        <div
+          class="flex justify-between items-center"
+        >
+          <p
+            class="opacity-60 text-[10px] uppercase font-bold"
+          >
+            Fat 1 · Mai/26
+          </p>
+          <span
+            class="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full"
+          >
+            PAGA ✅
+          </span>
+        </div>
+        <p
+          class="font-black text-emerald-600 dark:text-emerald-400 text-sm mt-1"
+        >
+          R$ 
+          1120.00
+        </p>
+      </button>
+      <button
+        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-rose-500/15 border-rose-500 shadow-sm ring-2 ring-rose-500/40"
+        type="button"
+      >
+        <div
+          class="flex justify-between items-center"
+        >
+          <p
+            class="opacity-60 text-[10px] uppercase font-bold"
+          >
+            Fat 2 · Fechada (Jun)
+          </p>
+          <span
+            class="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full"
+          >
+            FECHADA
+          </span>
+        </div>
+        <p
+          class="font-black text-rose-600 dark:text-rose-400 text-sm mt-1"
+        >
+          R$ 
+          3870.86
+        </p>
+      </button>
+      <button
+        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-black/5 dark:bg-white/5 border-transparent hover:border-blue-300"
+        type="button"
+      >
+        <div
+          class="flex justify-between items-center"
+        >
+          <p
+            class="opacity-60 text-[10px] uppercase font-bold"
+          >
+            Fat 3 · Aberta (Jul)
+          </p>
+          <span
+            class="text-[9px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full"
+          >
+            ABERTA
+          </span>
+        </div>
+        <p
+          class="font-black text-blue-600 dark:text-blue-400 text-sm mt-1"
+        >
+          R$ 
+          5490.98
+        </p>
+      </button>
+    </div>
+    <div
+      class="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]"
+    >
+      <div
+        class="flex justify-between items-center p-2 rounded-lg font-bold mb-2 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30"
+      >
+        <span
+          class="flex items-center gap-2"
+        >
+          📄 Fatura Fechada Jun/26 (Valor Original no Fechamento):
+          <span
+            class="px-1.5 py-0.5 rounded-full bg-emerald-600 text-white font-black text-[9px] uppercase shadow-sm"
+          >
+            PAGA ✅
+          </span>
+        </span>
+        <span
+          class="font-mono"
+        >
+          R$ 
+          3870.86
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center text-blue-600 dark:text-blue-400"
+      >
+        <span>
+          🔹 Pagamento Mínimo da Fatura Fechada (sem encargos - 10%):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          387.09
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 font-bold text-emerald-600 dark:text-emerald-400"
+      >
+        <span
+          class="flex items-center gap-1"
+        >
+          💰 Pagamento(s) Realizado(s) — abate diretamente do saldo devedor:
+        </span>
+        <span
+          class="font-mono"
+        >
+          R$ 
+          3870.86
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-semibold"
+      >
+        <span>
+          🔹 Saldo Devedor Restante (após pagamento):
+        </span>
+        <span
+          class="font-mono font-black"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="pt-2 font-bold text-[10px] uppercase tracking-wider border-t border-black/5 dark:border-white/5 flex items-center justify-between text-zinc-400"
+      >
+        <span>
+          📄
+           Encargos do Atraso (
+          0 dias - Pago em dia
+          ):
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center opacity-40"
+      >
+        <span
+          class="flex items-center gap-1 "
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 3000
+          </span>
+          Taxa de Multa por Atraso (2.0%):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center opacity-40"
+      >
+        <span
+          class="flex items-center gap-1 "
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 2001
+          </span>
+          Juros de Mora (0.0333%/dia):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center opacity-40"
+      >
+        <span
+          class="flex items-center gap-1 "
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 2000
+          </span>
+          Juros Remuneratórios / Financiamento (0.513%/dia):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center opacity-40"
+      >
+        <span
+          class="flex items-center gap-1 "
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 4001
+          </span>
+          IOF Adicional (Fixo - 0.38%):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="flex justify-between items-center opacity-40"
+      >
+        <span
+          class="flex items-center gap-1 "
+        >
+          <span
+            class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
+          >
+            Cód 4000
+          </span>
+          IOF Diário (0.0082%/dia):
+        </span>
+        <span
+          class="font-mono font-bold"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-zinc-400 opacity-60"
+      >
+        <span>
+          Valor Total dos Encargos do Atraso (Memória Informativa):
+        </span>
+        <span
+          class="font-mono"
+        >
+          R$ 
+          0.00
+        </span>
+      </div>
+      <div
+        class="mt-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5"
+      >
+        <span>
+          ✅
+        </span>
+        <span>
+          Fatura quitada em 
+          2026-07-27
+          . Os encargos do atraso foram HERDADOS e consolidados na fatura aberta (Fat 3) — consulte a aba "Fatura Aberta" para detalhes.
+        </span>
+      </div>
+    </div>
+    <div
+      class="pt-2 text-center text-[10px] text-zinc-400 border-t border-black/5 dark:border-white/5"
+    >
+      <span>
+        Deseja consultar faturas mais antigas? Acesse o histórico completo na aba 
+        <strong
+          class="text-amber-500 font-bold"
+        >
+          Faturamento 📑
+        </strong>
+      </span>
+    </div>
+  </div>
+</div>
+`;

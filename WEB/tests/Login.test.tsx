@@ -96,7 +96,9 @@ describe('Login — fluxo de autenticação', () => {
         fireEvent.click(screen.getByTestId('login-submit-button'));
 
         await waitFor(() => expect(mockAuthLogin).toHaveBeenCalledWith(mockUser));
-        expect(localStorage.getItem('authToken')).toBe('jwt-abc');
+        // Admin grava em adminToken (isolado do authToken do cliente na mesma origem).
+        expect(localStorage.getItem('adminToken')).toBe('jwt-abc');
+        expect(localStorage.getItem('authToken')).toBeNull();
     });
 
     it('exibe mensagem de erro quando credenciais são inválidas', async () => {

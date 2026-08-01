@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS fintech.transactions (
     to_user VARCHAR(255),
     to_key VARCHAR(255),
     date TIMESTAMP NOT NULL,
+    card_number VARCHAR(30),
+    authorization_code VARCHAR(50),
     PRIMARY KEY (id)
 );
 

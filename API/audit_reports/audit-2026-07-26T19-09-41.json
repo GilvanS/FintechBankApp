@@ -1,0 +1,266 @@
+{
+  "ranAt": "2026-07-26T19:09:41.535Z",
+  "flags": {
+    "quiet": true,
+    "allowFix": false,
+    "alertThreshold": 1
+  },
+  "summary": {
+    "anomalies": 2,
+    "fixed": 0,
+    "errors": 0,
+    "hasAlert": true,
+    "durationMs": 3587
+  },
+  "audits": {
+    "doubleCount": {
+      "scanned": 7,
+      "withPayments": 7,
+      "discrepancies": 2,
+      "resolved": 0,
+      "fixed": 0,
+      "errors": 0,
+      "details": [
+        {
+          "cpf": "11111111111",
+          "name": "Admin User",
+          "payments": [
+            {
+              "id": "8ec0f264-72d1-4b3e-8d88-8750851058b3",
+              "amount": 50,
+              "description": "Pagamento parcial de fatura",
+              "date": "2026-07-18T20:45:10.265Z"
+            },
+            {
+              "id": "fa2a70f8-456b-4d27-a183-112082692a94",
+              "amount": 50,
+              "description": "Pagamento parcial de fatura",
+              "date": "2026-07-18T20:45:37.828Z"
+            },
+            {
+              "id": "165604d7-f3a4-4388-842e-4f52529758f6",
+              "amount": 270.95,
+              "description": "Pagamento fatura",
+              "date": "2026-08-16T02:59:59.999Z"
+            }
+          ],
+          "invoices": [
+            {
+              "id": "cba279f5-dc40-4533-8428-11ef057cbd49",
+              "dueDate": "2026-07-15T15:00:00.000Z",
+              "status": "FECHADA",
+              "valorTotal": 3870.86,
+              "valorPago": 370.95,
+              "dataPagamento": null
+            }
+          ],
+          "status": "ok"
+        },
+        {
+          "cpf": "12312312399",
+          "name": "Teste Pagamento Massa",
+          "payments": [
+            {
+              "id": "3f4c760b-a5c5-41eb-8be8-5d101be711d5",
+              "amount": 4177.63,
+              "description": "Pagamento fatura",
+              "date": "2026-07-17T02:59:59.999Z"
+            },
+            {
+              "id": "8a7cf924-8a91-47c0-bf80-1d59cc709b3a",
+              "amount": 10,
+              "description": "Pagamento parcial de fatura",
+              "date": "2026-07-26T18:41:30.321Z"
+            },
+            {
+              "id": "7bc75c0d-3876-4355-95bb-4c330bf04a34",
+              "amount": 10,
+              "description": "Pagamento parcial de fatura",
+              "date": "2026-07-26T20:40:08.862Z"
+            }
+          ],
+          "invoices": [
+            {
+              "id": "eba7bd34-6dbf-4c7e-86a0-2a38f692fb69",
+              "dueDate": "2026-07-16T18:00:00.000Z",
+              "status": "FECHADA",
+              "valorTotal": 3870.86,
+              "valorPago": 3870.86,
+              "dataPagamento": "2026-07-26T20:43:50.063Z"
+            }
+          ],
+          "status": "discrepancy"
+        },
+        {
+          "cpf": "22222222222",
+          "name": "Beatriz Oliveira",
+          "payments": [
+            {
+              "id": "72680f13-87b2-4860-a789-b64832f70165",
+              "amount": 393.07,
+              "description": "Pagamento fatura",
+              "date": "2026-07-16T02:59:59.999Z"
+            }
+          ],
+          "invoices": [
+            {
+              "id": "invoice-overdue-22222222222",
+              "dueDate": "2026-07-09T04:05:35.308Z",
+              "status": "FECHADA",
+              "valorTotal": 1500.5,
+              "valorPago": 393.07,
+              "dataPagamento": null
+            }
+          ],
+          "status": "ok"
+        },
+        {
+          "cpf": "23736211503",
+          "name": "Henri Robin",
+          "payments": [
+            {
+              "id": "6bd7095c-a02c-4131-9cf4-ef29a9b71a2e",
+              "amount": 387.09,
+              "description": "Pagamento parcial de fatura",
+              "date": "2026-07-26T17:21:45.296Z"
+            }
+          ],
+          "invoices": [
+            {
+              "id": "00e49ddf-bcf2-49ef-832a-6b3d2d689a12",
+              "dueDate": "2026-07-10T18:00:00.000Z",
+              "status": "FECHADA",
+              "valorTotal": 3870.86,
+              "valorPago": 387.09,
+              "dataPagamento": null
+            }
+          ],
+          "status": "ok"
+        },
+        {
+          "cpf": "72330955820",
+          "name": "Fahad Al-Ghamdi",
+          "payments": [
+            {
+              "id": "e7057e2d-de63-4da8-9a41-3dff060ce234",
+              "amount": 10,
+              "description": "Pagamento parcial de fatura",
+              "date": "2026-07-26T18:32:37.146Z"
+            }
+          ],
+          "invoices": [
+            {
+              "id": "6fabd59c-2b12-42c1-8325-4903f437e161",
+              "dueDate": "2026-07-10T18:00:00.000Z",
+              "status": "FECHADA",
+              "valorTotal": 3870.86,
+              "valorPago": 10,
+              "dataPagamento": null
+            }
+          ],
+          "status": "ok"
+        },
+        {
+          "cpf": "77680674957",
+          "name": "Simon Huet",
+          "payments": [
+            {
+              "id": "29e26e66-81d4-4be8-8a04-38531851d738",
+              "amount": 100,
+              "description": "Pagamento parcial de fatura",
+              "date": "2026-07-26T08:47:55.015Z"
+            },
+            {
+              "id": "6829965e-5670-4278-8196-3663748138d6",
+              "amount": 418,
+              "description": "Pagamento parcial de fatura",
+              "date": "2026-07-26T08:48:08.931Z"
+            },
+            {
+              "id": "fa4818f2-0475-46ff-8ff8-6ebff59fb98b",
+              "amount": 335.29,
+              "description": "Pagamento parcial de fatura",
+              "date": "2026-07-26T08:51:38.634Z"
+            }
+          ],
+          "invoices": [
+            {
+              "id": "b9f9b470-5782-4ebb-9871-c93ad64c5fd8",
+              "dueDate": "2026-07-10T18:00:00.000Z",
+              "status": "FECHADA",
+              "valorTotal": 3870.86,
+              "valorPago": 853.29,
+              "dataPagamento": null
+            }
+          ],
+          "status": "ok"
+        },
+        {
+          "cpf": "99999999999",
+          "name": "Admin User",
+          "payments": [
+            {
+              "id": "decb3928-27a9-467f-8773-76cd21e79c30",
+              "amount": 4284.94,
+              "description": "Pagamento fatura",
+              "date": "2026-07-11T02:59:59.999Z"
+            },
+            {
+              "id": "4e808fa3-ed68-411f-85c3-baa9f76a1a66",
+              "amount": 399.99,
+              "description": "Pagamento fatura",
+              "date": "2026-08-27T02:59:59.999Z"
+            }
+          ],
+          "invoices": [
+            {
+              "id": "e5a94fb8-df27-4ca1-a169-2d7d480aa82a",
+              "dueDate": "2026-07-10T18:00:00.000Z",
+              "status": "FECHADA",
+              "valorTotal": 3870.86,
+              "valorPago": 3870.86,
+              "dataPagamento": "2026-07-26T16:49:06.414Z"
+            }
+          ],
+          "status": "discrepancy"
+        }
+      ]
+    },
+    "negativeBalance": {
+      "categories": {
+        "negativeBalance": {
+          "label": "Saldo (balance) negativo",
+          "count": 0,
+          "users": []
+        },
+        "negativeCreditLimit": {
+          "label": "Limite disponível negativo",
+          "count": 0,
+          "users": []
+        },
+        "overpayment": {
+          "label": "Valor pago > valor total da invoice",
+          "count": 0,
+          "users": []
+        },
+        "insufficientBalance": {
+          "label": "Saldo insuficiente para quitar fatura pendente",
+          "count": 0,
+          "users": []
+        },
+        "zeroBalanceWithDebt": {
+          "label": "Saldo zerado mas com fatura não paga",
+          "count": 0,
+          "users": []
+        }
+      },
+      "fixed": 0,
+      "errors": 0
+    }
+  },
+  "auditCompleto": {
+    "exitCode": 0,
+    "signal": null,
+    "stderr": null
+  }
+}

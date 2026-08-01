@@ -247,6 +247,38 @@ npm run test
 
 ---
 
+## 🔄 Motor de Assinaturas, Recorrências & Política de Retentativas
+
+O projeto conta com um **Motor de Recorrência (`recurringEngine.js`)** dedicado no backend, integrado a um agendador diário (**Cron**) e a endpoints administrativos no painel de controle (POS Sandbox).
+
+### 📐 Regras de Negócio Implementadas
+
+1. **Diferenciação do Consumo de Limite (Crédito vs. Assinatura):**
+   - **Assinaturas (`SUBSCRIPTION`):** Comprometem **apenas o valor da parcela/mensalidade do ciclo vigente** no limite disponível do cartão, sem travar o limite total do contrato.
+   - **Parcelamento Tradicional (`CREDIT`):** Compromete o **valor total com juros** no limite do cartão logo no 1º mês.
+2. **Débito Automático em Conta Corrente (`ACCOUNT_DEBIT`):**
+   - Suporte a cobranças diretas do saldo em conta corrente (`balance`). Entra em status `PENDING` e transita para `PAID` ou `PAST_DUE` conforme o saldo disponível.
+3. **Política de Retentativas (Retry Policy):**
+   - **Falha no Pagamento:** Em caso de recusa no cartão ou saldo insuficiente em conta, o status altera para `PAST_DUE` (Em Atraso - Tentativa 1 de 3).
+   - **Ciclo de Re-cobrança:** O motor efetua até **3 tentativas diárias**.
+   - **Suspensão:** Ao exaurir as 3 tentativas, o status altera para `SUSPENDED` e bloqueia renovações.
+4. **Sincronia Bidirecional (Admin <-> App):**
+   - Assinaturas simuladas pelo Admin no POS ou criadas na tela Home do App persistem no PostgreSQL (`fintech.recurring_bills`) e refletem em tempo real no app e nos modais financeiros.
+
+---
+
+## 🗺️ Roadmap & Foco do Projeto (Homologação & Treinamento QA)
+
+Este projeto é focado em **Ambiente de Homologação (Sandbox / PV - Ponto de Venda)** para **simulação de compras, assinaturas, testes automatizados e treinamento de regras de negócio**:
+
+- [x] **Motor de Recorrência & Retentativas (`recurringEngine.js`):** Simulação de ciclos de cobrança diários e política de 3 retentativas.
+- [x] **Simulador POS / PV (Admin):** Processamento manual de compras a Crédito, Débito e Assinaturas via maquina de cartão fictícia.
+- [x] **Diferenciação Estrita de Limite:** Validação de limite comprometido em parcelamento vs. ciclo mensal de assinatura.
+- [x] **Sincronia em Tempo Real:** Comunicação bidirecional entre o Painel Admin (PV) e o App/Web (Home & Modais).
+- [x] **Suíte de Testes Automatizados:** Bateria de testes de API e integração cobrindo aprovação, falta de saldo/limite e retentativas.
+
+---
+
 ## 👥 Usuários Padrão para Testes
 
 ### Admin
@@ -267,10 +299,39 @@ npm run test
 
 Para documentação detalhada, consulte:
 
+- **`SKILL.md`**: Regras de negócio do sistema de faturas (versão compacta para agentes de IA)
+- **`docs/REGRAS-NEGOCIO-FATURA.md`**: Documento completo de regras de negócio (fatura e pagamento)
 - **`DOCUMENTACAO-COMPLETA.md`**: Documentação consolidada completa do projeto
 - **API**: `API/README-backend.md`
 - **WEB**: `WEB/README.md`
 - **MOBILE**: `MOBILE/README.md`
+
+### 📊 Cobertura de Cross-References
+
+| Documento | Seções com cross-reference | Validação |
+|:----------|:--------------------------:|:---------:|
+| `SKILL.md` | 16/17 (94%) | ✅ `npm run validate:rules` |
+| `docs/REGRAS-NEGOCIO-FATURA.md` | 9/9 âncoras OK | ✅ `node scripts/validate_anchors.js` |
+
+### 🏷️ Badge Dinâmico de Cobertura
+
+**Shields.io (quando API estiver pública):**
+
+```
+https://img.shields.io/endpoint?url=https://SEU-DOMINIO/api/admin/badge/rules-coverage
+```
+
+**SVG local (gerado com `cd API && npm run badge:svg`):**
+
+![Regras](rules-coverage.svg)
+
+**Comandos:**
+
+| Comando | Descrição |
+|:--------|:----------|
+| `cd API && npm run badge:svg` | Gera `rules-coverage.svg` na raiz |
+| `cd API && npm run badge:json` | Exibe JSON com as estatísticas |
+| `curl http://localhost:3001/api/admin/badge/rules-coverage` | JSON endpoint para shields.io |
 
 ---
 

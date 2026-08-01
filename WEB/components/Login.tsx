@@ -86,9 +86,11 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
         setIsLoading(false);
 
         if (result.success && result.user) {
-            // Salvar token JWT para uso nas chamadas autenticadas
+            // Salvar token JWT na chave por perfil: admin e cliente coexistem no
+            // mesmo localStorage (mesma origem), entao logar um nao derruba o outro.
             if ((result as any).token) {
-                localStorage.setItem('authToken', (result as any).token);
+                const isAdmin = (result.user as any)?.role === 'admin';
+                localStorage.setItem(isAdmin ? 'adminToken' : 'authToken', (result as any).token);
             }
             auth.login(result.user);
             showSuccess('Login efetuado com sucesso');

@@ -65,6 +65,10 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
                     setPin(newPin);
                     if (currentIndex < 3) {
                         setFocusedPinIndex(currentIndex + 1);
+                    } else if (currentIndex === 3) {
+                        setTimeout(() => {
+                            onConfirm(newPin.join(''));
+                        }, 100);
                     }
                 }
             }
@@ -83,6 +87,10 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
             setPin(newPin);
             if (currentIndex < 3) {
                 setFocusedPinIndex(currentIndex + 1);
+            } else if (currentIndex === 3) {
+                setTimeout(() => {
+                    onConfirm(newPin.join(''));
+                }, 100);
             }
         }
     };

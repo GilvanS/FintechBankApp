@@ -1,5 +1,6 @@
 const { getDb, esc } = require('./context');
 const { computeInstallmentPlan } = require('../utils/billing');
+const { nowDb } = require('../utils/timezone');
 
 async function createInstallments({ cpf, amount, installments }) {
     const db = getDb();
@@ -24,7 +25,7 @@ async function createInstallments({ cpf, amount, installments }) {
 
 async function payDueInstallments({ cpf, cutoffIso, amount }) {
     const db = getDb();
-    const nowIso = cutoffIso || new Date().toISOString();
+    const nowIso = cutoffIso || nowDb();
 
     // `amount` = valor devido da fatura FECHADA calculado pelo chamador (inclui compras
     // à vista, que não têm linhas INVOICE_INSTALLMENT). Sem ele, legado: soma das parcelas.

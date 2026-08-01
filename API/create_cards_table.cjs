@@ -26,7 +26,7 @@ async function run() {
         card_number_raw   VARCHAR(16) NOT NULL UNIQUE,   -- sem formatação, para validação
         card_type         VARCHAR(20) NOT NULL CHECK (card_type IN ('physical', 'virtual')),
         card_brand        VARCHAR(20) NOT NULL DEFAULT 'mastercard',
-        bin               VARCHAR(7)  NOT NULL DEFAULT '5981012',
+        bin               VARCHAR(8)  NOT NULL DEFAULT '5981012',
         expiry            VARCHAR(7)  NOT NULL,          -- MM/AAAA ex: 07/2031
         expiry_short      VARCHAR(5)  NOT NULL,          -- MM/YY ex: 07/31
         cvv               VARCHAR(4)  NOT NULL,

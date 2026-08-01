@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Eye, EyeOff, QrCode, Split, FileText, Search, ShoppingBag, Utensils, Fuel, Tv, Car, Award, CheckCircle2 } from 'lucide-react';
-import { User, CardTransaction } from '../types';
+import { User, CardTransaction, Transaction } from '../types';
+import TransactionReceipt from './TransactionReceipt';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -12,6 +13,7 @@ interface InvoiceViewProps {
 }
 
 export default function InvoiceView({ user, onPayInvoice, onParcel }: InvoiceViewProps) {
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [activeSubTab, setActiveSubTab] = useState<'fechada' | 'aberta' | 'historico' | 'proximas'>('fechada');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,6 +96,10 @@ export default function InvoiceView({ user, onPayInvoice, onParcel }: InvoiceVie
       setIsPaying(false);
     }
   };
+
+  if (selectedTx) {
+    return <TransactionReceipt transaction={selectedTx} onBack={() => setSelectedTx(null)} />;
+  }
 
   return (
     <div className="space-y-6 pb-28 pt-4 px-4 max-w-md mx-auto">
@@ -265,6 +271,7 @@ export default function InvoiceView({ user, onPayInvoice, onParcel }: InvoiceVie
             getFilteredExpenses().map((tx) => (
               <div
                 key={tx.id}
+                onClick={() => setSelectedTx(tx as any)}
                 className="flex items-center justify-between p-3.5 bg-volt-surface border border-white/5 rounded-xl hover:border-volt-green/20 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-3">

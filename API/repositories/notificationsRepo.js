@@ -1,4 +1,5 @@
 const { getDb, esc } = require('./context');
+const { nowDb } = require('../utils/timezone');
 
 async function listByCpf(cpf) {
     const db = getDb();
@@ -31,7 +32,7 @@ async function markRead(cpf, id) {
 async function ensureSeed(cpf) {
     const db = getDb();
     const id = db.generateUUID();
-    const now = new Date().toISOString();
+    const now = nowDb();
     const exists = await db.executeQuery(`
         SELECT id FROM ${db.fq('notifications')}
         WHERE cpf = ${esc(cpf)} LIMIT 1
@@ -49,7 +50,7 @@ async function ensureSeed(cpf) {
 async function addNotification({ cpf, title, message, actionUrl }) {
     const db = getDb();
     const id = db.generateUUID();
-    const now = new Date().toISOString();
+    const now = nowDb();
     await db.executeQuery(`
         INSERT INTO ${db.fq('notifications')}
         (id, cpf, title, message, action_url, is_read, created_at)

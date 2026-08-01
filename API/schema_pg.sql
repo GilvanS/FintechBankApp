@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     status VARCHAR(20),
     reversal_of VARCHAR(255),
     subscription_id VARCHAR(255),
+    card_number VARCHAR(30),
+    authorization_code VARCHAR(50),
     PRIMARY KEY (id)
 );
 

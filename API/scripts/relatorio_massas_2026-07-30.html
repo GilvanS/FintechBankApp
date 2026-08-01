@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Relatório de Inadimplência — Volt Bank 30/07/2026</title>
+<style>
+    @page {
+        margin: 10mm 8mm;
+        size: A4 landscape;
+        @bottom-center {
+            content: "Volt Bank S.A. — CNPJ 00.000.000/0001-91 — Página " counter(page) " de " counter(pages);
+            font-size: 7px;
+            color: #999;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+        font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        color: #1a1a2e;
+        background: #f4f5f7;
+        padding: 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* ═══ HEADER BANCÁRIO ═══ */
+    .bank-header {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+        color: #fff;
+        padding: 20px 28px;
+        border-radius: 12px 12px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: relative;
+        overflow: hidden;
+    }
+    .bank-header::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(0,255,157,0.08) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .bank-header .logo-area {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        z-index: 1;
+    }
+    .bank-header .logo-svg {
+        width: 48px;
+        height: 48px;
+    }
+    .bank-header .logo-text h1 {
+        font-size: 22px;
+        font-weight: 900;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        line-height: 1.1;
+    }
+    .bank-header .logo-text h1 span {
+        color: #00ff9d;
+    }
+    .bank-header .logo-text .tagline {
+        font-size: 10px;
+        opacity: 0.6;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        font-weight: 300;
+    }
+    .bank-header .header-right {
+        text-align: right;
+        z-index: 1;
+        line-height: 1.5;
+    }
+    .bank-header .header-right .title {
+        font-size: 16px;
+        font-weight: 800;
+        letter-spacing: 1px;
+    }
+    .bank-header .header-right .subtitle {
+        font-size: 10px;
+        opacity: 0.6;
+    }
+    .bank-header .header-right .date {
+        font-size: 9px;
+        opacity: 0.5;
+        margin-top: 4px;
+    }
+
+    /* ═══ ACENTO VERDE ═══ */
+    .accent-bar {
+        height: 4px;
+        background: linear-gradient(90deg, #00ff9d, #A2FF00, #FFD700);
+    }
+
+    /* ═══ CONTEÚDO ═══ */
+    .content {
+        padding: 16px 20px 20px;
+        background: #fff;
+    }
+
+    /* ═══ KPI CARDS BANCÁRIOS ═══ */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+    .kpi-card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 12px 14px;
+        border: 1px solid #dee2e6;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        transition: box-shadow 0.2s;
+    }
+    .kpi-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .kpi-card .icon-box {
+        width: 38px;
+        height: 38px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+    .kpi-card .info { flex: 1; }
+    .kpi-card .info .label {
+        font-size: 8px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6c757d;
+        margin-bottom: 2px;
+    }
+    .kpi-card .info .value {
+        font-size: 18px;
+        font-weight: 900;
+        line-height: 1.1;
+    }
+    .kpi-card .info .sub {
+        font-size: 9px;
+        opacity: 0.6;
+        margin-top: 1px;
+    }
+    .icon-danger { background: #fde8e8; color: #e74c3c; }
+    .icon-success { background: #e8f8f0; color: #27ae60; }
+    .icon-warning { background: #fef3e2; color: #f39c12; }
+    .icon-info { background: #e1f0fa; color: #2980b9; }
+    .value-danger { color: #e74c3c; }
+    .value-success { color: #27ae60; }
+    .value-warning { color: #f39c12; }
+    .value-info { color: #2980b9; }
+
+    /* ═══ RESUMO CATEGORIAS ═══ */
+    .summary-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+    .summary-card {
+        padding: 8px 12px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 11px;
+        border: 1px solid;
+    }
+    .summary-card .count {
+        font-size: 22px;
+        font-weight: 900;
+        min-width: 36px;
+        text-align: center;
+    }
+    .summary-card .desc { line-height: 1.3; }
+    .summary-card .desc strong { font-size: 11px; }
+    .summary-card .desc small { font-size: 9px; opacity: 0.7; display: block; }
+    .sc-critico { background: #fde8e8; border-color: #f5c6cb; color: #721c24; }
+    .sc-ok { background: #e8f8f0; border-color: #c3e6cb; color: #155724; }
+    .sc-sem { background: #f8f9fa; border-color: #dee2e6; color: #495057; }
+    .sc-reg { background: #e1f0fa; border-color: #b8daff; color: #004085; }
+
+    /* ═══ SEÇÃO ═══ */
+    .section-title {
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 8px 0 6px;
+        border-bottom: 2px solid #1a1a2e;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .section-title .count-badge {
+        background: #1a1a2e;
+        color: #fff;
+        font-size: 9px;
+        padding: 1px 8px;
+        border-radius: 10px;
+        font-weight: 700;
+    }
+
+    /* ═══ TABELA ═══ */
+    .table-wrap {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+        margin-bottom: 14px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 8.5px;
+    }
+    thead th {
+        background: #1a1a2e;
+        color: #fff;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 7px 6px;
+        text-align: left;
+        font-size: 7px;
+        white-space: nowrap;
+    }
+    thead th.num { text-align: right; }
+    thead th.center { text-align: center; }
+    tbody td {
+        padding: 5px 6px;
+        border-bottom: 1px solid #eee;
+        vertical-align: middle;
+    }
+    tbody tr:nth-child(even) td { background: #fafbfc; }
+    tbody tr:hover td { background: #f0f4f8; }
+    tbody tr.reg td { opacity: 0.5; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    td.center { text-align: center; }
+    td.mono { font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 8px; }
+    td.strong { font-weight: 800; }
+    td.green { color: #27ae60; font-weight: 700; }
+    td.amber { color: #e67e22; font-weight: 700; }
+    td.muted { color: #999; }
+    td.red { color: #e74c3c; font-weight: 700; }
+
+    .badge {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 7px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .badge-reg { background: #d4edda; color: #155724; }
+    .badge-inad { background: #fde8e8; color: #721c24; }
+    .badge-ok { background: #d4edda; color: #155724; }
+    .badge-warn { background: #fff3cd; color: #856404; }
+    .badge-na { background: #e9ecef; color: #495057; }
+    .badge-total { background: #d4edda; color: #155724; }
+    .badge-min { background: #fff3cd; color: #856404; }
+    .badge-parc { background: #e1f0fa; color: #004085; }
+
+    /* ═══ PAYMENT HISTORY ─── */
+    .payment-dots {
+        display: flex;
+        gap: 2px;
+        align-items: center;
+        justify-content: center;
+    }
+    .payment-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .dot-total { background: #27ae60; }
+    .dot-min { background: #f39c12; }
+    .dot-parc { background: #2980b9; }
+
+    /* ═══ FILTRO CPF ═══ */
+    .filter-badge {
+        display: inline-block;
+        background: #00ff9d;
+        color: #1a1a2e;
+        font-size: 9px;
+        font-weight: 800;
+        padding: 2px 10px;
+        border-radius: 4px;
+        margin-left: 8px;
+        letter-spacing: 0.5px;
+    }
+
+    /* ═══ REGULARIZED TABLE ═══ */
+    .reg-table { font-size: 8px; }
+    .reg-table td { padding: 4px 8px; }
+
+    /* ═══ PAYMENT HISTORY DETAIL ═══ */
+    .payment-history-bar {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .ph-bar {
+        height: 4px;
+        border-radius: 2px;
+        flex: 1;
+        background: #eee;
+        overflow: hidden;
+    }
+    .ph-bar-fill {
+        height: 100%;
+        border-radius: 2px;
+        background: linear-gradient(90deg, #00ff9d, #A2FF00);
+    }
+
+    /* ═══ FOOTER ═══ */
+    .bank-footer {
+        background: #1a1a2e;
+        color: rgba(255,255,255,0.5);
+        padding: 10px 20px;
+        font-size: 7px;
+        display: flex;
+        justify-content: space-between;
+        border-radius: 0 0 12px 12px;
+        line-height: 1.6;
+    }
+    .bank-footer strong { color: rgba(255,255,255,0.8); }
+
+    @media print {
+        body { background: #fff; }
+        .bank-header { border-radius: 0; }
+        .bank-footer { border-radius: 0; }
+        .kpi-card { break-inside: avoid; box-shadow: none; }
+        .table-wrap { break-inside: auto; }
+        tr { break-inside: avoid; }
+    }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- HEADER BANCÁRIO -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="bank-header">
+    <div class="logo-area">
+        <svg class="logo-svg" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Fundo -->
+            <rect width="48" height="48" rx="10" fill="#00ff9d" opacity="0.15"/>
+            <!-- Símbolo do raio -->
+            <path d="M26 8L14 26h8l-2 14L32 22h-8l2-14z" fill="#00ff9d"/>
+            <!-- Detalhe interno -->
+            <path d="M24 12L16 24h6l-1.5 9L30 19h-6l1.5-7z" fill="#fff" opacity="0.3"/>
+            <!-- Brilho canto -->
+            <circle cx="14" cy="14" r="3" fill="#fff" opacity="0.15"/>
+        </svg>
+        <div class="logo-text">
+            <h1>Volt <span>Bank</span></h1>
+            <div class="tagline">Soluções Financeiras Inteligentes</div>
+        </div>
+    </div>
+    <div class="header-right">
+        <div class="title">RELATÓRIO DE INADIMPLÊNCIA</div>
+        <div class="subtitle">Painel de Massas em Atraso — Gerencial</div>
+        <div class="date">30/07/2026 às 17:28 · 125 usuários</div>
+    </div>
+</div>
+<div class="accent-bar"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- CONTEÚDO -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="content">
+
+<!-- KPI CARDS -->
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="icon-box icon-danger">📋</div>
+        <div class="info">
+            <div class="label">Em Atraso</div>
+            <div class="value value-danger">54 <span style="font-size:12px;font-weight:400;color:#999;">/ 125</span></div>
+            <div class="sub">Taxa: 43%</div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="icon-box icon-warning">⏱️</div>
+        <div class="info">
+            <div class="label">Média de Atraso</div>
+            <div class="value value-warning">19 <span style="font-size:12px;font-weight:400;">dias</span></div>
+            <div class="sub">Acima do vencimento</div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="icon-box icon-success">💰</div>
+        <div class="info">
+            <div class="label">Montante Inadimplente</div>
+            <div class="value value-success">R$ 240323,62</div>
+            <div class="sub">Faturas + Encargos</div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="icon-box icon-info">✅</div>
+        <div class="info">
+            <div class="label">Regularizadas (24h)</div>
+            <div class="value value-info">1</div>
+            <div class="sub">Pagaram nos últimos 24h</div>
+        </div>
+    </div>
+</div>
+
+<!-- RESUMO CATEGORIAS -->
+<div class="summary-row">
+    <div class="summary-card sc-critico">
+        <div class="count" style="color:#e74c3c;">2</div>
+        <div class="desc">
+            <strong>⚠️ Abaixo do Mínimo</strong>
+            <small>Pagaram < 10% da fatura</small>
+        </div>
+    </div>
+    <div class="summary-card sc-ok">
+        <div class="count" style="color:#27ae60;">6</div>
+        <div class="desc">
+            <strong>✅ Acima do Mínimo</strong>
+            <small>Pagaram ≥ 10% da fatura</small>
+        </div>
+    </div>
+    <div class="summary-card sc-sem">
+        <div class="count" style="color:#495057;">47</div>
+        <div class="desc">
+            <strong>— Sem Pagamento</strong>
+            <small>Não pagaram nada</small>
+        </div>
+    </div>
+    <div class="summary-card sc-reg">
+        <div class="count" style="color:#004085;">1</div>
+        <div class="desc">
+            <strong>✅ Regularizadas</strong>
+            <small>Quitaram nas últimas 24h</small>
+        </div>
+    </div>
+</div>
+
+<!-- TABELA PRINCIPAL -->
+
+<div class="section-title">
+    📊 Detalhamento de Massas
+    <span class="count-badge">55 registro(s)</span>
+    
+</div>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+    <th width="90">CPF</th>
+    <th>Nome / Massa</th>
+    <th width="70">Status</th>
+    <th class="num" width="75">Valor Original</th>
+    <th class="num" width="50">Dias</th>
+    <th class="num" width="72">Encargos</th>
+    <th class="num" width="80">Total Quitação</th>
+    <th class="num" width="75">Total Pago</th>
+    <th class="num" width="55">%</th>
+    <th class="num" width="75">Saldo Rest.</th>
+    <th class="center" width="65">Status Min.</th>
+    <th class="center" width="50">Pagto.</th>
+</tr>
+</thead>
+<tbody>
+<tr class="">
+        <td class="mono">723.309.558-20</td>
+        <td><strong>Fahad Al-Ghamdi</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num green">R$ 10,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3860,86</td>
+        <td class="center"><span class="badge badge-warn">Abaixo</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">111.111.111-11</td>
+        <td><strong>Admin User</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">15d</td>
+        <td class="num amber">R$ 414,08</td>
+        <td class="num strong">R$ 4284,94</td>
+        <td class="num green">R$ 370,95</td>
+        <td class="num amber">10%</td>
+        <td class="num amber">R$ 3499,91</td>
+        <td class="center"><span class="badge badge-warn">Abaixo</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">611.118.637-09</td>
+        <td><strong>Isidore Charles</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num green">R$ 2870,86</td>
+        <td class="num amber">74%</td>
+        <td class="num amber">R$ 1000,00</td>
+        <td class="center"><span class="badge badge-ok">Acima</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">347.214.614-10</td>
+        <td><strong>Barnabé Guillaume</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num green">R$ 387,09</td>
+        <td class="num amber">10%</td>
+        <td class="num amber">R$ 3483,77</td>
+        <td class="center"><span class="badge badge-ok">Acima</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">237.362.115-03</td>
+        <td><strong>Henri Robin</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num green">R$ 387,09</td>
+        <td class="num amber">10%</td>
+        <td class="num amber">R$ 3483,77</td>
+        <td class="center"><span class="badge badge-ok">Acima</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">123.123.123-12</td>
+        <td><strong>Usuario Teste Pagamento</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num green">R$ 1900,00</td>
+        <td class="num amber">49%</td>
+        <td class="num amber">R$ 1970,86</td>
+        <td class="center"><span class="badge badge-ok">Acima</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">776.806.749-57</td>
+        <td><strong>Simon Huet</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num green">R$ 1353,29</td>
+        <td class="num amber">35%</td>
+        <td class="num amber">R$ 2517,57</td>
+        <td class="center"><span class="badge badge-ok">Acima</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="reg">
+        <td class="mono">061.304.380-44</td>
+        <td><strong>Eudes Leclercq</strong></td>
+        <td><span class="badge badge-reg">REGULARIZADA</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center muted">20d</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num strong">R$ 3870,86</td>
+        <td class="num green">R$ 3870,86</td>
+        <td class="num green">100%</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="center"><span class="badge badge-ok">Acima</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">886.678.417-65</td>
+        <td><strong>Simone Renard</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">202.505.136-11</td>
+        <td><strong>Karla Melo</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">124.648.659-54</td>
+        <td><strong>Wade O'Connell</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">987.654.321-00</td>
+        <td><strong>User Teste</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">757.754.574-04</td>
+        <td><strong>Isabela Rocha Carvalho</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">969.374.940-50</td>
+        <td><strong>Alexander James Smith</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">766.717.259-50</td>
+        <td><strong>Raymonde Bernard</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">483.188.835-43</td>
+        <td><strong>Claude Garcia</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">777.666.555-44</td>
+        <td><strong>Cliente Cartao Teste</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">651.846.841-66</td>
+        <td><strong>Anceline Gauthier</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">576.739.446-23</td>
+        <td><strong>Ira Morar</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">249.306.139-45</td>
+        <td><strong>Lane Larkin</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">728.564.460-96</td>
+        <td><strong>Marvin Dietrich</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">767.265.140-39</td>
+        <td><strong>Rafael Xavier</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">775.295.885-91</td>
+        <td><strong>Nathalie Fournier</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">444.444.444-44</td>
+        <td><strong>Fernanda Lima</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">276.466.604-77</td>
+        <td><strong>Brunehilde Gaillard</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">938.528.569-61</td>
+        <td><strong>Natália Moraes</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">246.622.366-06</td>
+        <td><strong>Flavien Rodriguez</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">447.940.655-74</td>
+        <td><strong>Achaire Schmitt</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">162.663.232-49</td>
+        <td><strong>Flore Schmitt</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">775.511.646-85</td>
+        <td><strong>Jeannel Aubry</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">288.328.694-97</td>
+        <td><strong>Philomène Fabre</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">421.116.790-11</td>
+        <td><strong>Camila Beatriz Santos</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">731.295.366-20</td>
+        <td><strong>Juliana Lima Rezende</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">852.466.718-44</td>
+        <td><strong>Falba David</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">924.545.016-35</td>
+        <td><strong>Laurine Maillard</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">267.752.446-57</td>
+        <td><strong>Isidore Morin</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">777.777.777-77</td>
+        <td><strong>Test User</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">777.666.555-99</td>
+        <td><strong>Cliente Cartao Teste</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">784.756.800-46</td>
+        <td><strong>Rodrigo Mendes Oliveira</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">681.414.952-40</td>
+        <td><strong>Lucas Gabriel Ferreira</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">648.666.568-83</td>
+        <td><strong>Archambaud Remy</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">278.881.867-00</td>
+        <td><strong>René Gautier</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">671.548.642-57</td>
+        <td><strong>Prosper Julien</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">269.864.739-66</td>
+        <td><strong>Jacinthe Vidal</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">288.183.934-72</td>
+        <td><strong>Émile Clement</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">378.105.131-50</td>
+        <td><strong>Florie Fontaine</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">421.943.438-06</td>
+        <td><strong>Bruno Henrique Alves</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">20d</td>
+        <td class="num amber">R$ 521,41</td>
+        <td class="num strong">R$ 4392,27</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">123.100.123-00</td>
+        <td><strong>Teste Carga Retroativa</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">18d</td>
+        <td class="num amber">R$ 478,48</td>
+        <td class="num strong">R$ 4349,34</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">426.815.706-97</td>
+        <td><strong>Felix Weber</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">18d</td>
+        <td class="num amber">R$ 478,48</td>
+        <td class="num strong">R$ 4349,34</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">359.827.147-63</td>
+        <td><strong>Joon Jeong</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">16d</td>
+        <td class="num amber">R$ 435,55</td>
+        <td class="num strong">R$ 4306,41</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">207.326.755-61</td>
+        <td><strong>Sophie Schmidt</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">16d</td>
+        <td class="num amber">R$ 435,55</td>
+        <td class="num strong">R$ 4306,41</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">381.600.813-59</td>
+        <td><strong>Mateo Fernandez</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">16d</td>
+        <td class="num amber">R$ 435,55</td>
+        <td class="num strong">R$ 4306,41</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">982.158.285-07</td>
+        <td><strong>Noura Al-Saud</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">16d</td>
+        <td class="num amber">R$ 435,55</td>
+        <td class="num strong">R$ 4306,41</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">805.357.576-54</td>
+        <td><strong>Lucas Laurent</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">16d</td>
+        <td class="num amber">R$ 435,55</td>
+        <td class="num strong">R$ 4306,41</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr>
+<tr class="">
+        <td class="mono">333.333.333-33</td>
+        <td><strong>Daniel Costa</strong></td>
+        <td><span class="badge badge-inad">INADIMPLENTE</span></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num center red">15d</td>
+        <td class="num amber">R$ 414,08</td>
+        <td class="num strong">R$ 4284,94</td>
+        <td class="num muted">R$ 0,00</td>
+        <td class="num muted">0%</td>
+        <td class="num amber">R$ 3870,86</td>
+        <td class="center"><span class="badge badge-na">Sem Pag.</span></td>
+        <td class="center">
+            <span class="muted">—</span>
+        </td>
+    </tr></tbody>
+</table>
+</div>
+
+
+<!-- REGULARIZADAS -->
+
+<div class="section-title">
+    ✅ Massas Regularizadas nas Últimas 24h
+    <span class="count-badge">1 registro(s)</span>
+</div>
+<div class="table-wrap">
+<table class="reg-table">
+<thead>
+<tr>
+    <th>CPF</th>
+    <th>Nome</th>
+    <th class="num">Dívida Original</th>
+    <th class="num">Valor Pago</th>
+    <th class="num">%</th>
+    <th class="center">Tipo</th>
+    <th class="center">Há</th>
+    <th>Regularizado em</th>
+    <th class="center">Vencido há</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+        <td class="mono">061.304.380-44</td>
+        <td><strong>Eudes Leclercq</strong></td>
+        <td class="num mono">R$ 3870,86</td>
+        <td class="num green mono">R$ 3870,86</td>
+        <td class="num">100%</td>
+        <td class="center"><span class="badge badge-total">Total</span></td>
+        <td class="center">13h</td>
+        <td class="mono" style="font-size:7.5px;">30/07/2026 00:46</td>
+        <td class="center"><span class="badge badge-warn">19d 10h</span></td>
+    </tr>
+</tbody>
+</table>
+</div>
+
+
+<!-- RESUMO DOS PAGAMENTOS -->
+
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- FOOTER -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="bank-footer">
+    <div>
+        <strong>Volt Bank S.A.</strong> · CNPJ 00.000.000/0001-91<br>
+        Av. Paulista, 1000 · São Paulo · SP · Brasil
+    </div>
+    <div style="text-align:right;">
+        <strong>Relatório Gerencial de Inadimplência</strong><br>
+        Gerado em 30/07/2026 às 17:28 · 125 usuários · 54 em atraso
+    </div>
+</div>
+
+</body>
+</html>

@@ -13,33 +13,23 @@ import {
     adminDenyLimitRequest,
     adminUpdateCardDetails,
     adminGetStats,
-    adminSeedTestScenario,
-    adminSaveAsMock,
-    adminClearMockBaseline,
-    adminResetTestData,
+
+    adminFixOrphanPayments,
 } from '../services/api';
+import { adminGetUserByCpf as mockAdminGetUserByCpf } from '../services/mockApi';
 import { formatCPF } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../contexts/AppStateContext';
 
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Shield, KeyRound, ArrowUpCircle, Users, Activity, Check, X, Eye, EyeOff, FileSpreadsheet, CheckCheck, LucideIcon } from 'lucide-react';
+import { ArrowLeft, Shield, KeyRound, ArrowUpCircle, Users, Activity, Check, X, Eye, EyeOff } from 'lucide-react';
+import BackofficeInvoiceSection from './Admin/BackofficeInvoiceSection';
+import OverdueBadge from './Admin/OverdueBadge';
+import StatCard from './Admin/StatCard';
+import BillingMockSection from './Admin/BillingMockSection';
+import ConfirmModal from './Admin/ConfirmModal';
 
-const StatCard: React.FC<{ title: string; value: string | number; icon: LucideIcon; isMidnight: boolean }> = ({ title, value, icon: Icon, isMidnight }) => (
-    <div className={`p-6 rounded-2xl flex flex-col justify-between border transition-colors ${
-        isMidnight
-            ? 'bg-volt-surface border-white/5 shadow-md text-white hover:border-volt-green/20'
-            : 'bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-black hover:bg-gray-50'
-    }`}>
-        <div className="flex items-center space-x-3 mb-3">
-            <Icon className={`w-6 h-6 ${isMidnight ? 'text-volt-green' : 'text-black'}`} />
-            <p className={`text-[10px] break-words leading-tight ${isMidnight ? 'font-semibold text-white/80' : 'font-black uppercase tracking-wider text-black/60'}`}>{title}</p>
-        </div>
-        <p className={`text-2xl ${isMidnight ? 'font-bold text-white' : 'font-black text-black'}`}>{value}</p>
-    </div>
-);
-
-const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
+const Admin: React.FC<{ onClose: () => void; initialSearchCpf?: string }> = ({ onClose, initialSearchCpf }) => {
     const { user: adminUser, logout } = useAuth();
     const { theme } = useAppState();
     const isMidnight = theme === 'midnight';
@@ -67,7 +57,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
     // State for Modals and Toasts
     const [modalState, setModalState] = useState<{
         isOpen: boolean;
-        action: 'approve' | 'deny' | 'block' | 'unblock' | 'deposit' | null;
+        action: 'approve' | 'deny' | 'block' | 'unblock' | 'deposit' | 'fixOrphan' | null;
         data?: any;
     }>({ isOpen: false, action: null });
     const [denyReason, setDenyReason] = useState('');
@@ -122,6 +112,45 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
             setIsLoadingStats(false);
         }
     };
+
+    // Auto-search when initialSearchCpf is provided from another tab
+    useEffect(() => {
+        if (initialSearchCpf) {
+            const cleanCpf = initialSearchCpf.replace(/\D/g, '');
+            setCpfSearch(cleanCpf);
+            // Tenta API real primeiro; fallback para mockApi se falhar
+            adminGetUserByCpf(cleanCpf).then(result => {
+                if (result.success && result.user) {
+                    setSearchedUser(result.user);
+                    return;
+                }
+                // Se for "Acesso negado", o AdminDashboard já disparou o evento
+                // admin-auth-failed e mostrou o modal de re-login.
+                // Ainda assim tenta mockApi como fallback (modo offline).
+                const isAccessDenied = result.message?.toLowerCase().includes('negado') || result.message?.toLowerCase().includes('token');
+                return { isAccessDenied, mockFallback: mockAdminGetUserByCpf(cleanCpf) };
+            }).then((chainResult: any) => {
+                // Se o primeiro .then retornou undefined (API real funcionou), não faz nada
+                if (!chainResult) return;
+                const { isAccessDenied, mockFallback } = chainResult;
+                return mockFallback.then((mockResult: any) => {
+                    if (mockResult && mockResult.success && mockResult.user) {
+                        setSearchedUser(mockResult.user);
+                        if (isAccessDenied) {
+                            showToast('🔐 Dados carregados (modo simulado) — faça login como admin para dados reais', 'success');
+                        } else {
+                            showToast('Dados carregados (modo simulado)', 'success');
+                        }
+                    } else if (mockResult) {
+                        showToast(isAccessDenied
+                            ? '🔐 Sessão expirada — faça login novamente'
+                            : (mockResult.message || 'Usuário não encontrado.'), 'error');
+                        setSearchedUser(null);
+                    }
+                });
+            });
+        }
+    }, [initialSearchCpf]);
 
     useEffect(() => {
         fetchRequests();
@@ -206,6 +235,16 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                 result = await adminDeposit(modalState.data.cpf, amount);
                 if (result.success && result.user) setSearchedUser(result.user);
                 break;
+            case 'fixOrphan':
+                const fixResult = await adminFixOrphanPayments();
+                if (fixResult.success && fixResult.summary) {
+                    const s = fixResult.summary;
+                    showToast(`✅ ${s.fixed} corrigido(s), ${s.errors} erro(s), ${s.usersScanned} usuário(s) escaneados`, 'success');
+                } else {
+                    showToast(fixResult.message || 'Erro ao corrigir pagamentos órfãos.', 'error');
+                }
+                result = { success: fixResult.success, message: fixResult.message || '' };
+                break;
             default:
                 result = { success: false, message: 'Ação desconhecida.' };
         }
@@ -217,37 +256,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
         fetchStats(); // Refresh stats
     };
 
-    // ── Billing Mock (issue #42) ─────────────────────────────────────────────
-    const [billingCpf, setBillingCpf] = useState('11111111111');
-    const [billingLoading, setBillingLoading] = useState(false);
-    const [billingMsg, setBillingMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
-    const applyBillingScenario = async (scenario: string) => {
-        setBillingLoading(true); setBillingMsg(null);
-        const res = await adminSeedTestScenario(billingCpf || null, scenario);
-        setBillingMsg({ text: res.success ? `Cenário "${scenario}" aplicado.` : res.message || 'Erro.', ok: !!res.success });
-        setBillingLoading(false);
-    };
-    const saveBillingBaseline = async () => {
-        if (!billingCpf) return;
-        setBillingLoading(true); setBillingMsg(null);
-        const res = await adminSaveAsMock(billingCpf);
-        setBillingMsg({ text: res.success ? 'Baseline salvo. Reset restaurará este estado.' : res.message || 'Erro.', ok: !!res.success });
-        setBillingLoading(false);
-    };
-    const clearBillingBaseline = async () => {
-        if (!billingCpf) return;
-        setBillingLoading(true); setBillingMsg(null);
-        const res = await adminClearMockBaseline(billingCpf);
-        setBillingMsg({ text: res.success ? 'Baseline limpo. Reset usará o padrão.' : res.message || 'Erro.', ok: !!res.success });
-        setBillingLoading(false);
-    };
-    const resetAllTestData = async () => {
-        setBillingLoading(true); setBillingMsg(null);
-        const res = await adminResetTestData();
-        setBillingMsg({ text: res.success ? 'Dados de teste resetados.' : res.message || 'Erro.', ok: !!res.success });
-        setBillingLoading(false);
-    };
 
     // Classes derivadas do tema — mesma estrutura, só troca as cores.
     const btnTypographyClass = isMidnight
@@ -440,405 +449,23 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                                         <h3 className={`font-black text-2xl ${titleClass}`}>{searchedUser.fullName}</h3>
                                         <p className={`text-xs ${isMidnight ? 'font-medium text-white/70' : 'font-bold uppercase text-black/70'}`}>CPF: {formatCPF(searchedUser.cpf)} • Username: @{searchedUser.username || 'cliente'}</p>
                                     </div>
-                                    {(() => {
-                                        const closedAmount = searchedUser.creditCard?.closedInvoice || 0;
-                                        const today = new Date();
-                                        let dueDate = searchedUser.creditCard?.invoiceDueDate 
-                                            ? new Date(searchedUser.creditCard.invoiceDueDate)
-                                            : new Date(today.getFullYear(), today.getMonth() - 1, 15);
-                                        if (isNaN(dueDate.getTime())) dueDate = new Date(today.getFullYear(), today.getMonth() - 1, 15);
-                                        
-                                        let diffDays = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-                                        const explicitDays = (searchedUser as any).daysOverdue ?? (searchedUser.creditCard as any)?.daysOverdue ?? 0;
-                                        const overdueDays = explicitDays > 0 ? explicitDays : (closedAmount > 0 ? Math.max(7, diffDays) : 0);
-                                        const isOverdue = closedAmount > 0 && overdueDays > 0;
-
-                                        return (
-                                            <span className={`px-3 py-1 rounded-full text-xs font-black uppercase border ${
-                                                isOverdue 
-                                                    ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/40'
-                                                    : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/40'
-                                            }`}>
-                                                {isOverdue ? `Fatura Fechada em Atraso (${overdueDays} dias)` : 'Fatura Fechada em Dia'}
-                                            </span>
-                                        );
-                                    })()}
+                                    <OverdueBadge
+                                        closedInvoice={searchedUser.creditCard?.closedInvoice || 0}
+                                        invoiceDueDate={searchedUser.creditCard?.invoiceDueDate}
+                                        daysOverdue={(searchedUser as any).daysOverdue ?? (searchedUser.creditCard as any)?.daysOverdue ?? 0}
+                                    />
                                 </div>
 
                                 <p className={`text-xs mt-1 ${isMidnight ? 'font-semibold text-volt-green' : 'font-bold uppercase'} ${searchedUser.isBlocked || searchedUser.creditCard.isBlocked ? (isMidnight ? 'text-red-400' : 'text-red-600') : (isMidnight ? 'text-green-400' : 'text-green-600')}`}>
                                     {searchedUser.isBlocked ? 'CONTA BLOQUEADA' : 'CONTA ATIVA'} / {searchedUser.creditCard.isBlocked ? 'CARTÃO BLOQUEADO' : 'CARTÃO ATIVO'}
                                 </p>
 
-                                {/* Painel Backoffice: Saúde Financeira & Auditoria de Encargos */}
-                                {(() => {
-                                     const openAmount = searchedUser.creditCard?.currentInvoice && searchedUser.creditCard.currentInvoice > 0 ? searchedUser.creditCard.currentInvoice : 2365.05;
-                                     const closedAmount = searchedUser.creditCard?.closedInvoiceAmount || searchedUser.creditCard?.closedInvoice || 3870.86;
-                                     const previousAmount = 1120.00; // Fatura Anterior (Mai/26) - Paga
-                                     // Encargos autoritativos do backend (fonte única). Só recalcula no fallback.
-                                     const bkCharges: any = (searchedUser.creditCard as any)?.closedInvoiceCharges;
-                                     const diffTime = Math.abs(new Date().getTime() - new Date(searchedUser.creditCard?.closedInvoiceDueDate || searchedUser.creditCard?.invoiceDueDate || '2026-07-15').getTime());
-                                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                     const explicitDays = (searchedUser as any).daysOverdue ?? (searchedUser.creditCard as any)?.daysOverdue ?? 0;
-                                     const overdueDays = explicitDays > 0 ? explicitDays : (closedAmount > 0 ? Math.max(7, diffDays) : 0);
-                                     const isOverdue = closedAmount > 0 && overdueDays > 0;
-
-                                     const multa = bkCharges ? bkCharges.multa : (isOverdue ? Math.round(closedAmount * 0.02 * 100) / 100 : 0);
-                                     const jurosMora = bkCharges ? bkCharges.jurosMora : (isOverdue ? Math.round(closedAmount * 0.000333 * overdueDays * 100) / 100 : 0);
-                                     const jurosRemun = bkCharges ? bkCharges.jurosRemuneratorios : (isOverdue ? Math.round(closedAmount * 0.00513 * overdueDays * 100) / 100 : 0);
-                                     const iofFixo = Math.round(closedAmount * 0.0038 * 100) / 100;
-                                     const iofDiario = isOverdue ? Math.round(closedAmount * 0.000082 * overdueDays * 100) / 100 : 0;
-                                     const iofTotal = bkCharges ? bkCharges.iof : Math.round((iofFixo + iofDiario) * 100) / 100;
-                                     const totalEncargos = bkCharges ? bkCharges.totalEncargos : Math.round((multa + jurosMora + jurosRemun + iofTotal) * 100) / 100;
-                                     const totalWithCharges = (searchedUser.creditCard as any)?.closedInvoiceTotal ?? Math.round((closedAmount + totalEncargos) * 100) / 100;
-
-                                     // Mínimos (10%)
-                                     const minOpenOriginal = Math.round(openAmount * 0.10 * 100) / 100; 
-                                     const minClosedOriginal = Math.round(closedAmount * 0.10 * 100) / 100; 
-                                     const minPreviousOriginal = Math.round(previousAmount * 0.10 * 100) / 100; 
-                                     const minClosedWithCharges = Math.round((minClosedOriginal + totalEncargos) * 100) / 100; 
-                                     const totalOpenConsolidated = Math.round((openAmount + totalWithCharges) * 100) / 100; 
-                                     const minOpenConsolidated = Math.round((minOpenOriginal + totalWithCharges) * 100) / 100; 
-
-                                     return (
-                                         <div className={`mt-4 p-4 rounded-xl border space-y-3 ${isMidnight ? 'bg-zinc-900/80 border-white/10' : 'bg-white border-black/20 shadow-sm'}`}>
-                                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 dark:border-white/10 pb-2">
-                                                  <h4 className="text-xs font-black uppercase tracking-wider text-amber-500 flex items-center gap-2">
-                                                      <span>Diagnóstico Backoffice (Últimas 3 Faturas Visíveis)</span>
-                                                      <span className="text-[10px] text-zinc-400 font-mono hidden sm:inline">
-                                                          {selectedBackofficeInvoice === 'closed'
-                                                              ? '(Fatura Fechada Vencida 📂)'
-                                                              : selectedBackofficeInvoice === 'open'
-                                                              ? '(Fatura Aberta 📂)'
-                                                              : '(Fatura Anterior Paga 📂)'}
-                                                      </span>
-                                                  </h4>
-
-                                                  <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                          let tsvData = `RELATÓRIO DE FATURA E ENCARGOS - BACKOFFICE FINTECH\t${new Date().toLocaleDateString('pt-BR')}\n`;
-                                                          tsvData += `Cliente:\t${searchedUser.fullName}\tCPF:\t${searchedUser.cpf}\n`;
-                                                          tsvData += `Fatura Selecionada:\t${selectedBackofficeInvoice === 'closed' ? 'Fatura Fechada Jun/26' : selectedBackofficeInvoice === 'open' ? 'Fatura Aberta Jul/26' : 'Fatura Mai/26 Paga'}\tDias em Atraso:\t${overdueDays}\n\n`;
-                                                          tsvData += `CÓDIGO ISO\tITEM / DESCRIÇÃO DO ENCARGO\tTAXA / REGRA\tVALOR (R$)\n`;
-
-                                                          if (selectedBackofficeInvoice === 'closed') {
-                                                              tsvData += `BASE\tValor Original Fatura Fechada (Invariável)\tValor Fixo Fechamento\t${closedAmount.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `MIN\tPagamento Mínimo Fixado no Corte (10%)\t10.00%\t${minClosedOriginal.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 3000\tTaxa de Multa por Atraso (Informativo)\t2.00%\t${multa.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 2001\tJuros de Mora (Informativo)\t0.0333%/dia\t${jurosMora.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 2000\tJuros Remuneratórios / Financiamento\t0.513%/dia\t${jurosRemun.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 4001\tIOF Adicional (Fixo - Compras)\t0.38%\t${iofFixo.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 4000\tIOF Diário (Atraso)\t0.0082%/dia\t${iofDiario.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `TOTAL_ENC\tValor Total dos Encargos do Atraso (Memória)\tAcumulado (${overdueDays}d)\t${totalEncargos.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `NOTA\tEncargos herdados e consolidados na FATURA ABERTA\tSomente no Corte/Fechamento Aberta\t0,00\n`;
-                                                              tsvData += `MIN_REGULARIZAR\tPagamento Mínimo Obrigatório p/ Regularizar Atraso\tMínimo Original (10%) + 100% Encargos\t${minClosedWithCharges.toFixed(2).replace('.', ',')}\n`;
-                                                          } else if (selectedBackofficeInvoice === 'open') {
-                                                              tsvData += `BASE\tNovas Compras do Mês Corrente (Jul/26)\tAberto\t${openAmount.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `MIN\tPagamento Mínimo Compras Correntes (10%)\t10.00%\t${minOpenOriginal.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `HERANCA\tFatura Fechada Anterior em Atraso (Jun/26)\tInvariável\t${closedAmount.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 3000\tTaxa de Multa por Atraso (Herdada)\t2.00%\t${multa.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 2001\tJuros de Mora (Herdado)\t0.0333%/dia\t${jurosMora.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 2000\tJuros Remuneratórios (Herdado)\t0.513%/dia\t${jurosRemun.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 4001\tIOF Adicional Fixo (Herdado)\t0.38%\t${iofFixo.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 4000\tIOF Diário (Herdado)\t0.0082%/dia\t${iofDiario.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `TOTAL_HER\tTotal Encargos Herdados\tAcumulado (${overdueDays}d)\t${totalEncargos.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `TOTAL_CORTE\tTotal Consolidado no Fechamento/Corte\tCompras + Herança + Encargos\t${totalOpenConsolidated.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `MIN_CORTE\tPagamento Mínimo Consolidado no Corte\tMínimo + Herança + Encargos\t${minOpenConsolidated.toFixed(2).replace('.', ',')}\n`;
-                                                          } else {
-                                                              tsvData += `BASE\tFatura Anterior Mai/26 Quitada\t15/05/2026\t${previousAmount.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `MIN\tPagamento Mínimo da Época (10%)\t10.00%\t${minPreviousOriginal.toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 3000\tTaxa de Multa por Atraso\t0.00%\t0,00\n`;
-                                                              tsvData += `CÓD 2001\tJuros de Mora\t0.00%/dia\t0,00\n`;
-                                                              tsvData += `CÓD 2000\tJuros Remuneratórios\t0.00%/dia\t0,00\n`;
-                                                              tsvData += `CÓD 4001\tIOF Adicional Fixo (Compras)\t0.38%\t${(previousAmount * 0.0038).toFixed(2).replace('.', ',')}\n`;
-                                                              tsvData += `CÓD 4000\tIOF Diário\t0.00%/dia\t0,00\n`;
-                                                              tsvData += `STATUS\tStatus da Fatura\t100% Quitada\t0,00\n`;
-                                                          }
-
-                                                          try {
-                                                              navigator.clipboard.writeText(tsvData);
-                                                          } catch (err) {
-                                                              console.error('Erro ao copiar dados para a área de transferência:', err);
-                                                          }
-                                                          setCopiedExcelSuccess(true);
-                                                          setTimeout(() => setCopiedExcelSuccess(false), 3000);
-                                                      }}
-                                                      className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm ${
-                                                          copiedExcelSuccess
-                                                              ? 'bg-emerald-600 text-white border-emerald-500'
-                                                              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-                                                      }`}
-                                                      title="Copiar dados da fatura em formato de colunas TSV para colar no Microsoft Excel"
-                                                  >
-                                                      {copiedExcelSuccess ? (
-                                                          <>
-                                                              <CheckCheck className="w-3.5 h-3.5" />
-                                                              <span>Copiado para o Excel! ✅</span>
-                                                          </>
-                                                      ) : (
-                                                          <>
-                                                              <FileSpreadsheet className="w-3.5 h-3.5" />
-                                                              <span>📊 Copiar p/ Excel</span>
-                                                          </>
-                                                      )}
-                                                  </button>
-                                              </div>
-
-                                             {/* Grid das Últimas 3 Faturas numeradas (Fat 1 = mais antiga → Fat 3 = mais recente).
-                                                 Sempre 3 slots: o mais recente (Fat 3) é a fatura aberta/atual, reservando o
-                                                 espaço para a próxima fatura quando houver. */}
-                                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-                                                 <div className="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 flex flex-col justify-between">
-                                                     <p className="opacity-60 text-[10px] uppercase font-bold">Saldo Conta</p>
-                                                     <p className="font-black text-emerald-600 dark:text-emerald-400 text-sm">R$ {searchedUser.balance.toFixed(2)}</p>
-                                                 </div>
-
-                                                 {/* Fat 1 — Fatura mais antiga (Mai/26) - PAGA */}
-                                                 <button
-                                                     type="button"
-                                                     onClick={() => setSelectedBackofficeInvoice('previous')}
-                                                     className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
-                                                         selectedBackofficeInvoice === 'previous'
-                                                             ? 'bg-emerald-500/15 border-emerald-500 shadow-sm ring-2 ring-emerald-500/40'
-                                                             : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-emerald-300'
-                                                     }`}
-                                                 >
-                                                     <div className="flex justify-between items-center">
-                                                         <p className="opacity-60 text-[10px] uppercase font-bold">Fat 1 · Mai/26</p>
-                                                         <span className="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full">PAGA ✅</span>
-                                                     </div>
-                                                     <p className="font-black text-emerald-600 dark:text-emerald-400 text-sm mt-1">R$ {previousAmount.toFixed(2)}</p>
-                                                 </button>
-
-                                                 {/* Fat 2 — Fatura Fechada (Jun/26) - Com ÍCONE DE ATRASO Em Cima */}
-                                                 <button
-                                                     type="button"
-                                                     onClick={() => setSelectedBackofficeInvoice('closed')}
-                                                     className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
-                                                         selectedBackofficeInvoice === 'closed'
-                                                             ? 'bg-rose-500/15 border-rose-500 shadow-sm ring-2 ring-rose-500/40'
-                                                             : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-rose-300'
-                                                     }`}
-                                                 >
-                                                     <div className="flex justify-between items-center">
-                                                         <p className="opacity-60 text-[10px] uppercase font-bold">Fat 2 · Fechada (Jun)</p>
-                                                         {isOverdue ? (
-                                                             <span className="text-[9px] bg-rose-600 text-white font-black px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-1 shadow-sm">
-                                                                 ⚠️ {overdueDays}d ATRASO
-                                                             </span>
-                                                         ) : (
-                                                             <span className="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full">FECHADA</span>
-                                                         )}
-                                                     </div>
-                                                     <p className="font-black text-rose-600 dark:text-rose-400 text-sm mt-1">R$ {closedAmount.toFixed(2)}</p>
-                                                 </button>
-
-                                                 {/* Fat 3 — Fatura Aberta/atual (Jul/26) */}
-                                                 <button
-                                                     type="button"
-                                                     onClick={() => setSelectedBackofficeInvoice('open')}
-                                                     className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
-                                                         selectedBackofficeInvoice === 'open'
-                                                             ? 'bg-blue-500/15 border-blue-500 shadow-sm ring-2 ring-blue-500/40'
-                                                             : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-blue-300'
-                                                     }`}
-                                                 >
-                                                     <div className="flex justify-between items-center">
-                                                         <p className="opacity-60 text-[10px] uppercase font-bold">Fat 3 · Aberta (Jul)</p>
-                                                         <span className="text-[9px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full">ABERTA</span>
-                                                     </div>
-                                                     <p className="font-black text-blue-600 dark:text-blue-400 text-sm mt-1">R$ {openAmount.toFixed(2)}</p>
-                                                 </button>
-
-                                             </div>
-
-                                             {/* Detalhamento da Fatura Selecionada */}
-                                             {selectedBackofficeInvoice === 'closed' ? (
-                                                 <div className="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]">
-                                                     <div className="flex justify-between items-center bg-rose-500/10 p-2 rounded-lg font-bold text-rose-600 dark:text-rose-300 mb-2">
-                                                         <span>📄 Fatura Fechada Jun/26 (Valor Original Invariável no Fechamento):</span>
-                                                         <span className="font-mono">R$ {closedAmount.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center text-blue-600 dark:text-blue-400">
-                                                         <span>🔹 Pagamento Mínimo da Fatura Fechada (sem encargos - 10%):</span>
-                                                         <span className="font-mono font-bold">R$ {minClosedOriginal.toFixed(2)}</span>
-                                                     </div>
-
-                                                     {/* Todas as 5 linhas de encargos sempre visíveis */}
-                                                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-amber-500 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
-                                                         <span>⚠️ Encargos do Atraso ({overdueDays} dias acumulados no período):</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center">
-                                                         <span className="opacity-70 flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 3000</span>
-                                                             Taxa de Multa por Atraso (2.0%):
-                                                         </span>
-                                                         <span className="font-mono font-bold">R$ {multa.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center">
-                                                         <span className="opacity-70 flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2001</span>
-                                                             Juros de Mora (0.0333%/dia):
-                                                         </span>
-                                                         <span className="font-mono font-bold">R$ {jurosMora.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center">
-                                                         <span className="opacity-70 flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2000</span>
-                                                             Juros Remuneratórios / Financiamento (0.513%/dia):
-                                                         </span>
-                                                         <span className="font-mono font-bold">R$ {jurosRemun.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center">
-                                                         <span className="opacity-70 flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4001</span>
-                                                             IOF Adicional (Fixo - 0.38%):
-                                                         </span>
-                                                         <span className="font-mono font-bold">R$ {iofFixo.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center">
-                                                         <span className="opacity-70 flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4000</span>
-                                                             IOF Diário (0.0082%/dia):
-                                                         </span>
-                                                         <span className="font-mono font-bold">R$ {iofDiario.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-amber-600 dark:text-amber-400">
-                                                          <span>Valor Total dos Encargos do Atraso (Memória Informativa):</span>
-                                                          <span className="font-mono">R$ {totalEncargos.toFixed(2)}</span>
-                                                      </div>
-
-                                                      <div className="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1.5">
-                                                          <span>ℹ️</span>
-                                                          <span>Esta fatura fechada é informativa. Os encargos do atraso (R$ {totalEncargos.toFixed(2)}) e o saldo original são herdados e somados na FATURA ABERTA para a consolidação final no corte.</span>
-                                                      </div>
-                                                 </div>
-                                             ) : selectedBackofficeInvoice === 'open' ? (
-                                                 /* Fatura Aberta Selecionada (Com Herança) */
-                                                 <div className="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]">
-                                                     <div className="flex justify-between items-center bg-blue-500/10 p-2 rounded-lg font-bold text-blue-600 dark:text-blue-300 mb-2">
-                                                         <span>🛍️ Novas Compras do Mês Corrente (Fatura Aberta Jul/26):</span>
-                                                         <span className="font-mono">R$ {openAmount.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center text-blue-600 dark:text-blue-400">
-                                                         <span>🔹 Pagamento Mínimo das Compras Correntes (10% sem encargos):</span>
-                                                         <span className="font-mono font-bold">R$ {minOpenOriginal.toFixed(2)}</span>
-                                                     </div>
-
-                                                     {/* Encargos Herdados em detalhe */}
-                                                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-rose-500 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
-                                                         <span>Herança de Atraso da Fatura Anterior (Jun/26):</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center text-rose-500 font-bold">
-                                                         <span>Fatura Fechada Anterior em Atraso (Valor Invariável):</span>
-                                                         <span className="font-mono">R$ {closedAmount.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center text-amber-500">
-                                                         <span className="opacity-90 flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 3000</span>
-                                                             Taxa de Multa por Atraso (2.0%):
-                                                         </span>
-                                                         <span className="font-mono font-bold">R$ {multa.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center text-amber-500">
-                                                         <span className="opacity-90 flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2001</span>
-                                                             Juros de Mora (0.0333%/dia):
-                                                         </span>
-                                                         <span className="font-mono font-bold">R$ {jurosMora.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center text-amber-500">
-                                                         <span className="opacity-90 flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2000</span>
-                                                             Juros Remuneratórios (0.513%/dia):
-                                                         </span>
-                                                         <span className="font-mono font-bold">R$ {jurosRemun.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center text-amber-500">
-                                                         <span className="opacity-90 flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4001</span>
-                                                             IOF Adicional (Fixo - 0.38%):
-                                                         </span>
-                                                         <span className="font-mono font-bold">R$ {iofFixo.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center text-amber-500">
-                                                         <span className="opacity-90 flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4000</span>
-                                                             IOF Diário (0.0082%/dia):
-                                                         </span>
-                                                         <span className="font-mono font-bold">R$ {iofDiario.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between font-bold text-amber-500 pt-1">
-                                                         <span>Total de Encargos Herdados do Atraso ({overdueDays} dias):</span>
-                                                         <span className="font-mono">R$ {totalEncargos.toFixed(2)}</span>
-                                                     </div>
-
-                                                     <div className="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 text-xs font-black text-purple-600 dark:text-purple-300">
-                                                         <span>Total Consolidado para Fechamento/Corte (Compras + Fatura Fechada + Encargos):</span>
-                                                         <span className="font-mono">R$ {totalOpenConsolidated.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between text-xs font-bold text-emerald-500">
-                                                         <span>Pagamento Mínimo Consolidado no Corte (Mínimo Aberta + Fatura Fechada + Encargos):</span>
-                                                         <span className="font-mono">R$ {minOpenConsolidated.toFixed(2)}</span>
-                                                     </div>
-                                                 </div>
-                                             ) : (
-                                                 /* Fatura Anterior Selecionada (Paga) */
-                                                 <div className="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]">
-                                                     <div className="flex justify-between items-center bg-emerald-500/10 p-2 rounded-lg font-bold text-emerald-600 dark:text-emerald-300 mb-2">
-                                                         <span>✅ Fatura Anterior Mai/26 (Quitada em 15/05/2026):</span>
-                                                         <span className="font-mono">R$ {previousAmount.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400">
-                                                         <span>🔹 Pagamento Mínimo da Época (10% sem encargos):</span>
-                                                         <span className="font-mono font-bold">R$ {minPreviousOriginal.toFixed(2)}</span>
-                                                     </div>
-                                                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-zinc-400 border-t border-black/5 dark:border-white/5">
-                                                         Encargos do Atraso (0 dias - Pago em dia):
-                                                     </div>
-                                                     <div className="flex justify-between items-center opacity-60">
-                                                         <span className="flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 3000</span> Taxa de Multa por Atraso (2.0%):
-                                                         </span>
-                                                         <span className="font-mono">R$ 0.00</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center opacity-60">
-                                                         <span className="flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2001</span> Juros de Mora (0.0333%/dia):
-                                                         </span>
-                                                         <span className="font-mono">R$ 0.00</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center opacity-60">
-                                                         <span className="flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2000</span> Juros Remuneratórios (0.513%/dia):
-                                                         </span>
-                                                         <span className="font-mono">R$ 0.00</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center opacity-60">
-                                                         <span className="flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4001</span> IOF Adicional (Fixo - 0.38%):
-                                                         </span>
-                                                         <span className="font-mono">R$ 0.00</span>
-                                                     </div>
-                                                     <div className="flex justify-between items-center opacity-60">
-                                                         <span className="flex items-center gap-1">
-                                                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4000</span> IOF Diário (0.0082%/dia):
-                                                         </span>
-                                                         <span className="font-mono">R$ 0.00</span>
-                                                     </div>
-                                                     <div className="flex justify-between pt-1 border-t border-black/10 dark:border-white/10 text-xs font-black text-emerald-500">
-                                                         <span>Status da Fatura:</span>
-                                                         <span className="font-mono uppercase">100% QUITADA (R$ 0.00 DE DÍVIDA)</span>
-                                                     </div>
-                                                 </div>
-                                             )}
-
-                                             <div className="pt-2 text-center text-[10px] text-zinc-400 border-t border-black/5 dark:border-white/5">
-                                                 <span>Deseja consultar faturas mais antigas? Acesse o histórico completo na aba <strong className="text-amber-500 font-bold">Faturamento 📑</strong></span>
-                                             </div>
-                                         </div>
-                                     );
-                                 })()}
+                                <BackofficeInvoiceSection
+                                    searchedUser={searchedUser}
+                                    selectedBackofficeInvoice={selectedBackofficeInvoice}
+                                    onSelectInvoice={(tab: 'open' | 'closed' | 'previous') => setSelectedBackofficeInvoice(tab)}
+                                    isMidnight={isMidnight}
+                                />
 
                                 {/* Tabela Multi-Cartões do Cliente */}
                                 <div className={`mt-4 p-4 rounded-xl border space-y-3 ${isMidnight ? 'bg-zinc-900/80 border-white/10' : 'bg-white border-black/20 shadow-sm'}`}>
@@ -1178,156 +805,42 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                         </div>
                     </div>
 
-                    {/* Massa de Teste — Billing Mock */}
-                    <div className={`p-6 rounded-2xl flex flex-col items-center text-center ${isMidnight ? 'bg-volt-surface border border-white/5 shadow-md' : 'bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}`}>
-                        <h2 className={isMidnight ? `text-xl font-bold mb-2 ${titleClass}` : `text-xl font-black uppercase tracking-wider mb-2 ${titleClass}`}>Massa de Teste (Billing)</h2>
-                        <p className={isMidnight ? `text-xs mb-6 ${subTextClass}` : `text-xs font-bold mb-6 uppercase ${subTextClass}`}>Aplica cenários de faturamento para automação. Não afeta dados de produção.</p>
-
-                        <p className={`text-xs mb-3 ${isMidnight ? 'font-semibold' : 'font-black uppercase tracking-wider'} ${titleClass}`}>CPF alvo</p>
-                        <div className="flex gap-2 flex-wrap mb-4">
-                            {[
-                                { label: 'Todos', value: '' },
-                                { label: '111', value: '11111111111' },
-                                { label: '222', value: '22222222222' },
-                                { label: '333', value: '33333333333' },
-                                { label: '444', value: '44444444444' },
-                            ].map(opt => (
-                                <button key={opt.value || 'all'} onClick={() => setBillingCpf(opt.value)}
-                                    className={`text-xs px-3 py-2 rounded-xl transition-all ${
-                                        billingCpf === opt.value
-                                            ? (isMidnight ? 'bg-volt-green text-black font-semibold' : 'border-4 border-black bg-volt-yellow text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-black')
-                                            : (isMidnight ? 'bg-volt-dark text-white/50 border border-white/5 hover:border-white/20 hover:text-white' : 'border-4 border-black/20 text-black/50 hover:border-black hover:text-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-black')
-                                    }`}>
-                                    {opt.label}
-                                </button>
-                            ))}
-                        </div>
-                        <input value={billingCpf} onChange={e => setBillingCpf(e.target.value.replace(/\D/g, ''))}
-                            placeholder="ou CPF personalizado…"
-                            className={`w-full p-3 rounded-xl focus:outline-none transition-all mb-6 ${
-                                isMidnight
-                                    ? 'bg-volt-dark text-white border border-white/5 focus:border-volt-green font-medium'
-                                    : 'bg-white text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:translate-y-1 focus:shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] font-bold'
-                            }`} />
-
-                        <p className={`text-xs mb-3 ${isMidnight ? 'font-semibold' : 'font-black uppercase tracking-wider'} ${titleClass}`}>Cenário</p>
-                        <div className="grid grid-cols-2 gap-3 mb-6">
-                            {[
-                                { key: 'adimplente',   label: 'Adimplente',   cls: isMidnight ? 'text-volt-green bg-volt-green/10 border-volt-green/20 hover:bg-volt-green/20' : 'text-green-600 bg-green-500/10 border-green-500/30 hover:bg-green-500/20' },
-                                { key: 'vencida',      label: 'Vencida',      cls: isMidnight ? 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20 hover:bg-yellow-400/20' : 'text-yellow-700 bg-yellow-500/10 border-yellow-600/30 hover:bg-yellow-500/20' },
-                                { key: 'inadimplente', label: 'Inadimplente', cls: isMidnight ? 'text-red-500 bg-red-500/10 border-red-500/20 hover:bg-red-500/20' : 'text-red-600 bg-red-500/10 border-red-600/30 hover:bg-red-500/20' },
-                                { key: 'reset',        label: '↺ Reset',      cls: isMidnight ? 'text-white/70 bg-volt-dark border border-white/5 hover:bg-white/10' : 'text-black/70 bg-black/5 border-black/20 hover:bg-black/10' },
-                            ].map(s => (
-                                <button key={s.key} onClick={() => applyBillingScenario(s.key)}
-                                    disabled={billingLoading}
-                                    className={`text-xs py-3 px-3 rounded-xl border transition-all ${isMidnight ? 'font-semibold normal-case' : 'font-bold uppercase tracking-wider'} ${s.cls}`}>
-                                    {s.label}
-                                </button>
-                            ))}
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row gap-3 mb-4 w-full justify-center max-w-sm">
-                            <button onClick={saveBillingBaseline} disabled={billingLoading || !billingCpf}
-                                className={`flex-1 text-xs py-3 px-6 rounded-xl disabled:opacity-40 transition-all ${btnTypographySmallClass} ${primaryOutlineBtnClass}`}>
-                                Salvar Mock
-                            </button>
-                            <button onClick={clearBillingBaseline} disabled={billingLoading || !billingCpf}
-                                className={`flex-1 text-xs py-3 px-6 rounded-xl disabled:opacity-40 transition-all ${btnTypographySmallClass} ${neutralBtnClass}`}>
-                                Limpar
-                            </button>
-                        </div>
-                        <button onClick={resetAllTestData} disabled={billingLoading}
-                            className={`w-full max-w-sm text-xs py-3 px-6 rounded-xl disabled:opacity-40 transition-all ${btnTypographySmallClass} ${dangerOutlineBtnClass}`}>
-                            Reset Dados Teste
-                        </button>
-
-                        {billingMsg && (
-                            <p className={`text-sm mt-4 text-center font-bold uppercase tracking-wider ${billingMsg.ok ? (isMidnight ? 'text-green-400' : 'text-green-600') : (isMidnight ? 'text-red-400' : 'text-red-600')}`}>
-                                {billingMsg.text}
-                            </p>
-                        )}
-                    </div>
+                    <BillingMockSection
+                        isMidnight={isMidnight}
+                        titleClass={titleClass}
+                        subTextClass={subTextClass}
+                        innerCardClass={innerCardClass}
+                        btnTypographyClass={btnTypographyClass}
+                        btnTypographySmallClass={btnTypographySmallClass}
+                        primaryOutlineBtnClass={primaryOutlineBtnClass}
+                        dangerOutlineBtnClass={dangerOutlineBtnClass}
+                        neutralBtnClass={neutralBtnClass}
+                        onOpenModal={openModal}
+                    />
                 </section>
             </main>
 
-            {/* Modal */}
-            {modalState.isOpen && (
-                <div
-                    className={modalOverlayClass}
-                    id="admin-modal-overlay"
-                    data-testid="admin-modal-overlay"
-                    data-cy="admin-modal-overlay"
-                    data-playwright="admin-modal-overlay"
-                    role="dialog"
-                    aria-modal="true"
-                >
-                    <div
-                        className={`p-8 rounded-3xl w-full max-w-2xl test-admin-modal ${isMidnight ? 'bg-background-dark border border-white/10' : 'bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'}`}
-                        id="admin-modal"
-                        data-testid="admin-modal"
-                        data-cy="admin-modal"
-                        data-playwright="admin-modal"
-                    >
-                        <h2
-                            className={`text-2xl font-bold uppercase tracking-wider mb-4 test-admin-modal-title ${titleClass}`}
-                            id="admin-modal-title"
-                            data-testid="admin-modal-title"
-                            data-cy="admin-modal-title"
-                        >
-                            Confirmar Ação
-                        </h2>
-                        {modalState.action === 'deny' && (
-                            <>
-                                <p className={`font-bold mb-2 uppercase text-sm ${subTextClass}`}>Por favor, informe o motivo da recusa:</p>
-                                <textarea value={denyReason} onChange={e => setDenyReason(e.target.value)} className={`w-full p-4 rounded-xl focus:outline-none transition-all font-bold ${innerCardClass} ${isMidnight ? 'text-white placeholder-white/30' : 'text-black placeholder-black/30'}`} rows={3}></textarea>
-                            </>
-                        )}
-                        {modalState.action === 'deposit' && (
-                             <>
-                                <p className={`font-bold mb-2 uppercase text-sm ${subTextClass}`}>Informe o valor a ser depositado:</p>
-                                <input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className={`w-full p-4 rounded-xl focus:outline-none transition-all font-bold ${innerCardClass} ${isMidnight ? 'text-white placeholder-white/30' : 'text-black placeholder-black/30'}`} placeholder="0.00" />
-                            </>
-                        )}
-                        {modalState.action !== 'deny' && modalState.action !== 'deposit' && (
-                            <p className={`font-bold mb-8 text-lg ${subTextClass}`}>Você tem certeza que deseja executar esta ação para o CPF <span className={`font-bold ${titleClass}`}>{formatCPF(modalState.data.cpf)}</span>?</p>
-                        )}
-                        <div
-                            className="flex flex-col justify-end gap-4 mt-8 test-admin-modal-actions"
-                            id="admin-modal-actions"
-                            data-testid="admin-modal-actions"
-                            data-cy="admin-modal-actions"
-                        >
-                            <button
-                                onClick={closeModal}
-                                className={`px-6 py-3 rounded-2xl transition-all test-admin-modal-cancel ${btnTypographyClass} ${neutralBtnClass}`}
-                                id="btn-admin-modal-cancel"
-                                name="admin-modal-cancel"
-                                data-testid="admin-modal-cancel"
-                                data-cy="admin-modal-cancel"
-                                data-playwright="admin-modal-cancel"
-                                aria-label="Cancelar"
-                                type="button"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleConfirmAction}
-                                disabled={isLoadingAction}
-                                className={`px-6 py-3 rounded-2xl transition-all disabled:opacity-50 test-admin-modal-confirm ${btnTypographyClass} ${primaryOutlineBtnClass}`}
-                                id="btn-admin-modal-confirm"
-                                name="admin-modal-confirm"
-                                data-testid="admin-modal-confirm"
-                                data-cy="admin-modal-confirm"
-                                data-playwright="admin-modal-confirm"
-                                aria-label={isLoadingAction ? 'Processando...' : 'Confirmar'}
-                                type="button"
-                            >
-                                {isLoadingAction ? 'Processando...' : 'Confirmar'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ConfirmModal
+                isOpen={modalState.isOpen}
+                action={modalState.action}
+                dataCpf={modalState.data?.cpf}
+                denyReason={denyReason}
+                depositAmount={depositAmount}
+                isLoadingAction={isLoadingAction}
+                isMidnight={isMidnight}
+                modalOverlayClass={modalOverlayClass}
+                modalCardClass={isMidnight ? 'bg-background-dark border border-white/10' : 'bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'}
+                titleClass={titleClass}
+                subTextClass={subTextClass}
+                innerCardClass={innerCardClass}
+                btnTypographyClass={btnTypographyClass}
+                primaryOutlineBtnClass={primaryOutlineBtnClass}
+                neutralBtnClass={neutralBtnClass}
+                onClose={closeModal}
+                onConfirm={handleConfirmAction}
+                onDenyReasonChange={setDenyReason}
+                onDepositAmountChange={setDepositAmount}
+            />
 
             {/* Toast */}
             {toast && (

@@ -7,7 +7,7 @@ const { getDb, esc } = require('./context');
 async function findById({ cpf, invoiceId }) {
   const db = getDb();
   const rows = await db.executeQuery(`
-    SELECT id, cpf, status, due_date, created_at, updated_at
+    SELECT id, cpf, status, due_date, valor_total, created_at, updated_at
     FROM ${db.fq('invoices')}
     WHERE id=${esc(invoiceId)} AND cpf=${esc(cpf)}
   `);

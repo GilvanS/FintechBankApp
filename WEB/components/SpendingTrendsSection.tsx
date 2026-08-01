@@ -158,7 +158,28 @@ const SpendingTrendsSection: React.FC<Props> = ({ transactions, theme }) => {
                     <CartesianGrid strokeDasharray="3 3" stroke={isMidnight ? '#27272a' : '#e5e7eb'} />
                     <XAxis dataKey="month" tick={{ fill: isMidnight ? '#71717a' : '#6b7280', fontSize: 9, fontWeight: 700 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: isMidnight ? '#71717a' : '#6b7280', fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => `R$${v}`} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${v.toFixed(2)}`, '']} />
+                    <Tooltip 
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className={`p-3 rounded-2xl border-3 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${
+                              isMidnight ? 'bg-[#18181b] text-white' : 'bg-white text-black'
+                            }`}>
+                              <p className="text-xs font-black mb-1.5">{label}</p>
+                              <div className="flex flex-col gap-1 text-[11px] font-black">
+                                {payload.map((entry: any, idx: number) => (
+                                  <div key={idx} className="flex items-center gap-1">
+                                    <span className="w-2 h-2 rounded-full border border-black/30 shrink-0" style={{ backgroundColor: entry.color }} />
+                                    <span style={{ color: entry.color }}>: R$ {Number(entry.value).toFixed(2)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }} 
+                    />
                     {(['Refeição','Mobilidade','Cultura','Saúde','Outros'] as InsightTab[]).map(cat => (
                       <Line key={cat} type="monotone" dataKey={cat} stroke={categoryColors[cat]} strokeWidth={2}
                         dot={{ r: 3, strokeWidth: 2, fill: isMidnight ? '#09090b' : '#fff' }} activeDot={{ r: 4 }} />
@@ -175,7 +196,25 @@ const SpendingTrendsSection: React.FC<Props> = ({ transactions, theme }) => {
                     <CartesianGrid strokeDasharray="3 3" stroke={isMidnight ? '#27272a' : '#e5e7eb'} />
                     <XAxis dataKey="month" tick={{ fill: isMidnight ? '#71717a' : '#6b7280', fontSize: 9, fontWeight: 700 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: isMidnight ? '#71717a' : '#6b7280', fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => `R$${v}`} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${v.toFixed(2)}`, activeTab]} />
+                    <Tooltip 
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          const entry = payload[0];
+                          return (
+                            <div className={`p-3 rounded-2xl border-3 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${
+                              isMidnight ? 'bg-[#18181b] text-white' : 'bg-white text-black'
+                            }`}>
+                              <p className="text-xs font-black mb-1">{label}</p>
+                              <div className="flex items-center gap-1 text-[11px] font-black">
+                                <span className="w-2 h-2 rounded-full border border-black/30 shrink-0" style={{ backgroundColor: categoryColors[activeTab] }} />
+                                <span style={{ color: categoryColors[activeTab] }}>: R$ {Number(entry.value).toFixed(2)}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }} 
+                    />
                     <Area type="monotone" dataKey={activeTab} stroke={categoryColors[activeTab]} strokeWidth={2.5}
                       fill="url(#gradAreaTrend)" activeDot={{ r: 5 }} />
                   </AreaChart>

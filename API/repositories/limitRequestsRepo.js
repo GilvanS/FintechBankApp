@@ -1,9 +1,10 @@
 const { getDb, esc } = require('./context');
+const { nowDb } = require('../utils/timezone');
 
 async function create({ cpf, amount }) {
     const db = getDb();
     const id = db.generateUUID();
-    const now = new Date().toISOString();
+    const now = nowDb();
     await db.executeQuery(`
         INSERT INTO ${db.fq('limit_increase_requests')}
         (id, cpf, requested_limit, status, requested_at, decided_at, admin_cpf)
@@ -38,7 +39,7 @@ async function approve({ cpf, adminCpf }) {
     `);
     if (!reqRows.length) return null;
     const newLimit = parseFloat(reqRows[0].requested_limit);
-    const now = new Date().toISOString();
+    const now = nowDb();
 
     await db.executeQuery(`
         UPDATE ${db.fq('limit_increase_requests')}

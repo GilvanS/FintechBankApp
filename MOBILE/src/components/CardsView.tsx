@@ -754,7 +754,13 @@ export default function CardsView({
                     maxLength={5}
                     placeholder="MM/AA"
                     value={unlockExpiry}
-                    onChange={(e) => setUnlockExpiry(e.target.value)}
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/\D/g, '');
+                      if (val.length >= 3) {
+                        val = `${val.slice(0, 2)}/${val.slice(2, 4)}`;
+                      }
+                      setUnlockExpiry(val);
+                    }}
                     className="w-full bg-black/40 border border-white/10 rounded-lg p-2.5 text-xs text-white font-mono placeholder:text-zinc-600 focus:outline-none focus:border-volt-green"
                   />
                 </div>
@@ -1202,7 +1208,7 @@ export default function CardsView({
                 <p className="text-xs text-on-surface-variant mt-1">Nunca compartilhe sua senha com ninguém.</p>
               </div>
               <div className="bg-white/5 border border-white/5 rounded-xl p-4 font-mono text-2xl font-bold tracking-widest text-volt-green">
-                1 9 8 4
+                { (apiPhysical?.pin || '9898').split('').join(' ') }
               </div>
               <p className="text-[10px] text-on-surface-variant leading-relaxed">
                 Esta senha é utilizada para compras físicas em estabelecimentos comerciais usando seu chip físico.

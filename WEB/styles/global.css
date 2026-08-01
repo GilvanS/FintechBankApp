@@ -731,3 +731,33 @@ body:not(.theme-midnight) .exempt-brutalist text {
   fill: #ffffff !important;
 }
 
+/* Explicit style overrides for invoice selection tabs, cashback button, and summary sheet toggles */
+.active-sub-tab,
+.active-sub-tab * {
+  color: #000000 !important;
+}
+
+.inactive-sub-tab {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+
+body.theme-midnight .inactive-sub-tab {
+  color: #a1a1aa !important;
+}
+
+.cashback-btn,
+.cashback-btn * {
+  color: #000000 !important;
+}
+
+.summary-toggle-btn.active,
+.summary-toggle-btn.active * {
+  color: #ffffff !important;
+}
+
+.summary-toggle-btn.inactive,
+.summary-toggle-btn.inactive * {
+  color: #a1a1aa !important;
+}
+
+

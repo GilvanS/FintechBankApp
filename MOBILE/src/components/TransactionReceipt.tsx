@@ -142,6 +142,7 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                     {tx.toKey && <Row label="Chave PIX" value={tx.toKey} mono testid="receipt-pix-key" />}
                     {tx.cnpj && <Row label="CNPJ" value={tx.cnpj} mono testid="receipt-cnpj" />}
                     {tx.installments && <Row label="Parcelas" value={`${tx.currentInstallment || 1}/${tx.totalInstallments || 1}`} testid="receipt-installments" />}
+                    {tx.installments && <Row label="Valor Total da Compra" value={(amount * (tx.totalInstallments || 1)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} testid="receipt-total-amount" />}
                     {transaction.description && !isPix && <Row label="Descrição" value={transaction.description} testid="receipt-description" />}
                 </div>
 

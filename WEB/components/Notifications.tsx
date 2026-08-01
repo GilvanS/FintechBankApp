@@ -1,10 +1,5 @@
-
-
-
 import React, { useState, useEffect } from 'react';
-// FIX: Corrected import path for useAuth from parent directory.
 import { useAuth } from '../context/AuthContext';
-// FIX: Corrected import path for types from parent directory.
 import { AppNotification } from '../types';
 import { getNotifications, markNotificationAsRead } from '../services/api';
 import { useToast, ToastContainer } from './Toast';
@@ -13,6 +8,52 @@ import { formatDateTimeBR } from '../utils/formatters';
 interface NotificationsProps {
     onBack: () => void;
 }
+
+/** Verifica se a notificação é de pagamento mínimo pelo título */
+function isMinPaymentNotification(n: AppNotification): boolean {
+    const title = (n.title || '').toLowerCase();
+    return title.includes('mínimo') || title.includes('minimo');
+}
+
+/** Determina as classes CSS extra baseadas no tipo de notificação */
+function getNotificationClasses(n: AppNotification): string {
+    const base = 'p-4 rounded-lg border transition-all duration-200';
+    const isMin = isMinPaymentNotification(n);
+
+    if (isMin && !n.is_read) {
+        // Destaque verde para pagamento mínimo não lido
+        return `${base} bg-emerald-900/20 border-emerald-500/40 shadow-sm shadow-emerald-500/10`;
+    }
+    if (isMin && n.is_read) {
+        // Pagamento mínimo já lido — borda verde suave
+        return `${base} bg-surface-dark border-emerald-500/20`;
+    }
+    if (!n.is_read) {
+        return `${base} bg-primary/10 border-primary/30`;
+    }
+    return `${base} bg-surface-dark border-white/10`;
+}
+
+/** Ícone indicador baseado no tipo da notificação */
+function NotificationIcon({ n }: { n: AppNotification }) {
+    if (isMinPaymentNotification(n)) {
+        return (
+            <div className="flex-shrink-0 w-9 h-9 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+        );
+    }
+    return (
+        <div className="flex-shrink-0 w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+            <svg className="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+        </div>
+    );
+}
+
 function Notifications({ onBack }: NotificationsProps) {
     const { user } = useAuth();
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -60,17 +101,59 @@ function Notifications({ onBack }: NotificationsProps) {
                     notifications.length > 0 ? (
                         <ul className="space-y-3">
                             {notifications.map(n => (
-                                <li key={n.id} className={`p-4 rounded-lg border ${n.is_read ? 'bg-surface-dark border-white/10' : 'bg-primary/10 border-primary/30'}`}>
-                                    <p className={`text-white ${!n.is_read && 'font-semibold'}`}>{n.message}</p>
-                                    <div className="flex justify-between items-center mt-2">
-                                        <p className="text-xs text-white/40">{formatDateTimeBR(n.created_at)}</p>
-                                        {!n.is_read && <button onClick={() => handleMarkAsRead(n.id)} className="text-xs text-primary font-semibold hover:underline">Marcar como lida</button>}
+                                <li key={n.id} className={getNotificationClasses(n)}>
+                                    <div className="flex items-start gap-3">
+                                        <NotificationIcon n={n} />
+
+                                        <div className="flex-1 min-w-0">
+                                            {/* Título da notificação — sempre exibido se presente */}
+                                            {n.title && (
+                                                <p className={`text-sm font-semibold mb-0.5 ${
+                                                    isMinPaymentNotification(n)
+                                                        ? 'text-emerald-300'
+                                                        : !n.is_read
+                                                            ? 'text-white'
+                                                            : 'text-white/70'
+                                                }`}>
+                                                    {n.title}
+                                                </p>
+                                            )}
+
+                                            {/* Mensagem com destaque de lido/não lido */}
+                                            <p className={`text-sm leading-relaxed ${
+                                                !n.is_read ? 'text-white/80' : 'text-white/50'
+                                            }`}>
+                                                {n.message}
+                                            </p>
+
+                                            {/* Rodapé: data + ação */}
+                                            <div className="flex justify-between items-center mt-2">
+                                                <p className="text-xs text-white/40">{formatDateTimeBR(n.created_at)}</p>
+                                                {!n.is_read && (
+                                                    <button
+                                                        onClick={() => handleMarkAsRead(n.id)}
+                                                        className={`text-xs font-semibold hover:underline ${
+                                                            isMinPaymentNotification(n)
+                                                                ? 'text-emerald-400'
+                                                                : 'text-primary'
+                                                        }`}
+                                                    >
+                                                        Marcar como lida
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </li>
                             ))}
                         </ul>
                     ) : (
-                        <p className="text-center text-white/50 py-8">Nenhuma notificação.</p>
+                        <div className="text-center py-12">
+                            <svg className="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                            </svg>
+                            <p className="text-white/50">Nenhuma notificação.</p>
+                        </div>
                     )
                 )}
             </div>
@@ -78,4 +161,5 @@ function Notifications({ onBack }: NotificationsProps) {
         </div>
     );
 };
+
 export default Notifications;

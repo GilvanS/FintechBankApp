@@ -398,22 +398,20 @@ async function createMassUser(payload) {
         console.warn('⚠️ Erro ao gerar chaves PIX da massa:', pixErr.message);
     }
 
-    // Geração de compras + fatura SÓ quando o cartão está ativado (habilitado).
-    // Se o cartão for "AGUARDANDO ATIVAÇÃO", nenhuma compra/fatura é gerada.
-    const cardHabilitado = payload.cardActivation !== 'AWAITING_ACTIVATION';
-    if (cardHabilitado) {
-        try {
-            await seedMassBilling(db, cleanCpf, {
-                accountStatus: payload.accountStatus || 'adimplente',
-                daysOverdue: Number(payload.daysOverdue || 0),
-                overdueAmount: Number(payload.overdueAmount || 0),
-                creditLimit: Number(payload.creditLimit || 5000),
-            });
-        } catch (billingErr) {
-            console.warn('⚠️ Erro ao gerar faturamento da massa:', billingErr.message);
-        }
-    } else {
-        console.log(`[createMassUser] Cartão de ${cleanCpf} aguardando ativação — compras/fatura não geradas.`);
+    // Geração de compras + fatura SEMPRE roda — independente da ativação do cartão.
+    // A ativação do cartão é sobre uso futuro (novas compras); a fatura fechada
+    // (histórico) deve existir para a conta aparecer no Painel de Massas em Atraso
+    // mesmo quando o cartão está "AWAITING_ACTIVATION". Misturar os dois fazia
+    // ~50% das massas inadimplentes caírem no else e nunca ganharem fatura.
+    try {
+        await seedMassBilling(db, cleanCpf, {
+            accountStatus: payload.accountStatus || 'adimplente',
+            daysOverdue: Number(payload.daysOverdue || 0),
+            overdueAmount: Number(payload.overdueAmount || 0),
+            creditLimit: Number(payload.creditLimit || 5000),
+        });
+    } catch (billingErr) {
+        console.warn('⚠️ Erro ao gerar faturamento da massa:', billingErr.message);
     }
 
     return { id, cpf: cleanCpf, fullName: payload.fullName };

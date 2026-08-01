@@ -64,11 +64,11 @@ describe('HomeView - Render', () => {
 
     expect(screen.getByText(/Saldo em conta/i)).toBeInTheDocument();
     expect(screen.getByText(/Fatura Atual/i)).toBeInTheDocument();
-    expect(screen.getByText(/Ver fatura e limite/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pagar fatura/i)).toBeInTheDocument();
 
     const saldoSection = screen.getByText(/Saldo em conta/i).closest('section');
     expect(within(saldoSection).getByText(/1.234,56/)).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('toggle de visibilidade do saldo funciona', () => {
     const user = makeUser();

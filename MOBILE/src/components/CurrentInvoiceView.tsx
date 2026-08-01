@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Transaction, User } from '../types';
+import TransactionReceipt from './TransactionReceipt';
 
 interface CurrentInvoiceProps {
     user: User;
@@ -20,7 +21,7 @@ function txIcon(tx: Transaction): string {
 
 const CurrentInvoiceView: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
     const [hideValue, setHideValue] = useState(false);
-    const [expanded, setExpanded] = useState<string | null>(null);
+    const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
     const { creditCard } = user;
     const invoiceAmount = creditCard.currentInvoice ?? 0;
@@ -44,6 +45,10 @@ const CurrentInvoiceView: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => 
     }, {} as Record<string, Transaction[]>);
 
     const total = currentTransactions.reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
+
+    if (selectedTransaction) {
+        return <TransactionReceipt transaction={selectedTransaction} onBack={() => setSelectedTransaction(null)} />;
+    }
 
     return (
         <div className="flex flex-col h-full bg-background-dark text-white">
@@ -114,7 +119,6 @@ const CurrentInvoiceView: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => 
                                     </p>
                                     <div className="space-y-1">
                                         {txs.map(tx => {
-                                            const isExpanded = expanded === tx.id;
                                             const isRefund = tx.amount < 0;
                                             const installLabel = tx.installments
                                                 ?? (tx.currentInstallment && tx.totalInstallments
@@ -123,7 +127,7 @@ const CurrentInvoiceView: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => 
                                             return (
                                                 <div key={tx.id}>
                                                     <button
-                                                        onClick={() => setExpanded(isExpanded ? null : tx.id)}
+                                                        onClick={() => setSelectedTransaction(tx)}
                                                         className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-surface-dark/60 transition-colors text-left"
                                                     >
                                                         <div className="shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -148,30 +152,6 @@ const CurrentInvoiceView: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => 
                                                             {isRefund ? '+' : ''}{fmt(Math.abs(tx.amount))}
                                                         </p>
                                                     </button>
-
-                                                    {/* Accordion expandido (spec §5) */}
-                                                    {isExpanded && (
-                                                        <div className="mx-3 mb-2 rounded-xl bg-surface-dark/50 px-4 py-3 space-y-2">
-                                                            {tx.category && (
-                                                                <div className="flex justify-between text-xs border-b border-white/5 pb-2">
-                                                                    <span className="text-gray-400">Categoria</span>
-                                                                    <span className="text-white capitalize">{tx.category}</span>
-                                                                </div>
-                                                            )}
-                                                            <div className="flex justify-between text-xs border-b border-white/5 pb-2">
-                                                                <span className="text-gray-400">Data</span>
-                                                                <span className="text-white">
-                                                                    {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex justify-between text-xs">
-                                                                <span className="text-gray-400">Valor</span>
-                                                                <span className={isRefund ? 'text-primary' : 'text-white'}>
-                                                                    {fmt(Math.abs(tx.amount))}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    )}
                                                 </div>
                                             );
                                         })}

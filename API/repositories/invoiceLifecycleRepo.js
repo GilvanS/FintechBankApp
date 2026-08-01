@@ -4,6 +4,7 @@
  */
 
 const { getDb, esc } = require('./context');
+const { nowDb } = require('../utils/timezone');
 
 /**
  * Busca todas as faturas abertas para validação de vencimento
@@ -38,11 +39,11 @@ async function findOpenInvoicesByCpf(cpf) {
  */
 async function markInvoiceAsOverdue({ invoiceId, cpf, daysOverdue, totalWithCharges, interest, fine }) {
     const db = getDb();
-    const now = new Date().toISOString();
-    
+    const now = nowDb();
+
     await db.executeQuery(`
         UPDATE ${db.fq('invoices')}
-        SET 
+        SET
             status = 'VENCIDA',
             dias_atraso = ${daysOverdue},
             valor_juros = ${Number(interest || 0).toFixed(2)},
@@ -51,7 +52,7 @@ async function markInvoiceAsOverdue({ invoiceId, cpf, daysOverdue, totalWithChar
             updated_at = '${now}'
         WHERE id = ${esc(invoiceId)} AND cpf = ${esc(cpf)}
     `);
-    
+
     // Atualizar days_overdue na tabela users
     await db.executeQuery(`
         UPDATE ${db.fq('users')}
@@ -65,22 +66,22 @@ async function markInvoiceAsOverdue({ invoiceId, cpf, daysOverdue, totalWithChar
  */
 async function markInvoiceAsPaid({ invoiceId, cpf, paymentDate }) {
     const db = getDb();
-    const now = paymentDate || new Date().toISOString();
-    
+    const now = paymentDate || nowDb();
+
     await db.executeQuery(`
         UPDATE ${db.fq('invoices')}
-        SET 
+        SET
             status = 'FECHADA',
             data_pagamento = '${now}',
             dias_atraso = 0,
             updated_at = '${now}'
         WHERE id = ${esc(invoiceId)} AND cpf = ${esc(cpf)}
     `);
-    
+
     // Zerar days_overdue na tabela users
     await db.executeQuery(`
         UPDATE ${db.fq('users')}
-        SET 
+        SET
             days_overdue = 0,
             invoice_last_closed_date = '${now}',
             updated_at = '${now}'

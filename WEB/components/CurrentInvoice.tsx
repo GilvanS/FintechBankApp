@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import { User, CardTransaction } from '../types';
 import { useAppState } from '../contexts/AppStateContext';
+import { isPaymentTx } from './TransactionRow';
+import PaymentTypeFilter from './PaymentTypeFilter';
 
 const statusConfig = {
     aberta: { label: 'Fatura em aberto', icon: 'pending', color: 'text-blue-400', bg: 'bg-blue-400/10 border border-blue-400/20' },
@@ -34,6 +37,7 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: cu
   const { creditCard } = user;
   const [hideValue, setHideValue] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState<'ALL' | 'TOTAL' | 'MINIMO' | 'PARCIAL'>('ALL');
   const cycleStatus = user.billingCycle?.status ?? 'aberta';
   const status = statusConfig[cycleStatus] ?? statusConfig.aberta;
 
@@ -42,16 +46,22 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: cu
   const endOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
   if (endOfDay) endOfDay.setHours(23, 59, 59, 999);
 
-  const currentTransactions = hasInvoiceDueDate
+  const currentTransactions = (hasInvoiceDueDate
     ? creditCard.transactions.filter(tx => new Date(tx.date) <= (endOfDay as Date))
-    : creditCard.transactions;
+    : creditCard.transactions
+  ).filter(tx => {
+    // Filtro por tipo de pagamento
+    if (paymentTypeFilter === 'ALL') return true;
+    if (isPaymentTx(tx.type)) return tx.paymentType === paymentTypeFilter;
+    return true; // não-PAYMENT sempre aparecem
+  });
 
   const vencimentoLabel = hasInvoiceDueDate
     ? new Date(creditCard.invoiceDueDate).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'})
     : '--';
 
   const isCredit = creditCard.currentInvoice < 0;
-  const minPayment = creditCard.currentInvoice > 0 ? Math.max(creditCard.currentInvoice * 0.15, 10) : 0;
+  const minPayment = creditCard.currentInvoice > 0 ? Math.max(creditCard.currentInvoice * 0.10, 10) : 0;
 
   const grouped: Record<string, CardTransaction[]> = {};
   for (const tx of currentTransactions) {
@@ -128,6 +138,18 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: cu
             Confira aqui os detalhes da fatura e os lançamentos do mês.
           </p>
 
+          {/* Payment type filter chips — shared component */}
+          {creditCard.transactions.some(tx => isPaymentTx(tx.type)) && (
+            <div className="mb-4">
+              <PaymentTypeFilter
+                activeFilter={paymentTypeFilter}
+                onFilterChange={setPaymentTypeFilter}
+                isMidnight={isMidnight}
+                size="sm"
+              />
+            </div>
+          )}
+
           {currentTransactions.length > 0 ? (
             <div className="space-y-4">
               {Object.entries(grouped).map(([date, txs]) => (
@@ -136,7 +158,8 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: cu
                   <div className="space-y-1">
                     {txs.map(tx => {
                       const isExpanded = expanded === tx.id;
-                      const isRefund = tx.amount < 0 || tx.type === 'PAYMENT';
+                      const isPayment = isPaymentTx(tx.type);
+                      const isRefund = tx.amount < 0 || isPayment;
                       const installLabel = tx.installments
                         ?? (tx.currentInstallment && tx.totalInstallments
                           ? `${tx.currentInstallment}/${tx.totalInstallments}`
@@ -146,16 +169,41 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: cu
                         <div key={tx.id}>
                           <button
                             onClick={() => setExpanded(isExpanded ? null : tx.id)}
-                            className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left ${isMidnight ? 'hover:bg-white/10' : 'hover:bg-black/10'}`}
+                            className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left ${
+                              isPayment
+                                ? (isMidnight
+                                  ? 'bg-emerald-500/15 border border-emerald-500/40 hover:border-emerald-500/70'
+                                  : 'bg-emerald-50/90 border-2 border-emerald-400 hover:bg-emerald-100')
+                                : isMidnight ? 'hover:bg-white/10' : 'hover:bg-black/10'
+                            }`}
                           >
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${isMidnight ? 'bg-volt-primary/10' : 'bg-volt-primary/20'}`}>
-                              <span className={`material-symbols-outlined text-lg ${isRefund ? 'text-green-400' : 'text-volt-primary'}`}>
-                                {getIconForTx(tx.merchant)}
-                              </span>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              isPayment
+                                ? (isMidnight ? 'bg-emerald-500/25 border-2 border-emerald-500/40' : 'bg-emerald-200 border-2 border-emerald-500')
+                                : isMidnight ? 'bg-volt-primary/10' : 'bg-volt-primary/20'
+                            }`}>
+                              {isPayment
+                                ? <CheckCircle2 size={20} className="text-emerald-500" />
+                                : (
+                                  <span className={`material-symbols-outlined text-lg ${isRefund ? 'text-green-400' : 'text-volt-primary'}`}>
+                                    {getIconForTx(tx.merchant)}
+                                  </span>
+                                )}
                             </div>
                             <div className="flex-grow min-w-0">
                               <div className="flex items-center gap-1.5">
-                                <p className={`font-semibold text-sm truncate ${isMidnight ? 'text-white' : 'text-black'}`}>{tx.merchant}</p>
+                                <p className={`font-semibold text-sm truncate ${
+                                  isPayment ? (isMidnight ? 'text-emerald-300' : 'text-emerald-700') : isMidnight ? 'text-white' : 'text-black'
+                                }`}>{tx.merchant}</p>
+                                {isPayment && (
+                                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider shrink-0 ${
+                                    isMidnight
+                                      ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50'
+                                      : 'bg-emerald-500 text-white'
+                                  }`}>
+                                    Pagamento
+                                  </span>
+                                )}
                                 {installLabel && (
                                   <span className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${isMidnight ? 'text-gray-400 bg-white/5' : 'text-gray-600 bg-black/5'}`}>
                                     {installLabel}

@@ -21,6 +21,8 @@ exports.up = async function (knex) {
     await addIfMissing('invoices', 'valor_juros',              'DECIMAL(15,2) DEFAULT 0.00');
     await addIfMissing('invoices', 'valor_multa',              'DECIMAL(15,2) DEFAULT 0.00');
     await addIfMissing('invoices', 'valor_total_com_encargos', 'DECIMAL(15,2) DEFAULT 0.00');
+    await addIfMissing('invoices', 'valor_pago',              'DECIMAL(15,2) DEFAULT 0.00');
+    await addIfMissing('invoices', 'data_ultimo_pagamento',   'TIMESTAMP NULL');
 
     await addIfMissing('users', 'credit_card_due_day',      'INTEGER DEFAULT 10');
     await addIfMissing('users', 'invoice_last_closed_date', 'TIMESTAMP NULL');
@@ -41,7 +43,7 @@ exports.down = async function (knex) {
     await knex.raw('DROP INDEX IF EXISTS fintech.idx_invoices_due_date');
     await knex.raw('DROP INDEX IF EXISTS fintech.idx_invoices_cpf_status');
 
-    for (const col of ['valor_total', 'data_pagamento', 'dias_atraso', 'valor_juros', 'valor_multa', 'valor_total_com_encargos']) {
+    for (const col of ['valor_total', 'data_pagamento', 'dias_atraso', 'valor_juros', 'valor_multa', 'valor_total_com_encargos', 'valor_pago', 'data_ultimo_pagamento']) {
         await knex.raw(`ALTER TABLE fintech.invoices DROP COLUMN IF EXISTS ${col}`);
     }
     for (const col of ['credit_card_due_day', 'invoice_last_closed_date', 'days_overdue']) {

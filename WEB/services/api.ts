@@ -3,9 +3,39 @@ import { User, PasswordResetRequest, LimitIncreaseRequest, AppNotification, PixK
 
 const API_BASE = '/api'; // Vite proxy will forward to http://localhost:3001
 
+// ── Token Management ───────────────────────────────────────────────────
+// AdminDashboard.tsx chama esta função para guardar o token da sessão admin
+// no sessionStorage, garantindo que esteja disponível mesmo quando o
+// localStorage.adminToken expirar ou for sobrescrito.
+export function setAdminSessionToken(token: string | null): void {
+  if (token) {
+    sessionStorage.setItem('sessionAdminToken', token);
+  } else {
+    sessionStorage.removeItem('sessionAdminToken');
+  }
+}
+
+// Seleciona o token por perfil: endpoints de admin usam adminToken (isolado do
+// authToken do cliente), pois user e admin coexistem no mesmo localStorage (mesma
+// origem). Assim logar uma massa nao derruba a sessao admin, e vice-versa.
+//
+// Ordem de precedência para admin:
+//   1. sessionStorage.sessionAdminToken (setado pelo AdminDashboard ao montar)
+//   2. localStorage.adminToken (setado pelo Login para admin)
+//   3. localStorage.authToken (fallback)
+function tokenForEndpoint(endpoint: string): string | null {
+  const isAdminEndpoint = endpoint.startsWith('/admin') || endpoint.startsWith('/debug');
+  if (isAdminEndpoint) {
+    return sessionStorage.getItem('sessionAdminToken')
+      || localStorage.getItem('adminToken')
+      || localStorage.getItem('authToken');
+  }
+  return localStorage.getItem('authToken');
+}
+
 // Helper function to make API calls
 async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('authToken');
+  const token = tokenForEndpoint(endpoint);
   const response = await fetch(`${API_BASE}${endpoint}`, {
     credentials: 'include',
     ...options,
@@ -18,6 +48,14 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Request failed' }));
+    // Se for 403/Acesso negado em endpoint admin, notificar o AdminDashboard
+    // para que ele possa mostrar um modal de re-login.
+    if (response.status === 403 && (endpoint.startsWith('/admin') || endpoint.startsWith('/debug'))) {
+      const msg = error.message || 'Acesso negado';
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('admin-auth-failed', { detail: { message: msg, endpoint } }));
+      }, 0);
+    }
     throw new Error(error.message || `HTTP ${response.status}`);
   }
 
@@ -123,6 +161,7 @@ export const revealCard = async (cardId: string, pin: string): Promise<{ success
 // ── Resumo e histórico de faturas ──────────────────────────────────────────
 export interface InvoiceSummary {
   saldoAnterior: number;
+  closedInvoiceResidual?: number;
   jurosRemuneratorios: number;
   iof: number;
   jurosMora: number;
@@ -389,7 +428,7 @@ export const purchaseWithDebit = async (cpf: string, items: PurchasedItem[], cas
   }
 };
 
-export const payCreditCardInvoice = async (cpf: string, pin: string, amount?: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
+export const payCreditCardInvoice = async (cpf: string, pin: string, amount?: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; paymentCodes?: PaymentCodesResponse['data'] }> => {
   try {
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/cards/invoice/pay', {
       method: 'POST',
@@ -590,6 +629,7 @@ export const adminGetOverdueMasses = async (): Promise<{
   stats?: {
     totalUsers: number;
     overdueCount: number;
+    regularizedCount: number;
     overdueRatePercentage: number;
     totalOverdueAmount: number;
     avgDaysOverdue: number;
@@ -601,6 +641,8 @@ export const adminGetOverdueMasses = async (): Promise<{
     faturaFechada: number;
     daysOverdue: number;
     dueDate: string;
+    hoursAgo?: number;
+    regularizedAt?: string;
     encargos: {
       multa: number;
       jurosMora: number;
@@ -609,6 +651,17 @@ export const adminGetOverdueMasses = async (): Promise<{
       totalEncargos: number;
     };
     totalQuitacao: number;
+  }>;
+  regularizedReport?: Array<{
+    cpf: string;
+    fullName: string;
+    valorTotal: number;
+    valorPago: number;
+    paymentType: 'TOTAL' | 'MINIMO' | 'PARCIAL';
+    paidAt: string;
+    hoursAgo: number;
+    hoursToPay: number | null;
+    dueDate: string | null;
   }>;
 }> => {
   try {
@@ -988,6 +1041,162 @@ export const adminResetTestData = async (): Promise<{ success: boolean; message?
     } catch (error: any) {
         return { success: false, message: error.message || 'Erro ao resetar dados.' };
     }
+};
+
+export const adminGetRegularizedTimeline = async (): Promise<{
+  success: boolean;
+  timeline: Array<{
+    date: string;
+    label: string;
+    count: number;
+    totalAmount: number;
+  }>;
+  total: number;
+}> => {
+  try {
+    const result = await apiCall<any>('/admin/regularized-timeline', { method: 'GET' });
+    return result.success
+      ? result
+      : { success: false, timeline: [], total: 0 };
+  } catch {
+    return { success: false, timeline: [], total: 0 };
+  }
+};
+
+export const adminCheckRegularized = async (since: string): Promise<{
+  success: boolean;
+  count: number;
+  totalPaid: number;
+  items: Array<{
+    cpf: string;
+    fullName: string;
+    valorTotal: number;
+    valorPago: number;
+    paidAt: string;
+    dueDate: string;
+  }>;
+  checkedAt: string;
+  message?: string;
+}> => {
+  try {
+    const params = new URLSearchParams({ since });
+    const result = await apiCall<any>(`/admin/regularized/check?${params.toString()}`, { method: 'GET' });
+    return result.success
+      ? result
+      : { success: false, count: 0, totalPaid: 0, items: [], checkedAt: new Date().toISOString(), message: result.message };
+  } catch (error: any) {
+    return { success: false, count: 0, totalPaid: 0, items: [], checkedAt: new Date().toISOString(), message: error.message };
+  }
+};
+
+export const adminAuditConsistency = async (options?: { cpf?: string; limit?: number }): Promise<{
+  success: boolean;
+  message?: string;
+  summary?: {
+    totalScanned: number;
+    usersConsistent: number;
+    usersDesatualizados: number;
+    invoicesConsistent: number;
+    invoicesDesatualizadas: number;
+    totalInvoices: number;
+  };
+  details?: Array<{
+    cpf: string;
+    name: string;
+    status: string;
+    dueDate: string;
+    userDaysOverdue: number;
+    invoiceDiasAtraso: number;
+    realTimeDays: number;
+    diffUser: number;
+    diffInvoice: number;
+  }>;
+  filters?: { cpf: string | null; limit: number };
+  tip?: string;
+}> => {
+  try {
+    const params = new URLSearchParams();
+    if (options?.cpf) params.set('cpf', options.cpf);
+    if (options?.limit) params.set('limit', String(options.limit));
+    const qs = params.toString();
+    const result = await apiCall<any>(`/admin/audit-consistency${qs ? '?'+qs : ''}`);
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao auditar consistência' };
+  }
+};
+
+export const adminRunFullAudit = async (): Promise<{
+  success: boolean;
+  message?: string;
+  consistency?: {
+    totalScanned: number;
+    usersConsistent: number;
+    usersDesatualizados: number;
+    invoicesConsistent: number;
+    invoicesDesatualizadas: number;
+    totalInvoices: number;
+  };
+  payments?: {
+    doubleCount: { scanned: number; discrepancies: number };
+    negativeBalance: { scanned: number; issues: number; totalExcess: number };
+  };
+  tip?: string;
+}> => {
+  try {
+    const result = await apiCall<any>('/admin/audit/run-full');
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao executar auditoria completa' };
+  }
+};
+
+export const adminHealthCharges = async (): Promise<{
+  success: boolean;
+  message?: string;
+  summary?: {
+    totalUsers: number;
+    consistent: number;
+    divergent: number;
+    noInvoice: number;
+  };
+  details?: Array<{
+    cpf: string;
+    name: string;
+    residual: number;
+    daysOverdue: number;
+    realDaysOverdue: number;
+    computed: { multa: number; jurosMora: number; jurosRem: number; iof: number; total: number };
+    stored: { multa: number; jurosMora: number; jurosRem: number; iof: number; total: number };
+    diff: { multa: number; jurosMora: number; jurosRem: number; iof: number; total: number };
+    divergence: boolean;
+  }>;
+  hasDivergence?: boolean;
+  tip?: string;
+}> => {
+  try {
+    const result = await apiCall<any>('/admin/health/charges');
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao auditar encargos' };
+  }
+};
+
+export const adminFixOrphanPayments = async (): Promise<{
+  success: boolean;
+  message?: string;
+  summary?: { usersScanned: number; fixed: number; errors: number };
+  details?: any[];
+}> => {
+  try {
+    const result = await apiCall<{ success: boolean; summary?: any; details?: any[] }>('/admin/fix-orphan-payments', {
+      method: 'POST',
+      body: JSON.stringify({ confirm: true }),
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao corrigir pagamentos órfãos' };
+  }
 };
 
 export interface SimulateMassPayload {

@@ -29,6 +29,7 @@ export default defineConfig(() => {
       resolve: {
         alias: [
           { find: '@', replacement: path.resolve(__dirname, '.') },
+          { find: '@api', replacement: path.resolve(__dirname, '../API') },
           ...(isDemo ? [{
             find: /.*\/services\/api$/,
             replacement: path.resolve(__dirname, 'services/mockApi.ts'),
@@ -38,7 +39,7 @@ export default defineConfig(() => {
       test: {
         globals: true,
         environment: 'jsdom',
-        pool: 'vmThreads',
+        pool: 'threads',
         server: {
           deps: {
             inline: ['@reduxjs/toolkit', 'recharts']

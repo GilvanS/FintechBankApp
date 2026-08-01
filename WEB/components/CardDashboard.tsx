@@ -80,6 +80,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     updateUser({ ...user, creditCard: { ...creditCard, ...partial } })
                 }
                 userName={user.fullName}
+                user={user}
                 profileMessage={user.profileMessage}
                 onOpenInvoice={() => onNavigate('currentInvoice')}
                 invoiceAmount={invoiceAmount}

@@ -112,7 +112,23 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                     {isPix && <Row label="Instituição" value={tx.institution || 'Banco Digital'} testid="receipt-dest-institution" />}
                     {tx.toKey && <Row label="Chave PIX" value={tx.toKey} mono testid="receipt-pix-key" />}
                     {tx.cnpj && <Row label="CNPJ" value={tx.cnpj} mono testid="receipt-cnpj" />}
-                    {tx.installments && <Row label="Parcelas" value={`${tx.currentInstallment||1}/${tx.totalInstallments||1}`} testid="receipt-installments" />}
+                    {tx.installments && <Row label="Parcela Vigente" value={typeof tx.installments === 'string' && tx.installments.includes('/') ? tx.installments : `${tx.currentInstallment||1} de ${tx.totalInstallments||1}`} testid="receipt-installments" />}
+                    {(tx.totalAmount || (tx.totalInstallments && tx.amount)) && (
+                        <Row
+                            label="Valor Total da Compra"
+                            value={(tx.totalAmount || (tx.amount * tx.totalInstallments)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            mono
+                            testid="receipt-total-amount"
+                        />
+                    )}
+                    {(tx.cardNumber || tx.cardLast4 || (user as any)?.creditCard?.number) && (
+                        <Row
+                            label="Cartão Utilizado"
+                            value={tx.cardNumber || (tx.cardLast4 ? `**** **** **** ${tx.cardLast4}` : (user as any)?.creditCard?.number || '**** **** **** 1111')}
+                            mono
+                            testid="receipt-card-number"
+                        />
+                    )}
                     {transaction.description && !isPix && <Row label="Descrição" value={transaction.description} testid="receipt-description" />}
                 </div>
 

@@ -51,9 +51,17 @@ class PostgresProvider extends DatabaseInterface {
                 ssl: this.config.ssl ? { rejectUnauthorized: false } : false,
                 connectionTimeoutMillis: 10000,
                 idleTimeoutMillis: 30000,
-                max: 20
+                max: 20,
+                options: '-c timezone=America/Sao_Paulo'
             });
-            
+
+            // Forçar timezone da sessão no fuso de Brasília após conexão
+            this.pool.on('connect', (client) => {
+                client.query("SET TIME ZONE 'America/Sao_Paulo'").catch((err) => {
+                    console.error('⚠️ [PostgresProvider] Erro ao definir TIME ZONE na conexão:', err.message);
+                });
+            });
+
             // Test connection
             console.log('🔍 [PostgresProvider] Testando conexão...');
             const client = await this.pool.connect();

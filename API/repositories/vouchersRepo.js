@@ -1,4 +1,5 @@
 const { getDb, esc } = require('./context');
+const { nowDb } = require('../utils/timezone');
 
 // Persistência de credit vouchers (crédito resgatável gerado ao cancelar uma
 // compra a crédito cuja fatura de origem já está FECHADA — ver
@@ -7,7 +8,7 @@ const { getDb, esc } = require('./context');
 async function create({ cpf, amount, sourceTransactionId, sourceInvoiceId, description }) {
     const db = getDb();
     const id = db.generateUUID();
-    const now = new Date().toISOString();
+    const now = nowDb();
     await db.executeQuery(`
         INSERT INTO ${db.fq('credit_vouchers')}
         (id, cpf, amount, status, source_transaction_id, source_invoice_id, description, created_at)

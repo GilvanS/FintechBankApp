@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Auditoria de Pagamentos FintechBank</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f0f13;
+    --surface: #1a1a24;
+    --surface2: #24243a;
+    --border: #2a2a44;
+    --text: #e8e8f0;
+    --text2: #9898b8;
+    --green: #00e676;
+    --green-bg: rgba(0,230,118,0.08);
+    --red: #ff5252;
+    --red-bg: rgba(255,82,82,0.08);
+    --amber: #ffd740;
+    --amber-bg: rgba(255,215,64,0.08);
+    --blue: #448aff;
+    --blue-bg: rgba(68,138,255,0.08);
+    --purple: #b388ff;
+    --purple-bg: rgba(179,136,255,0.08);
+    --cyan: #18ffff;
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+    min-height: 100vh;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 20px 24px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 24px;
+  }
+  .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  .header .sub { font-size: 13px; color: var(--text2); margin-top: 4px; }
+  .header .badge {
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(255,215,64,0.25);
+  }
+
+  /* KPI Grid */
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px; margin-bottom: 24px;
+  }
+  .kpi-card {
+    padding: 18px 20px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .kpi-card .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); }
+  .kpi-card .value { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; line-height: 1; }
+  .kpi-card .sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+
+  /* Section */
+  .section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 20px;
+  }
+  .section-title {
+    font-size: 15px; font-weight: 700; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .count {
+    font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+    background: var(--surface2); color: var(--text2);
+  }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2);
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody tr:last-child td { border-bottom: none; }
+
+  /* Status badges */
+  .status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .status-ok { background: var(--green-bg); color: var(--green); border: 1px solid rgba(0,230,118,0.2); }
+  .status-discrepancy { background: var(--red-bg); color: var(--red); border: 1px solid rgba(255,82,82,0.2); }
+  .status-resolvido { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(68,138,255,0.2); }
+  .status-orphan { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(255,215,64,0.2); }
+
+  /* Bar comparison */
+  .bar-row { display: flex; align-items: center; gap: 8px; }
+  .bar-wrap { flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; position: relative; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 0.8s ease; }
+  .bar-fill.pmt { background: var(--blue); }
+  .bar-fill.inv { background: var(--green); }
+  .bar-fill.diff { background: var(--red); }
+  .bar-label { font-size: 11px; font-weight: 600; min-width: 60px; text-align: right; white-space: nowrap; }
+
+  /* Mini table */
+  .mini-table { font-size: 12px; }
+  .mini-table td { padding: 4px 8px; border: none; }
+  .mini-table tr td:first-child { color: var(--text2); }
+
+  /* Category grid */
+  .cat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 10px; }
+  .cat-item {
+    padding: 14px 16px; background: var(--surface2); border-radius: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+    border: 1px solid transparent;
+  }
+  .cat-item.pass { border-color: rgba(0,230,118,0.15); }
+  .cat-item.fail { border-color: rgba(255,82,82,0.15); }
+  .cat-item .clabel { font-size: 12px; color: var(--text2); }
+  .cat-item .cval { font-size: 16px; font-weight: 700; }
+
+  /* Details toggle */
+  .details-toggle {
+    font-size: 11px; color: var(--blue); cursor: pointer;
+    padding: 4px 8px; border-radius: 6px; background: var(--blue-bg);
+    border: none; font-weight: 600; transition: 0.15s;
+  }
+  .details-toggle:hover { background: rgba(68,138,255,0.15); }
+  .details-content { display: none; margin-top: 8px; padding: 10px; background: var(--surface2); border-radius: 8px; font-size: 12px; }
+  .details-content.open { display: block; }
+  .details-content table { font-size: 11px; }
+  .details-content th { padding: 4px 6px; }
+  .details-content td { padding: 4px 6px; }
+
+  /* Pagination */
+  .page-controls { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .page-btn { padding: 6px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.15s; }
+  .page-btn:hover { background: var(--border); }
+  .page-btn:disabled { opacity: 0.4; cursor: default; }
+  .page-info { font-size: 12px; color: var(--text2); }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    body { padding: 12px; }
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .header { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .cat-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container" id="app"></div>
+
+<script>
+// ─── Dados da Auditoria ──────────────────────────────────────────────────
+const DATA = {
+  "ranAt": "2026-07-26T18:24:40.009Z",
+  "doubleCount": {
+    "scanned": 7, "withPayments": 7, "discrepancies": 3, "fixed": 0, "errors": 0,
+    "details": [
+      { "cpf":"11111111111", "name":"Admin User", "status":"ok",
+        "payments":[{"amount":50,"description":"Pagamento parcial de fatura","date":"2026-07-18"},{"amount":50,"description":"Pagamento parcial de fatura","date":"2026-07-18"},{"amount":270.95,"description":"Pagamento fatura","date":"2026-08-16"}],
+        "invoices":[{"dueDate":"2026-07-15","status":"FECHADA","valorTotal":3870.86,"valorPago":370.95,"dataPagamento":null}],
+        "paymentTotal": 370.95, "invoiceTotalPago": 370.95, "diff": 0 },
+      { "cpf":"12312312399", "name":"Teste Pagamento Massa", "status":"discrepancy",
+        "payments":[{"amount":4177.63,"description":"Pagamento fatura","date":"2026-07-17"},{"amount":10,"description":"Pagamento parcial de fatura","date":"2026-07-26"},{"amount":10,"description":"Pagamento parcial de fatura","date":"2026-07-26"}],
+        "invoices":[{"dueDate":"2026-07-16","status":"FECHADA","valorTotal":3870.86,"valorPago":3870.86,"dataPagamento":"2026-07-26"}],
+        "paymentTotal": 4197.63, "invoiceTotalPago": 3870.86, "diff": 326.77 },
+      { "cpf":"22222222222", "name":"Beatriz Oliveira", "status":"ok",
+        "payments":[{"amount":393.07,"description":"Pagamento fatura","date":"2026-07-16"}],
+        "invoices":[{"dueDate":"2026-07-09","status":"FECHADA","valorTotal":1500.50,"valorPago":393.07,"dataPagamento":null}],
+        "paymentTotal": 393.07, "invoiceTotalPago": 393.07, "diff": 0 },
+      { "cpf":"23736211503", "name":"Henri Robin", "status":"ok",
+        "payments":[{"amount":387.09,"description":"Pagamento parcial de fatura","date":"2026-07-26"}],
+        "invoices":[{"dueDate":"2026-07-10","status":"FECHADA","valorTotal":3870.86,"valorPago":387.09,"dataPagamento":null}],
+        "paymentTotal": 387.09, "invoiceTotalPago": 387.09, "diff": 0 },
+      { "cpf":"72330955820", "name":"Fahad Al-Ghamdi", "status":"orphan_payments",
+        "payments":[{"amount":10,"description":"Pagamento parcial de fatura","date":"2026-07-26"}],
+        "invoices":[],
+        "paymentTotal": 10, "invoiceTotalPago": 0, "diff": 10 },
+      { "cpf":"77680674957", "name":"Simon Huet", "status":"ok",
+        "payments":[{"amount":100,"description":"Pagamento parcial de fatura","date":"2026-07-26"},{"amount":418,"description":"Pagamento parcial de fatura","date":"2026-07-26"},{"amount":335.29,"description":"Pagamento parcial de fatura","date":"2026-07-26"}],
+        "invoices":[{"dueDate":"2026-07-10","status":"FECHADA","valorTotal":3870.86,"valorPago":853.29,"dataPagamento":null}],
+        "paymentTotal": 853.29, "invoiceTotalPago": 853.29, "diff": 0 },
+      { "cpf":"99999999999", "name":"Admin User", "status":"discrepancy",
+        "payments":[{"amount":4284.94,"description":"Pagamento fatura","date":"2026-07-11"},{"amount":399.99,"description":"Pagamento fatura","date":"2026-08-27"}],
+        "invoices":[{"dueDate":"2026-07-10","status":"FECHADA","valorTotal":3870.86,"valorPago":3870.86,"dataPagamento":"2026-07-26"}],
+        "paymentTotal": 4684.93, "invoiceTotalPago": 3870.86, "diff": 814.07 }
+    ]
+  },
+  "negativeBalance": {
+    "categories": {
+      "negativeBalance": { "label":"Saldo (balance) negativo", "count":0 },
+      "negativeCreditLimit": { "label":"Limite disponível negativo", "count":0 },
+      "overpayment": { "label":"Valor pago > valor total da invoice", "count":0 },
+      "insufficientBalance": { "label":"Saldo insuficiente para pagamento mínimo", "count":0 },
+      "zeroBalanceWithDebt": { "label":"Saldo zerado mas com fatura não paga", "count":0 }
+    }
+  },
+  "totalIssues": 3, "totalFixed": 0, "totalErrors": 0
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
+const fmt = (v) => 'R$ ' + v.toFixed(2).replace('.', ',');
+const fmtDate = (s) => { if (!s) return '—'; const d=new Date(s); return d.toLocaleDateString('pt-BR'); };
+const shortCpf = (c) => c ? c.substring(0,3)+'.'+c.substring(3,6)+'.'+c.substring(6,9)+'-'+c.substring(9) : '—';
+
+const statusConfig = {
+  'ok':             { cls:'status-ok',          icon:'✓', label:'OK' },
+  'discrepancy':    { cls:'status-discrepancy',  icon:'⚠', label:'Discrepância' },
+  'resolvido':      { cls:'status-resolvido',    icon:'◉', label:'Resolvido' },
+  'orphan_payments':{ cls:'status-orphan',       icon:'○', label:'Pag. Órfão' },
+};
+
+function statusBadge(st) {
+  const c = statusConfig[st] || statusConfig.ok;
+  return `<span class="status ${c.cls}">${c.icon} ${c.label}</span>`;
+}
+
+function barCell(pmt, inv, maxVal) {
+  const m = Math.max(maxVal, 1);
+  const pw = Math.min((pmt / m) * 100, 100);
+  const iw = Math.min((inv / m) * 100, 100);
+  return `<div class="bar-row">
+    <span class="bar-label" style="color:var(--blue)">${fmt(pmt)}</span>
+    <div class="bar-wrap"><div class="bar-fill pmt" style="width:${pw}%"></div></div>
+    <span class="bar-label" style="color:var(--green)">${fmt(inv)}</span>
+    <div class="bar-wrap"><div class="bar-fill inv" style="width:${iw}%"></div></div>
+  </div>`;
+}
+
+// ─── Render ──────────────────────────────────────────────────────────────
+const dc = DATA.doubleCount;
+const nb = DATA.negativeBalance;
+const users = dc.details;
+const maxPayment = Math.max(...users.map(u => u.paymentTotal), 1);
+const resolved = users.filter(u => u.status === 'resolvido').length;
+const activeDisc = dc.discrepancies - resolved;
+
+// Pagination
+const PER_PAGE = 5;
+let currentPage = 0;
+const totalPages = Math.ceil(users.length / PER_PAGE);
+
+function render() {
+  const start = currentPage * PER_PAGE;
+  const end = Math.min(start + PER_PAGE, users.length);
+  const pageUsers = users.slice(start, end);
+
+  const $ = (id) => document.getElementById(id);
+
+  // KPI
+  $('kpi-users').textContent = dc.withPayments;
+  $('kpi-disc').textContent = activeDisc;
+  $('kpi-resolved').textContent = resolved;
+  $('kpi-errors').textContent = dc.errors;
+  $('kpi-fixed').textContent = DATA.totalFixed;
+
+  // Table body
+  const tbody = $('tbody');
+  tbody.innerHTML = pageUsers.map(u => {
+    const inv = u.invoices[0] || {};
+    const invCount = u.invoices.length;
+    const pmtCount = u.payments.length;
+    const hasMissingDate = invCount > 0 && !inv.dataPagamento && (inv.valorPago || 0) > 0;
+
+    return `<tr>
+      <td><strong>${u.name}</strong><br><span style="font-size:11px;color:var(--text2)">${shortCpf(u.cpf)}</span></td>
+      <td>${statusBadge(u.status)}${hasMissingDate ? '<br><span style="font-size:10px;color:var(--amber)">sem data_pagamento</span>' : ''}</td>
+      <td>${barCell(u.paymentTotal, u.invoiceTotalPago, maxPayment)}</td>
+      <td style="text-align:center">
+        <span style="font-size:13px;font-weight:700;color:${u.diff > 0.02 ? 'var(--red)' : 'var(--green)'}">
+          ${u.diff > 0.02 ? fmt(u.diff) : '—'}
+        </span>
+      </td>
+      <td><button class="details-toggle" onclick="toggleDetails('${u.cpf}')">${pmtCount} pag. / ${invCount} fat.</button></td>
+    </tr>
+    <tr id="det-${u.cpf}" class="details-content" style="display:none">
+      <td colspan="5">
+        <table style="width:100%">
+          <thead><tr><th>Data</th><th>Valor</th><th>Tipo</th><th>Descrição</th></tr></thead>
+          <tbody>
+            ${u.payments.map(p => `<tr>
+              <td>${fmtDate(p.date)}</td>
+              <td style="color:var(--blue);font-weight:600">${fmt(p.amount)}</td>
+              <td><span class="status status-ok" style="font-size:10px">Pagamento</span></td>
+              <td style="color:var(--text2)">${p.description || '—'}</td>
+            </tr>`).join('')}
+            ${u.invoices.map(i => `<tr>
+              <td>${fmtDate(i.dueDate)}</td>
+              <td style="color:var(--green);font-weight:600">${fmt(i.valorTotal)}</td>
+              <td><span class="status ${i.dataPagamento ? 'status-ok' : 'status-orphan'}" style="font-size:10px">${i.dataPagamento ? 'Paga' : 'Não Paga'}</span></td>
+              <td style="color:var(--text2)">Fatura ${i.status || '—'} · valor_pago: ${fmt(i.valorPago||0)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Pagination
+  $('page-info').textContent = `${start + 1}–${end} de ${users.length}`;
+  $('page-prev').disabled = currentPage === 0;
+  $('page-next').disabled = currentPage >= totalPages - 1;
+
+  // Negative balance categories
+  const catContainer = $('cat-container');
+  catContainer.innerHTML = Object.values(nb.categories).map(c => `
+    <div class="cat-item ${c.count === 0 ? 'pass' : 'fail'}">
+      <span class="clabel">${c.label}</span>
+      <span class="cval" style="color:${c.count === 0 ? 'var(--green)' : 'var(--red)'}">${c.count === 0 ? '✅ 0' : '⚠️ '+c.count}</span>
+    </div>
+  `).join('');
+}
+
+function toggleDetails(cpf) {
+  const el = document.getElementById('det-' + cpf);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'table-row' : 'none';
+}
+
+function prevPage() { if (currentPage > 0) { currentPage--; render(); } }
+function nextPage() { if (currentPage < totalPages - 1) { currentPage++; render(); } }
+
+// ─── Mount ───────────────────────────────────────────────────────────────
+document.getElementById('app').innerHTML = `
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h1>📊 Auditoria de Pagamentos</h1>
+      <div class="sub">FintechBankApp · ${new Date(DATA.ranAt).toLocaleString('pt-BR')}</div>
+    </div>
+    <span class="badge">${DATA.totalIssues > 0 ? '⚠️ '+DATA.totalIssues+' anomalia(s)' : '✅ Dados íntegros'}</span>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="label">Usuários</div><div class="value" id="kpi-users">—</div><div class="sub">com INVOICE_PAYMENT</div></div>
+    <div class="kpi-card"><div class="label">Discrepâncias</div><div class="value" id="kpi-disc" style="color:var(--red)">—</div><div class="sub">pagamentos × valor_pago</div></div>
+    <div class="kpi-card"><div class="label">Resolvidas</div><div class="value" id="kpi-resolved" style="color:var(--blue)">—</div><div class="sub">correção anterior</div></div>
+    <div class="kpi-card"><div class="label">Corrigidas</div><div class="value" id="kpi-fixed" style="color:var(--green)">—</div><div class="sub">com --fix</div></div>
+    <div class="kpi-card"><div class="label">Erros</div><div class="value" id="kpi-errors" style="color:${dc.errors > 0 ? 'var(--red)' : 'var(--text)'}">—</div><div class="sub">durante auditoria</div></div>
+  </div>
+
+  <!-- Audit 1: Double-Counting -->
+  <div class="section">
+    <div class="section-title">
+      📋 Double-Counting de Pagamentos
+      <span class="count">${users.length} usuários</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th style="width:22%">Usuário</th>
+          <th style="width:12%">Status</th>
+          <th style="width:40%">Pagamentos vs Valor Pago</th>
+          <th style="width:12%;text-align:center">Diferença</th>
+          <th style="width:14%">Transações</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="page-controls">
+      <button class="page-btn" id="page-prev" onclick="prevPage()">← Anterior</button>
+      <span class="page-info" id="page-info">—</span>
+      <button class="page-btn" id="page-next" onclick="nextPage()">Próximo →</button>
+    </div>
+  </div>
+
+  <!-- Audit 2: Negative Balance -->
+  <div class="section">
+    <div class="section-title">
+      🛡️ Saldo Negativo / Pagamento Excessivo
+      <span class="count">5 categorias</span>
+    </div>
+    <div class="cat-grid" id="cat-container"></div>
+  </div>
+
+  <!-- Legend -->
+  <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text2);padding:8px 0">
+    <span>🔵 Barras azuis = Pagamentos (transactions)</span>
+    <span>🟢 Barras verdes = Valor Pago (invoices)</span>
+    <span style="color:var(--red)">🔴 Diferença negativa = Discrepância</span>
+  </div>
+`;
+
+render();
+</script>
+</body>
+</html>

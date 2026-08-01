@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>error: column &quot;valor_pago&quot; does not exist<br> &nbsp; &nbsp;at F:\GITHUB\FintechBankApp\API\node_modules\pg\lib\client.js:545:17<br> &nbsp; &nbsp;at process.processTicksAndRejections (node:internal/process/task_queues:105:5)<br> &nbsp; &nbsp;at async PostgresProvider.executeQuery (F:\GITHUB\FintechBankApp\API\services\database\PostgresProvider.js:121:25)<br> &nbsp; &nbsp;at async getClosedInvoiceDebt (F:\GITHUB\FintechBankApp\API\index.cjs:4290:18)<br> &nbsp; &nbsp;at async F:\GITHUB\FintechBankApp\API\index.cjs:4474:24</pre>
+</body>
+</html>

@@ -1,23 +1,31 @@
 import React from 'react';
-import { Home, CreditCard, ShoppingBag, User, Sliders } from 'lucide-react';
+import { Home, CreditCard, ShoppingBag, User, Sliders, Shield, FileText } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface BottomNavBarProps {
     currentView: string;
-    onNavigate: (view: 'home' | 'cards' | 'shop' | 'profile' | 'limit') => void;
+    onNavigate: (view: 'home' | 'cards' | 'shop' | 'profile' | 'limit' | 'admin') => void;
     theme?: 'yellow' | 'midnight';
+    isAdmin?: boolean;
 }
 
-const navItems = [
-    { label: 'Início',  view: 'home',    icon: Home },
-    { label: 'Cartões', view: 'cards',   icon: CreditCard },
-    { label: 'Limite',  view: 'limit',   icon: Sliders },
-    { label: 'Shop',    view: 'shop',    icon: ShoppingBag },
-    { label: 'Perfil',  view: 'profile', icon: User },
-] as const;
+const getNavItems = (isAdmin: boolean) => {
+    const items = [
+        { label: 'Início',   view: 'home',     icon: Home },
+        { label: 'Faturas',  view: 'invoices', icon: FileText },
+        { label: 'Limites',  view: 'limit',    icon: Sliders },
+        { label: 'Shop',     view: 'shop',     icon: ShoppingBag },
+        { label: 'Perfil',   view: 'profile',  icon: User },
+    ];
+    if (isAdmin) {
+        items.push({ label: 'Admin', view: 'admin', icon: Shield });
+    }
+    return items;
+};
 
-const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate, theme = 'midnight' }) => {
+const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate, theme = 'midnight', isAdmin = false }) => {
     const isMidnight = theme === 'midnight';
+    const navItems = getNavItems(isAdmin);
 
     return (
         <nav
@@ -36,7 +44,7 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate, th
                     return (
                         <button
                             key={item.view}
-                            onClick={() => onNavigate(item.view)}
+                            onClick={() => onNavigate(item.view as any)}
                             className="relative flex flex-col items-center justify-center w-16 h-16 rounded-2xl transition-colors cursor-pointer group shrink-0"
                         >
                             {isActive && (
