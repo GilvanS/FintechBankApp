@@ -10,6 +10,7 @@
  * Ver docs/REGRAS-NEGOCIO-FATURA.md e SKILL.md.
  */
 module.exports = function createInvoiceController(deps) {
+    const { nowDb } = require('../../utils/timezone');
     const {
         databricksService,
         repoContext,
@@ -452,7 +453,7 @@ module.exports = function createInvoiceController(deps) {
         // O valor refinanciado é exatamente `principal` (= closedDebt.owed), então é ele que
         // é distribuído entre as faturas em aberto.
         if (closedDebt) {
-            await settleClosedInvoices(cpf, new Date().toISOString(), principal);
+            await settleClosedInvoices(cpf, nowDb(), principal);
         }
     
         const plan = await cardRepo.createInstallments({ cpf, amount: principal, installments });
@@ -543,7 +544,7 @@ module.exports = function createInvoiceController(deps) {
                 ? 'Pagamento minimo de fatura'
                 : 'Pagamento parcial de fatura';
             // Pagamento parcial: registrar sem deletar parcelas
-            const nowIso = new Date().toISOString();
+            const nowIso = nowDb();
             const payId = databricksService.generateUUID();
             await databricksService.executeQuery(`
                 INSERT INTO ${databricksService.fq('transactions')}
@@ -619,7 +620,7 @@ module.exports = function createInvoiceController(deps) {
         // Distribui o valor efetivamente cobrado (totalDue = dívida consolidada), nunca mais
         // que isso: quitar faturas sem ter recebido por elas é perda de receita.
         if (closedDebt) {
-            await settleClosedInvoices(cpf, new Date().toISOString(), result.totalDue || totalDue);
+            await settleClosedInvoices(cpf, nowDb(), result.totalDue || totalDue);
         }
         await notificationsRepo.addNotification({
             cpf,

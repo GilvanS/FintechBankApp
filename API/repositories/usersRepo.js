@@ -1,4 +1,5 @@
 const { getDb, esc } = require('./context');
+const { nowDb } = require('../utils/timezone');
 const { computeNextInvoiceDueDate } = require('../utils/billing');
 
 const MASS_MERCHANTS = ['iFood', 'Amazon BR', 'Posto Shell', 'Farmacia Pague Menos', 'Netflix', 'Uber', 'Magazine Luiza', 'Zara', 'Mercado Livre', 'Spotify'];
@@ -22,7 +23,7 @@ function splitAmount(total, parts) {
  */
 async function seedMassPixKeys(db, cpf, email) {
     const genId = () => (db.generateUUID ? db.generateUUID() : `pk-${cpf}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
-    const now = new Date().toISOString();
+    const now = nowDb();
     const keys = [{ type: 'CPF', key: cpf }];
     if (email) keys.push({ type: 'EMAIL', key: String(email).toLowerCase().trim() });
 
@@ -86,7 +87,7 @@ async function seedMassBilling(db, cpf, { accountStatus, daysOverdue, overdueAmo
         const iofDiario = round2(principal * 0.000082 * daysOverdue);
         const iof = round2(iofAdicional + iofDiario);
 
-        const now = new Date().toISOString();
+        const now = nowDb();
         const invoiceId = genId();
         const itemizedJson = JSON.stringify(items.map(it => ({
             id: it.id, date: it.date, amount: it.amount, merchant: it.merchant, type: it.type,
@@ -172,7 +173,7 @@ async function upsertSeed({ cpf, fullName, email, passwordHash, balance, role })
         SELECT cpf FROM ${db.fq('users')} WHERE cpf=${esc(cpf)}
     `);
     if (!exists.length) {
-        const now = new Date().toISOString();
+        const now = nowDb();
         const dueDay = 10; // alinhado ao billing_config.due_day
         const invoiceDueDate = computeNextInvoiceDueDate(dueDay).toISOString();
         await db.executeQuery(`
@@ -220,7 +221,7 @@ async function deposit(cpf, amount) {
         WHERE cpf=${esc(cpf)}
     `);
     const id = db.generateUUID();
-    const now = new Date().toISOString();
+    const now = nowDb();
     await db.executeQuery(`
         INSERT INTO ${db.fq('transactions')}
         (id, cpf, type, amount, description, from_user, to_user, to_key, date)
@@ -272,7 +273,7 @@ async function createMassUser(payload) {
     const id = db.generateUUID ? db.generateUUID() : `user-${cleanCpf}`;
     const bcrypt = require('bcryptjs');
     const hash = bcrypt.hashSync(payload.password || 'admin999', 10);
-    const now = new Date().toISOString();
+    const now = nowDb();
 
     const tutor = payload.tutor || {};
     const addr = payload.address || {};

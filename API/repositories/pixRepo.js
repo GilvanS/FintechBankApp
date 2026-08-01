@@ -43,7 +43,7 @@ async function listContacts(cpf) {
 async function addContact({ cpf, contactKey, contactName }) {
     const db = getDb();
     const id = db.generateUUID();
-    const now = new Date().toISOString();
+    const now = nowDb();
     await db.executeQuery(`
         INSERT INTO ${db.fq('pix_contacts')}
         (id, pix_account_id, contact_cpf, contact_name, created_at)

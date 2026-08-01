@@ -57,7 +57,7 @@ async function approve({ cpf, adminCpf }) {
 
 async function deny({ cpf, adminCpf, reason }) {
     const db = getDb();
-    const now = new Date().toISOString();
+    const now = nowDb();
     await db.executeQuery(`
         UPDATE ${db.fq('limit_increase_requests')}
         SET status='denied', decided_at=${esc(now)}, admin_cpf=${esc(adminCpf)}

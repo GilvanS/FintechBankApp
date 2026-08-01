@@ -61,7 +61,7 @@ async function anticipateInstallments({ cpf, transactionIds }) {
         WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND id IN (${idsList})
     `);
     const total = rows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
-    const now = new Date().toISOString();
+    const now = nowDb();
     const antId = db.generateUUID();
 
     await db.executeQuery(`

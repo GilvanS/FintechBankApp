@@ -188,7 +188,7 @@ async function getDueDateCalendar(cpf) {
  */
 async function saveDueDateCalendar({ cpf, dayOfMonth }) {
     const db = getDb();
-    const now = new Date().toISOString();
+    const now = nowDb();
     const id = db.generateUUID ? db.generateUUID() : `${cpf}_${Date.now()}`;
     
     // Verificar se já existe
