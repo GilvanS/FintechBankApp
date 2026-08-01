@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { X, Check, Clock, DollarSign, User, CalendarDays, CreditCard, TrendingUp, Download } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { formatCPF } from '../../utils/formatters';
@@ -78,7 +78,7 @@ const RegularizedReportModal: React.FC<Props> = ({ isOpen, onClose, items }) => 
             i.paidAt ? new Date(i.paidAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
             i.hoursToPay !== null ? String(i.hoursToPay) : ''
         ]);
-        exportCSV(`regularizadas_24h_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+        exportCSV(`regularizadas_72h_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
     };
 
     return (
@@ -94,9 +94,9 @@ const RegularizedReportModal: React.FC<Props> = ({ isOpen, onClose, items }) => 
                     <div>
                         <h3 className="text-2xl font-black uppercase tracking-tight flex items-center gap-3">
                             <TrendingUp size={24} className={isMidnight ? 'text-volt-green' : 'text-black'} />
-                            Relatório de Regularizadas (24h)
+                            Relatório de Regularizadas (72h)
                         </h3>
-                        <p className="text-xs opacity-60 mt-1">Massas que regularizaram a inadimplência nas últimas 24 horas</p>
+                        <p className="text-xs opacity-60 mt-1">Massas que regularizaram a inadimplência nas últimas 72 horas</p>
                     </div>
                     <button onClick={onClose} className={`p-2 rounded-full transition-all ${isMidnight ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'}`}>
                         <X size={24} />

@@ -1684,7 +1684,7 @@ apiRouter.post('/users/:cpf/notifications/:id/read', bearerAuth(), asyncHandler(
 // ─── Admin: notificações de pagamento mínimo (últimas 24h) ───────────────────
 apiRouter.get('/admin/notifications/minimo', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { esc } = repoContext;
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
 
     const rows = await databricksService.executeQuery(`
         SELECT n.id, n.cpf, n.title, n.message, n.created_at, n.is_read,
@@ -1720,7 +1720,7 @@ apiRouter.get('/admin/notifications/minimo', bearerAuth(), authenticateAdmin, as
 // ── Rota Admin: Listar notificações ABAIXO do mínimo (últimas 24h) ──
 apiRouter.get('/admin/notifications/abaixo', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { esc } = repoContext;
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
 
     const rows = await databricksService.executeQuery(`
         SELECT n.id, n.cpf, n.title, n.message, n.created_at, n.is_read,
@@ -2883,7 +2883,7 @@ apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin
     // ── Massas regularizadas (pagaram fatura há < 24h) ──
     // Estas massas saíram da inadimplência mas ainda aparecem no painel
     // por 24 horas para o admin poder validar os dados.
-    const vinteQuatroHorasAtras = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const vinteQuatroHorasAtras = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
     const recentlyPaidInvoices = await databricksService.executeQuery(`
         SELECT cpf, valor_total, valor_pago, due_date, data_pagamento,
                valor_iof, valor_multa, valor_juros_remuneratorios, valor_juros_mora, saldo_anterior
@@ -4753,7 +4753,7 @@ async function runBillingValidation() {
             const isMinimoDetectado = pctPago >= 0.10 && closedInvoiceData.amount > 0;
             if (isMinimoDetectado) {
                 try {
-                    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+                    const dayAgo = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
                     const recentNotifs = await databricksService.executeQuery(`
                         SELECT id FROM ${databricksService.fq('notifications')}
                         WHERE cpf = '${u.cpf}'
@@ -4782,7 +4782,7 @@ async function runBillingValidation() {
             const isAbaixoCritico = pctPago > 0 && pctPago < 0.10 && closedInvoiceData.amount > 0;
             if (isAbaixoCritico) {
                 try {
-                    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+                    const dayAgo = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
                     const recentAbaixoNotifs = await databricksService.executeQuery(`
                         SELECT id FROM ${databricksService.fq('notifications')}
                         WHERE cpf = '${u.cpf}'

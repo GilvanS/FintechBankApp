@@ -607,7 +607,7 @@ const RequestsManagement: React.FC = () => {
                             />
                         </button>
                         <span className="text-xs font-bold uppercase tracking-wider">
-                            Mostrar regularizadas (24h)
+                            Mostrar regularizadas (72h)
                         </span>
                     </label>
                     {!showRegularized && overdueDashboard?.stats?.regularizedCount > 0 && (
