@@ -526,16 +526,28 @@ module.exports = function createInvoiceController(deps) {
         const balance = parseFloat(user.balance || 0);
         const minPayment = Math.max(totalDue * 0.10, 10);
         const effectiveMin = balance > 0 ? Math.min(balance, minPayment) : minPayment;
-        const requestedAmount = typeof amount === 'number' && amount > 0 ? amount : totalDue;
-        const payAmount = Math.min(requestedAmount, totalDue);
-    
+
+        // Obter o total de encargos pendentes no banco
+        const chargesRows = await databricksService.executeQuery(`
+            SELECT COALESCE(SUM(CAST(amount AS DECIMAL(15,2))), 0) AS total
+            FROM ${databricksService.fq('billing_charges')}
+            WHERE cpf = '${cpf}' AND status = 'pending'
+        `);
+        const pendingChargesTotal = parseFloat(chargesRows[0]?.total || 0);
+        const totalDueComplete = Math.round((totalDue + pendingChargesTotal) * 100) / 100;
+
+        const requestedAmount = typeof amount === 'number' && amount > 0 ? amount : totalDueComplete;
+        const payAmount = Math.min(requestedAmount, totalDueComplete);
+
         // Valor mínimo é apenas sugestão de UI — o usuário pode pagar menos, mais, ou o total.
         // Pagar abaixo do mínimo mantém saldo devedor e encargos via fluxo de pagamento parcial abaixo.
         if (balance < payAmount) return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
-    
+
         const availableLimit = parseFloat(user.credit_card_available_limit || 0);
         const totalLimit = parseFloat(user.credit_card_total_limit || 0);
-    
+        const principalToPay = Math.min(payAmount, totalDue);
+        const chargesToPay = Math.max(0, payAmount - principalToPay);
+
         if (payAmount < totalDue - 0.01) {
             // Se o valor pago é EXATAMENTE o mínimo (margem de centavos), é MÍNIMO.
             // Qualquer outro valor (abaixo do mínimo, ou entre mínimo e total) é PARCIAL.
@@ -602,9 +614,9 @@ module.exports = function createInvoiceController(deps) {
     
         // Pagamento total: registrar pagamento pelo valor devido da fatura, limpar parcelas
         // do ciclo fechado, restaurar limite, avançar vencimento
-        const result = await cardRepo.payDueInstallments({ cpf, cutoffIso, amount: totalDue });
+        const result = await cardRepo.payDueInstallments({ cpf, cutoffIso, amount: payAmount, paymentDateIso: nowDb() });
         await usersRepo.updateBalance(cpf, (balance - result.totalDue).toFixed(2));
-        const restoredLimit = Math.min(totalLimit, availableLimit + result.totalDue);
+        const restoredLimit = Math.min(totalLimit, availableLimit + principalToPay);
         // NÃO avançar credit_card_invoice_due_date aqui — o motor de faturamento (invoiceEngine)
         // o faz naturalmente no fechamento do ciclo. Avançar manualmente desloca as janelas de
         // cálculo do enrichUserCreditCardData (close = due-7d, prevClose = close-1m), fazendo
@@ -616,11 +628,12 @@ module.exports = function createInvoiceController(deps) {
                 credit_card_is_blocked = false
             WHERE cpf = '${cpf}'
         `);
+
         // Sem marcar data_pagamento a fatura seguiria "não paga" e poderia ser cobrada de novo.
-        // Distribui o valor efetivamente cobrado (totalDue = dívida consolidada), nunca mais
+        // Distribui o valor efetivamente cobrado (principalToPay), nunca mais
         // que isso: quitar faturas sem ter recebido por elas é perda de receita.
         if (closedDebt) {
-            await settleClosedInvoices(cpf, nowDb(), result.totalDue || totalDue);
+            await settleClosedInvoices(cpf, nowDb(), principalToPay);
         }
         await notificationsRepo.addNotification({
             cpf,
@@ -768,8 +781,8 @@ module.exports = function createInvoiceController(deps) {
                     multa,
                     daysOverdue,
                     totalDespesas: openPurchases,
-                    totalPagamentos: 0.00,
-                    totalCreditos: 0.00,
+                    totalPagamentos: canon.paymentsTotal || 0.00,
+                    totalCreditos: canon.creditoExcedente || 0.00,
                     saldoFinal,
                     pagamentoMinimo,
                     dataVencimento: fmtDateSafe(openDueDateObj),

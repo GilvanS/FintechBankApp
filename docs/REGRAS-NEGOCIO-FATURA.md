@@ -1872,3 +1872,29 @@ curl -s http://localhost:3001/api/users/me \
 > **Fonte do código:** [`API/index.cjs`](../API/index.cjs) — `runBillingValidation`, `enrichUserCreditCardData` (linhas 427-434 para mapeamento PAYMENT)<br>
 > **Massa de teste:** CPF `61111863709` — Isidore Charles<br>
 > **Última validação:** 30/jul/2026 — Todas as 10 regras verificadas ✅
+
+---
+
+## 19. Regras de Estopo de Atraso e Crédito Excedente (Saldo Credor)
+
+> **Implementado e validado em 02/ago/2026. Evita regressão na regularização de faturas pagas e acúmulo incorreto de encargos.**
+
+### 19.1 Regra de Estopo de Atraso (Congelamento de Juros)
+Quando o cliente realiza o pagamento integral do principal da fatura fechada:
+1. O status do usuário é atualizado para `adimplente` e `days_overdue` é zerado no banco.
+2. O motor de faturamento (`runBillingValidation`) **para de gerar novos juros diários** (atraso estopou!).
+3. Os encargos gerados até a data do pagamento **continuam devidos (`status = 'pending'`)** no banco e aparecem herdados pela fatura aberta. Eles NÃO somem até serem quitados.
+4. Os dias de atraso (`daysOverdue`) exibidos no dashboard para a fatura fechada paga em atraso são congelados baseando-se na data do pagamento (`data_pagamento - due_date`), em vez de continuar crescendo indefinidamente.
+
+### 19.2 Quitação de Encargos
+Ao pagar a fatura, o teto aceito de pagamento é a soma do principal devido + total de encargos pendentes no banco (`billing_charges` com status `'pending'`).
+- O valor pago amortiza primeiro o principal da fatura fechada.
+- O valor excedente ao principal é direcionado a pagar os encargos pendentes na tabela `billing_charges`, atualizando o status de `'pending'` para `'paid'` (de forma proporcional).
+
+### 19.3 Crédito Excedente (Saldo Credor)
+Se o valor pago for maior que a soma do principal + encargos pendentes:
+$$\text{creditoExcedente} = \text{paymentsTotal} - (\text{principalTotal} + \text{chargesTotal})$$
+- O excesso entra como crédito na conta do cartão de crédito (saldo credor).
+- O `creditoExcedente` abate o valor final da fatura aberta:
+  $$\text{currentInvoiceTotal} = \text{comprasDoCiclo} + \text{principalFechadoVencido} + \text{encargosPendentes} - \text{creditoExcedente}$$
+- Isso garante que pagamentos a maior reduzam a fatura aberta do cartão.

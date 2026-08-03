@@ -28,12 +28,17 @@ async function checkPostgresContainers() {
             const isPostgresServer = img.startsWith('postgres') || img.includes('/postgres');
             const isPgAdminTool = img.includes('pgadmin') || img.includes('adminer') || img.includes('dpage/');
             if (isPostgresServer && !isPgAdminTool) {
-                // Extrair portas mapeadas
-                const portMatches = ports.match(/(\d+):(\d+)/g);
-                const mappedPorts = portMatches ? portMatches.map(p => {
-                    const [hostPort] = p.split(':');
-                    return parseInt(hostPort);
-                }) : [];
+                // Extrair portas mapeadas do host (ex: "0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp")
+                // O bind pode vir com IPv4, IPv6 entre colchetes ou sem host algum.
+                const mappedPorts = [];
+                const portRegex = /(?:(?:\d{1,3}(?:\.\d{1,3}){3}|\[[^\]]*\]):)?(\d+)->\d+/g;
+                let portMatch;
+                while ((portMatch = portRegex.exec(ports || '')) !== null) {
+                    const hostPort = parseInt(portMatch[1], 10);
+                    if (hostPort > 0 && !mappedPorts.includes(hostPort)) {
+                        mappedPorts.push(hostPort);
+                    }
+                }
                 
                 postgresContainers.push({
                     name: name.trim(),

@@ -23,9 +23,10 @@ async function createInstallments({ cpf, amount, installments }) {
     return { ...plan, planId, firstDueDate, parcela: plan.installmentValue };
 }
 
-async function payDueInstallments({ cpf, cutoffIso, amount }) {
+async function payDueInstallments({ cpf, cutoffIso, amount, paymentDateIso }) {
     const db = getDb();
-    const nowIso = cutoffIso || nowDb();
+    const payDate = paymentDateIso || nowDb();
+    const limitDate = cutoffIso || payDate;
 
     // `amount` = valor devido da fatura FECHADA calculado pelo chamador (inclui compras
     // à vista, que não têm linhas INVOICE_INSTALLMENT). Sem ele, legado: soma das parcelas.
@@ -33,7 +34,7 @@ async function payDueInstallments({ cpf, cutoffIso, amount }) {
     if (totalDue == null) {
         const dueRows = await db.executeQuery(`
             SELECT amount FROM ${db.fq('transactions')}
-            WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(nowIso)}
+            WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(limitDate)}
         `);
         totalDue = dueRows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
     }
@@ -42,12 +43,12 @@ async function payDueInstallments({ cpf, cutoffIso, amount }) {
     await db.executeQuery(`
         INSERT INTO ${db.fq('transactions')}
         (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-        VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-totalDue).toFixed(2))}, ${esc('Pagamento fatura')}, NULL, NULL, NULL, ${esc(nowIso)})
+        VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-totalDue).toFixed(2))}, ${esc('Pagamento fatura')}, NULL, NULL, NULL, ${esc(payDate)})
     `);
 
     await db.executeQuery(`
         DELETE FROM ${db.fq('transactions')}
-        WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(nowIso)}
+        WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(limitDate)}
     `);
 
     return { totalDue };

@@ -539,9 +539,55 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         ? Math.max(0, dbClosedInvoice)
         : Math.max(0, rawInvoiceTotal);
     normalized.creditCard.closedInvoiceResidual = dbClosedResidual !== undefined && dbClosedResidual !== null
-        ? Math.max(0, dbClosedResidual)
+        ? dbClosedResidual
         : Math.max(0, rawInvoiceTotal);
     normalized.creditCard.closedInvoiceAmount = normalized.creditCard.closedInvoice;
+
+    // ── Cálculo do Crédito Excedente (Saldo Credor) ──
+    let creditoExcedente = 0;
+    let paymentsTotal = 0;
+    try {
+        // 1. Buscar faturas fechadas não pagas ou pagas no ciclo aberto atual
+        const closedInvoicesCycle = await databricksService.executeQuery(`
+            SELECT valor_total FROM ${databricksService.fq('invoices')}
+            WHERE cpf = '${cpf}' AND status = 'FECHADA'
+              AND (data_pagamento IS NULL OR data_pagamento > '${new Date(_prevCloseMs).toISOString()}')
+        `);
+        const principalTotal = closedInvoicesCycle.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0);
+
+        // 2. Buscar encargos pendentes ou pagos no ciclo aberto atual
+        const chargesCycle = await databricksService.executeQuery(`
+            SELECT amount FROM ${databricksService.fq('billing_charges')}
+            WHERE cpf = '${cpf}'
+              AND (status = 'pending' OR (status = 'paid' AND created_at > '${new Date(_prevCloseMs).toISOString()}'))
+        `);
+        const chargesTotal = chargesCycle.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
+
+        // 3. Buscar pagamentos realizados no ciclo aberto atual
+        const paymentsCycle = await databricksService.executeQuery(`
+            SELECT COALESCE(SUM(ABS(amount)), 0) AS total
+            FROM ${databricksService.fq('transactions')}
+            WHERE cpf = '${cpf}'
+              AND type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
+              AND date > '${new Date(_prevCloseMs).toISOString()}'
+              AND date <= '${new Date(maxDueTime).toISOString()}'
+        `);
+        paymentsTotal = parseFloat(paymentsCycle[0]?.total || 0);
+
+        // Crédito excedente = Qualquer pagamento que passe do principal das faturas fechadas
+        creditoExcedente = Math.max(0, paymentsTotal - principalTotal);
+    } catch (err) {
+        console.warn('Erro ao calcular creditoExcedente:', err.message);
+    }
+
+    normalized.creditCard.creditoExcedente = creditoExcedente;
+    normalized.creditCard.paymentsTotal = paymentsTotal;
+    // Saldo residual da fatura anterior agora pode ser negativo (saldo credor) se o cliente pagou a mais
+    normalized.creditCard.closedInvoiceResidual = normalized.creditCard.closedInvoiceResidual - creditoExcedente;
+    // O valor pago exibido na fechada deve mostrar o total de pagamentos do ciclo
+    if (paymentsTotal > 0) {
+        normalized.creditCard._closedInvoiceValorPago = paymentsTotal;
+    }
 
     // FONTE ÚNICA DE VERDADE dos encargos/total da fatura fechada.
     // Calculado UMA vez aqui (backend) para que web e admin apenas LEIAM — antes cada
@@ -587,19 +633,22 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             }
         } catch (_) { /* billing_charges table not available, fall through */ }
 
-        // daysOverdue sempre em tempo real (correto independente do residual)
+        // daysOverdue em tempo real: se paga, calcula até a data de pagamento (atraso estopado)
         let _daysOverdue = 0;
         if (normalized.creditCard.closedInvoiceDueDate) {
             const _d = new Date(normalized.creditCard.closedInvoiceDueDate);
             _d.setHours(0, 0, 0, 0);
-            const _now = new Date();
-            _now.setHours(0, 0, 0, 0);
-            _daysOverdue = Math.max(0, Math.floor((_now - _d) / 86400000));
+            const _end = _isPaid && normalized.creditCard._closedInvoiceDataPagamento
+                ? new Date(normalized.creditCard._closedInvoiceDataPagamento)
+                : new Date();
+            _end.setHours(0, 0, 0, 0);
+            _daysOverdue = Math.max(0, Math.floor((_end - _d) / 86400000));
         }
 
-        // Se há billing_charges E a fatura NÃO foi paga: usar encargos REAIS.
-        // Caso contrário (fatura paga, ou sem billing_charges): fallback.
-        const _summary = (_dailyCharges && !_isPaid)
+        // Se há billing_charges: usar encargos REAIS.
+        // A quitação do principal estopa novos juros (days_overdue=0 no users e data_pagamento definida),
+        // mas os encargos acumulados continuam devidos até o fechamento/pagamento da aberta.
+        const _summary = (_dailyCharges)
             ? { ..._dailyCharges, daysOverdue: _daysOverdue }
             : buildClosedInvoiceSummary({
                 closedVal: _closedVal,
@@ -637,13 +686,12 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // cartão — somá-las cobrava do cliente valores que não existem no banco.
         const _openPurchases = normalized.creditCard.currentInvoice || 0;
         // currentInvoiceTotal = compras do ciclo + principal da fechada + encargos herdados
-        normalized.creditCard.currentInvoiceTotal = round2(_openPurchases + _closedVal + _summary.totalEncargos);
-        // Mínimo: 10% das compras do ciclo + 100% da fechada vencida + 100% dos encargos — não se
-        // parcela o que já está em atraso. Sem fechada, 10% do ciclo com piso de R$ 10.
-        // Se há encargos herdados de pagamento em atraso, inclui 100% deles no mínimo.
+        normalized.creditCard.currentInvoiceTotal = round2(Math.max(0, _openPurchases + _closedVal + _summary.totalEncargos));
+        // Mínimo: 10% das compras do ciclo + 100% da fechada vencida + 100% dos encargos
+        // Se há saldo credor (_closedVal < 0), ele abate o pagamento mínimo da fatura aberta
         normalized.creditCard.currentInvoiceMinimo = (_closedVal > 0 || _summary.totalEncargos > 0)
-            ? round2(_openPurchases * 0.10 + _closedVal + _summary.totalEncargos)
-            : (_openPurchases > 0 ? round2(Math.max(_openPurchases * 0.10, 10)) : 0);
+            ? round2(Math.max(0, _openPurchases * 0.10 + _closedVal + _summary.totalEncargos))
+            : (_openPurchases > 0 ? round2(Math.max(0, Math.max(_openPurchases * 0.10, 10) + (_closedVal < 0 ? _closedVal : 0))) : 0);
     }
 
     // Limpar campo interno de cálculo (não expor ao frontend)

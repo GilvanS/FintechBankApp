@@ -203,11 +203,15 @@ import * as mockApi from './mockApi';
 export const getInvoiceSummary = async (type: 'fechada' | 'aberta'): Promise<{ success: boolean; summary?: InvoiceSummary | null }> => {
   try {
     const res = await apiCall<{ success: boolean; summary: InvoiceSummary | null }>(`/credit/invoices/summary/${type}`);
-    if (res && res.success && res.summary) {
+    if (res && res.success) {
       return res;
     }
-  } catch {}
-  return mockApi.getInvoiceSummary(type);
+    return { success: false, summary: null };
+  } catch (error: any) {
+    // Se falhar por erro de rede ou autenticação, propaga o erro e não faz fallback
+    // para o mock indevido, evitando mascarar dados.
+    return { success: false, message: error.message || 'Erro ao carregar resumo de fatura' };
+  }
 };
 
 export const getInvoiceHistory = async (): Promise<{ success: boolean; history?: InvoiceHistoryItem[] }> => {

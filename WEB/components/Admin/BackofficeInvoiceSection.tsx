@@ -50,16 +50,16 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
     const overdueDays = explicitDays > 0 ? explicitDays : (originalClosedAmount > 0 ? Math.max(7, diffDays) : 0);
     const isOverdue = originalClosedAmount > 0 && overdueDays > 0;
 
-    // Encargos calculados pelo invoiceMath.js (fonte única) — mesmas fórmulas
-    // do runBillingValidation. originalClosedAmount é o valor ORIGINAL da fatura
-    // (nunca 0 mesmo paga), então os cálculos SEMPRE produzem os valores corretos.
-    // O display usa a condição `!isPaid ? multa : 0` para mostrar 0 quando quitada.
-    const multa = calcMulta(originalClosedAmount);
-    const jurosMora = calcJurosMora(originalClosedAmount, overdueDays);
-    const jurosRemun = calcJurosRemuneratorios(originalClosedAmount, overdueDays);
-    const iofFixo = calcIofAdicional(originalClosedAmount);
-    const iofDiario = calcIofDiario(originalClosedAmount, overdueDays);
-    const totalEncargos = calcAllCharges(originalClosedAmount, overdueDays).total;
+    // Encargos vindos do backend (fonte única) ou calculados como fallback
+    const charges = (searchedUser.creditCard as any)?.closedInvoiceCharges || {};
+    const multa = typeof charges.multa === 'number' ? charges.multa : calcMulta(originalClosedAmount);
+    const jurosMora = typeof charges.jurosMora === 'number' ? charges.jurosMora : calcJurosMora(originalClosedAmount, overdueDays);
+    const jurosRemun = typeof charges.jurosRemuneratorios === 'number' ? charges.jurosRemuneratorios : calcJurosRemuneratorios(originalClosedAmount, overdueDays);
+    const iofTotal = typeof charges.iof === 'number' ? charges.iof : calcAllCharges(originalClosedAmount, overdueDays).iof;
+    const totalEncargos = typeof charges.totalEncargos === 'number' ? charges.totalEncargos : calcAllCharges(originalClosedAmount, overdueDays).total;
+
+    const iofFixo = originalClosedAmount > 0 ? Math.round(originalClosedAmount * 0.0038 * 100) / 100 : 0;
+    const iofDiario = Math.max(0, iofTotal - iofFixo);
 
     const totalWithCharges = searchedUser.creditCard?.closedInvoiceTotal ?? NaN;
 
@@ -340,6 +340,17 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                             <span className="flex items-center gap-1">
                                 <span>⚠️</span>
                                 Valor Pendente (Saldo Residual da Fatura Anterior após pagamento parcial):
+                            </span>
+                            <span className="font-mono">R$ {closedInvoiceResidual.toFixed(2)}</span>
+                        </div>
+                    )}
+
+                    {/* Saldo Credor (Sobra do Pagamento) */}
+                    {closedInvoiceResidual < 0 && (
+                        <div className="flex justify-between items-center p-2 -mx-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 font-bold text-emerald-600 dark:text-emerald-400">
+                            <span className="flex items-center gap-1">
+                                <span>🟢</span>
+                                Saldo Credor (Sobra do Pagamento Anterior):
                             </span>
                             <span className="font-mono">R$ {closedInvoiceResidual.toFixed(2)}</span>
                         </div>

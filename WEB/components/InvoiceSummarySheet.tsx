@@ -211,6 +211,14 @@ const InvoiceSummarySheet: React.FC<InvoiceSummarySheetProps> = ({
                           <span className="text-base font-black text-amber-400">{fmt(effectiveSummary.closedInvoiceResidual)}</span>
                         </div>
                       )}
+
+                      {/* Saldo Credor (sobra do pagamento que excedeu o principal) — aparece apenas quando < 0 */}
+                      {effectiveSummary.closedInvoiceResidual && effectiveSummary.closedInvoiceResidual < 0 && (
+                        <div className="flex flex-col gap-0.5 bg-emerald-500/10 p-3 rounded-2xl border border-emerald-500/30">
+                          <span className="text-xs font-bold text-volt-green uppercase tracking-wider">🟢 Saldo credor (sobra do pagamento anterior)</span>
+                          <span className="text-base font-black text-volt-green">{fmt(effectiveSummary.closedInvoiceResidual)}</span>
+                        </div>
+                      )}
                       <div className="flex flex-col gap-0.5">
                         <span className="text-xs font-bold text-on-surface-variant">Saldo da fatura anterior</span>
                         <span className="text-base font-black text-white">{fmt(effectiveSummary.saldoAnterior)}</span>
