@@ -1,0 +1,46 @@
+# docker-compose.wsl.yml
+# Usar SOMENTE com o daemon docker-ce de dentro do WSL (distro Ubuntu),
+# com o Docker Desktop desligado.
+#
+#   sudo service docker start
+#   docker compose -f API/docker-compose.wsl.yml up -d
+#
+# Diferenca para o docker-compose.yml: aponta para o volume `fintech_pgdata`,
+# que vive no daemon do Ubuntu. O volume `674168372df3...` do compose padrao
+# pertence ao daemon do Docker Desktop.
+name: dbautomacao
+services:
+  database:
+    container_name: pgdb
+    image: postgres:trixie
+    environment:
+      POSTGRES_PASSWORD: "pwd123"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    networks:
+      - skynet
+
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "admin@test.com"
+      PGADMIN_DEFAULT_PASSWORD: "pwd123"
+    ports:
+      - "16543:80"
+    depends_on:
+      - database
+    networks:
+      - skynet
+
+volumes:
+  pgdata:
+    # Volume no daemon do WSL com o banco fintechbank migrado — nao recriar
+    external: true
+    name: fintech_pgdata
+
+networks:
+  skynet:
+    driver: bridge
