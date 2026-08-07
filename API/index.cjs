@@ -12,7 +12,6 @@ const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 // const path = require('path'); // Removido duplicata
-const { DBSQLClient } = require('@databricks/sql');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
@@ -20,6 +19,9 @@ const { products } = require('./data/mockSeed');
 const DatabaseFactory = require('./services/database/DatabaseFactory');
 
 const { nowDb } = require('./utils/timezone');
+const { toDateOnly, toDateBR } = require('./utils/dateUtils');
+const telegramService = require('./services/telegramService');
+const telegramSettingsRepo = require('./repositories/telegramSettingsRepo');
 
 // --- Repositórios / Contexto ---
 const repoContext = require('./repositories/context');
@@ -33,7 +35,59 @@ const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequeste
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate } = require('./utils/billing');
 const cardEngine = require('./utils/cardEngine');
-const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges } = require('./utils/invoiceMath');
+const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates } = require('./utils/invoiceMath');
+
+// art. 52 CDC — payload único de encargos de juros exposto nas rotas de compra
+// (shop/checkout e acquirer-simulate) e nas transações enriquecidas do cartão.
+// Fonte única: evita duplicar a matemática entre as rotas.
+const buildJurosPayload = ({ original, totalWithInterest, installments, interestRate }) => {
+    const rate = Number(interestRate) || 0;
+    const qty = Number(installments) || 1;
+    const originalVal = Number(original) || 0;
+    const tWI = Number(totalWithInterest) || 0;
+    const ef = calcEffectiveRates(rate, qty);
+    return {
+        originalAmount: round2(originalVal),
+        jurosTotal: rate > 0 ? round2(Math.max(0, tWI - originalVal)) : 0,
+        interestRate: rate,
+        totalParcelado: round2(tWI),
+        valorParcela: round2(qty > 1 ? tWI / qty : tWI),
+        taxaEfetivaMensal: ef.mensal,
+        taxaEfetivaAnual: ef.anual,
+    };
+};
+
+// Gera o COMPROVANTE DE COMPRA em PDF (art. 52 CDC) e envia ao tópico Telegram
+// da massa. Reusa a categoria 'payment_receipt' (toggle do painel admin que já
+// governa os comprovantes) com filename próprio. Fire-and-forget: nunca falha a
+// compra por causa do Telegram — erros são apenas logados.
+async function generateAndSendPurchaseReceipt({ cpf, nome, cartaoFinal, data }) {
+    try {
+        const { generatePurchaseReceiptPDF } = require('./services/invoicePdfService');
+        let userName = nome;
+        let cardFinal = cartaoFinal;
+        if (!userName || !cardFinal) {
+            try {
+                const u = await usersRepo.findByCpf(cpf);
+                if (!userName && u) userName = u.full_name || '';
+                if (!cardFinal && u && (u.card_number || u.cardNumber)) {
+                    cardFinal = String(u.card_number || u.cardNumber).replace(/\D/g, '').slice(-4);
+                }
+            } catch (_e) { /* não bloqueia o envio */ }
+        }
+        const pdfData = {
+            nome: userName || '',
+            cpf,
+            cpfFormatado: typeof telegramService.formatCpf === 'function' ? telegramService.formatCpf(cpf) : cpf,
+            cartaoFinal: cardFinal || '—',
+            ...data,
+        };
+        const buffer = await generatePurchaseReceiptPDF(pdfData);
+        await telegramService.sendDocument(cpf, buffer, `comprovante_compra_${cpf}.pdf`, 'payment_receipt');
+    } catch (e) {
+        console.error('[purchase-receipt] Erro ao gerar/enviar comprovante de compra:', e && e.message);
+    }
+}
 const subsUtil = require('./utils/subscriptions');
 const subscriptionsRepo = require('./repositories/subscriptionsRepo');
 const transactionReversal = require('./utils/transactionReversal');
@@ -55,10 +109,8 @@ const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET; // auth.js lança erro no startup se não definido
 
 // --- Serviço de Banco de Dados ---
-// Inicializado via Factory com base em DB_PROVIDER
+// Inicializado via Factory. Apenas PostgresProvider (pgdb).
 const dbService = DatabaseFactory.createDatabaseService();
-// Alias para compatibilidade com código existente
-const databricksService = dbService;
 
 // Conectar ao banco será feito no bootstrap()
 // dbService.connect(); // Removido - conexão é feita no bootstrap()
@@ -66,16 +118,20 @@ const databricksService = dbService;
 // --- Motor de Faturas ---
 const cron = require('node-cron');
 const { runEngine } = require('./services/invoiceEngine');
+const { runDailyAudit } = require('./services/dailyAudit');
+const { runInvoiceImmutabilityHealth, resolveOrphanCutoff } = require('./services/invoiceImmutabilityHealth');
 const { assertTimezone } = require('./utils/timezone');
 
 // Agendar verificação diariamente à meia-noite (horário de Brasília)
 cron.schedule('0 0 * * *', async () => {
+    telegramService.alertGroup('⚙️ Motor diário iniciando: fechamento de faturas, billing, recorrências e sincronização...', 'system_start');
     console.log('[Cron] Executando Invoice Engine...');
     try {
-        await assertTimezone(databricksService);
+        await assertTimezone(dbService);
         await runEngine();
     } catch (e) {
         console.error('[Cron] Erro no Invoice Engine:', e);
+        telegramService.alertGroup(`🚨 ERRO no Invoice Engine: ${e.message}`, 'system_error');
     }
 
     // Roda logo após o Invoice Engine: marca contas inadimplentes e recalcula
@@ -87,6 +143,7 @@ cron.schedule('0 0 * * *', async () => {
         console.log('[Cron] Validação de faturamento concluída:', result && result.message);
     } catch (e) {
         console.error('[Cron] Erro na validação de faturamento:', e);
+        telegramService.alertGroup(`🚨 ERRO na validação de faturamento: ${e.message}`, 'system_error');
     }
 
     // Cobrança recorrente de assinaturas vencidas (débito/crédito) via Motor de Recorrência.
@@ -97,6 +154,7 @@ cron.schedule('0 0 * * *', async () => {
         console.log('[Cron] Cobrança de assinaturas realizada:', result && result.processedCount, 'processadas');
     } catch (e) {
         console.error('[Cron] Erro na cobrança de assinaturas:', e);
+        telegramService.alertGroup(`🚨 ERRO na cobrança de assinaturas: ${e.message}`, 'system_error');
     }
 
     // Sincronizar dias_atraso nas invoices fechadas não pagas (garantia extra
@@ -111,24 +169,91 @@ cron.schedule('0 0 * * *', async () => {
         }
     } catch (e) {
         console.error('[Cron] Erro ao sincronizar dias_atraso:', e);
+        telegramService.alertGroup(`🚨 ERRO ao sincronizar dias_atraso: ${e.message}`, 'system_error');
+    }
+    telegramService.alertGroup('✅ Motor diário concluído: faturas, billing, assinaturas e sincronização processados.', 'system_done');
+});
+
+// Cron de auditoria diária de anomalias (executa às 02:00 BRT)
+cron.schedule('0 2 * * *', async () => {
+    telegramService.alertGroup('⚙️ Job de auditoria diária iniciando: varredura de anomalias...', 'system_start');
+    try {
+        await assertTimezone(dbService);
+        const result = await runDailyAudit(dbService, auditLog);
+        telegramService.alertGroup(`✅ Job de auditoria concluído: ${result.count} anomalias detectadas.`, 'system_done');
+    } catch (e) {
+        console.error('[Cron-Audit] Erro na auditoria:', e);
+        telegramService.alertGroup(`🚨 ERRO no job de auditoria: ${e.message}`, 'system_error');
     }
 });
+
+// Health check diário da imutabilidade de fatura FECHADA.
+// Roda em paralelo ao audit (4h Brasília) — se a trigger for burlada, este job
+// detecta e alerta via Telegram na categoria 'daily_anomaly'.
+cron.schedule('0 4 * * *', async () => {
+    telegramService.alertGroup('⚙️ Health check de imutabilidade iniciando...', 'system_start');
+    console.log('[Cron-Immutability] Verificando violações de imutabilidade...');
+    try {
+        await assertTimezone(dbService);
+        const r = await runInvoiceImmutabilityHealth(dbService, auditLog);
+        console.log(`[Cron-Immutability] Concluído: ${r.count} achados.`);
+        telegramService.alertGroup(`✅ Health check de imutabilidade concluído: ${r.count} achado(s).`, 'system_done');
+    } catch (e) {
+        console.error('[Cron-Immutability] Erro:', e);
+        telegramService.alertGroup(`🚨 ERRO no health check de imutabilidade: ${e.message}`, 'system_error');
+    }
+});
+
 // Cron semanal: corrige pagamentos órfãos automaticamente (domingo 3h da manhã, horário de Brasília)
 // Reutiliza a mesma função runOrphanPaymentFix() da rota POST /admin/fix-orphan-payments
 cron.schedule('0 3 * * 0', async () => {
+    telegramService.alertGroup('⚙️ Job semanal iniciando: correção de pagamentos órfãos...', 'system_start');
     console.log('[Cron-Semanal] Executando correção automática de pagamentos órfãos...');
     try {
-        await assertTimezone(databricksService);
+        await assertTimezone(dbService);
         const result = await runOrphanPaymentFix();
         const s = result.summary;
         console.log(`[Cron-Semanal] Correção concluída: ${s.fixed} corrigido(s), ${s.errors} erro(s), ${s.usersScanned} usuário(s) escaneados`);
+        telegramService.alertGroup(`✅ Job semanal concluído: ${s.fixed} corrigido(s), ${s.errors} erro(s), ${s.usersScanned} usuário(s) escaneados.`, 'system_done');
         if (s.errors > 0 || s.fixed > 0) {
             console.log('[Cron-Semanal] Detalhes:', JSON.stringify(result.details.filter(d => d.action !== 'ok')));
         }
     } catch (e) {
         console.error('[Cron-Semanal] Erro na correção de pagamentos órfãos:', e);
+        telegramService.alertGroup(`🚨 ERRO no job semanal de pagamentos órfãos: ${e.message}`, 'system_error');
     }
 });
+
+// Remessa horária: cria tópico Telegram para até 10 massas por vez.
+// Backfill das massas criadas antes da integração existir, sem estourar o rate limit
+// do Telegram (~30 msg/s) nem despejar 146 tópicos de uma vez no grupo.
+const TELEGRAM_BACKFILL_BATCH = 10;
+
+async function runTelegramTopicBackfill(limit = TELEGRAM_BACKFILL_BATCH) {
+    const pending = await dbService.executeQuery(`
+        SELECT u.cpf, u.full_name
+        FROM ${dbService.fq('users')} u
+        LEFT JOIN ${dbService.fq('telegram_user_topics')} t ON t.cpf = u.cpf
+        WHERE u.cpf <> '99999999999' AND t.cpf IS NULL
+        ORDER BY u.created_at DESC
+        LIMIT ${Number(limit) || TELEGRAM_BACKFILL_BATCH}
+    `);
+    for (const row of pending) {
+        telegramService.ensureTopic(row.cpf, row.full_name);
+    }
+    const remainingRows = await dbService.executeQuery(`
+        SELECT COUNT(*) AS total
+        FROM ${dbService.fq('users')} u
+        LEFT JOIN ${dbService.fq('telegram_user_topics')} t ON t.cpf = u.cpf
+        WHERE u.cpf <> '99999999999' AND t.cpf IS NULL
+    `);
+    const remaining = Math.max(0, parseInt(remainingRows[0]?.total || 0, 10) - pending.length);
+    return { processed: pending.length, remaining };
+}
+
+// Backfill de tópicos NÃO tem cron. Rodava a cada hora no minuto 17 e poluía o
+// grupo com "📬 Remessa de tópicos" sem ninguém pedir. Agora só sob demanda:
+// POST /admin/telegram/backfill (painel admin).
 
 // --- Funções de Normalização (snake_case do DB para camelCase do App) ---
 const normalizeUser = (dbUser) => {
@@ -197,11 +322,11 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     const { esc } = repoContext;
     let latestInvoice = null;
     try {
-        const invRows = await databricksService.executeQuery(`
+        const invRows = await dbService.executeQuery(`
             SELECT status, due_date, valor_total, saldo_anterior, valor_iof, valor_multa,
                    valor_juros_remuneratorios, valor_juros_mora,
                    COALESCE(valor_pago, 0) AS valor_pago, itemized_transactions, data_pagamento
-            FROM ${databricksService.fq('invoices')}
+            FROM ${dbService.fq('invoices')}
             WHERE cpf = '${cpf}' ORDER BY due_date DESC LIMIT 5
         `);
         if (invRows.length > 0) {
@@ -221,6 +346,16 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             if (closedInvoice) {
                 // Janela de transações da fatura fechada continua ancorada na mais recente
                 normalized.creditCard.closedInvoiceDueDate = closedInvoice.due_date;
+                // daysOverdue REAL: ancorar na fatura fechada MAIS ANTIGA não paga.
+                // Ex.: massa com 2 fechadas não pagas (venc. jul/10 + ago/10) — a de jul
+                // tem 24 dias de atraso, a de ago ainda não venceu. Usar a mais recente
+                // (unpaidClosed[0]) mostraria 0 dias de atraso no payload, divergindo do
+                // banco (users.days_overdue=24) e do painel admin.
+                const _oldestDueMs = unpaidClosed.reduce((minMs, inv) => {
+                    const ms = new Date(inv.due_date).getTime();
+                    return (!minMs || ms < minMs) ? ms : minMs;
+                }, null);
+                normalized.creditCard._closedInvoiceOldestDueDate = _oldestDueMs ? new Date(_oldestDueMs) : null;
                 // Saldo residual = valor_total (principal) - valor_pago, NÃO o gross (que já
                 // inclui encargos congelados do seed). Usar gross faria os encargos ao vivo
                 // serem calculados DUAS VEZES — uma nos encargos congelados (dentro do gross)
@@ -257,9 +392,20 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 const latestFechada = invRows.find(i => i.status === 'FECHADA' && computeInvoiceGross(i) > 0);
                 if (latestFechada) {
                     normalized.creditCard.closedInvoiceDueDate = latestFechada.due_date;
+
+                    // Somar todas as faturas fechadas pagas na mesma data de pagamento (lote único de quitação)
+                    const sameBatchInvoices = invRows.filter(i =>
+                        i.status === 'FECHADA' &&
+                        i.data_pagamento &&
+                        new Date(i.data_pagamento).getTime() === new Date(latestFechada.data_pagamento).getTime()
+                    );
+
+                    const totalVal = sameBatchInvoices.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0);
+                    const totalPaid = sameBatchInvoices.reduce((sum, inv) => sum + parseFloat(inv.valor_pago || 0), 0);
+
                     // _closedInvoiceValorTotal = PRINCIPAL (valor_total), não o gross
-                    normalized.creditCard._closedInvoiceValorTotal = Math.round(parseFloat(latestFechada.valor_total || 0) * 100) / 100;
-                    normalized.creditCard._closedInvoiceValorPago = parseFloat(latestFechada.valor_pago || 0);
+                    normalized.creditCard._closedInvoiceValorTotal = Math.round(totalVal * 100) / 100;
+                    normalized.creditCard._closedInvoiceValorPago = Math.round(totalPaid * 100) / 100;
                     normalized.creditCard._closedInvoiceDataPagamento = latestFechada.data_pagamento;
                     // Fatura quitada — saldo devedor é zero
                     normalized.creditCard.closedInvoice = 0;
@@ -354,9 +500,10 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     let planRows = [];
     let splitTxIds = new Set();
     try {
-        planRows = await databricksService.executeQuery(`
-            SELECT id, purchase_tx_id, description, installment_amount, installments, remaining_installments, next_due_date
-            FROM ${databricksService.fq('installment_plans')}
+        planRows = await dbService.executeQuery(`
+            SELECT id, purchase_tx_id, description, installment_amount, installments, remaining_installments, next_due_date,
+                   original_amount, total_with_interest, interest_rate
+            FROM ${dbService.fq('installment_plans')}
             WHERE cpf = '${cpf}' AND status = 'ACTIVE'
         `);
         splitTxIds = new Set(planRows.map(p => p.purchase_tx_id).filter(Boolean));
@@ -365,11 +512,11 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     }
 
     // 3. Buscar transações de cartão do usuário
-    const cardRows = await databricksService.executeQuery(`
+    const cardRows = await dbService.executeQuery(`
         SELECT id, type, amount, description, date
-        FROM ${databricksService.fq('transactions')}
+        FROM ${dbService.fq('transactions')}
         WHERE cpf = '${cpf}'
-          AND type IN ('SHOP_CREDIT','CREDIT','INVOICE_INSTALLMENT','INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+          AND type IN ('SHOP_CREDIT','CREDIT','SUBSCRIPTION','INVOICE_INSTALLMENT','INVOICE_PAYMENT','INVOICE_ANTICIPATION')
           AND (status IS NULL OR status <> 'cancelled')
         ORDER BY date DESC
         LIMIT 100
@@ -405,6 +552,35 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
 
     const allTransactions = [...cardRows, ...pendingInstallments];
 
+    // ── Anexa informações de JUROS do parcelamento a uma transação (art. 52 CDC) ──
+    // originalAmount = valor original da compra (sem juros); jurosTotal = juros em R$;
+    // taxa efetiva mensal/anual = derivada da taxa total one-shot (calcEffectiveRates).
+    const attachPlanJurosInfo = (tx, plan) => {
+        const rate = Number(plan.interest_rate || 0);
+        let original = Number(plan.original_amount);
+        if (!(original > 0)) original = Number(plan.total_amount || 0); // fallback plano legado
+        const totalWithInterest = Number(plan.total_with_interest && plan.total_with_interest > 0 ? plan.total_with_interest : plan.total_amount || 0);
+        return {
+            ...tx,
+            ...buildJurosPayload({ original, totalWithInterest, installments: plan.installments, interestRate: plan.interest_rate }),
+        };
+    };
+    // Acha o plano de uma parcela INVOICE_INSTALLMENT por (qtd parcelas + valor da parcela).
+    // Prefere plano com juros (rate > 0) para expor os encargos corretos no comprovante.
+    // ⚠️ Heurística: se o usuário tiver 2 planos ativos com a MESMA qtd e MESMO valor de
+    // parcela (ex.: duas compras 12x do mesmo valor), o match pode anexar o plano errado
+    // (originalAmount/jurosTotal divergentes). As descrições do plano da loja são genéricas
+    // ('Compra shop (credito)'), então não há chave mais confiável sem FK dedicada.
+    const findPlanForInstallment = (plans, qty, installmentAmount) => {
+        const candidates = (plans || []).filter(p =>
+            Number(p.installments) === Number(qty) &&
+            Math.abs(Number(p.installment_amount) - Number(installmentAmount)) < 0.01
+        );
+        return candidates.find(p => Number(p.interest_rate) > 0) || candidates[0];
+    };
+    const planByTxId = new Map();
+    for (const p of planRows) if (p.purchase_tx_id) planByTxId.set(p.purchase_tx_id, p);
+
     const cardTransactions = allTransactions.map(r => {
         const base = {
             id: r.id,
@@ -412,8 +588,10 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             amount: Math.abs(parseFloat(r.amount || 0)),
         };
         const desc = r.description || '';
-        if (r.type === 'SHOP_CREDIT' || r.type === 'CREDIT') {
-            return { ...base, merchant: desc || 'Compra credito', type: 'CREDIT' };
+        if (r.type === 'SHOP_CREDIT' || r.type === 'CREDIT' || r.type === 'SUBSCRIPTION') {
+            const baseTx = { ...base, merchant: desc || 'Compra credito', type: 'CREDIT' };
+            const plan = planByTxId.get(r.id);
+            return plan ? attachPlanJurosInfo(baseTx, plan) : baseTx;
         }
         if (r.type === 'INVOICE_INSTALLMENT') {
             const m = desc.match(/\((\d+)\/(\d+)\)/);
@@ -421,7 +599,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             const totalInstallments = m ? parseInt(m[2], 10) : undefined;
             const installments = m ? `${m[1]}/${m[2]}` : undefined;
             const merchantName = desc.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim() || 'Compra credito';
-            return { ...base, merchant: merchantName, type: 'INVOICE_INSTALLMENT', installments, currentInstallment, totalInstallments };
+            const baseTx = { ...base, merchant: merchantName, type: 'INVOICE_INSTALLMENT', installments, currentInstallment, totalInstallments };
+            const plan = findPlanForInstallment(planRows, totalInstallments, base.amount);
+            return plan ? attachPlanJurosInfo(baseTx, plan) : baseTx;
         }
         if (r.type === 'INVOICE_PAYMENT' || r.type === 'INVOICE_ANTICIPATION') {
             // Determina o tipo de pagamento a partir da descrição original da transação.
@@ -455,7 +635,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         if (txDate <= _prevCloseMs || txDate > maxDueTime) return false;
         if (splitTxIds.has(tx.id)) return false;
         if (tx.type === 'INVOICE_INSTALLMENT') return true;
-        if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT') return true;
+        if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT' || tx.type === 'SUBSCRIPTION') return true;
         if (tx.type === 'PAYMENT' || tx.type === 'INVOICE_PAYMENT' || tx.type === 'INVOICE_ANTICIPATION') return true;
         return false;
     });
@@ -516,10 +696,18 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     } else {
         closedTransactions = cardTransactions.filter(tx => {
             const txDate = new Date(tx.date).getTime();
-            if (txDate <= _prevPrevCloseMs || txDate > _prevCloseMs) return false;
+            if (txDate <= _prevPrevCloseMs || txDate > _prevCloseMs) {
+                // Permitir que transações de pagamento (PAYMENT) feitas após _prevCloseMs entrem
+                // no histórico de closedTransactions da fatura fechada que elas pagaram.
+                const isPay = tx.type === 'PAYMENT' || tx.type === 'INVOICE_PAYMENT' || tx.type === 'INVOICE_ANTICIPATION';
+                if (isPay && txDate > _prevCloseMs && txDate <= maxDueTime) {
+                    return true;
+                }
+                return false;
+            }
             if (splitTxIds.has(tx.id)) return false;
             if (tx.type === 'INVOICE_INSTALLMENT') return true;
-            if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT') return true;
+            if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT' || tx.type === 'SUBSCRIPTION') return true;
             if (tx.type === 'PAYMENT' || tx.type === 'INVOICE_PAYMENT' || tx.type === 'INVOICE_ANTICIPATION') return true;
             return false;
         });
@@ -527,7 +715,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
 
     const closedSnapshot = normalized.creditCard._closedInvoiceSnapshot;
     delete normalized.creditCard._closedInvoiceSnapshot;
-    normalized.creditCard.closedTransactions = closedSnapshot || closedTransactions;
+    normalized.creditCard.closedTransactions = closedSnapshot
+        ? [...closedSnapshot, ...closedTransactions.filter(tx => tx.type === 'PAYMENT')]
+        : closedTransactions;
     const rawInvoiceTotal = normalized.creditCard.closedTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
     // paidInCycle removido — closedInvoice já usa valor_pago (saldo residual do DB).
     // A subtração dupla (paidInCycle + valor_pago) causava double-counting.
@@ -546,27 +736,29 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     // ── Cálculo do Crédito Excedente (Saldo Credor) ──
     let creditoExcedente = 0;
     let paymentsTotal = 0;
+    let chargesTotal = 0;
+    let principalTotal = 0;
     try {
         // 1. Buscar faturas fechadas não pagas ou pagas no ciclo aberto atual
-        const closedInvoicesCycle = await databricksService.executeQuery(`
-            SELECT valor_total FROM ${databricksService.fq('invoices')}
+        const closedInvoicesCycle = await dbService.executeQuery(`
+            SELECT valor_total FROM ${dbService.fq('invoices')}
             WHERE cpf = '${cpf}' AND status = 'FECHADA'
               AND (data_pagamento IS NULL OR data_pagamento > '${new Date(_prevCloseMs).toISOString()}')
         `);
-        const principalTotal = closedInvoicesCycle.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0);
+        principalTotal = closedInvoicesCycle.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0);
 
         // 2. Buscar encargos pendentes ou pagos no ciclo aberto atual
-        const chargesCycle = await databricksService.executeQuery(`
-            SELECT amount FROM ${databricksService.fq('billing_charges')}
+        const chargesCycle = await dbService.executeQuery(`
+            SELECT amount FROM ${dbService.fq('billing_charges')}
             WHERE cpf = '${cpf}'
               AND (status = 'pending' OR (status = 'paid' AND created_at > '${new Date(_prevCloseMs).toISOString()}'))
         `);
-        const chargesTotal = chargesCycle.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
+        chargesTotal = chargesCycle.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
 
         // 3. Buscar pagamentos realizados no ciclo aberto atual
-        const paymentsCycle = await databricksService.executeQuery(`
+        const paymentsCycle = await dbService.executeQuery(`
             SELECT COALESCE(SUM(ABS(amount)), 0) AS total
-            FROM ${databricksService.fq('transactions')}
+            FROM ${dbService.fq('transactions')}
             WHERE cpf = '${cpf}'
               AND type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
               AND date > '${new Date(_prevCloseMs).toISOString()}'
@@ -574,19 +766,39 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         `);
         paymentsTotal = parseFloat(paymentsCycle[0]?.total || 0);
 
-        // Crédito excedente = Qualquer pagamento que passe do principal das faturas fechadas
-        creditoExcedente = Math.max(0, paymentsTotal - principalTotal);
+        // Crédito excedente = pagamento que passe de (principal + encargos) das faturas fechadas.
+        // Subtrai chargesTotal: encargos pendentes/pagos no ciclo têm prioridade sobre crédito —
+        // só o que sobrar DEPOIS de cobrir principal + encargos é saldo credor (creditoExcedente).
+        creditoExcedente = Math.max(0, paymentsTotal - principalTotal - chargesTotal);
     } catch (err) {
         console.warn('Erro ao calcular creditoExcedente:', err.message);
     }
 
     normalized.creditCard.creditoExcedente = creditoExcedente;
     normalized.creditCard.paymentsTotal = paymentsTotal;
-    // Saldo residual da fatura anterior agora pode ser negativo (saldo credor) se o cliente pagou a mais
-    normalized.creditCard.closedInvoiceResidual = normalized.creditCard.closedInvoiceResidual - creditoExcedente;
-    // O valor pago exibido na fechada deve mostrar o total de pagamentos do ciclo
+    // ── closedInvoiceResidual: FONTE ÚNICA = DB (valor_total - valor_pago) ──
+    // NÃO usar paymentsTotal da janela do ciclo atual: pagamentos PARCIAIS feitos em
+    // ciclos anteriores (registrados no valor_pago do DB pela rota de pagamento) ficariam
+    // invisíveis para a janela do ciclo, inflando o residual. Bug real observado na massa
+    // 12312312312: pagou R$ 1.900 em julho, mas o residual mostrava R$ 4.400,52 em vez de
+    // R$ 2.500,52 (= 3.870,86 - 1.900 + 529,66). O DB é a fonte da verdade do valor pago.
+    // _closedInvoiceValorTotal/_ValorPago somam TODAS as fechadas não pagas do DB.
+    const _originalPrincipal = parseFloat(normalized.creditCard._closedInvoiceValorTotal || 0);
+    const _dbValorPago = parseFloat(normalized.creditCard._closedInvoiceValorPago || 0);
+    // max(db, janela): se a rota de pagamento já atualizou o valor_pago no DB, usa ele;
+    // se por algum motivo o DB não foi atualizado (pagamento órfão), usa a janela como
+    // rede de segurança para o residual não inflar.
+    const _residualPrincipal = _originalPrincipal - Math.max(_dbValorPago, paymentsTotal);
+    // Saldo credor (pagou além do principal) = residual NEGATIVO (exibido como tal no admin)
+    normalized.creditCard.closedInvoiceResidual = Math.round(_residualPrincipal * 100) / 100;
+    // O valor pago exibido na fechada: total real pago (DB ou janela, o maior).
+    // Nunca sobrescrever para MENOS: um pagamento parcial anterior (ex.: R$ 1.900 em
+    // julho) não pode sumir quando a janela do ciclo atual não o enxerga.
     if (paymentsTotal > 0) {
-        normalized.creditCard._closedInvoiceValorPago = paymentsTotal;
+        normalized.creditCard._closedInvoiceValorPago = Math.max(
+            parseFloat(normalized.creditCard._closedInvoiceValorPago || 0),
+            paymentsTotal
+        );
     }
 
     // FONTE ÚNICA DE VERDADE dos encargos/total da fatura fechada.
@@ -608,9 +820,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // billing_charges preserva o histórico real independente do residual.
         let _dailyCharges = null;
         try {
-            const _chargeRows = await databricksService.executeQuery(`
+            const _chargeRows = await dbService.executeQuery(`
                 SELECT charge_type, SUM(CAST(amount AS DECIMAL(15,2))) AS total
-                FROM ${databricksService.fq('billing_charges')}
+                FROM ${dbService.fq('billing_charges')}
                 WHERE cpf = '${cpf}' AND status = 'pending'
                 GROUP BY charge_type
             `);
@@ -635,8 +847,10 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
 
         // daysOverdue em tempo real: se paga, calcula até a data de pagamento (atraso estopado)
         let _daysOverdue = 0;
-        if (normalized.creditCard.closedInvoiceDueDate) {
-            const _d = new Date(normalized.creditCard.closedInvoiceDueDate);
+        // Prefere a fatura MAIS ANTIGA não paga (atraso real); fallback para a mais recente.
+        const _dueRef = normalized.creditCard._closedInvoiceOldestDueDate || normalized.creditCard.closedInvoiceDueDate;
+        if (_dueRef) {
+            const _d = new Date(_dueRef);
             _d.setHours(0, 0, 0, 0);
             const _end = _isPaid && normalized.creditCard._closedInvoiceDataPagamento
                 ? new Date(normalized.creditCard._closedInvoiceDataPagamento)
@@ -685,23 +899,28 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // (volt_recurring_bills) que são previsão de exibição, não compra lançada no
         // cartão — somá-las cobrava do cliente valores que não existem no banco.
         const _openPurchases = normalized.creditCard.currentInvoice || 0;
-        // currentInvoiceTotal = compras do ciclo + principal da fechada + encargos herdados
-        normalized.creditCard.currentInvoiceTotal = round2(Math.max(0, _openPurchases + _closedVal + _summary.totalEncargos));
-        // Mínimo: 10% das compras do ciclo + 100% da fechada vencida + 100% dos encargos
-        // Se há saldo credor (_closedVal < 0), ele abate o pagamento mínimo da fatura aberta
-        normalized.creditCard.currentInvoiceMinimo = (_closedVal > 0 || _summary.totalEncargos > 0)
-            ? round2(Math.max(0, _openPurchases * 0.10 + _closedVal + _summary.totalEncargos))
-            : (_openPurchases > 0 ? round2(Math.max(0, Math.max(_openPurchases * 0.10, 10) + (_closedVal < 0 ? _closedVal : 0))) : 0);
+        // closedInvoiceResidual = APENAS o principal ainda devido (valor_total - valor_pago).
+        // Zera quando a fechada é quitada. NÃO inclui encargos.
+        const _closedPrincipalResidual = normalized.creditCard.closedInvoiceResidual || 0;
+        // Encargos herdados da fechada (multa + juros mora + juros remuneratórios + IOF).
+        // Continuam devidos na ABERTA mesmo após a quitação do principal — pagar a fechada
+        // estanca novos encargos, mas os já acumulados são herdados pela aberta.
+        const _encargosHerdados = _summary.totalEncargos || 0;
+        // Total da aberta = compras do ciclo + principal residual da fechada + encargos herdados.
+        normalized.creditCard.currentInvoiceTotal = round2(Math.max(0, _openPurchases + _closedPrincipalResidual + _encargosHerdados));
+        // Mínimo consolidado: 10% das compras + 100% do residual + 100% dos encargos
+        normalized.creditCard.currentInvoiceMinimo = round2(Math.max(0, _openPurchases * 0.10 + _closedPrincipalResidual + _encargosHerdados));
     }
 
     // Limpar campo interno de cálculo (não expor ao frontend)
     delete normalized.creditCard._paidLateCharges;
+    delete normalized.creditCard._closedInvoiceOldestDueDate;
 
     try {
-        const _futurePlans = await databricksService.executeQuery(`
+        const _futurePlans = await dbService.executeQuery(`
             SELECT installment_amount, remaining_installments, next_due_date,
                    description, installments AS total_installments
-            FROM ${databricksService.fq('installment_plans')}
+            FROM ${dbService.fq('installment_plans')}
             WHERE cpf = '${cpf}' AND LOWER(status) = 'active' AND remaining_installments > 0
         `);
         const _futMap = {};
@@ -733,9 +952,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     }
 
     try {
-        const purchaseRows = await databricksService.executeQuery(`
+        const purchaseRows = await dbService.executeQuery(`
             SELECT id, name, description, price, image_url, quantity, points_earned, purchase_date
-            FROM ${databricksService.fq('purchased_items')}
+            FROM ${dbService.fq('purchased_items')}
             WHERE cpf = '${cpf}'
             ORDER BY purchase_date DESC
             LIMIT 50
@@ -815,7 +1034,7 @@ const resetTokenStore = new Map();
 const app = express();
 
 // Injetar contexto para repositories
-repoContext.setDb(databricksService);
+repoContext.setDb(dbService);
 
 // --- Middlewares ---
 const ALLOWED_ORIGINS = [
@@ -924,8 +1143,8 @@ apiRouter.get('/health', asyncHandler(async (req, res) => {
         status: 'ok',
         timestamp: new Date().toISOString(),
         database: {
-            connected: databricksService.session !== null,
-            mockMode: databricksService.mockMode || false
+            connected: dbService.session !== null,
+            mockMode: dbService.mockMode || false
         },
         endpoints: {
             total: 0,
@@ -944,18 +1163,18 @@ apiRouter.get('/debug/tables', bearerAuth(), authenticateAdmin, asyncHandler(asy
         const tables = {};
         
         // Verificar tabela users
-        const usersQuery = `SELECT COUNT(*) as count FROM ${databricksService.fq('users')}`;
-        const usersResult = await databricksService.executeQuery(usersQuery);
+        const usersQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('users')}`;
+        const usersResult = await dbService.executeQuery(usersQuery);
         tables.users = { exists: true, count: usersResult[0]?.count || 0 };
         
         // Verificar tabela pix_contacts
-        const contactsQuery = `SELECT COUNT(*) as count FROM ${databricksService.fq('pix_contacts')}`;
-        const contactsResult = await databricksService.executeQuery(contactsQuery);
+        const contactsQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('pix_contacts')}`;
+        const contactsResult = await dbService.executeQuery(contactsQuery);
         tables.pix_contacts = { exists: true, count: contactsResult[0]?.count || 0 };
         
         // Verificar tabela transactions
-        const transactionsQuery = `SELECT COUNT(*) as count FROM ${databricksService.fq('transactions')}`;
-        const transactionsResult = await databricksService.executeQuery(transactionsQuery);
+        const transactionsQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('transactions')}`;
+        const transactionsResult = await dbService.executeQuery(transactionsQuery);
         tables.transactions = { exists: true, count: transactionsResult[0]?.count || 0 };
         
         console.log('✅ Verificação de tabelas concluída:', tables);
@@ -976,8 +1195,8 @@ apiRouter.get('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(
     console.log(`🔍 Debug do usuário ${cpf} solicitado`);
     
     try {
-        const query = `SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`;
-        const result = await databricksService.executeQuery(query);
+        const query = `SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`;
+        const result = await dbService.executeQuery(query);
         
         if (result.length === 0) {
             return res.json({ success: true, data: { exists: false, user: null } });
@@ -1007,8 +1226,8 @@ apiRouter.delete('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandl
     
     try {
         // Verificar se usuário existe
-        const userQuery = `SELECT cpf, balance, credit_card_total_limit, credit_card_available_limit FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`;
-        const userRows = await databricksService.executeQuery(userQuery);
+        const userQuery = `SELECT cpf, balance, credit_card_total_limit, credit_card_available_limit FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`;
+        const userRows = await dbService.executeQuery(userQuery);
         
         if (userRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
@@ -1037,8 +1256,8 @@ apiRouter.delete('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandl
         }
         
         // Validação 3: Verificar se há parcelas pendentes (INVOICE_INSTALLMENT)
-        const pendingInstallmentsQuery = `SELECT COUNT(*) as count FROM ${databricksService.fq('transactions')} WHERE cpf = '${cpf}' AND type = 'INVOICE_INSTALLMENT'`;
-        const installmentsResult = await databricksService.executeQuery(pendingInstallmentsQuery);
+        const pendingInstallmentsQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('transactions')} WHERE cpf = '${cpf}' AND type = 'INVOICE_INSTALLMENT'`;
+        const installmentsResult = await dbService.executeQuery(pendingInstallmentsQuery);
         const pendingInstallmentsCount = parseInt(installmentsResult[0]?.count || 0);
         
         if (pendingInstallmentsCount > 0) {
@@ -1049,8 +1268,8 @@ apiRouter.delete('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandl
         }
         
         // Validação 4: Verificar se há faturas abertas ou vencidas
-        const openInvoicesQuery = `SELECT COUNT(*) as count FROM ${databricksService.fq('invoices')} WHERE cpf = '${cpf}' AND status IN ('ABERTA', 'VENCIDA')`;
-        const invoicesResult = await databricksService.executeQuery(openInvoicesQuery);
+        const openInvoicesQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('invoices')} WHERE cpf = '${cpf}' AND status IN ('ABERTA', 'VENCIDA')`;
+        const invoicesResult = await dbService.executeQuery(openInvoicesQuery);
         const openInvoicesCount = parseInt(invoicesResult[0]?.count || 0);
         
         if (openInvoicesCount > 0) {
@@ -1064,18 +1283,25 @@ apiRouter.delete('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandl
         console.log(`✅ Validações passadas. Deletando usuário ${cpf} e dados relacionados...`);
         
         // Deletar dados relacionados primeiro (cascata manual)
-        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('transactions')} WHERE cpf = '${cpf}'`);
-        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('pix_contacts')} WHERE pix_account_id = '${cpf}'`);
-        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('pix_keys')} WHERE cpf = '${cpf}'`);
-        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('notifications')} WHERE cpf = '${cpf}'`);
-        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('limit_increase_requests')} WHERE cpf = '${cpf}'`);
-        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('purchased_items')} WHERE cpf = '${cpf}'`);
-        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('installment_plans')} WHERE cpf = '${cpf}'`);
-        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('invoices')} WHERE cpf = '${cpf}'`);
+        await dbService.executeQuery(`DELETE FROM ${dbService.fq('transactions')} WHERE cpf = '${cpf}'`);
+        await dbService.executeQuery(`DELETE FROM ${dbService.fq('pix_contacts')} WHERE pix_account_id = '${cpf}'`);
+        await dbService.executeQuery(`DELETE FROM ${dbService.fq('pix_keys')} WHERE cpf = '${cpf}'`);
+        await dbService.executeQuery(`DELETE FROM ${dbService.fq('notifications')} WHERE cpf = '${cpf}'`);
+        await dbService.executeQuery(`DELETE FROM ${dbService.fq('limit_increase_requests')} WHERE cpf = '${cpf}'`);
+        await dbService.executeQuery(`DELETE FROM ${dbService.fq('purchased_items')} WHERE cpf = '${cpf}'`);
+        await dbService.executeQuery(`DELETE FROM ${dbService.fq('installment_plans')} WHERE cpf = '${cpf}'`);
+        await dbService.executeQuery(`DELETE FROM ${dbService.fq('invoices')} WHERE cpf = '${cpf}'`);
         
+        // Tópico do Telegram: falha aqui não pode impedir a exclusão da massa
+        try {
+            await telegramService.deleteTopic(cpf);
+        } catch (tgErr) {
+            console.warn(`⚠️ Falha ao apagar tópico Telegram de ${cpf}:`, tgErr.message);
+        }
+
         // Deletar usuário
-        await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
-        
+        await dbService.executeQuery(`DELETE FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
+
         console.log(`✅ Usuário ${cpf} e todos os dados relacionados deletados com sucesso`);
         res.json({ success: true, message: `Usuário ${cpf} deletado com sucesso` });
         
@@ -1120,8 +1346,8 @@ apiRouter.post('/test/reset', asyncHandler(async (req, res) => {
         for (const cpf of targets) {
             const { balance, creditCardBlocked } = TEST_RESET_USERS[cpf];
 
-            await databricksService.executeQuery(`
-                UPDATE ${databricksService.fq('users')}
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('users')}
                 SET balance = ${balance},
                     is_blocked = false,
                     login_attempts = 0,
@@ -1134,7 +1360,7 @@ apiRouter.post('/test/reset', asyncHandler(async (req, res) => {
                 WHERE cpf = '${cpf}'
             `);
 
-            await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('transactions')} WHERE cpf = '${cpf}'`);
+            await dbService.executeQuery(`DELETE FROM ${dbService.fq('transactions')} WHERE cpf = '${cpf}'`);
 
             reset.push(cpf);
         }
@@ -1162,7 +1388,7 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     };
     
     console.log('🔵 [SIGNUP] Verificando se usuário já existe...');
-    const existingUser = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${escapeSQL(cpf)}' OR email = '${escapeSQL(email)}'`);
+    const existingUser = await dbService.executeQuery(`SELECT cpf FROM ${dbService.fq('users')} WHERE cpf = '${escapeSQL(cpf)}' OR email = '${escapeSQL(email)}'`);
     console.log('🔵 [SIGNUP] Resultado da verificação:', existingUser.length > 0 ? 'Usuário já existe' : 'Usuário não existe');
     
     if (existingUser.length > 0) {
@@ -1175,7 +1401,7 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
         console.log('🔵 [SIGNUP] Hash gerado, tamanho:', hashedPassword.length);
         console.log('🔵 [SIGNUP] Hash gerado (primeiros 30 chars):', hashedPassword.substring(0, 30) + '...');
     
-    // Valores padrão definidos no código (já que o Databricks não permite DEFAULT)
+    // Valores padrão definidos no código (Postgres não usa DEFAULT aqui)
     const now = new Date().toISOString();
     const defaultBalance = 2000.00; // Saldo inicial: R$ 2.000,00
     const defaultRole = 'customer';
@@ -1227,9 +1453,9 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
             return res.status(500).json({ success: false, message: 'Erro ao gerar hash da senha. Tente novamente.' });
         }
         
-        const userId = databricksService.generateUUID();
+        const userId = dbService.generateUUID();
         const insertQuery = `
-            INSERT INTO ${databricksService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, credit_card_total_limit, credit_card_available_limit, credit_card_is_blocked, credit_card_points_balance, credit_card_due_day, credit_card_invoice_due_date, created_at, updated_at, card_cvv, card_expiry, card_delivery_status, card_is_activated, profile_message)
+            INSERT INTO ${dbService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, credit_card_total_limit, credit_card_available_limit, credit_card_is_blocked, credit_card_points_balance, credit_card_due_day, credit_card_invoice_due_date, created_at, updated_at, card_cvv, card_expiry, card_delivery_status, card_is_activated, profile_message)
             VALUES ('${userId}', '${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, ${defaultCreditCardTotalLimit}, ${defaultCreditCardAvailableLimit}, ${defaultCreditCardIsBlocked}, ${defaultCreditCardPointsBalance}, ${defaultCreditCardDueDay}, '${defaultInvoiceDueDate}', '${now}', '${now}', '${cvv}', '${expiry}', '${cardDeliveryStatus}', ${cardIsActivated}, '${escapeSQL(profileMessage)}')
         `;
         
@@ -1242,14 +1468,14 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
             creditCardTotalLimit: defaultCreditCardTotalLimit,
             creditCardAvailableLimit: defaultCreditCardAvailableLimit
         });
-        await databricksService.executeQuery(insertQuery);
+        await dbService.executeQuery(insertQuery);
         console.log('🔵 [SIGNUP] INSERT executado com sucesso');
         
         // Verificar se o usuário foi criado com sucesso e verificar os valores inseridos
         console.log('🔵 [SIGNUP] Verificando se usuário foi criado...');
-        const verifyUser = await databricksService.executeQuery(`
+        const verifyUser = await dbService.executeQuery(`
             SELECT cpf, balance, pix_daily_limit, credit_card_total_limit, credit_card_available_limit, password_hash
-            FROM ${databricksService.fq('users')} 
+            FROM ${dbService.fq('users')} 
             WHERE cpf = '${escapedCpf}'
         `);
         console.log('🔵 [SIGNUP] Resultado da verificação pós-INSERT:', verifyUser.length > 0 ? 'Usuário encontrado' : 'Usuário NÃO encontrado');
@@ -1284,6 +1510,7 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
         }
         
         console.log(`✅ [SIGNUP] Usuário ${cpf} criado com sucesso!`);
+        telegramService.ensureTopic(cpf, fullName);
         const response = { success: true, message: 'Conta criada com sucesso!' };
         console.log('🔵 [SIGNUP] Enviando resposta:', response);
         res.status(200).json(response);
@@ -1317,9 +1544,9 @@ apiRouter.post('/auth/login', loginLimiter, loginValidationRules, handleValidati
     try {
         // Escapar CPF para evitar SQL injection
         const escapedCpf = cpf.replace(/'/g, "''");
-        const query = `SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${escapedCpf}'`;
+        const query = `SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${escapedCpf}'`;
         console.log(`🔍 Executando query: ${query}`);
-        const users = await databricksService.executeQuery(query);
+        const users = await dbService.executeQuery(query);
         console.log(`🔍 Query retornou ${users ? users.length : 0} resultado(s)`);
         console.log(`🔍 Tipo de retorno: ${Array.isArray(users) ? 'Array' : typeof users}`);
         if (users && users.length > 0) {
@@ -1366,8 +1593,8 @@ apiRouter.post('/auth/login', loginLimiter, loginValidationRules, handleValidati
         if (!isMatch) {
             console.log(`❌ Senha incorreta para usuario ${user.cpf}`);
             const escapedCpfForUpdate = cpf.replace(/'/g, "''");
-            await databricksService.executeQuery(`
-                UPDATE ${databricksService.fq('users')}
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('users')}
                 SET login_attempts = COALESCE(login_attempts, 0) + 1, updated_at = current_timestamp()
                 WHERE cpf = '${escapedCpfForUpdate}'
             `);
@@ -1375,8 +1602,8 @@ apiRouter.post('/auth/login', loginLimiter, loginValidationRules, handleValidati
         }
         
         const escapedCpfForUpdate = cpf.replace(/'/g, "''");
-        await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('users')}
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')}
             SET login_attempts = 0, updated_at = current_timestamp()
             WHERE cpf = '${escapedCpfForUpdate}'
         `);
@@ -1405,11 +1632,11 @@ apiRouter.post('/auth/logout', (req, res) => {
 apiRouter.post('/auth/request-password-reset', asyncHandler(async (req, res) => {
     const { cpf } = req.body;
     const safeCpf = escapeSQL(String(cpf || '').replace(/\D/g, ''));
-    const users = await databricksService.executeQuery(`SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf = '${safeCpf}'`);
+    const users = await dbService.executeQuery(`SELECT cpf FROM ${dbService.fq('users')} WHERE cpf = '${safeCpf}'`);
     if (users.length > 0) {
         const otp = crypto.randomInt(100000, 999999).toString();
         resetTokenStore.set(safeCpf, { token: otp, expiresAt: Date.now() + 15 * 60 * 1000 });
-        await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET password_reset_requested = true, updated_at = current_timestamp() WHERE cpf = '${safeCpf}'`);
+        await dbService.executeQuery(`UPDATE ${dbService.fq('users')} SET password_reset_requested = true, updated_at = current_timestamp() WHERE cpf = '${safeCpf}'`);
         res.json({
             success: true,
             message: 'Instruções para nova senha enviadas ao seu e-mail.',
@@ -1424,8 +1651,8 @@ apiRouter.post('/auth/reset-password', resetPasswordValidationRules, handleValid
     const { cpf, token, newPassword } = req.body;
     const safeCpf = escapeSQL(String(cpf || '').replace(/\D/g, ''));
 
-    const rows = await databricksService.executeQuery(`
-        SELECT cpf, password_reset_requested FROM ${databricksService.fq('users')} WHERE cpf = '${safeCpf}'
+    const rows = await dbService.executeQuery(`
+        SELECT cpf, password_reset_requested FROM ${dbService.fq('users')} WHERE cpf = '${safeCpf}'
     `);
     if (!rows.length) {
         return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
@@ -1441,8 +1668,8 @@ apiRouter.post('/auth/reset-password', resetPasswordValidationRules, handleValid
     }
     const hash = await bcrypt.hash(newPassword, 10);
     const escapedHash = hash.replace(/'/g, "''");
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')}
         SET password_hash = '${escapedHash}', password_reset_requested = false, is_blocked = false, login_attempts = 0, updated_at = current_timestamp()
         WHERE cpf = '${safeCpf}'
     `);
@@ -1460,22 +1687,22 @@ apiRouter.get('/users/me', bearerAuth(), asyncHandler(async (req, res) => {
 
     // ── Billing status ────────────────────────────────────────────────────────
     try {
-        const billingCfgRows = await databricksService.executeQuery(
-            `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
+        const billingCfgRows = await dbService.executeQuery(
+            `SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`
         );
         const billingCfg = billingCfgRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3, is_active: true };
         const cycle = computeCurrentCycle(billingCfg);
 
-        const billingUserRow = await databricksService.executeQuery(`
+        const billingUserRow = await dbService.executeQuery(`
             SELECT COALESCE(account_status, 'adimplente') AS account_status,
                    COALESCE(days_overdue, 0)              AS days_overdue
-            FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'
+            FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'
         `);
         const bu = billingUserRow[0] || {};
 
-        const chargeRows = await databricksService.executeQuery(`
+        const chargeRows = await dbService.executeQuery(`
             SELECT charge_type, amount
-            FROM ${databricksService.fq('billing_charges')}
+            FROM ${dbService.fq('billing_charges')}
             WHERE cpf = '${cpf}' AND status = 'pending'
         `);
         const pendingCharges = chargeRows.reduce((s, c) => s + parseFloat(c.amount), 0);
@@ -1510,22 +1737,22 @@ apiRouter.get('/users/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
 
     // Billing status — accountStatus, daysOverdue, pendingCharges, billingCycle
     try {
-        const billingCfgRows = await databricksService.executeQuery(
-            `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
+        const billingCfgRows = await dbService.executeQuery(
+            `SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`
         );
         const billingCfg = billingCfgRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3, is_active: true };
         const cycle = computeCurrentCycle(billingCfg);
 
-        const billingUserRow = await databricksService.executeQuery(`
+        const billingUserRow = await dbService.executeQuery(`
             SELECT COALESCE(account_status, 'adimplente') AS account_status,
                    COALESCE(days_overdue, 0)              AS days_overdue
-            FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'
+            FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'
         `);
         const bu = billingUserRow[0] || {};
 
-        const chargeRows = await databricksService.executeQuery(`
+        const chargeRows = await dbService.executeQuery(`
             SELECT charge_type, amount
-            FROM ${databricksService.fq('billing_charges')}
+            FROM ${dbService.fq('billing_charges')}
             WHERE cpf = '${cpf}' AND status = 'pending'
         `);
         const pendingCharges = chargeRows.reduce((s, c) => s + parseFloat(c.amount), 0);
@@ -1553,12 +1780,12 @@ apiRouter.get('/user/me/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
     if (req.user.cpf !== req.params.cpf && req.user.role !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
-    const users = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
+    const users = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
     if (users.length === 0) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     
     const user = users[0];
-    const transactions = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('transactions')} WHERE cpf = '${req.params.cpf}' ORDER BY date DESC`);
-    const contacts = await databricksService.executeQuery(`SELECT contact_name as name, contact_cpf as key FROM ${databricksService.fq('pix_contacts')} WHERE pix_account_id = '${req.params.cpf}' ORDER BY created_at DESC`);
+    const transactions = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('transactions')} WHERE cpf = '${req.params.cpf}' ORDER BY date DESC`);
+    const contacts = await dbService.executeQuery(`SELECT contact_name as name, contact_cpf as key FROM ${dbService.fq('pix_contacts')} WHERE pix_account_id = '${req.params.cpf}' ORDER BY created_at DESC`);
     
     const userData = normalizeUser(user);
     userData.transactions = transactions.map(normalizeTransaction);
@@ -1573,14 +1800,14 @@ apiRouter.put('/user/limits/pix-daily/:cpf', bearerAuth(), asyncHandler(async (r
     }
     const { newLimit } = req.body;
     const now = new Date().toISOString();
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET pix_daily_limit = ${newLimit}, updated_at = '${now}' WHERE cpf = '${req.params.cpf}'`);
+    await dbService.executeQuery(`UPDATE ${dbService.fq('users')} SET pix_daily_limit = ${newLimit}, updated_at = '${now}' WHERE cpf = '${req.params.cpf}'`);
     res.json({ success: true, message: 'Limite diário de PIX atualizado com sucesso!' });
 }));
 
 apiRouter.get('/user/pix-daily-usage/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
-    const today = new Date().toISOString().split('T')[0];
-    const result = await databricksService.executeQuery(`
-        SELECT SUM(amount) as total FROM ${databricksService.fq('transactions')} 
+    const today = toDateOnly(new Date());
+    const result = await dbService.executeQuery(`
+        SELECT SUM(amount) as total FROM ${dbService.fq('transactions')} 
         WHERE cpf = '${req.params.cpf}' AND type = 'PIX_SENT' AND date >= '${today}'
     `);
     const total = result[0]?.total ? Math.abs(parseFloat(result[0].total)) : 0;
@@ -1593,7 +1820,7 @@ apiRouter.get('/users/:cpf/balance', bearerAuth(), asyncHandler(async (req, res)
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
     
-    const users = await databricksService.executeQuery(`SELECT balance FROM ${databricksService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
+    const users = await dbService.executeQuery(`SELECT balance FROM ${dbService.fq('users')} WHERE cpf = '${req.params.cpf}'`);
     if (users.length === 0) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     
     res.json({ success: true, balance: parseFloat(users[0].balance) || 0 });
@@ -1622,6 +1849,7 @@ apiRouter.get('/users/:cpf/statement', bearerAuth(), asyncHandler(async (req, re
                 'SHOP_DEBIT',
                 'SHOP_CREDIT',
                 'CREDIT',
+                'SUBSCRIPTION',
                 'INVOICE_INSTALLMENT',
                 'REFUND'
             ];
@@ -1658,6 +1886,7 @@ apiRouter.get('/users/:cpf/statement', bearerAuth(), asyncHandler(async (req, re
                 'SHOP_DEBIT',
                 'SHOP_CREDIT',
                 'CREDIT',
+                'SUBSCRIPTION',
                 'INVOICE_INSTALLMENT',
                 'CASHBACK_CREDIT',
                 'INVOICE_PAYMENT',
@@ -1670,15 +1899,15 @@ apiRouter.get('/users/:cpf/statement', bearerAuth(), asyncHandler(async (req, re
         const typesList = allowedTypes.map(t => esc(t)).join(',');
         
         // Query para contar total de registros
-        const countQuery = `SELECT COUNT(*) as total FROM ${databricksService.fq('transactions')} WHERE cpf = ${esc(cpf)} AND type IN (${typesList})`;
-        const countResult = await databricksService.executeQuery(countQuery);
+        const countQuery = `SELECT COUNT(*) as total FROM ${dbService.fq('transactions')} WHERE cpf = ${esc(cpf)} AND type IN (${typesList})`;
+        const countResult = await dbService.executeQuery(countQuery);
         const total = parseInt(countResult[0]?.total || 0, 10);
         const totalPages = Math.ceil(total / limit);
         
         // Query para buscar transações com paginação
-        const query = `SELECT * FROM ${databricksService.fq('transactions')} WHERE cpf = ${esc(cpf)} AND type IN (${typesList}) ORDER BY date DESC LIMIT ${limit} OFFSET ${offset}`;
+        const query = `SELECT * FROM ${dbService.fq('transactions')} WHERE cpf = ${esc(cpf)} AND type IN (${typesList}) ORDER BY date DESC LIMIT ${limit} OFFSET ${offset}`;
   
-        const transactions = await databricksService.executeQuery(query);
+        const transactions = await dbService.executeQuery(query);
         const normalized = transactions.map(normalizeTransaction).filter(tx => tx !== null);
         
         res.json({ 
@@ -1716,12 +1945,12 @@ apiRouter.put('/users/:cpf/profile', bearerAuth(), asyncHandler(async (req, res)
 
     if (!fields.length) return res.status(400).json({ success: false, message: 'Nenhum campo valido para atualizar.' });
 
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')}
         SET ${fields.join(', ')}, updated_at = current_timestamp()
         WHERE cpf = '${cpf}'
     `);
-    const [user] = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf='${cpf}'`);
+    const [user] = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE cpf='${cpf}'`);
     return res.json({ success: true, user: normalizeUser(user) });
 }));
 
@@ -1748,11 +1977,11 @@ apiRouter.get('/admin/notifications/minimo', bearerAuth(), authenticateAdmin, as
     const { esc } = repoContext;
     const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
 
-    const rows = await databricksService.executeQuery(`
+    const rows = await dbService.executeQuery(`
         SELECT n.id, n.cpf, n.title, n.message, n.created_at, n.is_read,
                u.full_name
-        FROM ${databricksService.fq('notifications')} n
-        LEFT JOIN ${databricksService.fq('users')} u ON n.cpf = u.cpf
+        FROM ${dbService.fq('notifications')} n
+        LEFT JOIN ${dbService.fq('users')} u ON n.cpf = u.cpf
         WHERE (n.title LIKE '%mínimo%' OR n.title LIKE '%minimo%')
           AND n.created_at >= ${esc(cutoff)}
         ORDER BY n.created_at DESC
@@ -1784,14 +2013,14 @@ apiRouter.get('/admin/notifications/abaixo', bearerAuth(), authenticateAdmin, as
     const { esc } = repoContext;
     const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
 
-    const rows = await databricksService.executeQuery(`
+    const rows = await dbService.executeQuery(`
         SELECT n.id, n.cpf, n.title, n.message, n.created_at, n.is_read,
                u.full_name,
                i.valor_total, COALESCE(i.valor_pago, 0) AS valor_pago,
                i.dias_atraso, u.account_status, u.days_overdue
-        FROM ${databricksService.fq('notifications')} n
-        LEFT JOIN ${databricksService.fq('users')} u ON n.cpf = u.cpf
-        LEFT JOIN ${databricksService.fq('invoices')} i ON n.cpf = i.cpf
+        FROM ${dbService.fq('notifications')} n
+        LEFT JOIN ${dbService.fq('users')} u ON n.cpf = u.cpf
+        LEFT JOIN ${dbService.fq('invoices')} i ON n.cpf = i.cpf
           AND i.status = 'FECHADA' AND i.data_pagamento IS NULL
         WHERE (n.title LIKE '%Abaixo%' OR n.title LIKE '%abaixo%' OR n.title LIKE '%crítico%' OR n.title LIKE '%critico%')
           AND n.created_at >= ${esc(cutoff)}
@@ -1834,9 +2063,9 @@ apiRouter.get('/admin/regularized-timeline', bearerAuth(), authenticateAdmin, as
     // Janela: últimos 7 dias.
     const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    const rows = await databricksService.executeQuery(`
+    const rows = await dbService.executeQuery(`
         SELECT data_pagamento, valor_total, valor_pago
-        FROM ${databricksService.fq('invoices')}
+        FROM ${dbService.fq('invoices')}
         WHERE status = 'FECHADA'
           AND data_pagamento IS NOT NULL
           AND data_pagamento >= '${seteDiasAtras}'
@@ -1863,10 +2092,10 @@ apiRouter.get('/admin/regularized-timeline', bearerAuth(), authenticateAdmin, as
     const timeline = [];
     for (let i = 6; i >= 0; i--) {
         const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-        const dayKey = dayKey(d);
-        const entry = dayMap.get(dayKey);
+        const k = dayKey(d);
+        const entry = dayMap.get(k);
         timeline.push({
-            date: dayKey,
+            date: k,
             label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
             count: entry ? entry.count : 0,
             totalAmount: entry ? Math.round(entry.totalAmount * 100) / 100 : 0,
@@ -1898,7 +2127,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
     }
     
     if (['card_debit', 'credit'].includes(paymentMethod)) {
-        const [card] = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('cards')} WHERE user_cpf = '${req.user.cpf}' AND card_type = 'physical'`);
+        const [card] = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('cards')} WHERE user_cpf = '${req.user.cpf}' AND card_type = 'physical'`);
         if (!card) {
             return res.status(403).json({ success: false, message: 'Cartão físico não encontrado.' });
         }
@@ -1994,20 +2223,42 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             productDesc = 'Compra shop (debito)';
         }
         
-        const txId = databricksService.generateUUID();
+        const txId = dbService.generateUUID();
         const now = new Date().toISOString();
         // Valor NEGATIVO pois é um débito (saída de dinheiro)
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
             VALUES (${esc(txId)}, ${esc(req.user.cpf)}, ${esc('SHOP_DEBIT')}, ${-netDebit.toFixed(2)}, ${esc(productDesc)}, ${esc(now)})
         `);
-        
+        telegramService.send('purchase', { cpf: req.user.cpf, text: `🛒 Compra no débito: R$ ${netDebit.toFixed(2)} — ${productDesc}` }).catch(() => {});
+        // Comprovante de compra (art. 52 CDC) no tópico da massa — fire-and-forget
+        generateAndSendPurchaseReceipt({
+            cpf: req.user.cpf,
+            data: {
+                estabelecimento: productDesc,
+                formaPagamento: 'Cartão de débito',
+                tipoPagamento: 'À vista (débito)',
+                totalParcelas: 1,
+                originalAmount: round2(netDebit),
+                jurosTotal: 0,
+                interestRate: 0,
+                totalParcelado: round2(netDebit),
+                valorParcela: round2(netDebit),
+                taxaEfetivaMensal: 0,
+                taxaEfetivaAnual: 0,
+                dataCompra: now,
+                transactionId: txId,
+                autenticacao: `FB-${Date.now().toString(36).toUpperCase()}`,
+            },
+        }).catch(() => {});
+
         if (cashback > 0) {
-            const cashbackTxId = databricksService.generateUUID();
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+            const cashbackTxId = dbService.generateUUID();
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
                 VALUES (${esc(cashbackTxId)}, ${esc(req.user.cpf)}, ${esc('CASHBACK_CREDIT')}, ${cashback.toFixed(2)}, ${esc('Cashback shop')}, ${esc(now)})
             `);
+            telegramService.send('purchase', { cpf: req.user.cpf, text: `💰 Cashback: R$ ${cashback.toFixed(2)}` }).catch(() => {});
         }
         
         // Persistir itens comprados e pontos por item (para débito)
@@ -2015,17 +2266,17 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             const p = productById.get(it.productId);
             const itemTotal = Number(p.price) * it.quantity;
             const itemPoints = Math.floor(itemTotal * pointsRate);
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('purchased_items')}
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('purchased_items')}
                 (id, cpf, product_id, name, description, price, image_url, quantity, points_earned, purchase_date, payment_method, cashback_used, installments)
-                VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', '${p.id}', '${p.name.replace(/'/g,"''")}', '${(p.description||'').replace(/'/g,"''")}', ${Number(p.price).toFixed(2)}, '${p.image_url || p.imageUrl || ''}', ${it.quantity}, ${itemPoints}, current_timestamp(), '${paymentMethod}', ${Number(cashback).toFixed(2)}, NULL)
+                VALUES ('${dbService.generateUUID()}', '${req.user.cpf}', '${p.id}', '${p.name.replace(/'/g,"''")}', '${(p.description||'').replace(/'/g,"''")}', ${Number(p.price).toFixed(2)}, '${p.image_url || p.imageUrl || ''}', ${it.quantity}, ${itemPoints}, current_timestamp(), '${paymentMethod}', ${Number(cashback).toFixed(2)}, NULL)
             `);
         }
 
         // Registrar pontos ganhos
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
-            VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'POINTS_EARNED', ${points}, 'Pontos ganhos no shop', current_timestamp())
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
+            VALUES ('${dbService.generateUUID()}', '${req.user.cpf}', 'POINTS_EARNED', ${points}, 'Pontos ganhos no shop', current_timestamp())
         `);
         
         // Preparar detalhes dos produtos comprados
@@ -2096,8 +2347,8 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             // Se o limite disponível não estiver definido ou for inválido, inicializar com o limite total
             availableLimit = totalLimit;
             const { esc } = require('./repositories/context');
-            await databricksService.executeQuery(`
-                UPDATE ${databricksService.fq('users')}
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('users')}
                 SET credit_card_available_limit = ${totalLimit.toFixed(2)}
                 WHERE cpf = ${esc(req.user.cpf)}
             `);
@@ -2109,8 +2360,8 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         if (availableLimit > totalLimit) {
             availableLimit = totalLimit;
             const { esc } = require('./repositories/context');
-            await databricksService.executeQuery(`
-                UPDATE ${databricksService.fq('users')}
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('users')}
                 SET credit_card_available_limit = ${totalLimit.toFixed(2)}
                 WHERE cpf = ${esc(req.user.cpf)}
             `);
@@ -2143,8 +2394,8 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         // IMPORTANTE: NUNCA debitar do balance (saldo da conta) para compras no crédito
         const newAvailableLimit = finalAvailableLimit - consumoLimite;
         const { esc } = require('./repositories/context');
-        await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('users')}
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')}
             SET credit_card_available_limit = ${newAvailableLimit.toFixed(2)}
             WHERE cpf = ${esc(req.user.cpf)}
         `);
@@ -2165,21 +2416,28 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         }
         const safeProductDesc = productDesc.replace(/'/g, "''");
 
-        const txId = databricksService.generateUUID();
+        const txId = dbService.generateUUID();
         creditTransactionId = txId; // Armazenar para uso na resposta
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('transactions')}
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('transactions')}
             (id, cpf, type, amount, description, from_user, to_user, to_key, date)
             VALUES ('${txId}', '${req.user.cpf}', 'SHOP_CREDIT', -${creditAmount.toFixed(2)}, '${safeProductDesc}', NULL, NULL, NULL, '${nowIso}')
         `);
+        // Transparência de encargos (CDC art. 52 · Res. BCB 96/2021 e 365/2023): quando a compra
+        // tiver juros, a mensagem expõe juros R$, taxa efetiva e total com/sem financiamento.
+        const _jpMsg = buildJurosPayload({ original: total, totalWithInterest: qty >= 2 ? totalParcelado : creditAmount, installments: qty, interestRate: rate });
+        const _msgJuros = _jpMsg.jurosTotal > 0
+            ? ` · juros R$ ${_jpMsg.jurosTotal.toFixed(2)} (${(_jpMsg.interestRate * 100).toFixed(1)}% no total) · taxa efetiva ${_jpMsg.taxaEfetivaMensal.toFixed(2)}% a.m. · total c/ juros R$ ${_jpMsg.totalParcelado.toFixed(2)}`
+            : '';
+        telegramService.send('purchase', { cpf: req.user.cpf, text: `💳 Compra no crédito: R$ ${creditAmount.toFixed(2)} — ${productDesc}${_msgJuros}` }).catch(() => {});
 
         // Gerar somente a 1a parcela na fatura atual e criar plano agregado para as futuras
         if (qty >= 2) {
             const now = new Date();
 
             // Buscar vencimento da fatura aberta atual do usuário
-            const userRows = await databricksService.executeQuery(
-                `SELECT credit_card_invoice_due_date FROM ${databricksService.fq('users')} WHERE cpf = '${req.user.cpf}'`
+            const userRows = await dbService.executeQuery(
+                `SELECT credit_card_invoice_due_date FROM ${dbService.fq('users')} WHERE cpf = '${req.user.cpf}'`
             );
             const user = userRows[0] || {};
             const userDueDate = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
@@ -2192,9 +2450,9 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             const parcela = totalParcelado / qty;
 
             // 1a parcela (aparecer na fatura vigente) com nome do produto
-            const firstInstId = databricksService.generateUUID();
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('transactions')}
+            const firstInstId = dbService.generateUUID();
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('transactions')}
                 (id, cpf, type, amount, description, from_user, to_user, to_key, date)
                 VALUES ('${firstInstId}', '${req.user.cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${safeProductDesc} (1/${qty})', NULL, NULL, NULL, '${toLocalSqlTimestamp(firstDue)}')
             `);
@@ -2204,7 +2462,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             const nextDueDate = new Date(firstDue);
             nextDueDate.setUTCMonth(firstDue.getUTCMonth() + 1);
 
-            const planId = databricksService.generateUUID();
+            const planId = dbService.generateUUID();
             const { esc } = require('./repositories/context');
             const planNow = toLocalSqlTimestamp();
             // original_amount = valor original da compra (sem juros), total_amount = valor total parcelado (com juros se houver)
@@ -2214,7 +2472,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             
             // Verificar se as colunas existem antes de inserir
             try {
-                const columnCheck = await databricksService.executeQuery(`
+                const columnCheck = await dbService.executeQuery(`
                     SELECT column_name 
                     FROM information_schema.columns 
                     WHERE table_schema = 'fintech' 
@@ -2228,15 +2486,15 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
                     console.log('⚠️ [SHOP CHECKOUT] Colunas faltando. Tentando adicionar...');
                     // Tentar adicionar as colunas se não existirem
                     if (!existingColumns.includes('original_amount')) {
-                        await databricksService.executeQuery(`
-                            ALTER TABLE ${databricksService.fq('installment_plans')}
+                        await dbService.executeQuery(`
+                            ALTER TABLE ${dbService.fq('installment_plans')}
                             ADD COLUMN original_amount DECIMAL(15,2) DEFAULT 0.00
                         `);
                         console.log('✅ [SHOP CHECKOUT] Coluna original_amount adicionada.');
                     }
                     if (!existingColumns.includes('total_with_interest')) {
-                        await databricksService.executeQuery(`
-                            ALTER TABLE ${databricksService.fq('installment_plans')}
+                        await dbService.executeQuery(`
+                            ALTER TABLE ${dbService.fq('installment_plans')}
                             ADD COLUMN total_with_interest DECIMAL(15,2) DEFAULT 0.00
                         `);
                         console.log('✅ [SHOP CHECKOUT] Coluna total_with_interest adicionada.');
@@ -2248,12 +2506,31 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             
             // Inserir plano de parcelamento - sempre incluir total_with_interest (mesmo valor que total_amount)
             console.log('💾 [SHOP CHECKOUT] Inserindo plano de parcelamento...');
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('installment_plans')}
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('installment_plans')}
                 (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
                 VALUES (${esc(planId)}, ${esc(req.user.cpf)}, ${esc(txId)}, ${esc('Compra shop (credito)')}, ${originalAmount.toFixed(2)}, ${totalParcelado.toFixed(2)}, ${totalWithInterest.toFixed(2)}, ${qty}, ${parcela.toFixed(2)}, ${typeof rate === 'number' ? rate.toFixed(4) : '0.0000'}, ${remainingBalance}, ${qty - 1}, ${esc(toLocalSqlTimestamp(nextDueDate))}, ${esc('ACTIVE')}, ${esc(planNow)}, ${esc(planNow)})
             `);
             console.log('✅ [SHOP CHECKOUT] Plano de parcelamento inserido com sucesso.');
+        }
+
+        // Comprovante de compra (art. 52 CDC) no tópico da massa — fire-and-forget
+        {
+            const _jp = buildJurosPayload({ original: total, totalWithInterest: qty >= 2 ? totalParcelado : creditAmount, installments: qty, interestRate: rate });
+            generateAndSendPurchaseReceipt({
+                cpf: req.user.cpf,
+                data: {
+                    estabelecimento: productDesc,
+                    formaPagamento: 'Cartão de crédito',
+                    tipoPagamento: qty === 1 ? 'À vista' : (rate > 0 ? 'Parcelado com juros' : 'Parcelado sem juros'),
+                    totalParcelas: qty,
+                    parcelaAtual: 1,
+                    dataCompra: nowIso,
+                    transactionId: txId,
+                    autenticacao: `FB-${Date.now().toString(36).toUpperCase()}`,
+                    ..._jp,
+                },
+            }).catch(() => {});
         }
     } else {
         return res.status(400).json({ success: false, message: 'Metodo de pagamento invalido.' });
@@ -2264,16 +2541,16 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         const p = productById.get(it.productId);
         const itemTotal = Number(p.price) * it.quantity;
         const itemPoints = Math.floor(itemTotal * pointsRate);
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('purchased_items')}
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('purchased_items')}
             (id, cpf, product_id, name, description, price, image_url, quantity, points_earned, purchase_date, payment_method, cashback_used, installments)
-            VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', '${p.id}', '${p.name.replace(/'/g,"''")}', '${(p.description||'').replace(/'/g,"''")}', ${Number(p.price).toFixed(2)}, '${p.image_url || p.imageUrl || ''}', ${it.quantity}, ${itemPoints}, current_timestamp(), '${paymentMethod}', ${paymentMethod === 'debit' ? Number(cashback).toFixed(2) : 0}, ${paymentMethod === 'credit' ? installments : 'NULL'})
+            VALUES ('${dbService.generateUUID()}', '${req.user.cpf}', '${p.id}', '${p.name.replace(/'/g,"''")}', '${(p.description||'').replace(/'/g,"''")}', ${Number(p.price).toFixed(2)}, '${p.image_url || p.imageUrl || ''}', ${it.quantity}, ${itemPoints}, current_timestamp(), '${paymentMethod}', ${paymentMethod === 'debit' ? Number(cashback).toFixed(2) : 0}, ${paymentMethod === 'credit' ? installments : 'NULL'})
         `);
     }
 
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
-        VALUES ('${databricksService.generateUUID()}', '${req.user.cpf}', 'POINTS_EARNED', ${points}, 'Pontos ganhos no shop', current_timestamp())
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
+        VALUES ('${dbService.generateUUID()}', '${req.user.cpf}', 'POINTS_EARNED', ${points}, 'Pontos ganhos no shop', current_timestamp())
     `);
 
     // Preparar detalhes dos produtos comprados
@@ -2298,6 +2575,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
 
     // Calcular valores finais - para crédito, usar variáveis do escopo correto
     let finalAmountLabel;
+    let purchaseJuros = null;
     if (paymentMethod === 'credit') {
         // Para crédito, o valor final depende se é parcelado ou não
         const qty = installments;
@@ -2305,6 +2583,15 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         const totalParcelado = qty >= 2 ? (qty >= 13 ? total * (1 + rate) : total) : 0;
         const creditAmount = qty === 1 ? (total * 0.90) : total;
         finalAmountLabel = qty === 1 ? creditAmount : totalParcelado;
+        // art. 52 CDC — expor encargos de juros no payload da compra
+        // originalAmount = valor original; jurosTotal = juros em R$; taxa efetiva
+        // mensal/anual derivada da taxa total one-shot (calcEffectiveRates).
+        purchaseJuros = buildJurosPayload({
+            original: total,
+            totalWithInterest: qty >= 2 ? totalParcelado : creditAmount,
+            installments: qty,
+            interestRate: rate,
+        });
     } else {
         finalAmountLabel = netDebit;
     }
@@ -2319,7 +2606,8 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             paymentMethod,
             installments: paymentMethod === 'credit' ? installments : 1,
             pointsEarned: points,
-            transactionId: creditTransactionId
+            transactionId: creditTransactionId,
+            ...(purchaseJuros || {})
         }
     });
 }));
@@ -2453,8 +2741,8 @@ apiRouter.post('/pix/keys', bearerAuth(), asyncHandler(async (req, res) => {
     }
     
     // Verificar se a chave já está cadastrada para outro usuário
-    const allKeys = await databricksService.executeQuery(`
-        SELECT cpf, key FROM ${databricksService.fq('pix_keys')} WHERE LOWER(key) = LOWER('${normalizedKey.replace(/'/g, "''")}')
+    const allKeys = await dbService.executeQuery(`
+        SELECT cpf, key FROM ${dbService.fq('pix_keys')} WHERE LOWER(key) = LOWER('${normalizedKey.replace(/'/g, "''")}')
     `);
     if (allKeys.length > 0) {
         const otherUserCpf = allKeys[0].cpf;
@@ -2520,7 +2808,7 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
     }
     
     // Get sender info
-    const fromUserRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf='${senderCpf}'`);
+    const fromUserRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE cpf='${senderCpf}'`);
     if (!fromUserRows || fromUserRows.length === 0) {
         return res.status(404).json({ success: false, message: 'Usuário remetente não encontrado.' });
     }
@@ -2531,10 +2819,10 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
     }
     
     // Check daily limit
-    const today = new Date().toISOString().split('T')[0];
-    const dailyUsageRows = await databricksService.executeQuery(`
+    const today = toDateOnly(new Date());
+    const dailyUsageRows = await dbService.executeQuery(`
         SELECT COALESCE(SUM(ABS(amount)), 0) as total
-        FROM ${databricksService.fq('transactions')}
+        FROM ${dbService.fq('transactions')}
         WHERE cpf='${senderCpf}' AND type IN ('PIX_SENT','PIX_CREDIT_SENT') AND date >= '${today}'
     `);
     const dailyUsage = parseFloat(dailyUsageRows[0]?.total || 0);
@@ -2546,32 +2834,34 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
     
     // Execute transfer
     const newBalance = balance - numericAmount;
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance=${newBalance}, updated_at=CURRENT_TIMESTAMP WHERE cpf='${senderCpf}'`);
+    await dbService.executeQuery(`UPDATE ${dbService.fq('users')} SET balance=${newBalance}, updated_at=CURRENT_TIMESTAMP WHERE cpf='${senderCpf}'`);
     
-    const toUserRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf='${toCpf}'`);
+    const toUserRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE cpf='${toCpf}'`);
     if (toUserRows && toUserRows.length > 0) {
         const toBalance = parseFloat(toUserRows[0].balance || 0);
-        await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance=${toBalance + numericAmount}, updated_at=CURRENT_TIMESTAMP WHERE cpf='${toCpf}'`);
+        await dbService.executeQuery(`UPDATE ${dbService.fq('users')} SET balance=${toBalance + numericAmount}, updated_at=CURRENT_TIMESTAMP WHERE cpf='${toCpf}'`);
     }
     
     // Record transactions
     const { esc } = require('./repositories/context');
-    const txId = databricksService.generateUUID();
+    const txId = dbService.generateUUID();
     const now = new Date().toISOString();
     const txDescription = description || 'Transferência PIX';
     
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date, to_user, to_key)
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date, to_user, to_key)
         VALUES (${esc(txId)}, ${esc(senderCpf)}, ${esc('PIX_SENT')}, ${-numericAmount}, ${esc(txDescription)}, ${esc(now)}, ${esc(toCpf)}, ${esc(key)})
     `);
     
-    const txId2 = databricksService.generateUUID();
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date, from_user)
+    const txId2 = dbService.generateUUID();
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date, from_user)
         VALUES (${esc(txId2)}, ${esc(toCpf)}, ${esc('PIX_RECEIVED')}, ${numericAmount}, ${esc(txDescription)}, ${esc(now)}, ${esc(senderCpf)})
     `);
     
     console.log(`✅ Transações PIX registradas: PIX_SENT (${txId}) e PIX_RECEIVED (${txId2})`);
+    telegramService.send('payment', { cpf: senderCpf, text: `📤 PIX enviado: R$ ${numericAmount.toFixed(2)} — ${txDescription}` }).catch(() => {});
+    telegramService.send('payment', { cpf: toCpf, text: `📥 PIX recebido: R$ ${numericAmount.toFixed(2)} — ${txDescription}` }).catch(() => {});
     
     auditLog(req, 'pix_transfer', 'info', { from: senderCpf, to: toCpf, amount: numericAmount });
     res.json({ success: true, message: 'Transferência realizada com sucesso!' });
@@ -2607,7 +2897,7 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
     }
 
     // Buscar usuário remetente
-    const fromUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${senderCpf}'`);
+    const fromUsers = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${senderCpf}'`);
     if (!fromUsers || fromUsers.length === 0) {
         return res.status(404).json({ success: false, message: 'Usuário remetente não encontrado.' });
     }
@@ -2622,7 +2912,7 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
         return res.status(404).json({ success: false, message: 'Chave PIX de destino não encontrada.' });
     }
     
-    const toUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${recipient.cpf}'`);
+    const toUsers = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${recipient.cpf}'`);
     const toUser = toUsers[0];
 
     if (!toUser) return res.status(400).json({ success: false, message: 'Chave PIX de destino não encontrada.' });
@@ -2632,7 +2922,7 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
     const totalWithInterest = numericAmount * (1 + rate * nInstallments);
     const installmentValue = parseFloat((totalWithInterest / nInstallments).toFixed(2));
     const now = new Date().toISOString();
-    const txId = databricksService.generateUUID();
+    const txId = dbService.generateUUID();
 
     // Transferência imediata para o destinatário
     const newFromBalance = fromUser.balance - numericAmount;
@@ -2643,20 +2933,22 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
     }
 
     const { esc } = require('./repositories/context');
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance = ${newFromBalance}, updated_at = CURRENT_TIMESTAMP WHERE cpf = '${senderCpf}'`);
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('users')} SET balance = ${newToBalance}, updated_at = CURRENT_TIMESTAMP WHERE cpf = '${toUser.cpf}'`);
+    await dbService.executeQuery(`UPDATE ${dbService.fq('users')} SET balance = ${newFromBalance}, updated_at = CURRENT_TIMESTAMP WHERE cpf = '${senderCpf}'`);
+    await dbService.executeQuery(`UPDATE ${dbService.fq('users')} SET balance = ${newToBalance}, updated_at = CURRENT_TIMESTAMP WHERE cpf = '${toUser.cpf}'`);
 
     const txDescription = description || 'Transferência PIX Crédito';
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date, to_user, to_key)
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date, to_user, to_key)
         VALUES (${esc(txId + '_credit_sent')}, ${esc(senderCpf)}, 'PIX_CREDIT_SENT', ${-numericAmount}, ${esc(txDescription)}, ${esc(now)}, ${esc(toUser.cpf)}, ${esc(recipientKey)})
     `);
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date, from_user, to_key)
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date, from_user, to_key)
         VALUES (${esc(txId + '_credit_received')}, ${esc(toUser.cpf)}, 'PIX_CREDIT_RECEIVED', ${numericAmount}, ${esc(txDescription)}, ${esc(now)}, ${esc(fromUser.full_name)}, ${esc(recipientKey)})
     `);
 
     auditLog(req, 'pix_transfer_credit', 'info', { toKey: recipientKey, amount: numericAmount, installments: nInstallments });
+    telegramService.send('payment', { cpf: senderCpf, text: `📤 PIX no crédito enviado: R$ ${numericAmount.toFixed(2)} em ${nInstallments}x — ${txDescription}` }).catch(() => {});
+    telegramService.send('payment', { cpf: toUser.cpf, text: `📥 PIX recebido: R$ ${numericAmount.toFixed(2)} — ${txDescription}` }).catch(() => {});
 
     res.json({
         success: true,
@@ -2676,13 +2968,471 @@ apiRouter.get('/admin/users', bearerAuth(), authenticateAdmin, asyncHandler(asyn
     res.json({ success: true, users: users.map(normalizeUser) });
 }));
 
+// --- Telegram: gestão dos tópicos por massa ---
+apiRouter.get('/admin/telegram/status', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const status = await telegramService.getStatus();
+    res.json({ success: true, ...status });
+}));
+
+apiRouter.get('/admin/telegram/topics', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const rows = await telegramService.listTopics();
+    const missingRows = await dbService.executeQuery(`
+        SELECT u.cpf, u.full_name
+        FROM ${dbService.fq('users')} u
+        LEFT JOIN ${dbService.fq('telegram_user_topics')} t ON t.cpf = u.cpf
+        WHERE u.cpf <> '99999999999' AND t.cpf IS NULL
+        ORDER BY u.created_at DESC
+    `);
+    res.json({
+        success: true,
+        topics: rows.map(r => ({ cpf: r.cpf, topicId: r.topic_id, createdAt: r.created_at, fullName: r.full_name || null })),
+        missing: missingRows.map(r => ({ cpf: r.cpf, fullName: r.full_name || null }))
+    });
+}));
+
+apiRouter.post('/admin/telegram/topics/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { cpf } = req.params;
+    const user = await usersRepo.findByCpf(cpf);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+    telegramService.ensureTopic(cpf, user.full_name);
+    res.json({ success: true, message: `Tópico solicitado para ${cpf}.` });
+}));
+
+apiRouter.delete('/admin/telegram/topics/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const result = await telegramService.deleteTopic(req.params.cpf);
+    res.json({ success: true, deleted: result.deleted });
+}));
+
+// --- Telegram: toggles por categoria (painel admin) ---
+apiRouter.get('/admin/telegram/settings', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const rows = await telegramSettingsRepo.listSettings();
+    const settings = rows.map(r => {
+        let expiresInHours = null;
+        if (r.valid_until) {
+            const ms = new Date(r.valid_until).getTime() - Date.now();
+            expiresInHours = Math.max(0, Math.round(ms / 3600000));
+        }
+        return { ...r, expires_in_hours: expiresInHours };
+    });
+    res.json({ success: true, settings });
+}));
+
+apiRouter.patch('/admin/telegram/settings/:category', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { category } = req.params;
+    const existing = await telegramSettingsRepo.getSetting(category);
+    if (!existing) return res.status(404).json({ success: false, message: `Categoria desconhecida: ${category}` });
+
+    const { enabled, valid_from, valid_until, ttl_minutes } = req.body || {};
+    const fields = {};
+    if (enabled !== undefined) {
+        if (typeof enabled !== 'boolean') return res.status(400).json({ success: false, message: 'enabled deve ser boolean' });
+        fields.enabled = enabled;
+    }
+    if (valid_from !== undefined) fields.valid_from = valid_from;
+    if (valid_until !== undefined) fields.valid_until = valid_until;
+    if (ttl_minutes !== undefined) {
+        if (ttl_minutes !== null && (!Number.isInteger(ttl_minutes) || ttl_minutes < 0)) {
+            return res.status(400).json({ success: false, message: 'ttl_minutes deve ser inteiro >= 0 ou null' });
+        }
+        fields.ttl_minutes = ttl_minutes;
+    }
+
+    await telegramSettingsRepo.upsertSetting(category, fields, req.user && req.user.cpf);
+    telegramService.invalidateSettingCache(category);
+    const updated = await telegramSettingsRepo.getSetting(category);
+    res.json({ success: true, setting: updated });
+}));
+
+apiRouter.get('/admin/telegram/persistent-topics', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const topics = await telegramSettingsRepo.listPersistentTopics();
+    res.json({ success: true, topics });
+}));
+
+apiRouter.post('/admin/telegram/test', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { category, cpf, payload } = req.body || {};
+    if (!category) {
+        // Legado: teste genérico de integração (botão "Enviar teste" do painel)
+        if (!telegramService._enabled) {
+            return res.status(400).json({ success: false, message: 'Integração Telegram desabilitada (falta TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID).' });
+        }
+        telegramService.alertGroup('🧪 Teste de integração enviado pelo painel admin.');
+        return res.json({ success: true, message: 'Mensagem de teste enviada ao grupo.' });
+    }
+    const setting = await telegramSettingsRepo.getSetting(category);
+    if (!setting) return res.status(404).json({ success: false, message: `Categoria desconhecida: ${category}` });
+
+    const text = `[TEST] ${(payload && payload.text) || `Ping de teste da categoria ${category}`}`;
+    const result = await telegramService.send(category, { cpf: cpf || null, nome: payload && payload.nome, text });
+    res.json({ success: true, category, ...result });
+}));
+
+apiRouter.post('/admin/telegram/topics/:cpf/send-table', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { cpf } = req.params;
+    const { title, headers, rows } = req.body || {};
+    if (!title || !headers || !rows) {
+        return res.status(400).json({ success: false, message: 'Dados incompletos (title, headers, rows são obrigatórios).' });
+    }
+    telegramService.sendTable(cpf, title, headers, rows);
+    res.json({ success: true, message: 'Tabela enviada ao tópico.' });
+}));
+
+apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { cpf } = req.params;
+    const { type } = req.body || {};
+    if (!type) return res.status(400).json({ success: false, message: 'Tipo de fatura (type) é obrigatório.' });
+
+    const userRow = await usersRepo.findByCpf(cpf);
+    if (!userRow) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+
+    const tempUser = normalizeUser(userRow);
+    await enrichUserCreditCardData(tempUser, cpf);
+    const card = tempUser.creditCard || {};
+
+    const openAmount = card.currentInvoice || 0;
+    const originalClosedAmount = card._closedInvoiceValorTotal ?? card.closedInvoiceAmount ?? card.closedInvoice ?? 0;
+    const closedAmount = card.closedInvoice ?? 0;
+    const isPaid = card.closedInvoiceIsPaid ?? false;
+    const valorPago = card._closedInvoiceValorPago ?? 0;
+    const closedInvoiceResidual = card.closedInvoiceResidual ?? 0;
+
+    const diffTime = Math.abs(new Date().getTime() - new Date(card.closedInvoiceDueDate || card.invoiceDueDate || '2026-07-15').getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const explicitDays = tempUser.daysOverdue ?? card.daysOverdue ?? 0;
+    const overdueDays = explicitDays > 0 ? explicitDays : (originalClosedAmount > 0 ? Math.max(7, diffDays) : 0);
+
+    const charges = card.closedInvoiceCharges || {};
+    const multa = typeof charges.multa === 'number' ? charges.multa : calcMulta(originalClosedAmount);
+    const jurosMora = typeof charges.jurosMora === 'number' ? charges.jurosMora : calcJurosMora(originalClosedAmount, overdueDays);
+    const jurosRemun = typeof charges.jurosRemuneratorios === 'number' ? charges.jurosRemuneratorios : calcJurosRemuneratorios(originalClosedAmount, overdueDays);
+    const iofTotal = typeof charges.iof === 'number' ? charges.iof : calcAllCharges(originalClosedAmount, overdueDays).iof;
+    const totalEncargos = typeof charges.totalEncargos === 'number' ? charges.totalEncargos : calcAllCharges(originalClosedAmount, overdueDays).total;
+
+    const iofFixo = originalClosedAmount > 0 ? Math.round(originalClosedAmount * 0.0038 * 100) / 100 : 0;
+    const iofDiario = Math.max(0, iofTotal - iofFixo);
+    const totalOpenConsolidated = card.currentInvoiceTotal ?? 0;
+    const minOpenConsolidated = card.currentInvoiceMinimo ?? 0;
+    const minClosedOriginal = Math.round(originalClosedAmount * 0.10 * 100) / 100;
+    const minClosedWithCharges = Math.round((minClosedOriginal + totalEncargos) * 100) / 100;
+
+    // Datas reais da fatura (fechada: closedInvoiceDueDate; aberta: invoiceDueDate).
+    const closedDueIso = card.closedInvoiceDueDate || null;
+    const openDueIso = card.invoiceDueDate || null;
+    const refDueIso = type === 'open' ? (openDueIso || closedDueIso) : closedDueIso;
+    const refDue = refDueIso ? new Date(refDueIso) : null;
+    const periodoLabel = (() => {
+        if (!refDue || isNaN(refDue.getTime())) return '';
+        const _meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+        return `${_meses[refDue.getMonth()]}/${String(refDue.getFullYear()).slice(2)}`;
+    })();
+    // Previsão do próximo fechamento = vencimento − 7 dias (regra do corte do invoiceEngine).
+    let previsaoFechamento = null;
+    if (refDue && !isNaN(refDue.getTime())) {
+        const p = new Date(refDue);
+        p.setDate(p.getDate() - 7);
+        previsaoFechamento = p.toISOString();
+    }
+
+    // ── FATURA UNIVERSAL (4 páginas — Fintech Bank 598) ─────────────────────
+    // Novo layout: Pág.1 resumo + box total + limites + encargos; Pág.2
+    // movimentações (compras); Pág.3 parcelas futuras + opções de pagamento
+    // + PIX/boleto. Mesmo serviço usado pelos scripts de preview.
+    const { generateUniversalInvoicePDF } = require('./services/invoicePdfService');
+
+    // ── Movimentações da fatura (PÁGINA 2 — compras e saques) ──
+    // Fechada: usa card.closedTransactions — que já embute o snapshot imutável
+    //   itemized_transactions (sobrevive ao pagamento). PAYMENT é filtrado abaixo.
+    // Aberta: usa card.transactions (= openTransactions do enrich, ciclo corrente).
+    // ATENÇÃO: card.openTransactions e card._closedInvoiceSnapshot NÃO existem no
+    //   payload do enrich — o snapshot é movido para closedTransactions e APAGADO
+    //   (index.cjs:640-641). Usar esses nomes fazia a Página 2 sair SEMPRE vazia
+    //   em PDFs gerados com dados reais (só o preview com mockados mostrava compras).
+    // Formata a parcela da linha como "02/04" (zero-padded). Aceita o formato
+    // "2/4" do enrich (INVOICE_INSTALLMENT) ou do snapshot itemized_transactions.
+    const formatParcelaPdf = (tx) => {
+        if (!tx) return '';
+        let cur = tx.currentInstallment, total = tx.totalInstallments;
+        if (tx.installments && typeof tx.installments === 'string') {
+            const m = tx.installments.match(/(\d+)\s*\/\s*(\d+)/);
+            if (m) { cur = parseInt(m[1], 10); total = parseInt(m[2], 10); }
+        }
+        if (!cur || !total) return '';
+        return `${String(cur).padStart(2, '0')}/${String(total).padStart(2, '0')}`;
+    };
+
+    let movimentacoes = [];
+    try {
+        const purchaseTypes = ['CREDIT', 'SHOP_CREDIT', 'INVOICE_INSTALLMENT', 'SUBSCRIPTION'];
+        const source = type === 'closed'
+            ? ((card.closedTransactions && card.closedTransactions.length > 0)
+                ? card.closedTransactions
+                : (card.transactions || []))
+            : (card.transactions || []);
+        movimentacoes = source
+            .filter(tx => purchaseTypes.includes(tx.type))
+            .map(tx => ({
+                data: tx.date ? toDateBR(tx.date) : '',
+                descricao: tx.merchant || tx.description || 'Lançamento',
+                valor: Math.abs(parseFloat(tx.amount) || 0),
+                // Parcela (02/04) — do enrich/snapshot; vazio quando à vista.
+                parcela: formatParcelaPdf(tx),
+                // Juros do financiamento (art. 52 CDC) — attachPlanJurosInfo no enrich.
+                jurosTotal: Number(tx.jurosTotal) > 0 ? round2(Number(tx.jurosTotal)) : 0,
+                originalAmount: tx.originalAmount != null ? round2(Number(tx.originalAmount)) : null,
+                totalParcelado: tx.totalParcelado != null ? round2(Number(tx.totalParcelado)) : null,
+                taxaEfetivaMensal: tx.taxaEfetivaMensal != null ? (Number(tx.taxaEfetivaMensal) * 100) : null,
+            }))
+            .slice(0, 60);
+    } catch (movErr) {
+        console.warn('[send-pdf] Erro ao montar movimentações:', movErr.message);
+    }
+
+    // ── Parcelas futuras (installment_plans ativos) ──
+    let parcelasFuturas = [];
+    let totalProximas = 0;
+    let proximaFatura = 0;
+    try {
+        const plans = await dbService.executeQuery(`
+            SELECT p.installment_amount, p.remaining_installments, p.installments, p.next_due_date,
+                   COALESCE(t.description, p.description) AS description,
+                   p.original_amount, p.total_with_interest, p.interest_rate
+            FROM ${dbService.fq('installment_plans')} p
+            LEFT JOIN ${dbService.fq('transactions')} t ON t.id = p.purchase_tx_id
+            WHERE p.cpf = ${repoContext.esc(cpf)}
+              AND LOWER(p.status) = 'active' AND p.remaining_installments > 0
+            ORDER BY p.next_due_date ASC
+        `);
+        const dueDay = card.dueDay || 15;
+        const nextDueRef = new Date(card.closedInvoiceDueDate || card.invoiceDueDate || Date.now());
+        nextDueRef.setMonth(nextDueRef.getMonth() + 1);
+        nextDueRef.setDate(dueDay);
+        parcelasFuturas = (plans || []).map(p => {
+            const inst = Math.abs(parseFloat(p.installment_amount) || 0);
+            totalProximas += inst;
+            const pd = p.next_due_date ? new Date(p.next_due_date) : null;
+            if (pd && pd <= nextDueRef) proximaFatura += inst;
+            const cleanDesc = String(p.description || 'Parcela de compra').replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
+            const currentInst = p.installments - p.remaining_installments + 1;
+            return {
+                data: pd ? `${String(pd.getDate()).padStart(2, '0')}/${String(pd.getMonth() + 1).padStart(2, '0')}` : '',
+                descricao: `${cleanDesc} (${currentInst}/${p.installments})`,
+                valor: inst,
+            };
+        }).slice(0, 40);
+    } catch (plansErr) {
+        console.warn('[send-pdf] Erro ao buscar parcelas futuras:', plansErr.message);
+    }
+
+    // ── Enriquecer juros das movimentações da FECHADA (art. 52 CDC) ──
+    // O snapshot itemized_transactions NÃO persiste jurosTotal/originalAmount/
+    // totalParcelado (só parcelas). Para a fatura fechada, casa cada linha com o
+    // plano ativo correspondente (mesma qtd de parcelas + mesmo valor de parcela,
+    // preferindo plano com juros) — mesma heurística do enrich (findPlanForInstallment)
+    // e anexa os encargos do financiamento para a linha vermelha da Página 2.
+    try {
+        const _jurosFromPlan = (tx, plan) => {
+            if (!plan) return tx;
+            const rate = Number(plan.interest_rate || 0);
+            const original = Number(plan.original_amount || 0);
+            const totalWI = Number(plan.total_with_interest && plan.total_with_interest > 0 ? plan.total_with_interest : 0) || original;
+            if (!(original > 0)) return tx;
+            const _ef = calcEffectiveRates(rate, Number(plan.installments) || 1);
+            return {
+                ...tx,
+                jurosTotal: rate > 0 ? round2(Math.max(0, totalWI - original)) : 0,
+                originalAmount: round2(original),
+                totalParcelado: round2(totalWI),
+                taxaEfetivaMensal: _ef.mensal != null ? round2(Number(_ef.mensal) * 100) : null,
+            };
+        };
+        movimentacoes = (movimentacoes || []).map(tx => {
+            // Já veio enriquecido (aberta via attachPlanJurosInfo)? Não re-casar.
+            if (Number(tx.jurosTotal || 0) > 0 || (tx.totalParcelado != null && Number(tx.totalParcelado) > 0)) return tx;
+            if (!tx.parcela) return tx; // à vista — sem plano
+            const _mm = tx.parcela.match(/^(\d+)\/(\d+)$/);
+            if (!_mm) return tx;
+            const _qty = parseInt(_mm[2], 10);
+            const _amt = Number(tx.valor || 0);
+            const _candidates = (plans || []).filter(p =>
+                Number(p.installments) === _qty &&
+                Math.abs(Number(p.installment_amount || 0) - _amt) < 0.01
+            );
+            const _plan = _candidates.find(p => Number(p.interest_rate) > 0) || _candidates[0];
+            return _plan ? _jurosFromPlan(tx, _plan) : tx;
+        });
+    } catch (jurosErr) {
+        console.warn('[send-pdf] Erro ao enriquecer juros das movimentações:', jurosErr.message);
+    }
+
+    // ── Códigos de pagamento (PIX + boleto) ──
+    let pixCopiaECola = '';
+    let boletoLinhaDigitavel = '';
+    try {
+        const codes = invoiceController.helpers.generatePaymentCodesFallback(
+            cpf, tempUser.fullName, type === 'open' ? totalOpenConsolidated : originalClosedAmount,
+            toDateOnly(card.closedInvoiceDueDate || card.invoiceDueDate || new Date()), `fatura_${cpf}`
+        );
+        pixCopiaECola = codes?.pix?.payload || '';
+        boletoLinhaDigitavel = codes?.boleto?.linhaDigitavel || '';
+    } catch (codesErr) {
+        console.warn('[send-pdf] Erro ao gerar códigos de pagamento:', codesErr.message);
+    }
+
+    // ── Montar payload da fatura universal ──
+    // Últimos 4 dígitos do cartão físico/virtual real do usuário (tabela cards).
+    let cartaoFinal = '****';
+    try {
+        const cards = await dbService.executeQuery(`
+            SELECT card_number_raw FROM ${dbService.fq('cards')}
+            WHERE user_cpf = ${repoContext.esc(cpf)} ORDER BY created_at DESC LIMIT 1
+        `);
+        const raw = (cards && cards[0]?.card_number_raw) || '';
+        if (raw) cartaoFinal = String(raw).slice(-4);
+    } catch (cardErr) {
+        console.warn('[send-pdf] Erro ao buscar cartão:', cardErr.message);
+    }
+
+    const pdfData = {
+        nome: tempUser.fullName || '',
+        cpf,
+        cpfFormatado: telegramService.formatCpf(cpf),
+        cartaoFinal,
+        tipo: type === 'open' ? 'open' : 'closed',
+        periodo: periodoLabel,
+        emissao: new Date().toISOString(),
+        vencimento: type === 'open' ? (openDueIso || closedDueIso) : closedDueIso,
+        previsaoFechamento,
+        limiteTotal: card.totalLimit || tempUser.creditCard?.totalLimit || 0,
+        limiteDisponivel: card.availableLimit || tempUser.creditCard?.availableLimit || 0,
+        limiteSaque: 0,
+        isPaga: !!isPaid,
+        totalEstaFatura: type === 'open' ? totalOpenConsolidated : originalClosedAmount,
+        resumo: type === 'open'
+            ? {
+                anterior: originalClosedAmount,
+                pagamento: valorPago,
+                pagamentoData: card.closedInvoicePaidAt || null,
+                saldoFinanciado: Math.max(0, closedInvoiceResidual),
+                lancamentos: openAmount,
+                total: totalOpenConsolidated,
+            }
+            : {
+                anterior: 0,
+                pagamento: valorPago,
+                pagamentoData: card.closedInvoicePaidAt || null,
+                saldoFinanciado: Math.max(0, originalClosedAmount - valorPago),
+                lancamentos: originalClosedAmount,
+                total: Math.max(0, originalClosedAmount - valorPago),
+            },
+        encargos: type === 'open'
+            ? [
+                { nome: 'Taxa de Multa por Atraso (Herdada)', taxa: '2,00%', valor: multa },
+                { nome: 'Juros de Mora (Herdado)', taxa: '0,0333%/dia', valor: jurosMora },
+                { nome: 'Juros Remuneratórios (Herdado)', taxa: '0,513%/dia', valor: jurosRemun },
+                { nome: 'IOF Adicional Fixo (Herdado)', taxa: '0,38%', valor: iofFixo },
+                { nome: 'IOF Diário (Herdado)', taxa: '0,0082%/dia', valor: iofDiario },
+            ]
+            : [
+                { nome: 'Juros do rotativo', taxa: '15,39% a.m.', valor: 0 },
+                { nome: 'Juros de mora', taxa: '1,00% a.m. (0,0333%/dia)', valor: 0 },
+                { nome: 'Multa por atraso', taxa: '2,00%', valor: 0 },
+                { nome: 'IOF de financiamento', taxa: '0,38% + 0,0082% a.d.', valor: 0 },
+            ],
+        movimentacoes,
+        parcelasFuturas,
+        proximaFatura: Math.round(proximaFatura * 100) / 100,
+        demaisFaturas: Math.round((totalProximas - proximaFatura) * 100) / 100,
+        totalProximasFaturas: Math.round(totalProximas * 100) / 100,
+        pagamentoMinimo: {
+            valor: minClosedOriginal,
+            financiado: originalClosedAmount,
+            encargos: totalEncargos,
+            iof: iofTotal,
+            total: minClosedWithCharges,
+            jurosLabel: '15,39% a.m. — 453,46% a.a.',
+            cetLabel: '15,73% a.m. — 491,21% a.a.',
+        },
+        parcelasFixas: {
+            valor: totalProximas > 0 ? Math.round((totalProximas / 12) * 100) / 100 : 0,
+            qtd: totalProximas > 0 ? '12x' : '',
+            financiado: Math.round(totalProximas * 100) / 100,
+            solicitado: Math.round(totalProximas * 100) / 100,
+            iof: 0,
+            total: Math.round(totalProximas * 100) / 100,
+            jurosLabel: '5,99% a.m. — 102,95% a.a.',
+            cetLabel: '6,32% a.m. — 110,71% a.a.',
+        },
+        pixCopiaECola,
+        boletoLinhaDigitavel,
+        // PÁGINA 4 — Boleto bancário completo (Fintech Bank 598: Recibo do Pagador
+        // + Ficha de Compensação + código de barras). Linha digitável vem do
+        // generatePaymentCodesFallback; o serviço calcula o código de barras e
+        // os DVs (módulo 10/11) com a regra Febraban.
+        boleto: {
+            banco: '598',
+            bancoDv: 9,
+            bancoNome: '598 - Fintech Bank App',
+            agencia: '0001',
+            conta: '00000001',
+            carteira: '09',
+            nossoNumero: String(cpf).replace(/\D/g, '').slice(-10),
+            documento: String(cpf).replace(/\D/g, ''),
+            vencimento: type === 'open' ? (openDueIso || closedDueIso) : closedDueIso,
+            emissao: new Date().toISOString(),
+            valor: type === 'open' ? totalOpenConsolidated : originalClosedAmount,
+            linhaDigitavel: boletoLinhaDigitavel,
+            cedente: 'Fintech Bank App S.A.',
+            cedenteCpf: '12.345.678/0001-90',
+            sacado: tempUser.fullName || '',
+            sacadoCpf: telegramService.formatCpf(cpf),
+            instrucoes: [
+                'Cobrar multa de 2% após o vencimento.',
+                'Juros de mora de 0,0333% ao dia após o vencimento.',
+                'Este boleto liquida a ' + (type === 'open' ? 'fatura aberta consolidada' : 'fatura fechada') + ' ' + (periodoLabel || '') + '.',
+            ],
+        },
+        nota: type === 'open'
+            ? (isPaid
+                ? `Fatura Aberta — Total consolidado no corte: R$ ${totalOpenConsolidated.toFixed(2)} (compras + herança + encargos herdados). Fatura fechada anterior PAGA em ${toDateOnly(card.closedInvoicePaidAt || '')}.`
+                : `Fatura Aberta — Total consolidado no corte: R$ ${totalOpenConsolidated.toFixed(2)} (compras + herança + encargos herdados).`)
+            : (isPaid
+                ? `Fatura QUITADA em ${toDateOnly(card.closedInvoicePaidAt || '')}. Encargos de atraso herdados e consolidados na Fatura Aberta.`
+                : `Fatura EM ABERTO — ${overdueDays} dias de atraso. Encargos do atraso são herdados e consolidados na Fatura Aberta.`),
+    };
+
+    const pdfDataBuffer = await generateUniversalInvoicePDF(pdfData);
+
+    const filename = `fatura_${type}_${cpf}.pdf`;
+    await telegramService.sendDocument(cpf, pdfDataBuffer, filename);
+    res.json({ success: true, message: 'Fatura universal (4 páginas, com boleto bancário) gerada e enviada ao Telegram da massa com sucesso!' });
+}));
+
+apiRouter.post('/admin/telegram/topics/:cpf/message', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { cpf } = req.params;
+    const { text } = req.body || {};
+    if (!text || !text.trim()) {
+        return res.status(400).json({ success: false, message: 'Texto é obrigatório.' });
+    }
+    telegramService.alertUser(cpf, text);
+    res.json({ success: true, message: 'Mensagem enviada ao tópico.' });
+}));
+
+// Dispara uma remessa manualmente (mesma função do cron horário)
+apiRouter.post('/admin/telegram/backfill', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    if (!telegramService._enabled) {
+        return res.status(400).json({ success: false, message: 'Integração Telegram desabilitada.' });
+    }
+    const limit = Math.min(Number(req.body?.limit) || TELEGRAM_BACKFILL_BATCH, 50);
+    const { processed, remaining } = await runTelegramTopicBackfill(limit);
+    res.json({ success: true, processed, remaining, message: `${processed} tópico(s) solicitado(s). ${remaining} na fila.` });
+}));
+
 // Endpoint para estatísticas do dashboard admin
 apiRouter.get('/admin/stats', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     try {
         // Total de Clientes (excluindo admin)
-        const usersCountResult = await databricksService.executeQuery(`
+        const usersCountResult = await dbService.executeQuery(`
             SELECT COUNT(*) as total
-            FROM ${databricksService.fq('users')}
+            FROM ${dbService.fq('users')}
             WHERE role != 'admin' OR role IS NULL
         `);
         const totalClients = parseInt(usersCountResult[0]?.total || 0, 10);
@@ -2693,26 +3443,26 @@ apiRouter.get('/admin/stats', bearerAuth(), authenticateAdmin, asyncHandler(asyn
         const todayEnd = new Date(todayStart);
         todayEnd.setDate(todayEnd.getDate() + 1);
         
-        const transactionsTodayResult = await databricksService.executeQuery(`
+        const transactionsTodayResult = await dbService.executeQuery(`
             SELECT COUNT(*) as total
-            FROM ${databricksService.fq('transactions')}
+            FROM ${dbService.fq('transactions')}
             WHERE date >= '${todayStart.toISOString()}'
               AND date < '${todayEnd.toISOString()}'
         `);
         const transactionsToday = parseInt(transactionsTodayResult[0]?.total || 0, 10);
 
         // Solicitações de Senha Pendentes
-        const passwordRequestsResult = await databricksService.executeQuery(`
+        const passwordRequestsResult = await dbService.executeQuery(`
             SELECT COUNT(*) as total
-            FROM ${databricksService.fq('users')}
+            FROM ${dbService.fq('users')}
             WHERE password_reset_requested = true
         `);
         const passwordRequests = parseInt(passwordRequestsResult[0]?.total || 0, 10);
 
         // Solicitações de Limite Pendentes
-        const limitRequestsResult = await databricksService.executeQuery(`
+        const limitRequestsResult = await dbService.executeQuery(`
             SELECT COUNT(*) as total
-            FROM ${databricksService.fq('limit_increase_requests')}
+            FROM ${dbService.fq('limit_increase_requests')}
             WHERE status = 'pending' OR status IS NULL
         `);
         const limitRequests = parseInt(limitRequestsResult[0]?.total || 0, 10);
@@ -2738,7 +3488,7 @@ apiRouter.get('/admin/stats', bearerAuth(), authenticateAdmin, asyncHandler(asyn
 
 // ─── [PILOTO] Rotas de fatura/pagamento extraídas para src/routes/invoice.routes.js ───
 const invoiceController = createInvoiceController({
-    databricksService,
+    dbService,
     repoContext,
     usersRepo,
     invoiceRepo,
@@ -2754,15 +3504,15 @@ registerInvoiceRoutes({ apiRouter, bearerAuth, asyncHandler, controller: invoice
 
 // --- Dashboard de Massas em Atraso para Admin ---
 apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
-    const allUsersResult = await databricksService.executeQuery(`
+    const allUsersResult = await dbService.executeQuery(`
         SELECT cpf, full_name, account_status
-        FROM ${databricksService.fq('users')}
+        FROM ${dbService.fq('users')}
     `).catch(() => []);
 
-    const overdueInvoices = await databricksService.executeQuery(`
+    const overdueInvoices = await dbService.executeQuery(`
         SELECT cpf, valor_total, due_date, valor_iof, valor_multa, valor_juros_remuneratorios, valor_juros_mora, saldo_anterior,
                COALESCE(valor_pago, 0) AS valor_pago
-        FROM ${databricksService.fq('invoices')}
+        FROM ${dbService.fq('invoices')}
         WHERE status = 'FECHADA' AND data_pagamento IS NULL
     `).catch(() => []);
 
@@ -2770,10 +3520,10 @@ apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin
     // Estas massas saíram da inadimplência mas ainda aparecem no painel
     // por 24 horas para o admin poder validar os dados.
     const vinteQuatroHorasAtras = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
-    const recentlyPaidInvoices = await databricksService.executeQuery(`
+    const recentlyPaidInvoices = await dbService.executeQuery(`
         SELECT cpf, valor_total, valor_pago, due_date, data_pagamento,
                valor_iof, valor_multa, valor_juros_remuneratorios, valor_juros_mora, saldo_anterior
-        FROM ${databricksService.fq('invoices')}
+        FROM ${dbService.fq('invoices')}
         WHERE status = 'FECHADA' AND data_pagamento IS NOT NULL
           AND data_pagamento >= '${vinteQuatroHorasAtras}'
     `).catch(() => []);
@@ -2783,9 +3533,9 @@ apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin
     // 'pending'; o invoiceEngine marca 'paid' quando consolida na fatura fechada.
     // Logo 'pending' = encargos ativos ainda não consolidados. Recalcular aqui com
     // calcAllCharges divergiria do que foi efetivamente cobrado à massa.
-    const chargeRows = await databricksService.executeQuery(`
+    const chargeRows = await dbService.executeQuery(`
         SELECT cpf, charge_type, COALESCE(SUM(amount), 0) AS total
-        FROM ${databricksService.fq('billing_charges')}
+        FROM ${dbService.fq('billing_charges')}
         WHERE status = 'pending'
         GROUP BY cpf, charge_type
     `).catch(() => []);
@@ -2875,7 +3625,7 @@ apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin
         // de :2872 como linha própria — somá-lo contaria o mesmo débito duas vezes.
         const totalQuitacao = Math.round((residual + totalEncargos) * 100) / 100;
 
-        const dueDateStr = dueDate ? dueDate.toISOString().split('T')[0] : null;
+        const dueDateStr = inv.due_date ? toDateOnly(inv.due_date) : null;
         const existing = overdueByCpf.get(inv.cpf);
 
         if (!existing) {
@@ -2967,7 +3717,7 @@ apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin
             faturaFechada: closedVal,
             daysOverdue,
             invoiceCount: 1,
-            dueDate: inv.due_date ? new Date(inv.due_date).toISOString().split('T')[0] : null,
+            dueDate: inv.due_date ? toDateOnly(inv.due_date) : null,
             encargos: { multa: 0, jurosMora: 0, jurosRemuneratorios: 0, iof: 0, totalEncargos: 0 },
             totalQuitacao: closedVal,
             regularizedAt: paidAt,
@@ -2986,9 +3736,9 @@ apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin
         if (allCpfs.length > 0) {
             // Buscar TODAS as transações INVOICE_PAYMENT destes CPFs de uma vez
             const cpfList = allCpfs.map(c => `'${c}'`).join(',');
-            const paymentTxRows = await databricksService.executeQuery(`
+            const paymentTxRows = await dbService.executeQuery(`
                 SELECT cpf, id, amount, description, date
-                FROM ${databricksService.fq('transactions')}
+                FROM ${dbService.fq('transactions')}
                 WHERE cpf IN (${cpfList})
                   AND type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
                 ORDER BY date DESC
@@ -3065,7 +3815,7 @@ apiRouter.get('/admin/overdue-masses-dashboard', bearerAuth(), authenticateAdmin
             paidAt,
             hoursAgo,
             hoursToPay,
-            dueDate: inv.due_date ? new Date(inv.due_date).toISOString().split('T')[0] : null
+            dueDate: inv.due_date ? toDateOnly(inv.due_date) : null
         };
     });
 
@@ -3095,10 +3845,10 @@ apiRouter.get('/admin/regularized/check', bearerAuth(), authenticateAdmin, async
     }
 
     const sinceISO = since.toISOString();
-    const newPaidInvoices = await databricksService.executeQuery(`
+    const newPaidInvoices = await dbService.executeQuery(`
         SELECT i.cpf, u.full_name, i.valor_total, i.valor_pago, i.data_pagamento, i.due_date
-        FROM ${databricksService.fq('invoices')} i
-        LEFT JOIN ${databricksService.fq('users')} u ON i.cpf = u.cpf
+        FROM ${dbService.fq('invoices')} i
+        LEFT JOIN ${dbService.fq('users')} u ON i.cpf = u.cpf
         WHERE i.status = 'FECHADA' AND i.data_pagamento IS NOT NULL
           AND i.data_pagamento >= '${sinceISO}'
         ORDER BY i.data_pagamento DESC
@@ -3248,8 +3998,8 @@ apiRouter.put('/admin/users/:cpf/credit-limit', bearerAuth(), authenticateAdmin,
     const { esc } = require('./repositories/context');
     const now = new Date().toISOString();
     
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')}
         SET ${sets.join(', ')}, updated_at = ${esc(now)}
         WHERE cpf = ${esc(cpf)}
     `);
@@ -3283,12 +4033,11 @@ apiRouter.post('/admin/users/:cpf/fix', bearerAuth(), authenticateAdmin, asyncHa
 
     // Gerar hash da nova senha
     const hash = await bcrypt.hash(newPassword, 10);
-    const provider = process.env.DB_PROVIDER || process.env.DB_DIALECT || 'databricks';
-    const timestampFunc = provider === 'postgres' ? 'CURRENT_TIMESTAMP' : 'current_timestamp()';
+    const timestampFunc = 'CURRENT_TIMESTAMP';
     
     // Corrigir tudo de uma vez: desbloquear, resetar senha, limpar tentativas
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')}
         SET is_blocked = false,
             password_hash = '${hash.replace(/'/g, "''")}',
             login_attempts = 0,
@@ -3373,13 +4122,13 @@ apiRouter.post('/admin/users/:cpf/card-details', bearerAuth(), authenticateAdmin
         });
     }
 
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')}
         SET ${sets.join(', ')}, updated_at = current_timestamp()
         WHERE cpf = '${cpf}'
     `);
 
-    const [user] = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf='${cpf}'`);
+    const [user] = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE cpf='${cpf}'`);
     res.json({ success: true, user: normalizeUser(user) });
 }));
 
@@ -3405,7 +4154,7 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
         return res.status(400).json({ success: false, message: 'CVV e Validade são obrigatórios.' });
     }
 
-    const [dbUser] = await databricksService.executeQuery(`SELECT card_cvv, card_expiry, card_is_activated FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
+    const [dbUser] = await dbService.executeQuery(`SELECT card_cvv, card_expiry, card_is_activated FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
     if (!dbUser) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
     if (dbUser.card_is_activated) return res.status(400).json({ success: false, message: 'Cartão já está ativado.' });
 
@@ -3424,7 +4173,7 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
     while (attempts < 10) {
         const gen = generateCardNumber();
         // Verificar unicidade no banco
-        const [existing] = await databricksService.executeQuery(
+        const [existing] = await dbService.executeQuery(
             `SELECT id FROM fintech.cards WHERE card_number_raw = ${repoContext.esc(gen.raw)}`
         );
         if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; cardBrand = gen.brand; cardBin = gen.bin; break; }
@@ -3437,14 +4186,14 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
     const { esc } = repoContext;
 
     // Salvar cartão na tabela fintech.cards
-    await databricksService.executeQuery(`
+    await dbService.executeQuery(`
         INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated)
         VALUES (${esc(cpf)}, ${esc(cardFormatted)}, ${esc(cardRaw)}, 'physical', ${esc(cardBrand)}, ${esc(cardBin)}, ${esc(expiryFull)}, ${esc(dbUser.card_expiry)}, ${esc(cvv)}, ${esc(pin)}, true)
     `);
 
     // Atualizar status do usuário
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')}
         SET card_is_activated = true, card_delivery_status = 'unlocked', updated_at = CURRENT_TIMESTAMP
         WHERE cpf = '${cpf}'
     `);
@@ -3468,7 +4217,7 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
 apiRouter.get('/cards/my-cards', bearerAuth(), asyncHandler(async (req, res) => {
     const cpf = req.user.cpf;
 
-    const cards = await databricksService.executeQuery(`
+    const cards = await dbService.executeQuery(`
         SELECT id, card_number, card_number_raw, card_type, card_brand, bin,
                expiry, expiry_short, cvv, pin, is_activated, is_blocked, nickname, created_at
         FROM fintech.cards
@@ -3502,8 +4251,8 @@ apiRouter.get('/admin/acquirer-simulate/card/:cardNumber/cpf', bearerAuth(), aut
     const cleanNumber = cardNumber.replace(/\D/g, '');
     
     // 1. Busca na tabela de cartões usando o card_number_raw ou card_number
-    const [card] = await databricksService.executeQuery(
-        `SELECT user_cpf, card_type FROM ${databricksService.fq('cards')} WHERE card_number_raw = '${cleanNumber}' OR REPLACE(card_number, ' ', '') = '${cleanNumber}'`
+    const [card] = await dbService.executeQuery(
+        `SELECT user_cpf, card_type FROM ${dbService.fq('cards')} WHERE card_number_raw = '${cleanNumber}' OR REPLACE(card_number, ' ', '') = '${cleanNumber}'`
     );
     
     if (card) {
@@ -3512,8 +4261,8 @@ apiRouter.get('/admin/acquirer-simulate/card/:cardNumber/cpf', bearerAuth(), aut
     }
 
     // 2. Fallback inteligente: se for um cartão de teste novo, retorna um CPF de usuário ativo do banco
-    const [user] = await databricksService.executeQuery(
-        `SELECT cpf FROM ${databricksService.fq('users')} WHERE status = 'ACTIVE' AND cpf IS NOT NULL LIMIT 1`
+    const [user] = await dbService.executeQuery(
+        `SELECT cpf FROM ${dbService.fq('users')} WHERE status = 'ACTIVE' AND cpf IS NOT NULL LIMIT 1`
     );
 
     if (user && user.cpf) {
@@ -3535,8 +4284,8 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
     const cleanExpiry = expiry.includes('/') ? (expiry.split('/')[0].padStart(2, '0') + '/' + expiry.split('/')[1].slice(-2)) : expiry;
 
     // 1. Validar Cartão (Suporta com/sem espaços e validade MM/AA ou MM/AAAA)
-    let [card] = await databricksService.executeQuery(
-        `SELECT * FROM ${databricksService.fq('cards')} WHERE (card_number_raw = '${cleanCardNumber}' OR REPLACE(card_number, ' ', '') = '${cleanCardNumber}') AND cvv = '${cvv}' AND (expiry_short = '${cleanExpiry}' OR expiry = '${expiry}' OR expiry_short = '${expiry}')`
+    let [card] = await dbService.executeQuery(
+        `SELECT * FROM ${dbService.fq('cards')} WHERE (card_number_raw = '${cleanCardNumber}' OR REPLACE(card_number, ' ', '') = '${cleanCardNumber}') AND cvv = '${cvv}' AND (expiry_short = '${cleanExpiry}' OR expiry = '${expiry}' OR expiry_short = '${expiry}')`
     );
     
     let user = null;
@@ -3549,22 +4298,22 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
         if (type === 'DEBIT' && !pin) return res.status(400).json({ success: false, message: 'PIN é obrigatório para compras no débito.' });
 
         // 2. Buscar Usuário associado ao cartão
-        const users = await databricksService.executeQuery(
-            `SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${card.user_cpf}'`
+        const users = await dbService.executeQuery(
+            `SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${card.user_cpf}'`
         );
         user = users[0];
     } else {
         // FALLBACK LOGIC
         if (cleanCpf) {
-            const users = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${cleanCpf}'`);
+            const users = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${cleanCpf}'`);
             user = users[0];
         }
         if (!user) {
-            const adminUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} WHERE role = 'admin' LIMIT 1`);
+            const adminUsers = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE role = 'admin' LIMIT 1`);
             user = adminUsers[0];
         }
         if (!user) {
-            const firstUsers = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('users')} LIMIT 1`);
+            const firstUsers = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} LIMIT 1`);
             user = firstUsers[0];
         }
         if (!user) {
@@ -3579,25 +4328,49 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
     if (isNaN(numAmount) || numAmount <= 0) return res.status(400).json({ success: false, message: 'Valor inválido.' });
 
     let now = new Date();
-    const txId = databricksService.generateUUID();
+    const txId = dbService.generateUUID();
+    // art. 52 CDC — payload de juros exposto na resposta quando o fluxo for crédito
+    let jurosPayload = null;
 
     // 3. Processar Transação
     if (type === 'DEBIT') {
         const balance = Number(user.balance);
         if (balance < numAmount) return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
         
-        await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('users')} SET balance = balance - ${numAmount} WHERE cpf = '${user.cpf}'
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')} SET balance = balance - ${numAmount} WHERE cpf = '${user.cpf}'
         `);
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
             VALUES ('${txId}', '${user.cpf}', 'SHOP_DEBIT', -${numAmount}, '${description}', '${nowDb()}')
         `);
+        // Mensagem da compra no tópico Telegram da massa (padrão da Loja /shop)
+        telegramService.send('purchase', { cpf: user.cpf, text: `🛒 Compra no débito: R$ ${numAmount.toFixed(2)} — ${description}` }).catch(() => {});
+        // Comprovante de compra (art. 52 CDC) no tópico da massa — fire-and-forget
+        generateAndSendPurchaseReceipt({
+            cpf: user.cpf,
+            data: {
+                estabelecimento: description,
+                formaPagamento: 'Cartão de débito',
+                tipoPagamento: 'À vista (débito)',
+                totalParcelas: 1,
+                originalAmount: round2(numAmount),
+                jurosTotal: 0,
+                interestRate: 0,
+                totalParcelado: round2(numAmount),
+                valorParcela: round2(numAmount),
+                taxaEfetivaMensal: 0,
+                taxaEfetivaAnual: 0,
+                dataCompra: nowDb(),
+                transactionId: txId,
+                autenticacao: `FB-${Date.now().toString(36).toUpperCase()}`,
+            },
+        }).catch(() => {});
     } else if (type === 'SUBSCRIPTION' && paymentMethod === 'ACCOUNT_DEBIT') {
         // Débito Automático em Conta — NÃO afeta fatura do cartão nem limite de crédito
-        const billId = databricksService.generateUUID();
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('recurring_bills')} 
+        const billId = dbService.generateUUID();
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('recurring_bills')} 
             (id, cpf, name, amount, due_day, category, status, frequency, payment_method, created_at, updated_at)
             VALUES ('${billId}', '${user.cpf}', '${description}', ${numAmount}, ${now.getDate()}, 'outros', 'active', '${frequency}', 'ACCOUNT_DEBIT', '${nowDb()}', '${nowDb()}')
         `);
@@ -3624,49 +4397,89 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             }
         }
 
-        await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('users')} SET credit_card_available_limit = credit_card_available_limit - ${totalWithInterest} WHERE cpf = '${user.cpf}'
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')} SET credit_card_available_limit = credit_card_available_limit - ${totalWithInterest} WHERE cpf = '${user.cpf}'
         `);
         
         const txType = type === 'SUBSCRIPTION' ? 'SUBSCRIPTION' : 'SHOP_CREDIT';
         
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
             VALUES ('${txId}', '${user.cpf}', '${txType}', -${totalWithInterest}, '${description}', '${nowDb()}')
         `);
+        // Mensagem da compra no tópico Telegram da massa (padrão da Loja /shop).
+        // Transparência de encargos (CDC art. 52 · Res. BCB 96/2021 e 365/2023): juros R$, taxa
+        // efetiva e total com juros são expostos quando a compra parcelada tiver encargos.
+        const _label = type === 'SUBSCRIPTION' ? 'Assinatura' : 'Compra no crédito';
+        const _jpMsg = buildJurosPayload({ original: numAmount, totalWithInterest, installments, interestRate });
+        const _msgJuros = _jpMsg.jurosTotal > 0
+            ? ` · juros R$ ${_jpMsg.jurosTotal.toFixed(2)} (${(_jpMsg.interestRate * 100).toFixed(1)}% no total) · taxa efetiva ${_jpMsg.taxaEfetivaMensal.toFixed(2)}% a.m. · total c/ juros R$ ${_jpMsg.totalParcelado.toFixed(2)}`
+            : '';
+        telegramService.send('purchase', { cpf: user.cpf, text: `💳 ${_label}: R$ ${totalWithInterest.toFixed(2)} — ${description}${_msgJuros}` }).catch(() => {});
+
+        // art. 52 CDC — expor encargos de juros no payload da resposta
+        jurosPayload = {
+            ...buildJurosPayload({ original: numAmount, totalWithInterest, installments, interestRate }),
+            installments,
+            type,
+        };
 
         if (type === 'SUBSCRIPTION') {
-            const billId = databricksService.generateUUID();
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('recurring_bills')} 
+            const billId = dbService.generateUUID();
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('recurring_bills')} 
                 (id, cpf, name, amount, due_day, category, status, frequency, payment_method, created_at, updated_at)
                 VALUES ('${billId}', '${user.cpf}', '${description}', ${numAmount}, ${now.getDate()}, 'outros', 'active', '${frequency}', '${paymentMethod}', '${nowDb()}', '${nowDb()}')
             `);
         }
 
         if (type === 'CREDIT' && installments > 1) {
-            const planId = databricksService.generateUUID();
+            const planId = dbService.generateUUID();
             const installmentAmount = totalWithInterest / installments;
             const nextDue = new Date(now);
             // DO NOT ADD A MONTH!
             // nextDue.setMonth(nextDue.getMonth() + 1);
 
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('installment_plans')}
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('installment_plans')}
                 (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
                 VALUES ('${planId}', '${user.cpf}', '${txId}', '${description}', ${numAmount}, ${totalWithInterest}, ${totalWithInterest}, ${installments}, ${installmentAmount}, ${interestRate}, ${totalWithInterest}, ${installments}, '${nextDue.toISOString()}', 'ACTIVE', '${nowDb()}', '${nowDb()}')
             `);
         }
+
+        // Comprovante de compra (art. 52 CDC) no tópico da massa — fire-and-forget
+        {
+            const _jp = buildJurosPayload({ original: numAmount, totalWithInterest, installments, interestRate });
+            generateAndSendPurchaseReceipt({
+                cpf: user.cpf,
+                data: {
+                    estabelecimento: description,
+                    formaPagamento: 'Cartão de crédito',
+                    tipoPagamento: installments > 1 ? (interestRate > 0 ? 'Parcelado com juros' : 'Parcelado sem juros') : 'À vista',
+                    totalParcelas: installments,
+                    parcelaAtual: 1,
+                    dataCompra: nowDb(),
+                    transactionId: txId,
+                    autenticacao: `FB-${Date.now().toString(36).toUpperCase()}`,
+                    ..._jp,
+                },
+            }).catch(() => {});
+        }
     }
 
-    res.json({ success: true, message: 'Transação processada com sucesso via Adquirente.' });
+    res.json({
+        success: true,
+        message: 'Transação processada com sucesso via Adquirente.',
+        transactionId: txId,
+        ...(jurosPayload ? { purchase: jurosPayload } : {}),
+    });
 }));
 
 // ─── GET /admin/transactions/:id — Detalhes da transação ──────────────
 apiRouter.get('/admin/transactions/:id', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const [transaction] = await databricksService.executeQuery(
-        `SELECT * FROM ${databricksService.fq('transactions')} WHERE id = '${id}'`
+    const [transaction] = await dbService.executeQuery(
+        `SELECT * FROM ${dbService.fq('transactions')} WHERE id = '${id}'`
     );
     
     if (!transaction) return res.status(404).json({ success: false, message: 'Transação não encontrada.' });
@@ -3678,21 +4491,21 @@ apiRouter.get('/admin/transactions/:id', bearerAuth(), authenticateAdmin, asyncH
 apiRouter.post('/admin/transactions/:cpf/:id/cancel', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf, id } = req.params;
     
-    const [transaction] = await databricksService.executeQuery(
-        `SELECT * FROM ${databricksService.fq('transactions')} WHERE id = '${id}' AND cpf = '${cpf}'`
+    const [transaction] = await dbService.executeQuery(
+        `SELECT * FROM ${dbService.fq('transactions')} WHERE id = '${id}' AND cpf = '${cpf}'`
     );
     if (!transaction) return res.status(404).json({ success: false, message: 'Transação não encontrada.' });
     
     // Verifica se já foi estornada buscando uma transação de REFUND com esse ID na descrição
     const descRefund = `Estorno da transação ${id}`;
-    const [alreadyRefunded] = await databricksService.executeQuery(
-        `SELECT * FROM ${databricksService.fq('transactions')} WHERE cpf = '${cpf}' AND type = 'REFUND' AND description LIKE '%${id}%'`
+    const [alreadyRefunded] = await dbService.executeQuery(
+        `SELECT * FROM ${dbService.fq('transactions')} WHERE cpf = '${cpf}' AND type = 'REFUND' AND description LIKE '%${id}%'`
     );
     if (alreadyRefunded) return res.status(400).json({ success: false, message: 'Transação já foi estornada.' });
     
     // Buscar faturas fechadas para identificar se é estorno direto ou voucher
-    const closedInvoices = await databricksService.executeQuery(
-        `SELECT * FROM ${databricksService.fq('invoices')} WHERE user_cpf = '${cpf}' AND status = 'FECHADA'`
+    const closedInvoices = await dbService.executeQuery(
+        `SELECT * FROM ${dbService.fq('invoices')} WHERE user_cpf = '${cpf}' AND status = 'FECHADA'`
     );
     
     const plan = transactionReversal.computeReversalPlan({ transaction, closedInvoices });
@@ -3702,26 +4515,26 @@ apiRouter.post('/admin/transactions/:cpf/:id/cancel', bearerAuth(), authenticate
     
     const amount = plan.amount;
     const now = new Date().toISOString();
-    const reversalId = databricksService.generateUUID();
+    const reversalId = dbService.generateUUID();
     const finalDescription = `${plan.description} (Original: ${id})`;
     
     if (plan.kind === 'debit_refund') {
         // Devolve pro saldo da conta
-        await databricksService.executeQuery(
-            `UPDATE ${databricksService.fq('users')} SET balance = balance + ${amount} WHERE cpf = '${cpf}'`
+        await dbService.executeQuery(
+            `UPDATE ${dbService.fq('users')} SET balance = balance + ${amount} WHERE cpf = '${cpf}'`
         );
-        await databricksService.executeQuery(
-            `INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+        await dbService.executeQuery(
+            `INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
              VALUES ('${reversalId}', '${cpf}', 'REFUND', ${amount}, '${finalDescription}', '${now}')`
         );
     } else {
         // kind === 'invoice_credit' || kind === 'voucher'
         // Devolve o limite
-        await databricksService.executeQuery(
-            `UPDATE ${databricksService.fq('users')} SET credit_card_available_limit = credit_card_available_limit + ${amount} WHERE cpf = '${cpf}'`
+        await dbService.executeQuery(
+            `UPDATE ${dbService.fq('users')} SET credit_card_available_limit = credit_card_available_limit + ${amount} WHERE cpf = '${cpf}'`
         );
-        await databricksService.executeQuery(
-            `INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+        await dbService.executeQuery(
+            `INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
              VALUES ('${reversalId}', '${cpf}', 'REFUND', ${amount}, '${finalDescription}', '${now}')`
         );
     }
@@ -3734,43 +4547,43 @@ apiRouter.post('/admin/simulate-purchases', bearerAuth(), authenticateAdmin, asy
     const { targetCpf, scenario } = req.body;
     if (!targetCpf) return res.status(400).json({ success: false, message: 'targetCpf é obrigatorio.' });
 
-    const [dbUser] = await databricksService.executeQuery(
-        `SELECT * FROM ${databricksService.fq('users')} WHERE cpf = '${targetCpf}'`
+    const [dbUser] = await dbService.executeQuery(
+        `SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${targetCpf}'`
     );
     if (!dbUser) return res.status(404).json({ success: false, message: 'Usuario não encontrado.' });
 
     let now = new Date();
     // Compra 1x
-    const txId1 = databricksService.generateUUID();
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+    const txId1 = dbService.generateUUID();
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
         VALUES ('${txId1}', '${targetCpf}', 'SHOP_CREDIT', -50.00, 'Compra à vista simulada', '${nowDb()}')
     `);
 
     // Compra Parcelada em 3x
-    const txId3 = databricksService.generateUUID();
-    const planId3 = databricksService.generateUUID();
+    const txId3 = dbService.generateUUID();
+    const planId3 = dbService.generateUUID();
     const nextDue3 = new Date(now);
     nextDue3.setMonth(nextDue3.getMonth() + 1);
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
         VALUES ('${txId3}', '${targetCpf}', 'INVOICE_INSTALLMENT', -100.00, 'Compra 3x simulada (1/3)', '${nowDb()}')
     `);
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('installment_plans')}
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('installment_plans')}
         (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
         VALUES ('${planId3}', '${targetCpf}', '${txId3}', 'Compra 3x simulada', 300.00, 300.00, 300.00, 3, 100.00, 0, 200.00, 2, '${nextDue3.toISOString()}', 'ACTIVE', '${nowDb()}', '${nowDb()}')
     `);
 
     // Compra Parcelada em 6x
-    const txId6 = databricksService.generateUUID();
-    const planId6 = databricksService.generateUUID();
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('transactions')} (id, cpf, type, amount, description, date)
+    const txId6 = dbService.generateUUID();
+    const planId6 = dbService.generateUUID();
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
         VALUES ('${txId6}', '${targetCpf}', 'INVOICE_INSTALLMENT', -200.00, 'Compra 6x simulada (1/6)', '${nowDb()}')
     `);
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('installment_plans')}
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('installment_plans')}
         (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
         VALUES ('${planId6}', '${targetCpf}', '${txId6}', 'Compra 6x simulada', 1200.00, 1200.00, 1200.00, 6, 200.00, 0, 1000.00, 5, '${nextDue3.toISOString()}', 'ACTIVE', '${nowDb()}', '${nowDb()}')
     `);
@@ -3788,23 +4601,23 @@ apiRouter.post('/admin/simulate-purchases', bearerAuth(), authenticateAdmin, asy
 
     if (scenario === 'bad') {
         // Cenário Inadimplente: Atualiza dias de atraso e status da conta
-        await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('users')} 
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')} 
             SET account_status = 'OVERDUE', days_overdue = 15 
             WHERE cpf = '${targetCpf}'
         `);
         healthMessage = 'Simulação (Cenário Ruim) concluída. Conta classificada como inadimplente com 15 dias de atraso.';
     } else {
-        await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('users')} 
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')} 
             SET account_status = 'ACTIVE', days_overdue = 0 
             WHERE cpf = '${targetCpf}'
         `);
     }
     
     // Atualiza o limite de credito
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')}
         SET credit_card_available_limit = credit_card_available_limit - 1550
         WHERE cpf = '${targetCpf}'
     `);
@@ -3854,8 +4667,8 @@ apiRouter.put('/cards/billing-cycle', bearerAuth(), [
     
     const nextInvoiceDate = new Date(nextInvoiceYear, nextInvoiceMonth, dueDay);
     
-    await databricksService.executeQuery(
-        `UPDATE ${databricksService.fq('users')} SET credit_card_due_day = ${dueDay}, credit_card_invoice_due_date = '${nextInvoiceDate.toISOString()}' WHERE cpf = '${cpf}'`
+    await dbService.executeQuery(
+        `UPDATE ${dbService.fq('users')} SET credit_card_due_day = ${dueDay}, credit_card_invoice_due_date = '${nextInvoiceDate.toISOString()}' WHERE cpf = '${cpf}'`
     );
     
     res.json({ success: true, message: 'Dia de vencimento alterado com sucesso.', nextInvoiceDate: nextInvoiceDate.toISOString(), dueDay, closingDay: closingDate.getDate() });
@@ -3867,8 +4680,8 @@ apiRouter.post('/cards/virtual/generate', bearerAuth(), asyncHandler(async (req,
     const { nickname } = req.body || {};
 
     // Verificar se usuário tem cartão físico ativado
-    const [dbUser] = await databricksService.executeQuery(
-        `SELECT card_is_activated, card_expiry FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`
+    const [dbUser] = await dbService.executeQuery(
+        `SELECT card_is_activated, card_expiry FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`
     );
     if (!dbUser) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
     if (!dbUser.card_is_activated) {
@@ -3880,7 +4693,7 @@ apiRouter.post('/cards/virtual/generate', bearerAuth(), asyncHandler(async (req,
     let attempts = 0;
     while (attempts < 10) {
         const gen = generateCardNumber();
-        const [existing] = await databricksService.executeQuery(
+        const [existing] = await dbService.executeQuery(
             `SELECT id FROM fintech.cards WHERE card_number_raw = ${repoContext.esc(gen.raw)}`
         );
         if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; cardBrand = gen.brand; cardBin = gen.bin; break; }
@@ -3895,7 +4708,7 @@ apiRouter.post('/cards/virtual/generate', bearerAuth(), asyncHandler(async (req,
     const safeNickname = nickname ? String(nickname).substring(0, 100) : 'Cartão Virtual';
     const { esc } = repoContext;
 
-    await databricksService.executeQuery(`
+    await dbService.executeQuery(`
         INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated, nickname)
         VALUES (${esc(cpf)}, ${esc(cardFormatted)}, ${esc(cardRaw)}, 'virtual', ${esc(cardBrand)}, ${esc(cardBin)}, ${esc(expiryFull)}, ${esc(dbUser.card_expiry)}, ${esc(virtualCvv)}, ${esc(pin)}, true, ${esc(safeNickname)})
     `);
@@ -3925,7 +4738,7 @@ apiRouter.put('/cards/:id/toggle-block', bearerAuth(), asyncHandler(async (req, 
         return res.status(400).json({ success: false, message: 'Id de cartão inválido.' });
     }
 
-    const [card] = await databricksService.executeQuery(`
+    const [card] = await dbService.executeQuery(`
         SELECT id, is_blocked FROM fintech.cards
         WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
     `);
@@ -3934,7 +4747,7 @@ apiRouter.put('/cards/:id/toggle-block', bearerAuth(), asyncHandler(async (req, 
     }
 
     const newBlocked = !card.is_blocked;
-    await databricksService.executeQuery(`
+    await dbService.executeQuery(`
         UPDATE fintech.cards SET is_blocked = ${newBlocked}
         WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
     `);
@@ -3950,7 +4763,7 @@ apiRouter.delete('/cards/:id', bearerAuth(), asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: 'Id de cartão inválido.' });
     }
 
-    const [card] = await databricksService.executeQuery(`
+    const [card] = await dbService.executeQuery(`
         SELECT id FROM fintech.cards
         WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
     `);
@@ -3958,7 +4771,7 @@ apiRouter.delete('/cards/:id', bearerAuth(), asyncHandler(async (req, res) => {
         return res.status(404).json({ success: false, message: 'Cartão virtual não encontrado (o cartão físico não pode ser excluído).' });
     }
 
-    await databricksService.executeQuery(`
+    await dbService.executeQuery(`
         DELETE FROM fintech.cards
         WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
     `);
@@ -3977,8 +4790,8 @@ apiRouter.put('/admin/cards/:cpf/delivery-status', bearerAuth(), authenticateAdm
         return res.status(400).json({ success: false, message: 'Status inválido.' });
     }
     
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')} 
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')} 
         SET card_delivery_status = '${status}', updated_at = current_timestamp()
         WHERE cpf = '${cpf}'
     `);
@@ -3995,8 +4808,8 @@ apiRouter.put('/cards/physical/test-delivery-status', bearerAuth(), asyncHandler
         return res.status(400).json({ success: false, message: 'Status inválido.' });
     }
     
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')} 
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')} 
         SET card_delivery_status = '${status}', updated_at = current_timestamp()
         WHERE cpf = '${cpf}'
     `);
@@ -4017,7 +4830,7 @@ apiRouter.post('/admin/users/:cpf/card/purchase/open', bearerAuth(), authenticat
     const user = await usersRepo.findByCpf(cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     
-    const [dbUser] = await databricksService.executeQuery(`SELECT card_is_activated FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
+    const [dbUser] = await dbService.executeQuery(`SELECT card_is_activated FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
     if (!dbUser || !dbUser.card_is_activated) {
         return res.status(403).json({ success: false, message: 'Cartão físico não está ativado.' });
     }
@@ -4046,9 +4859,9 @@ apiRouter.post('/admin/users/:cpf/card/purchase/open', bearerAuth(), authenticat
     const creditAmount = qty === 1 ? (amount * 0.90) : amount;
 
     // Registrar a compra de credito visivel na fatura aberta (sempre)
-    const txId = databricksService.generateUUID();
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('transactions')}
+    const txId = dbService.generateUUID();
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('transactions')}
         (id, cpf, type, amount, description, from_user, to_user, to_key, date)
         VALUES ('${txId}', '${cpf}', 'CREDIT', ${creditAmount.toFixed(2)}, '${description.replace(/'/g,"''")}', NULL, NULL, NULL, '${nowIso}')
     `);
@@ -4062,9 +4875,9 @@ apiRouter.post('/admin/users/:cpf/card/purchase/open', bearerAuth(), authenticat
         for (let i = 1; i <= qty; i++) {
             const dueDate = new Date(baseDate);
             dueDate.setMonth(baseDate.getMonth() + i); // fatura aberta: comeca proximo mes
-            const instId = databricksService.generateUUID();
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('transactions')}
+            const instId = dbService.generateUUID();
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('transactions')}
                 (id, cpf, type, amount, description, from_user, to_user, to_key, date)
                 VALUES ('${instId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${`${description.replace(/'/g,"''")} (${i}/${qty})`}', NULL, NULL, NULL, '${toLocalSqlTimestamp(dueDate)}')
             `);
@@ -4085,7 +4898,7 @@ apiRouter.post('/admin/users/:cpf/card/purchase/closed', bearerAuth(), authentic
     const user = await usersRepo.findByCpf(cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
     
-    const [dbUser] = await databricksService.executeQuery(`SELECT card_is_activated FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'`);
+    const [dbUser] = await dbService.executeQuery(`SELECT card_is_activated FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
     if (!dbUser || !dbUser.card_is_activated) {
         return res.status(403).json({ success: false, message: 'Cartão físico não está ativado.' });
     }
@@ -4110,9 +4923,9 @@ apiRouter.post('/admin/users/:cpf/card/purchase/closed', bearerAuth(), authentic
     if (qty === 1) {
         // Compra a vista na fatura fechada: aplica desconto 10% e 1 unica parcela negativa vencendo agora
         const valorVista = amount * 0.90;
-        const txId = databricksService.generateUUID();
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('transactions')}
+        const txId = dbService.generateUUID();
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('transactions')}
             (id, cpf, type, amount, description, from_user, to_user, to_key, date)
             VALUES ('${txId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-valorVista).toFixed(2)}, '${description.replace(/'/g,"''")}', NULL, NULL, NULL, '${toLocalSqlTimestamp(now)}')
         `);
@@ -4127,9 +4940,9 @@ apiRouter.post('/admin/users/:cpf/card/purchase/closed', bearerAuth(), authentic
     for (let i = 1; i <= qty; i++) {
         const dueDate = new Date(now);
         dueDate.setMonth(dueDate.getMonth() + (i - 1)); // 1a agora, demais mensais
-        const txId = databricksService.generateUUID();
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('transactions')}
+        const txId = dbService.generateUUID();
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('transactions')}
             (id, cpf, type, amount, description, from_user, to_user, to_key, date)
             VALUES ('${txId}', '${cpf}', 'INVOICE_INSTALLMENT', ${(-parcela).toFixed(2)}, '${`${description.replace(/'/g,"''")} (${i}/${qty})`}', NULL, NULL, NULL, '${toLocalSqlTimestamp(dueDate)}')
         `);
@@ -4156,8 +4969,8 @@ apiRouter.post('/admin/invoices/:cpf/:invoiceId/status', bearerAuth(), authentic
     if (!invoice) return res.status(404).json({ success: false, message: 'Fatura nao encontrada' });
 
     if (invoice.status === 'FECHADA' && status === 'ABERTA') {
-        const rows = await databricksService.executeQuery(`
-            SELECT COUNT(*) as cnt FROM ${databricksService.fq('transactions')}
+        const rows = await dbService.executeQuery(`
+            SELECT COUNT(*) as cnt FROM ${dbService.fq('transactions')}
             WHERE cpf='${cpf}' AND type='INVOICE_INSTALLMENT'
         `);
         const cnt = parseInt(rows[0]?.cnt || 0, 10);
@@ -4168,15 +4981,15 @@ apiRouter.post('/admin/invoices/:cpf/:invoiceId/status', bearerAuth(), authentic
     }
 
     if (status === 'BLOQUEADA') {
-        await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('users')}
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')}
             SET credit_card_is_blocked = true, updated_at = current_timestamp()
             WHERE cpf = '${cpf}'
         `);
     }
     if (status === 'ABERTA') {
-        await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('users')}
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')}
             SET credit_card_is_blocked = false, updated_at = current_timestamp()
             WHERE cpf = '${cpf}'
         `);
@@ -4241,8 +5054,8 @@ apiRouter.put('/admin/invoices/:cpf/due-date', bearerAuth(), authenticateAdmin, 
         return res.status(400).json({ success: false, message: 'Data inválida.' });
     }
 
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')}
         SET credit_card_invoice_due_date = ${esc(dDate.toISOString())}, updated_at = current_timestamp()
         WHERE cpf = ${esc(cpf)}
     `);
@@ -4288,9 +5101,9 @@ apiRouter.post('/admin/requests/limit/:cpf/deny', bearerAuth(), authenticateAdmi
 }));
 
 apiRouter.get('/admin/requests/password', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
-    const rows = await databricksService.executeQuery(`
+    const rows = await dbService.executeQuery(`
         SELECT cpf, full_name, email, password_reset_requested
-        FROM ${databricksService.fq('users')}
+        FROM ${dbService.fq('users')}
         WHERE password_reset_requested = true
         ORDER BY updated_at DESC
     `);
@@ -4326,12 +5139,21 @@ apiRouter.post('/admin/requests/password/:cpf/deny', bearerAuth(), authenticateA
 apiRouter.post('/admin/reset/users', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const adminCpf = '99999999999';
     // Apaga todos os dados associados a CPFs diferentes do admin
-    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('transactions')} WHERE cpf <> '${adminCpf}'`);
-    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('pix_contacts')} WHERE pix_account_id <> '${adminCpf}'`);
-    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('pix_keys')} WHERE cpf <> '${adminCpf}'`);
-    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('notifications')} WHERE cpf <> '${adminCpf}'`);
-    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('limit_increase_requests')} WHERE cpf <> '${adminCpf}'`);
-    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('users')} WHERE cpf <> '${adminCpf}'`);
+    await dbService.executeQuery(`DELETE FROM ${dbService.fq('transactions')} WHERE cpf <> '${adminCpf}'`);
+    await dbService.executeQuery(`DELETE FROM ${dbService.fq('pix_contacts')} WHERE pix_account_id <> '${adminCpf}'`);
+    await dbService.executeQuery(`DELETE FROM ${dbService.fq('pix_keys')} WHERE cpf <> '${adminCpf}'`);
+    await dbService.executeQuery(`DELETE FROM ${dbService.fq('notifications')} WHERE cpf <> '${adminCpf}'`);
+    await dbService.executeQuery(`DELETE FROM ${dbService.fq('limit_increase_requests')} WHERE cpf <> '${adminCpf}'`);
+    await dbService.executeQuery(`DELETE FROM ${dbService.fq('users')} WHERE cpf <> '${adminCpf}'`);
+    // Tópicos Telegram das massas apagadas (mantém o do admin)
+    try {
+        const topics = await telegramService.listTopics();
+        for (const t of topics) {
+            if (t.cpf !== adminCpf) await telegramService.deleteTopic(t.cpf);
+        }
+    } catch (tgErr) {
+        console.warn('⚠️ Falha ao limpar tópicos Telegram no reset:', tgErr.message);
+    }
     await ensureAdminUser();
     res.json({ success: true, message: 'Base resetada. Apenas admin mantido.' });
 }));
@@ -4342,7 +5164,7 @@ apiRouter.post('/admin/reset/users', bearerAuth(), authenticateAdmin, asyncHandl
 
 // GET /admin/billing/config — retorna parâmetros de faturamento
 apiRouter.get('/admin/billing/config', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
-    const rows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+    const rows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
     if (!rows.length) return res.status(404).json({ success: false, message: 'Configuração de faturamento não encontrada.' });
     res.json({ success: true, config: rows[0] });
 }));
@@ -4366,14 +5188,14 @@ apiRouter.put('/admin/billing/config', bearerAuth(), authenticateAdmin, asyncHan
     sets.push(`updated_at = CURRENT_TIMESTAMP`);
     sets.push(`updated_by = '${adminCpf}'`);
 
-    await databricksService.executeQuery(`UPDATE ${databricksService.fq('billing_config')} SET ${sets.join(', ')} WHERE id = 1`);
-    const updated = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+    await dbService.executeQuery(`UPDATE ${dbService.fq('billing_config')} SET ${sets.join(', ')} WHERE id = 1`);
+    const updated = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
     res.json({ success: true, message: 'Configuração de faturamento atualizada.', config: updated[0] });
 }));
 
 // GET /admin/billing/accounts-status  (alias: /admin/billing/status)
 apiRouter.get(['/admin/billing/accounts-status', '/admin/billing/status'], bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
-    const users = await databricksService.executeQuery(`
+    const users = await dbService.executeQuery(`
         SELECT cpf, full_name, email,
                COALESCE(account_status, 'adimplente') AS account_status,
                COALESCE(days_overdue, 0) AS days_overdue,
@@ -4381,7 +5203,7 @@ apiRouter.get(['/admin/billing/accounts-status', '/admin/billing/status'], beare
                credit_card_available_limit,
                credit_card_total_limit,
                invoice_last_closed_date
-        FROM ${databricksService.fq('users')}
+        FROM ${dbService.fq('users')}
         WHERE role = 'customer'
         ORDER BY account_status DESC, days_overdue DESC
     `);
@@ -4407,7 +5229,7 @@ apiRouter.post('/admin/billing/seed-test-scenarios', bearerAuth(), authenticateA
     const results  = [];
 
     for (const target of targets) {
-        const result = await applyScenario(databricksService, target, scenario, { daysOverdue, invoiceAmount });
+        const result = await applyScenario(dbService, target, scenario, { daysOverdue, invoiceAmount });
         results.push(result);
     }
     res.json({ success: true, applied: results });
@@ -4420,7 +5242,7 @@ apiRouter.post('/admin/billing/seed-test-scenarios', bearerAuth(), authenticateA
 apiRouter.post('/admin/billing/save-as-mock', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf } = req.body;
     if (!cpf) return res.status(400).json({ success: false, message: 'Campo "cpf" obrigatório.' });
-    const result = await saveAsMockBaseline(databricksService, String(cpf));
+    const result = await saveAsMockBaseline(dbService, String(cpf));
     res.json({ success: true, ...result });
 }));
 
@@ -4430,7 +5252,7 @@ apiRouter.post('/admin/billing/save-as-mock', bearerAuth(), authenticateAdmin, a
 apiRouter.post('/admin/billing/clear-mock-baseline', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf } = req.body;
     if (!cpf) return res.status(400).json({ success: false, message: 'Campo "cpf" obrigatório.' });
-    const result = await clearMockBaseline(databricksService, String(cpf));
+    const result = await clearMockBaseline(dbService, String(cpf));
     res.json({ success: true, ...result });
 }));
 
@@ -4439,7 +5261,7 @@ apiRouter.post('/admin/billing/clear-mock-baseline', bearerAuth(), authenticateA
 // cron diário — sem isso, nada dispara essa validação automaticamente e days_overdue/
 // billing_charges nunca são atualizados dia a dia.
 async function runBillingValidation() {
-    const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+    const configRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
     if (!configRows.length) return { success: false, message: 'Configuração de faturamento não encontrada.' };
     const cfg = configRows[0];
     if (!cfg.is_active) return { success: true, message: 'Ciclo de faturamento inativo. Nenhuma validação executada.' };
@@ -4447,13 +5269,13 @@ async function runBillingValidation() {
     const cycle = computeCurrentCycle(cfg);
     const today = new Date();
 
-    const users = await databricksService.executeQuery(`
+    const users = await dbService.executeQuery(`
         SELECT cpf, credit_card_invoice_due_date,
                COALESCE(account_status,'adimplente') AS account_status,
                COALESCE(days_overdue, 0) AS days_overdue,
                COALESCE(credit_card_available_limit, 0) AS credit_card_available_limit,
                COALESCE(credit_card_total_limit, 5000) AS credit_card_total_limit
-        FROM ${databricksService.fq('users')}
+        FROM ${dbService.fq('users')}
     `);
 
     // Vencimento real de cada fatura FECHADA ainda não paga — não usar
@@ -4461,8 +5283,8 @@ async function runBillingValidation() {
     // PRÓXIMO ciclo assim que o corte da fatura atual passa (7 dias antes do vencimento),
     // então no dia do vencimento (e durante todo o período de atraso) esse campo já
     // aponta para um ciclo futuro, fazendo daysOverdue ficar sempre 0.
-    const closedInvoiceRows = await databricksService.executeQuery(`
-        SELECT cpf, due_date, valor_total, COALESCE(valor_pago, 0) AS valor_pago FROM ${databricksService.fq('invoices')}
+    const closedInvoiceRows = await dbService.executeQuery(`
+        SELECT cpf, due_date, valor_total, COALESCE(valor_pago, 0) AS valor_pago FROM ${dbService.fq('invoices')}
         WHERE status = 'FECHADA' AND data_pagamento IS NULL
         ORDER BY due_date DESC
     `);
@@ -4518,9 +5340,9 @@ async function runBillingValidation() {
                 // o valor_total ORIGINAL (não o residual). Juros de mora, juros
                 // remuneratórios e IOF diário são incrementos DIÁRIOS sobre o
                 // residual — sempre inseridos a cada execução.
-                const existingCharges = await databricksService.executeQuery(`
+                const existingCharges = await dbService.executeQuery(`
                     SELECT charge_type, COALESCE(SUM(amount), 0) AS total
-                    FROM ${databricksService.fq('billing_charges')}
+                    FROM ${dbService.fq('billing_charges')}
                     WHERE cpf = '${u.cpf}' AND invoice_reference = '${cycle.invoiceRef}' AND status = 'pending'
                     GROUP BY charge_type
                 `);
@@ -4537,8 +5359,8 @@ async function runBillingValidation() {
                     const multa = calcMulta(originalValorTotal);
                     if (multa > 0.005) {
                         const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_multa`;
-                        await databricksService.executeQuery(`
-                            INSERT INTO ${databricksService.fq('billing_charges')}
+                        await dbService.executeQuery(`
+                            INSERT INTO ${dbService.fq('billing_charges')}
                             (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
                             VALUES
                             ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'multa', ${multa}, ${daysOverdue}, ${invoiceAmount})
@@ -4557,8 +5379,8 @@ async function runBillingValidation() {
                     const iof = calcIof(originalValorTotal, daysOverdue);
                     if (iof > 0.005) {
                         const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_iof`;
-                        await databricksService.executeQuery(`
-                            INSERT INTO ${databricksService.fq('billing_charges')}
+                        await dbService.executeQuery(`
+                            INSERT INTO ${dbService.fq('billing_charges')}
                             (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
                             VALUES
                             ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'iof', ${iof}, ${daysOverdue}, ${invoiceAmount})
@@ -4571,8 +5393,8 @@ async function runBillingValidation() {
                     const dailyIof = calcIofDiario(invoiceAmount, 1);
                     if (dailyIof > 0.005) {
                         const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_iof`;
-                        await databricksService.executeQuery(`
-                            INSERT INTO ${databricksService.fq('billing_charges')}
+                        await dbService.executeQuery(`
+                            INSERT INTO ${dbService.fq('billing_charges')}
                             (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
                             VALUES
                             ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'iof', ${dailyIof}, ${daysOverdue}, ${invoiceAmount})
@@ -4589,8 +5411,8 @@ async function runBillingValidation() {
                     const dailyJurosMora = calcJurosMora(invoiceAmount, 1);
                     if (dailyJurosMora > 0.005) {
                         const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_juros_mora`;
-                        await databricksService.executeQuery(`
-                            INSERT INTO ${databricksService.fq('billing_charges')}
+                        await dbService.executeQuery(`
+                            INSERT INTO ${dbService.fq('billing_charges')}
                             (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
                             VALUES
                             ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'juros_mora', ${dailyJurosMora}, ${daysOverdue}, ${invoiceAmount})
@@ -4607,8 +5429,8 @@ async function runBillingValidation() {
                     const dailyJurosRem = calcJurosRemuneratorios(invoiceAmount, 1);
                     if (dailyJurosRem > 0.005) {
                         const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_juros_rem`;
-                        await databricksService.executeQuery(`
-                            INSERT INTO ${databricksService.fq('billing_charges')}
+                        await dbService.executeQuery(`
+                            INSERT INTO ${dbService.fq('billing_charges')}
                             (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
                             VALUES
                             ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'juros_remuneratorios', ${dailyJurosRem}, ${daysOverdue}, ${invoiceAmount})
@@ -4640,8 +5462,8 @@ async function runBillingValidation() {
             if (isMinimoDetectado) {
                 try {
                     const dayAgo = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
-                    const recentNotifs = await databricksService.executeQuery(`
-                        SELECT id FROM ${databricksService.fq('notifications')}
+                    const recentNotifs = await dbService.executeQuery(`
+                        SELECT id FROM ${dbService.fq('notifications')}
                         WHERE cpf = '${u.cpf}'
                           AND title = 'Pagamento mínimo de fatura ✅'
                           AND created_at > '${dayAgo}'
@@ -4669,8 +5491,8 @@ async function runBillingValidation() {
             if (isAbaixoCritico) {
                 try {
                     const dayAgo = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
-                    const recentAbaixoNotifs = await databricksService.executeQuery(`
-                        SELECT id FROM ${databricksService.fq('notifications')}
+                    const recentAbaixoNotifs = await dbService.executeQuery(`
+                        SELECT id FROM ${dbService.fq('notifications')}
                         WHERE cpf = '${u.cpf}'
                           AND (title LIKE '%Abaixo%' OR title LIKE '%abaixo%' OR title LIKE '%crítico%' OR title LIKE '%critico%')
                           AND created_at > '${dayAgo}'
@@ -4693,8 +5515,8 @@ async function runBillingValidation() {
         }
 
         if (newStatus !== u.account_status || daysOverdue !== parseInt(u.days_overdue)) {
-            await databricksService.executeQuery(`
-                UPDATE ${databricksService.fq('users')}
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('users')}
                 SET account_status = '${newStatus}', days_overdue = ${daysOverdue}, updated_at = CURRENT_TIMESTAMP
                 WHERE cpf = '${u.cpf}'
             `);
@@ -4705,8 +5527,8 @@ async function runBillingValidation() {
 
     // ── Sincronizar dias_atraso nas invoices (sempre, não apenas quando users muda) ──
     try {
-        await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('invoices')}
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('invoices')}
             SET dias_atraso = GREATEST(0, (CURRENT_DATE - due_date::date)),
                 updated_at = CURRENT_TIMESTAMP
             WHERE status = 'FECHADA'
@@ -4740,8 +5562,8 @@ async function runBillingValidation() {
 // - Pode ser chamada a qualquer momento sem efeitos colaterais
 const syncInvoiceDiasAtraso = async () => {
     try {
-        const result = await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('invoices')}
+        const result = await dbService.executeQuery(`
+            UPDATE ${dbService.fq('invoices')}
             SET dias_atraso = GREATEST(0, (CURRENT_DATE - due_date::date)),
                 updated_at = CURRENT_TIMESTAMP
             WHERE status = 'FECHADA'
@@ -4752,10 +5574,10 @@ const syncInvoiceDiasAtraso = async () => {
         const updatedCount = result?.rowCount || result?.length || 0;
         
         // Verificar quantas invoices totais existem
-        const verify = await databricksService.executeQuery(`
+        const verify = await dbService.executeQuery(`
             SELECT COUNT(*) AS total,
                    SUM(CASE WHEN COALESCE(dias_atraso, 0) = GREATEST(0, (CURRENT_DATE - due_date::date)) THEN 1 ELSE 0 END) AS corretas
-            FROM ${databricksService.fq('invoices')}
+            FROM ${dbService.fq('invoices')}
             WHERE status = 'FECHADA' AND data_pagamento IS NULL AND due_date < CURRENT_TIMESTAMP
         `);
         const total = parseInt(verify?.[0]?.total || 0);
@@ -4779,16 +5601,16 @@ apiRouter.get('/admin/billing/account/:cpf/status', bearerAuth(), authenticateAd
     const { cpf } = req.params;
     if (!cpf || cpf.length !== 11) return res.status(400).json({ success: false, message: 'CPF inválido.' });
 
-    const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+    const configRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
     if (!configRows.length) return res.status(500).json({ success: false, message: 'Configuração de faturamento não encontrada.' });
     const cfg = configRows[0];
 
-    const userRows = await databricksService.executeQuery(`
+    const userRows = await dbService.executeQuery(`
         SELECT cpf, full_name, email,
                COALESCE(account_status,'adimplente') AS account_status,
                COALESCE(days_overdue, 0) AS days_overdue,
                credit_card_invoice_due_date, credit_card_available_limit, credit_card_total_limit,
-        FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'
+        FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'
     `);
     if (!userRows.length) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
     const u = userRows[0];
@@ -4798,8 +5620,8 @@ apiRouter.get('/admin/billing/account/:cpf/status', bearerAuth(), authenticateAd
         parseFloat(u.credit_card_total_limit || 5000) - parseFloat(u.credit_card_available_limit || 0)
     );
 
-    const charges = await databricksService.executeQuery(`
-        SELECT * FROM ${databricksService.fq('billing_charges')}
+    const charges = await dbService.executeQuery(`
+        SELECT * FROM ${dbService.fq('billing_charges')}
         WHERE cpf = '${cpf}' ORDER BY created_at DESC LIMIT 20
     `);
 
@@ -4842,10 +5664,10 @@ apiRouter.get('/admin/billing/account/:cpf/status', bearerAuth(), authenticateAd
 async function fetchUnpaidClosedInvoices(cpf) {
     const { esc } = repoContext;
     // Da mais antiga para a mais recente: o pagamento amortiza a dívida mais velha primeiro
-    return databricksService.executeQuery(`
+    return dbService.executeQuery(`
         SELECT id, due_date, valor_total, saldo_anterior, valor_iof, valor_multa,
                valor_juros_remuneratorios, valor_juros_mora, valor_pago, status
-        FROM ${databricksService.fq('invoices')}
+        FROM ${dbService.fq('invoices')}
         WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
         ORDER BY due_date ASC
     `);
@@ -4859,9 +5681,9 @@ apiRouter.get('/users/:cpf/purchases', bearerAuth(), asyncHandler(async (req, re
     if (req.user.cpf !== cpf && req.user.role !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
-    const rows = await databricksService.executeQuery(`
+    const rows = await dbService.executeQuery(`
         SELECT id, product_id, name, description, price, image_url, quantity, points_earned, purchase_date, payment_method, cashback_used, installments
-        FROM ${databricksService.fq('purchased_items')}
+        FROM ${dbService.fq('purchased_items')}
         WHERE cpf='${cpf}'
         ORDER BY purchase_date DESC
     `);
@@ -4869,9 +5691,9 @@ apiRouter.get('/users/:cpf/purchases', bearerAuth(), asyncHandler(async (req, re
 }));
 
 apiRouter.get('/stories', bearerAuth(), asyncHandler(async (req, res) => {
-    const rows = await databricksService.executeQuery(`
+    const rows = await dbService.executeQuery(`
         SELECT id, cpf, image_url, caption, created_at
-        FROM ${databricksService.fq('stories')}
+        FROM ${dbService.fq('stories')}
         ORDER BY created_at DESC
     `);
     res.json(rows);
@@ -4930,9 +5752,9 @@ apiRouter.post('/pix/categorize', bearerAuth(), asyncHandler(async (req, res) =>
     // 2. Histórico do usuário para aprendizado de padrão
     const cpf = req.user.cpf;
     try {
-        const history = await databricksService.executeQuery(`
+        const history = await dbService.executeQuery(`
             SELECT description, category
-            FROM ${databricksService.fq('transactions')}
+            FROM ${dbService.fq('transactions')}
             WHERE from_user = ${escapeSQL(cpf)} OR to_user = ${escapeSQL(cpf)}
             ORDER BY date DESC
             LIMIT 50
@@ -4958,8 +5780,8 @@ apiRouter.get('/financial-health/:cpf', bearerAuth(), asyncHandler(async (req, r
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
 
-    const userRows = await databricksService.executeQuery(
-        `SELECT balance, credit_card_available_limit, credit_card_total_limit FROM ${databricksService.fq('users')} WHERE cpf='${escapeSQL(cpf)}'`
+    const userRows = await dbService.executeQuery(
+        `SELECT balance, credit_card_available_limit, credit_card_total_limit FROM ${dbService.fq('users')} WHERE cpf='${escapeSQL(cpf)}'`
     );
     if (!userRows || !userRows.length) {
         return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
@@ -4968,9 +5790,9 @@ apiRouter.get('/financial-health/:cpf', bearerAuth(), asyncHandler(async (req, r
 
     let txRows = [];
     try {
-        txRows = await databricksService.executeQuery(`
+        txRows = await dbService.executeQuery(`
             SELECT amount, type, date
-            FROM ${databricksService.fq('transactions')}
+            FROM ${dbService.fq('transactions')}
             WHERE from_user='${escapeSQL(cpf)}'
             ORDER BY date DESC LIMIT 90
         `);
@@ -5104,14 +5926,14 @@ app.use((err, req, res, next) => {
 });
 
 async function initializeDatabase() {
-    // Skip Databricks-specific initialization if using Postgres
+    // Skip Postgres-specific initialization if needed
     const provider = process.env.DB_PROVIDER || process.env.DB_DIALECT;
     if (provider === 'postgres') {
         console.log('ℹ️  Usando PostgreSQL. Verificando estrutura das tabelas...');
         
         // Verificar se as colunas category e cashback existem na tabela de produtos
         try {
-            const productColumns = await databricksService.executeQuery(`
+            const productColumns = await dbService.executeQuery(`
                 SELECT column_name 
                 FROM information_schema.columns 
                 WHERE table_schema = 'fintech' 
@@ -5121,15 +5943,15 @@ async function initializeDatabase() {
             const existingProductCols = productColumns.map(c => c.column_name);
             if (!existingProductCols.includes('category')) {
                 console.log('🔧 Adicionando coluna category na tabela products...');
-                await databricksService.executeQuery(`
-                    ALTER TABLE ${databricksService.fq('products')}
+                await dbService.executeQuery(`
+                    ALTER TABLE ${dbService.fq('products')}
                     ADD COLUMN category VARCHAR(255) DEFAULT 'Geral'
                 `);
             }
             if (!existingProductCols.includes('cashback')) {
                 console.log('🔧 Adicionando coluna cashback na tabela products...');
-                await databricksService.executeQuery(`
-                    ALTER TABLE ${databricksService.fq('products')}
+                await dbService.executeQuery(`
+                    ALTER TABLE ${dbService.fq('products')}
                     ADD COLUMN cashback VARCHAR(255) DEFAULT '5%'
                 `);
             }
@@ -5144,7 +5966,7 @@ async function initializeDatabase() {
             console.log('🔍 Verificando e atualizando valores padrão de signup...');
             
             // Verificar se as colunas de cartão de crédito existem
-            const creditCardColumns = await databricksService.executeQuery(`
+            const creditCardColumns = await dbService.executeQuery(`
                 SELECT column_name 
                 FROM information_schema.columns 
                 WHERE table_schema = 'fintech' 
@@ -5157,8 +5979,8 @@ async function initializeDatabase() {
             // Adicionar colunas de cartão de crédito se não existirem
             if (!existingColumns.includes('credit_card_total_limit')) {
                 console.log('🔧 Adicionando coluna credit_card_total_limit...');
-                await databricksService.executeQuery(`
-                    ALTER TABLE ${databricksService.fq('users')}
+                await dbService.executeQuery(`
+                    ALTER TABLE ${dbService.fq('users')}
                     ADD COLUMN credit_card_total_limit DECIMAL(15,2) DEFAULT 5000.00
                 `);
                 console.log('✅ Coluna credit_card_total_limit adicionada.');
@@ -5166,8 +5988,8 @@ async function initializeDatabase() {
             
             if (!existingColumns.includes('credit_card_available_limit')) {
                 console.log('🔧 Adicionando coluna credit_card_available_limit...');
-                await databricksService.executeQuery(`
-                    ALTER TABLE ${databricksService.fq('users')}
+                await dbService.executeQuery(`
+                    ALTER TABLE ${dbService.fq('users')}
                     ADD COLUMN credit_card_available_limit DECIMAL(15,2) DEFAULT 5000.00
                 `);
                 console.log('✅ Coluna credit_card_available_limit adicionada.');
@@ -5175,8 +5997,8 @@ async function initializeDatabase() {
             
             if (!existingColumns.includes('credit_card_points_balance')) {
                 console.log('🔧 Adicionando coluna credit_card_points_balance...');
-                await databricksService.executeQuery(`
-                    ALTER TABLE ${databricksService.fq('users')}
+                await dbService.executeQuery(`
+                    ALTER TABLE ${dbService.fq('users')}
                     ADD COLUMN credit_card_points_balance INTEGER DEFAULT 0
                 `);
                 console.log('✅ Coluna credit_card_points_balance adicionada.');
@@ -5184,8 +6006,8 @@ async function initializeDatabase() {
             
             if (!existingColumns.includes('credit_card_is_blocked')) {
                 console.log('🔧 Adicionando coluna credit_card_is_blocked...');
-                await databricksService.executeQuery(`
-                    ALTER TABLE ${databricksService.fq('users')}
+                await dbService.executeQuery(`
+                    ALTER TABLE ${dbService.fq('users')}
                     ADD COLUMN credit_card_is_blocked BOOLEAN DEFAULT FALSE
                 `);
                 console.log('✅ Coluna credit_card_is_blocked adicionada.');
@@ -5193,29 +6015,29 @@ async function initializeDatabase() {
             
             // Atualizar DEFAULT de pix_daily_limit para 2000.00
             console.log('🔧 Atualizando DEFAULT de pix_daily_limit para 2000.00...');
-            await databricksService.executeQuery(`
-                ALTER TABLE ${databricksService.fq('users')}
+            await dbService.executeQuery(`
+                ALTER TABLE ${dbService.fq('users')}
                 ALTER COLUMN pix_daily_limit SET DEFAULT 2000.00
             `);
             
             // Atualizar DEFAULT de credit_card_total_limit para 5000.00
             console.log('🔧 Atualizando DEFAULT de credit_card_total_limit para 5000.00...');
-            await databricksService.executeQuery(`
-                ALTER TABLE ${databricksService.fq('users')}
+            await dbService.executeQuery(`
+                ALTER TABLE ${dbService.fq('users')}
                 ALTER COLUMN credit_card_total_limit SET DEFAULT 5000.00
             `);
             
             // Atualizar DEFAULT de credit_card_available_limit para 5000.00
             console.log('🔧 Atualizando DEFAULT de credit_card_available_limit para 5000.00...');
-            await databricksService.executeQuery(`
-                ALTER TABLE ${databricksService.fq('users')}
+            await dbService.executeQuery(`
+                ALTER TABLE ${dbService.fq('users')}
                 ALTER COLUMN credit_card_available_limit SET DEFAULT 5000.00
             `);
             
             // Atualizar usuários existentes que não têm limites de crédito definidos
             console.log('🔧 Atualizando usuários existentes sem limites de crédito...');
-            await databricksService.executeQuery(`
-                UPDATE ${databricksService.fq('users')}
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('users')}
                 SET 
                     credit_card_total_limit = COALESCE(credit_card_total_limit, 5000.00),
                     credit_card_available_limit = COALESCE(credit_card_available_limit, 5000.00),
@@ -5230,8 +6052,8 @@ async function initializeDatabase() {
             // Preenche com o próximo ciclo (dia 10 do mês seguinte, 12h) para que passem a
             // ser processados no fechamento normal.
             console.log('🔧 Backfill de credit_card_invoice_due_date para usuários sem vencimento...');
-            await databricksService.executeQuery(`
-                UPDATE ${databricksService.fq('users')}
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('users')}
                 SET
                     credit_card_due_day = COALESCE(credit_card_due_day, 10),
                     credit_card_invoice_due_date = date_trunc('month', CURRENT_DATE) + interval '1 month' + interval '9 days' + interval '12 hours'
@@ -5246,7 +6068,7 @@ async function initializeDatabase() {
         
         // Verificar e corrigir estrutura da tabela limit_increase_requests se necessário
         try {
-            const columnCheck = await databricksService.executeQuery(`
+            const columnCheck = await dbService.executeQuery(`
                 SELECT column_name 
                 FROM information_schema.columns 
                 WHERE table_schema = 'fintech' 
@@ -5256,8 +6078,8 @@ async function initializeDatabase() {
             
             if (!columnCheck || columnCheck.length === 0) {
                 console.log('⚠️  Coluna requested_at não encontrada. Adicionando...');
-                await databricksService.executeQuery(`
-                    ALTER TABLE ${databricksService.fq('limit_increase_requests')}
+                await dbService.executeQuery(`
+                    ALTER TABLE ${dbService.fq('limit_increase_requests')}
                     ADD COLUMN requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 `);
                 console.log('✅ Coluna requested_at adicionada com sucesso.');
@@ -5266,8 +6088,8 @@ async function initializeDatabase() {
             console.warn('⚠️  Erro ao verificar/corrigir tabela limit_increase_requests:', error.message);
             // Tentar criar a tabela se não existir
             try {
-                await databricksService.executeQuery(`
-                    CREATE TABLE IF NOT EXISTS ${databricksService.fq('limit_increase_requests')} (
+                await dbService.executeQuery(`
+                    CREATE TABLE IF NOT EXISTS ${dbService.fq('limit_increase_requests')} (
                         id VARCHAR(255) NOT NULL,
                         cpf VARCHAR(11) NOT NULL,
                         requested_limit DECIMAL(15,2) NOT NULL,
@@ -5289,7 +6111,7 @@ async function initializeDatabase() {
         
         for (const columnName of requiredColumns) {
             try {
-                const columnCheck = await databricksService.executeQuery(`
+                const columnCheck = await dbService.executeQuery(`
                     SELECT column_name 
                     FROM information_schema.columns 
                     WHERE table_schema = 'fintech' 
@@ -5301,29 +6123,29 @@ async function initializeDatabase() {
                     console.log(`⚠️  Coluna ${columnName} não encontrada. Adicionando...`);
                     try {
                         // Adicionar a coluna com DEFAULT primeiro
-                        await databricksService.executeQuery(`
-                            ALTER TABLE ${databricksService.fq('installment_plans')}
+                        await dbService.executeQuery(`
+                            ALTER TABLE ${dbService.fq('installment_plans')}
                             ADD COLUMN ${columnName} DECIMAL(15,2) DEFAULT 0.00
                         `);
                         
                         // Atualizar valores existentes
                         if (columnName === 'total_with_interest') {
-                            await databricksService.executeQuery(`
-                                UPDATE ${databricksService.fq('installment_plans')}
+                            await dbService.executeQuery(`
+                                UPDATE ${dbService.fq('installment_plans')}
                                 SET total_with_interest = COALESCE(total_amount, 0)
                                 WHERE total_with_interest IS NULL OR total_with_interest = 0
                             `);
                         } else if (columnName === 'original_amount') {
-                            await databricksService.executeQuery(`
-                                UPDATE ${databricksService.fq('installment_plans')}
+                            await dbService.executeQuery(`
+                                UPDATE ${dbService.fq('installment_plans')}
                                 SET original_amount = COALESCE(total_amount, 0)
                                 WHERE original_amount IS NULL OR original_amount = 0
                             `);
                         }
                         
                         // Tornar NOT NULL após atualizar valores
-                        await databricksService.executeQuery(`
-                            ALTER TABLE ${databricksService.fq('installment_plans')}
+                        await dbService.executeQuery(`
+                            ALTER TABLE ${dbService.fq('installment_plans')}
                             ALTER COLUMN ${columnName} SET NOT NULL
                         `);
                         console.log(`✅ Coluna ${columnName} adicionada com sucesso.`);
@@ -5341,26 +6163,26 @@ async function initializeDatabase() {
         
         // Garantir colunas de encargos/resumo na tabela invoices
         try {
-            const invoiceCols = await databricksService.executeQuery(`
+            const invoiceCols = await dbService.executeQuery(`
                 SELECT column_name FROM information_schema.columns
                 WHERE table_schema = 'fintech' AND table_name = 'invoices'
                 AND column_name IN ('saldo_anterior','valor_iof','valor_juros_remuneratorios','valor_juros_mora','itemized_transactions')
             `);
             const hasInvCols = invoiceCols.map(c => c.column_name);
             if (!hasInvCols.includes('saldo_anterior')) {
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('invoices')} ADD COLUMN saldo_anterior DECIMAL(15,2) DEFAULT 0.00`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('invoices')} ADD COLUMN saldo_anterior DECIMAL(15,2) DEFAULT 0.00`);
                 console.log('✅ Coluna saldo_anterior adicionada em invoices.');
             }
             if (!hasInvCols.includes('valor_iof')) {
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('invoices')} ADD COLUMN valor_iof DECIMAL(15,2) DEFAULT 0.00`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('invoices')} ADD COLUMN valor_iof DECIMAL(15,2) DEFAULT 0.00`);
                 console.log('✅ Coluna valor_iof adicionada em invoices.');
             }
             if (!hasInvCols.includes('valor_juros_remuneratorios')) {
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('invoices')} ADD COLUMN valor_juros_remuneratorios DECIMAL(15,2) DEFAULT 0.00`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('invoices')} ADD COLUMN valor_juros_remuneratorios DECIMAL(15,2) DEFAULT 0.00`);
                 console.log('✅ Coluna valor_juros_remuneratorios adicionada em invoices.');
             }
             if (!hasInvCols.includes('valor_juros_mora')) {
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('invoices')} ADD COLUMN valor_juros_mora DECIMAL(15,2) DEFAULT 0.00`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('invoices')} ADD COLUMN valor_juros_mora DECIMAL(15,2) DEFAULT 0.00`);
                 console.log('✅ Coluna valor_juros_mora adicionada em invoices.');
             }
             if (!hasInvCols.includes('itemized_transactions')) {
@@ -5368,7 +6190,7 @@ async function initializeDatabase() {
                 // Necessário porque pagar/antecipar parcelas APAGA as linhas de transactions
                 // (cardRepo.payDueInstallments/anticipateInstallments), o que faria a lista de
                 // compras da fatura fechada sumir mesmo com o valor_total preservado.
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('invoices')} ADD COLUMN itemized_transactions TEXT`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('invoices')} ADD COLUMN itemized_transactions TEXT`);
                 console.log('✅ Coluna itemized_transactions adicionada em invoices.');
             }
         } catch (error) {
@@ -5380,19 +6202,19 @@ async function initializeDatabase() {
     }
 
     try {
-        console.log('🔧 Inicializando estrutura do banco de dados (Databricks)...');
+        console.log('🔧 Inicializando estrutura do banco de dados (Postgres)...');
         // console.log(`📋 Usando catálogo: ${databricksConfig.catalog}, schema: ${databricksConfig.schema}`); // Removed to fix error
         
         // Verificar se a tabela users existe e tem a estrutura correta
         try {
-            const tableInfo = await databricksService.executeQuery(`DESCRIBE TABLE ${databricksService.fq('users')}`);
+            const tableInfo = await dbService.executeQuery(`DESCRIBE TABLE ${dbService.fq('users')}`);
             const hasFullName = tableInfo.some(col => col.col_name === 'full_name');
             const hasUsername = tableInfo.some(col => col.col_name === 'username');
             
             if (!hasFullName || !hasUsername) {
                 console.log('⚠️  Tabela users existe mas não tem a estrutura correta (faltam colunas). Recriando...');
-                await databricksService.executeQuery(`DROP TABLE IF EXISTS ${databricksService.fq('users')}`);
-                await databricksService.executeQuery(`DROP TABLE IF EXISTS ${databricksService.fq('transactions')}`);
+                await dbService.executeQuery(`DROP TABLE IF EXISTS ${dbService.fq('users')}`);
+                await dbService.executeQuery(`DROP TABLE IF EXISTS ${dbService.fq('transactions')}`);
             }
         } catch (describeError) {
             // Tabela não existe ou erro ao descrever - isso é normal na primeira execução
@@ -5407,13 +6229,13 @@ async function initializeDatabase() {
         
         // Forçar recriação da tabela pix_contacts com estrutura correta (se necessário)
         try {
-            await databricksService.executeQuery(`DESCRIBE TABLE ${databricksService.fq('pix_contacts')}`);
+            await dbService.executeQuery(`DESCRIBE TABLE ${dbService.fq('pix_contacts')}`);
             console.log('✅ Tabela pix_contacts já existe com estrutura correta.');
         } catch (pixContactsError) {
             console.log('🔄 Recriando tabela pix_contacts com estrutura correta...');
-            await databricksService.executeQuery(`DROP TABLE IF EXISTS ${databricksService.fq('pix_contacts')}`);
-            await databricksService.executeQuery(`
-                CREATE TABLE ${databricksService.fq('pix_contacts')} (
+            await dbService.executeQuery(`DROP TABLE IF EXISTS ${dbService.fq('pix_contacts')}`);
+            await dbService.executeQuery(`
+                CREATE TABLE ${dbService.fq('pix_contacts')} (
                     id STRING NOT NULL,
                     pix_account_id STRING NOT NULL,
                     contact_cpf STRING NOT NULL,
@@ -5425,21 +6247,21 @@ async function initializeDatabase() {
         
         // Criar schema se necessário (schema já foi ajustado para 'default' se catalog e schema eram iguais)
         try {
-            const currentCatalog = databricksService.catalog;
-            const currentSchema = databricksService.schema;
+            const currentCatalog = dbService.catalog;
+            const currentSchema = dbService.schema;
             const schemaQuery = `CREATE SCHEMA IF NOT EXISTS \`${currentCatalog}\`.\`${currentSchema}\``;
             console.log(`🔍 Executando: ${schemaQuery}`);
-            await databricksService.executeQuery(schemaQuery);
+            await dbService.executeQuery(schemaQuery);
             console.log(`✅ Schema ${currentCatalog}.${currentSchema} verificado/criado com sucesso.`);
         } catch (schemaError) {
-            console.error(`❌ Erro ao criar schema ${databricksService.catalog}.${databricksService.schema}:`, schemaError.message);
+            console.error(`❌ Erro ao criar schema ${dbService.catalog}.${dbService.schema}:`, schemaError.message);
             // Não é crítico - o schema pode já existir
             console.log("ℹ️  Continuando sem criar schema explicitamente...");
         }
 
-        // Criar tabela users se não existir (sem DEFAULT values para compatibilidade com Databricks)
-        await databricksService.executeQuery(`
-            CREATE TABLE IF NOT EXISTS ${databricksService.fq('users')} (
+        // Criar tabela users se não existir (sem DEFAULT values para compatibilidade com Postgres)
+        await dbService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${dbService.fq('users')} (
                 cpf STRING NOT NULL,
                 full_name STRING NOT NULL,
                 email STRING NOT NULL,
@@ -5468,7 +6290,7 @@ async function initializeDatabase() {
         // Adicionar colunas extras se faltarem
         let currentCols = [];
         try {
-            currentCols = await databricksService.executeQuery(`DESCRIBE TABLE ${databricksService.fq('users')}`);
+            currentCols = await dbService.executeQuery(`DESCRIBE TABLE ${dbService.fq('users')}`);
         } catch (describeError) {
             console.warn('⚠️  Erro ao descrever tabela users para verificar colunas:', describeError.message);
             // Continuar sem adicionar colunas extras - a tabela pode ter sido criada corretamente
@@ -5478,8 +6300,8 @@ async function initializeDatabase() {
         const addIfMissing = async (name, type) => {
             if (!colSet.has(name)) {
                 console.log(`🔧 Adicionando coluna users.${name}...`);
-                await databricksService.executeQuery(`
-                    ALTER TABLE ${databricksService.fq('users')}
+                await dbService.executeQuery(`
+                    ALTER TABLE ${dbService.fq('users')}
                     ADD COLUMNS (${name} ${type})
                 `);
             }
@@ -5494,9 +6316,9 @@ async function initializeDatabase() {
         await addIfMissing('credit_card_points_balance', 'INT');
         await addIfMissing('credit_card_is_blocked', 'BOOLEAN');
 
-        // Criar tabela transactions se não existir (sem DEFAULT values para compatibilidade com Databricks)
-        await databricksService.executeQuery(`
-            CREATE TABLE IF NOT EXISTS ${databricksService.fq('transactions')} (
+        // Criar tabela transactions se não existir (sem DEFAULT values para compatibilidade com Postgres)
+        await dbService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${dbService.fq('transactions')} (
                 id STRING NOT NULL,
                 cpf STRING NOT NULL,
                 type STRING NOT NULL,
@@ -5510,8 +6332,8 @@ async function initializeDatabase() {
         `);
         console.log('✅ Tabela transactions verificada/criada com sucesso.');
 
-        await databricksService.executeQuery(`
-            CREATE TABLE IF NOT EXISTS ${databricksService.fq('installment_plans')} (
+        await dbService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${dbService.fq('installment_plans')} (
                 id STRING NOT NULL,
                 cpf STRING NOT NULL,
                 purchase_tx_id STRING,
@@ -5530,8 +6352,8 @@ async function initializeDatabase() {
         `);
 
         // Criar tabela invoices se não existir
-        await databricksService.executeQuery(`
-            CREATE TABLE IF NOT EXISTS ${databricksService.fq('invoices')} (
+        await dbService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${dbService.fq('invoices')} (
                 id STRING NOT NULL,
                 cpf STRING NOT NULL,
                 status STRING NOT NULL,
@@ -5544,8 +6366,8 @@ async function initializeDatabase() {
         console.log('✅ Tabela invoices verificada/criada com sucesso.');
 
         // Criar tabela pix_contacts se não existir (estrutura corrigida)
-        await databricksService.executeQuery(`
-            CREATE TABLE IF NOT EXISTS ${databricksService.fq('pix_contacts')} (
+        await dbService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${dbService.fq('pix_contacts')} (
                 id STRING NOT NULL,
                 pix_account_id STRING NOT NULL,
                 contact_cpf STRING NOT NULL,
@@ -5556,8 +6378,8 @@ async function initializeDatabase() {
         console.log('✅ Tabela pix_contacts verificada/criada com sucesso.');
 
         // Criar tabela notifications (AppNotification) se não existir
-        await databricksService.executeQuery(`
-            CREATE TABLE IF NOT EXISTS ${databricksService.fq('notifications')} (
+        await dbService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${dbService.fq('notifications')} (
                 id STRING NOT NULL,
                 cpf STRING NOT NULL,
                 title STRING NOT NULL,
@@ -5570,8 +6392,8 @@ async function initializeDatabase() {
         console.log('✅ Tabela notifications verificada/criada com sucesso.');
 
         // Criar tabela limit_increase_requests se não existir
-        await databricksService.executeQuery(`
-            CREATE TABLE IF NOT EXISTS ${databricksService.fq('limit_increase_requests')} (
+        await dbService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${dbService.fq('limit_increase_requests')} (
                 id STRING NOT NULL,
                 cpf STRING NOT NULL,
                 requested_limit DECIMAL(15,2) NOT NULL,
@@ -5585,8 +6407,8 @@ async function initializeDatabase() {
 
         // Criar tabela products
         if (provider === 'postgres') {
-            await databricksService.executeQuery(`
-                CREATE TABLE IF NOT EXISTS ${databricksService.fq('products')} (
+            await dbService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${dbService.fq('products')} (
                     id VARCHAR(255) NOT NULL PRIMARY KEY,
                     name VARCHAR(255) NOT NULL,
                     description TEXT,
@@ -5597,8 +6419,8 @@ async function initializeDatabase() {
                 )
             `);
         } else {
-            await databricksService.executeQuery(`
-                CREATE TABLE IF NOT EXISTS ${databricksService.fq('products')} (
+            await dbService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${dbService.fq('products')} (
                     id STRING NOT NULL,
                     name STRING NOT NULL,
                     description STRING,
@@ -5612,8 +6434,8 @@ async function initializeDatabase() {
         console.log('✅ Tabela products verificada/criada com sucesso.');
 
         // Criar tabela pix_keys
-        await databricksService.executeQuery(`
-            CREATE TABLE IF NOT EXISTS ${databricksService.fq('pix_keys')} (
+        await dbService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${dbService.fq('pix_keys')} (
                 id STRING NOT NULL,
                 cpf STRING NOT NULL,
                 type STRING NOT NULL,
@@ -5624,8 +6446,8 @@ async function initializeDatabase() {
         console.log('✅ Tabela pix_keys verificada/criada com sucesso.');
 
         // Criar tabela purchased_items
-        await databricksService.executeQuery(`
-            CREATE TABLE IF NOT EXISTS ${databricksService.fq('purchased_items')} (
+        await dbService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${dbService.fq('purchased_items')} (
                 id STRING NOT NULL,
                 cpf STRING NOT NULL,
                 product_id STRING NOT NULL,
@@ -5644,8 +6466,8 @@ async function initializeDatabase() {
         console.log('✅ Tabela purchased_items verificada/criada com sucesso.');
 
         // Criar tabela stories
-        await databricksService.executeQuery(`
-            CREATE TABLE IF NOT EXISTS ${databricksService.fq('stories')} (
+        await dbService.executeQuery(`
+            CREATE TABLE IF NOT EXISTS ${dbService.fq('stories')} (
                 id STRING NOT NULL,
                 cpf STRING NOT NULL,
                 image_url STRING NOT NULL,
@@ -5659,8 +6481,8 @@ async function initializeDatabase() {
         // billing_config — parâmetros globais de faturamento
         // =====================================================
         if (provider === 'postgres') {
-            await databricksService.executeQuery(`
-                CREATE TABLE IF NOT EXISTS ${databricksService.fq('billing_config')} (
+            await dbService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${dbService.fq('billing_config')} (
                     id INTEGER PRIMARY KEY DEFAULT 1,
                     close_day INTEGER NOT NULL DEFAULT 20,
                     due_day INTEGER NOT NULL DEFAULT 10,
@@ -5670,16 +6492,16 @@ async function initializeDatabase() {
                     updated_by VARCHAR(11)
                 )
             `);
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('billing_config')} (id, close_day, due_day, grace_period_days, is_active)
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('billing_config')} (id, close_day, due_day, grace_period_days, is_active)
                 VALUES (1, 20, 10, 3, TRUE)
                 ON CONFLICT (id) DO NOTHING
             `);
             console.log('✅ Tabela billing_config verificada/criada com sucesso.');
 
             // Tabela de assinaturas (cobrança recorrente)
-            await databricksService.executeQuery(`
-                CREATE TABLE IF NOT EXISTS ${databricksService.fq('subscriptions')} (
+            await dbService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${dbService.fq('subscriptions')} (
                     id VARCHAR(255) PRIMARY KEY,
                     cpf VARCHAR(11) NOT NULL,
                     name VARCHAR(255) NOT NULL,
@@ -5696,28 +6518,28 @@ async function initializeDatabase() {
             console.log('✅ Tabela subscriptions verificada/criada com sucesso.');
 
             // Colunas de cancelamento/estorno na tabela transactions
-            const txCols = await databricksService.executeQuery(`
+            const txCols = await dbService.executeQuery(`
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name = 'transactions' AND column_name IN ('status','reversal_of','subscription_id')
             `);
             const hasTxCols = txCols.map(c => c.column_name);
             if (!hasTxCols.includes('status')) {
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('transactions')} ADD COLUMN status VARCHAR(20)`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('transactions')} ADD COLUMN status VARCHAR(20)`);
                 console.log('✅ Coluna status adicionada em transactions.');
             }
             if (!hasTxCols.includes('reversal_of')) {
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('transactions')} ADD COLUMN reversal_of VARCHAR(255)`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('transactions')} ADD COLUMN reversal_of VARCHAR(255)`);
                 console.log('✅ Coluna reversal_of adicionada em transactions.');
             }
             if (!hasTxCols.includes('subscription_id')) {
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('transactions')} ADD COLUMN subscription_id VARCHAR(255)`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('transactions')} ADD COLUMN subscription_id VARCHAR(255)`);
                 console.log('✅ Coluna subscription_id adicionada em transactions.');
             }
 
             // Tabela de credit vouchers (estorno de compra a crédito cuja fatura de
             // origem já está fechada — ver utils/transactionReversal.js)
-            await databricksService.executeQuery(`
-                CREATE TABLE IF NOT EXISTS ${databricksService.fq('credit_vouchers')} (
+            await dbService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${dbService.fq('credit_vouchers')} (
                     id VARCHAR(255) PRIMARY KEY,
                     cpf VARCHAR(11) NOT NULL,
                     amount DECIMAL(15,2) NOT NULL,
@@ -5733,32 +6555,32 @@ async function initializeDatabase() {
             console.log('✅ Tabela credit_vouchers verificada/criada com sucesso.');
 
             // Garantir colunas de status na tabela users
-            const billingCols = await databricksService.executeQuery(`
+            const billingCols = await dbService.executeQuery(`
                 SELECT column_name FROM information_schema.columns
                 WHERE table_schema = 'fintech' AND table_name = 'users'
                 AND column_name IN ('account_status','days_overdue','credit_card_due_day','invoice_last_closed_date')
             `);
             const hasCols = billingCols.map(c => c.column_name);
             if (!hasCols.includes('account_status')) {
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('users')} ADD COLUMN account_status VARCHAR(20) DEFAULT 'adimplente'`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('users')} ADD COLUMN account_status VARCHAR(20) DEFAULT 'adimplente'`);
                 console.log('✅ Coluna account_status adicionada em users.');
             }
             if (!hasCols.includes('days_overdue')) {
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('users')} ADD COLUMN days_overdue INTEGER DEFAULT 0`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('users')} ADD COLUMN days_overdue INTEGER DEFAULT 0`);
                 console.log('✅ Coluna days_overdue adicionada em users.');
             }
             if (!hasCols.includes('credit_card_due_day')) {
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('users')} ADD COLUMN credit_card_due_day INTEGER DEFAULT 15`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('users')} ADD COLUMN credit_card_due_day INTEGER DEFAULT 15`);
                 console.log('✅ Coluna credit_card_due_day adicionada em users.');
             }
             if (!hasCols.includes('invoice_last_closed_date')) {
-                await databricksService.executeQuery(`ALTER TABLE ${databricksService.fq('users')} ADD COLUMN invoice_last_closed_date TIMESTAMP`);
+                await dbService.executeQuery(`ALTER TABLE ${dbService.fq('users')} ADD COLUMN invoice_last_closed_date TIMESTAMP`);
                 console.log('✅ Coluna invoice_last_closed_date adicionada em users.');
             }
 
             // billing_charges — encargos por inadimplência
-            await databricksService.executeQuery(`
-                CREATE TABLE IF NOT EXISTS ${databricksService.fq('billing_charges')} (
+            await dbService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${dbService.fq('billing_charges')} (
                     id VARCHAR(255) PRIMARY KEY,
                     cpf VARCHAR(11) NOT NULL,
                     invoice_reference VARCHAR(7) NOT NULL,
@@ -5771,6 +6593,43 @@ async function initializeDatabase() {
                 )
             `);
             console.log('✅ Tabela billing_charges verificada/criada com sucesso.');
+
+            // telegram_user_topics — tópico do fórum Telegram por CPF
+            await dbService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${dbService.fq('telegram_user_topics')} (
+                    cpf VARCHAR(11) PRIMARY KEY,
+                    topic_id INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('✅ Tabela telegram_user_topics verificada/criada com sucesso.');
+
+            // audit_log — persistência dos logs de auditoria
+            await dbService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${dbService.fq('audit_log')} (
+                    id BIGSERIAL PRIMARY KEY,
+                    req_id VARCHAR(64),
+                    cpf VARCHAR(11),
+                    action VARCHAR(120) NOT NULL,
+                    level VARCHAR(20) NOT NULL DEFAULT 'info',
+                    meta JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('✅ Tabela audit_log verificada/criada com sucesso.');
+        } else {
+            // Delta / SQLite fallback
+            await dbService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${dbService.fq('audit_log')} (
+                    id STRING NOT NULL,
+                    req_id STRING,
+                    cpf STRING,
+                    action STRING NOT NULL,
+                    level STRING NOT NULL,
+                    meta STRING,
+                    created_at TIMESTAMP NOT NULL
+                ) USING DELTA
+            `);
         }
 
         console.log('🎉 Estrutura do banco de dados inicializada com sucesso!');
@@ -5787,21 +6646,21 @@ async function ensureAdminUser() {
     console.log("🔄 Verificando/recriando usuário administrador...");
     
     // Deletar admin existente se houver (mesmo email/CPF)
-    await databricksService.executeQuery(`DELETE FROM ${databricksService.fq('users')} WHERE cpf = '${adminCpf}' OR email = '${adminEmail}'`);
+    await dbService.executeQuery(`DELETE FROM ${dbService.fq('users')} WHERE cpf = '${adminCpf}' OR email = '${adminEmail}'`);
     
     console.log("Criando usuário administrador padrão...");
     const adminPassword = 'admin999';
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
     const now = new Date().toISOString();
-    const adminId = databricksService.generateUUID();
+    const adminId = dbService.generateUUID();
     
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
         VALUES ('${adminId}', '${adminCpf}', 'Admin User', '${adminEmail}', '${hashedPassword}', 100000, 'admin', false, 0, 100000.00, false, '${now}', '${now}')
     `);
     console.log(`✅ Usuário Admin criado. CPF: ${adminCpf}, Senha: ${adminPassword}`);
     
-    const createdAdmin = await databricksService.executeQuery(`SELECT cpf, email, role FROM ${databricksService.fq('users')} WHERE cpf = '${adminCpf}'`);
+    const createdAdmin = await dbService.executeQuery(`SELECT cpf, email, role FROM ${dbService.fq('users')} WHERE cpf = '${adminCpf}'`);
     console.log(`🔍 Admin criado:`, createdAdmin[0]);
 }
 
@@ -5809,13 +6668,13 @@ async function seedDatabase() {
     const SEED_NON_ADMIN_USERS = false; // manter apenas admin
     
     // Seed de produtos permanece
-    const existingProducts = await databricksService.executeQuery(`SELECT id, image_url, category, cashback FROM ${databricksService.fq('products')}`);
+    const existingProducts = await dbService.executeQuery(`SELECT id, image_url, category, cashback FROM ${dbService.fq('products')}`);
     const existingMap = new Map(existingProducts.map(p => [p.id, p]));
     for (const p of products) {
         const existing = existingMap.get(p.id);
         if (!existing) {
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('products')}
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('products')}
                 (id, name, description, price, image_url, category, cashback)
                 VALUES ('${p.id}', '${p.name.replace(/'/g,"''")}', '${(p.description || '').replace(/'/g,"''")}', ${p.price}, '${p.imageUrl || ''}', '${p.category || 'Geral'}', '${p.cashback || '5%'}')
             `);
@@ -5824,8 +6683,8 @@ async function seedDatabase() {
             const cashbackDiff = existing.cashback !== p.cashback;
             const imgDiff = existing.image_url !== p.imageUrl;
             if (imgDiff || categoryDiff || cashbackDiff) {
-                await databricksService.executeQuery(`
-                    UPDATE ${databricksService.fq('products')} 
+                await dbService.executeQuery(`
+                    UPDATE ${dbService.fq('products')} 
                     SET image_url='${p.imageUrl || ''}', 
                         category='${p.category || 'Geral'}', 
                         cashback='${p.cashback || '5%'}' 
@@ -5850,13 +6709,13 @@ async function seedDatabase() {
         for (const u of users) {
             const hashed = bcrypt.hashSync(u.password, 10);
             const now = new Date().toISOString();
-            const exists = await databricksService.executeQuery(`
-                SELECT cpf FROM ${databricksService.fq('users')} WHERE cpf='${u.cpf}'
+            const exists = await dbService.executeQuery(`
+                SELECT cpf FROM ${dbService.fq('users')} WHERE cpf='${u.cpf}'
             `);
             if (!exists.length) {
-                const userId = databricksService.generateUUID();
-                await databricksService.executeQuery(`
-                    INSERT INTO ${databricksService.fq('users')}
+                const userId = dbService.generateUUID();
+                await dbService.executeQuery(`
+                    INSERT INTO ${dbService.fq('users')}
                     (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
                     VALUES ('${userId}', '${u.cpf}', '${u.fullName.replace(/'/g,"''")}', '${u.email}', '${hashed}', ${u.balance}, '${u.role}', false, 0, ${u.pixDailyLimit}, false, '${now}', '${now}')
                 `);
@@ -5885,24 +6744,25 @@ async function bootstrap() {
     try {
         console.log('');
         console.log('🔄 [Bootstrap] Iniciando conexão com banco de dados...');
-        await databricksService.connect();
+        await dbService.connect();
         console.log('✅ [Bootstrap] Conexão com banco de dados estabelecida!');
         console.log('');
         
-        if (databricksService.mockMode) {
+        if (dbService.mockMode) {
             console.log('🧪 Servidor iniciado em mockMode. Endpoints que dependem de DB retornarao erro controlado.');
         } else {
             await initializeDatabase();
+            telegramService.init(dbService);
             await ensureAdminUser();
             await seedDatabase();
-            await seedBillingMockData(databricksService);
+            await seedBillingMockData(dbService);
             try {
                 const { applyMassGeneratorMigrations } = require('./scripts/add-mass-generator-schema.cjs');
                 await applyMassGeneratorMigrations();
             } catch (migErr) {
                 console.warn('⚠️ [Migration] Não foi possível executar migração de colunas:', migErr.message);
             }
-            console.log("🎯 Servidor pronto para uso com Databricks!");
+            console.log("🎯 Servidor pronto para uso com Postgres!");
             console.log("📋 Swagger disponível em: http://localhost:3001/api-docs");
         }
     } catch (error) {
@@ -5913,7 +6773,7 @@ async function bootstrap() {
     // Guarda de fuso: aborta se o fuso do processo ou do banco divergir de America/Sao_Paulo
     const { assertTimezone } = require('./utils/timezone');
     try {
-        await assertTimezone(databricksService);
+        await assertTimezone(dbService);
         console.log('✅ [Timezone Guard] Fuso de processo e banco validados: America/Sao_Paulo');
     } catch (err) {
         console.error('❌ [Timezone Guard] ' + err.message);
@@ -5932,17 +6792,18 @@ async function chargeSubscription(sub) {
 
     const amount = Math.abs(parseFloat(sub.amount || 0));
     const nowIso = new Date().toISOString();
-    const txId = databricksService.generateUUID();
+    const txId = dbService.generateUUID();
 
     if (sub.payment_method === 'debit') {
         const balance = parseFloat(user.balance || 0);
         if (balance < amount) return { ok: false, reason: 'saldo-insuficiente' };
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('transactions')}
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('transactions')}
             (id, cpf, type, amount, description, from_user, to_user, to_key, date, subscription_id)
             VALUES (${esc(txId)}, ${esc(sub.cpf)}, 'PAYMENT', ${esc((-amount).toFixed(2))}, ${esc(`Assinatura: ${sub.name}`)}, NULL, NULL, NULL, ${esc(nowIso)}, ${esc(sub.id)})
         `);
         await usersRepo.updateBalance(sub.cpf, (balance - amount).toFixed(2));
+        telegramService.alertUser(sub.cpf, `🔁 Assinatura cobrada no débito: ${sub.name} — R$ ${amount.toFixed(2)}`, null, 'notification');
         return { ok: true };
     }
 
@@ -5950,16 +6811,17 @@ async function chargeSubscription(sub) {
     if (user.credit_card_is_blocked) return { ok: false, reason: 'cartao-bloqueado' };
     const available = parseFloat(user.credit_card_available_limit || 0);
     if (available < amount) return { ok: false, reason: 'limite-insuficiente' };
-    await databricksService.executeQuery(`
-        INSERT INTO ${databricksService.fq('transactions')}
+    await dbService.executeQuery(`
+        INSERT INTO ${dbService.fq('transactions')}
         (id, cpf, type, amount, description, from_user, to_user, to_key, date, subscription_id)
         VALUES (${esc(txId)}, ${esc(sub.cpf)}, 'SHOP_CREDIT', ${esc((-amount).toFixed(2))}, ${esc(`Assinatura: ${sub.name}`)}, NULL, NULL, NULL, ${esc(nowIso)}, ${esc(sub.id)})
     `);
-    await databricksService.executeQuery(`
-        UPDATE ${databricksService.fq('users')}
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')}
         SET credit_card_available_limit = ${(available - amount).toFixed(2)}
         WHERE cpf = ${esc(sub.cpf)}
     `);
+    telegramService.alertUser(sub.cpf, `🔁 Assinatura na fatura do cartão: ${sub.name} — R$ ${amount.toFixed(2)}`, null, 'invoice_close');
     return { ok: true };
 }
 
@@ -6065,10 +6927,10 @@ apiRouter.post('/admin/transactions/simulate-mass', bearerAuth(), authenticateAd
     const created = [];
     for (let i = 0; i < n; i++) {
         const amount = Math.round((Math.random() * 190 + 10) * 100) / 100;
-        const id = databricksService.generateUUID();
+        const id = dbService.generateUUID();
         const desc = `[SIM] ${merchants[i % merchants.length]}`;
-        await databricksService.executeQuery(`
-            INSERT INTO ${databricksService.fq('transactions')}
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('transactions')}
             (id, cpf, type, amount, description, from_user, to_user, to_key, date)
             VALUES (${esc(id)}, ${esc(targetCpf)}, 'SHOP_CREDIT', ${esc((-amount).toFixed(2))}, ${esc(desc)}, NULL, NULL, NULL, ${esc(new Date().toISOString())})
         `);
@@ -6104,13 +6966,13 @@ async function runOrphanPaymentFix({ cpfFilter = null, onComplete = null } = {})
 
     let sql = `
         SELECT DISTINCT t.cpf, u.full_name
-        FROM ${databricksService.fq('transactions')} t
-        LEFT JOIN ${databricksService.fq('users')} u ON t.cpf = u.cpf
+        FROM ${dbService.fq('transactions')} t
+        LEFT JOIN ${dbService.fq('users')} u ON t.cpf = u.cpf
         WHERE t.type = 'INVOICE_PAYMENT'
     `;
     if (filterCpf) sql += ` AND t.cpf = ${esc(filterCpf)}`;
 
-    const users = await databricksService.executeQuery(sql);
+    const users = await dbService.executeQuery(sql);
 
     for (const user of users) {
         const cpf = user.cpf;
@@ -6118,18 +6980,18 @@ async function runOrphanPaymentFix({ cpfFilter = null, onComplete = null } = {})
         const detail = { cpf, name, action: 'none', fixed: false };
 
         try {
-            const paymentRows = await databricksService.executeQuery(`
+            const paymentRows = await dbService.executeQuery(`
                 SELECT id, amount, description, date
-                FROM ${databricksService.fq('transactions')}
+                FROM ${dbService.fq('transactions')}
                 WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT'
                     AND (status IS NULL OR status <> 'cancelled')
                 ORDER BY date ASC
             `);
             const paymentTotal = paymentRows.reduce((sum, r) => sum + Math.abs(parseFloat(r.amount || 0)), 0);
 
-            const invoiceRows = await databricksService.executeQuery(`
+            const invoiceRows = await dbService.executeQuery(`
                 SELECT id, due_date, status, valor_total, valor_pago, data_pagamento
-                FROM ${databricksService.fq('invoices')}
+                FROM ${dbService.fq('invoices')}
                 WHERE cpf = ${esc(cpf)} AND COALESCE(valor_pago, 0) > 0
                 ORDER BY due_date DESC
             `);
@@ -6141,37 +7003,33 @@ async function runOrphanPaymentFix({ cpfFilter = null, onComplete = null } = {})
             // Caso A: Pagamentos > valor_pago
             if (paymentTotal > invoiceTotalPago + 0.02) {
                 const missing = round2(paymentTotal - invoiceTotalPago);
-                const recentInvoice = await databricksService.executeQuery(`
+                const recentInvoice = await dbService.executeQuery(`
                     SELECT id, valor_total, valor_pago
-                    FROM ${databricksService.fq('invoices')}
+                    FROM ${dbService.fq('invoices')}
                     WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
                     ORDER BY due_date DESC LIMIT 1
                 `);
 
                 if (recentInvoice.length > 0) {
+                    // Fatura FECHADA é imutável: ajustamos o BANCO DO PAGAMENTO (refund
+                    // para balance) em vez de mexer em valor_pago. Excedente vira saldo credor
+                    // e abaterá a próxima fatura via creditoExcedente.
                     const inv = recentInvoice[0];
-                    const newValorPago = round2(parseFloat(inv.valor_pago || 0) + missing);
-                    const capped = Math.min(newValorPago, parseFloat(inv.valor_total || 0));
-                    await databricksService.executeQuery(`
-                        UPDATE ${databricksService.fq('invoices')}
-                        SET valor_pago = ${capped.toFixed(2)}, updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ${esc(inv.id)}
-                    `);
-                    const excess = round2(newValorPago - capped);
+                    const excess = round2(missing);
                     if (excess > 0.01) {
-                        await databricksService.executeQuery(`
-                            UPDATE ${databricksService.fq('users')}
+                        await dbService.executeQuery(`
+                            UPDATE ${dbService.fq('users')}
                             SET balance = COALESCE(balance, 0) + ${excess.toFixed(2)}, updated_at = CURRENT_TIMESTAMP
                             WHERE cpf = ${esc(cpf)}
                         `);
                     }
-                    fixed++; detail.action = 'added_to_invoice'; detail.fixed = true;
-                    detail.missing = missing; detail.excessRefunded = excess > 0.01 ? excess : 0; detail.invoiceId = inv.id;
+                    fixed++; detail.action = 'refunded_excess_to_balance'; detail.fixed = true;
+                    detail.refundAmount = excess; detail.missing = missing; detail.invoiceId = inv.id;
                 } else {
                     const refundAmount = invoiceTotalPago > 0.01 ? missing : paymentTotal;
                     const safeRefund = round2(refundAmount);
-                    await databricksService.executeQuery(`
-                        UPDATE ${databricksService.fq('users')}
+                    await dbService.executeQuery(`
+                        UPDATE ${dbService.fq('users')}
                         SET balance = COALESCE(balance, 0) + ${safeRefund.toFixed(2)}, updated_at = CURRENT_TIMESTAMP
                         WHERE cpf = ${esc(cpf)}
                     `);
@@ -6181,19 +7039,20 @@ async function runOrphanPaymentFix({ cpfFilter = null, onComplete = null } = {})
                 }
             }
 
-            // Caso B: valor_pago > pagamentos
+            // Caso B: valor_pago > pagamentos (legado — só acontece em faturas pré-migration
+            // onde valor_pago ficou inflado pelo bug). Como fatura FECHADA é imutável, o
+            // ajuste é devolvido para o balance do usuário — o caminho novo lê SUM(pagamentos)
+            // e não usa mais esse campo para derivar quitação.
             if (invoiceTotalPago > paymentTotal + 0.02) {
                 const excess = round2(invoiceTotalPago - paymentTotal);
-                if (invoiceRows.length > 0) {
-                    const lastInv = invoiceRows[0];
-                    const newValorPago = round2(parseFloat(lastInv.valor_pago || 0) - excess);
-                    await databricksService.executeQuery(`
-                        UPDATE ${databricksService.fq('invoices')}
-                        SET valor_pago = ${Math.max(0, newValorPago).toFixed(2)}, updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ${esc(lastInv.id)}
+                if (excess > 0.01) {
+                    await dbService.executeQuery(`
+                        UPDATE ${dbService.fq('users')}
+                        SET balance = COALESCE(balance, 0) + ${excess.toFixed(2)}, updated_at = CURRENT_TIMESTAMP
+                        WHERE cpf = ${esc(cpf)}
                     `);
-                    fixed++; detail.action = 'reduced_invoice'; detail.fixed = true;
-                    detail.reduced = excess; detail.invoiceId = lastInv.id;
+                    fixed++; detail.action = 'refunded_inflated_to_balance'; detail.fixed = true;
+                    detail.reduced = excess;
                 }
             }
         } catch (err) {
@@ -6226,14 +7085,14 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
     // 1. Contar TOTAL de usuários com INVOICE_PAYMENT (sem LIMIT/OFFSET) para metadata
     let countSql = `
         SELECT COUNT(DISTINCT t.cpf) AS total
-        FROM ${databricksService.fq('transactions')} t
-        LEFT JOIN ${databricksService.fq('users')} u ON t.cpf = u.cpf
+        FROM ${dbService.fq('transactions')} t
+        LEFT JOIN ${dbService.fq('users')} u ON t.cpf = u.cpf
         WHERE t.type = 'INVOICE_PAYMENT'
     `;
     if (filterCpf) {
         countSql += ` AND t.cpf = ${esc(filterCpf)}`;
     }
-    const countResult = await databricksService.executeQuery(countSql);
+    const countResult = await dbService.executeQuery(countSql);
     const totalUsers = parseInt(countResult[0]?.total || 0, 10);
     const totalPages = Math.ceil(totalUsers / limit) || 0;
     const currentPage = Math.floor(offset / limit) + 1;
@@ -6242,8 +7101,8 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
     // 2. Buscar usuários com INVOICE_PAYMENT (paginado)
     let sql = `
         SELECT DISTINCT t.cpf, u.full_name
-        FROM ${databricksService.fq('transactions')} t
-        LEFT JOIN ${databricksService.fq('users')} u ON t.cpf = u.cpf
+        FROM ${dbService.fq('transactions')} t
+        LEFT JOIN ${dbService.fq('users')} u ON t.cpf = u.cpf
         WHERE t.type = 'INVOICE_PAYMENT'
     `;
     if (filterCpf) {
@@ -6251,7 +7110,7 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
     }
     sql += ` ORDER BY u.full_name ASC LIMIT ${limit} OFFSET ${offset}`;
 
-    const users = await databricksService.executeQuery(sql);
+    const users = await dbService.executeQuery(sql);
     const results = [];
     let totalDiscrepancies = 0;
 
@@ -6260,9 +7119,9 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
         const name = user.full_name || '(sem nome)';
 
         // 3. Somar INVOICE_PAYMENT transactions
-        const paymentRows = await databricksService.executeQuery(`
+        const paymentRows = await dbService.executeQuery(`
             SELECT id, amount, description, date
-            FROM ${databricksService.fq('transactions')}
+            FROM ${dbService.fq('transactions')}
             WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT'
                 AND (status IS NULL OR status <> 'cancelled')
             ORDER BY date ASC
@@ -6272,9 +7131,9 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
         const paymentCount = paymentRows.length;
 
         // 4. Somar valor_pago das invoices
-        const invoiceRows = await databricksService.executeQuery(`
+        const invoiceRows = await dbService.executeQuery(`
             SELECT id, due_date, status, valor_total, valor_pago, data_pagamento
-            FROM ${databricksService.fq('invoices')}
+            FROM ${dbService.fq('invoices')}
             WHERE cpf = ${esc(cpf)} AND COALESCE(valor_pago, 0) > 0
             ORDER BY due_date DESC
         `);
@@ -6332,7 +7191,7 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
     try {
         const aggSql = `
             SELECT t.cpf
-            FROM ${databricksService.fq('transactions')} t
+            FROM ${dbService.fq('transactions')} t
             WHERE t.type = 'INVOICE_PAYMENT'
                 AND (t.status IS NULL OR t.status <> 'cancelled')
                 ${filterCpf ? `AND t.cpf = ${esc(filterCpf)}` : ''}
@@ -6341,12 +7200,12 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
                 COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) -
                 COALESCE((
                     SELECT SUM(CAST(i.valor_pago AS DECIMAL(15,2)))
-                    FROM ${databricksService.fq('invoices')} i
+                    FROM ${dbService.fq('invoices')} i
                     WHERE i.cpf = t.cpf AND COALESCE(i.valor_pago, 0) > 0
                 ), 0)
             ) > 0.02
         `;
-        const aggRows = await databricksService.executeQuery(aggSql);
+        const aggRows = await dbService.executeQuery(aggSql);
         aggDiscrepancies = aggRows.length;
     } catch (_aggErr) {
         console.warn('⚠️ [audit-orphan-payments] Aggregate de discrepâncias falhou, usando fallback:', _aggErr.message);
@@ -6384,9 +7243,9 @@ apiRouter.get('/admin/audit-full', bearerAuth(), authenticateAdmin, asyncHandler
     const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
     const limit = !isNaN(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 200) : 100;
 
-    const users = await databricksService.executeQuery(`
+    const users = await dbService.executeQuery(`
         SELECT cpf, full_name, COALESCE(balance, 0) AS balance
-        FROM ${databricksService.fq('users')}
+        FROM ${dbService.fq('users')}
         ${filterCpf ? `WHERE cpf = ${esc(filterCpf)}` : ''}
         ORDER BY full_name ASC
         LIMIT ${limit}
@@ -6406,20 +7265,20 @@ apiRouter.get('/admin/audit-full', bearerAuth(), authenticateAdmin, asyncHandler
         const cpf = user.cpf;
         const balance = parseFloat(user.balance || 0);
 
-        const paymentRows = await databricksService.executeQuery(`
+        const paymentRows = await dbService.executeQuery(`
             SELECT id, amount, description, date
-            FROM ${databricksService.fq('transactions')}
+            FROM ${dbService.fq('transactions')}
             WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT'
                 AND (status IS NULL OR status <> 'cancelled')
             ORDER BY date ASC
         `);
         const paymentTotal = round2(paymentRows.reduce((sum, r) => sum + Math.abs(parseFloat(r.amount || 0)), 0));
 
-        const invoiceRows = await databricksService.executeQuery(`
+        const invoiceRows = await dbService.executeQuery(`
             SELECT id, due_date, status, valor_total, saldo_anterior, valor_iof, valor_multa,
                    valor_juros_remuneratorios, valor_juros_mora,
                    COALESCE(valor_pago, 0) AS valor_pago, data_pagamento
-            FROM ${databricksService.fq('invoices')}
+            FROM ${dbService.fq('invoices')}
             WHERE cpf = ${esc(cpf)}
             ORDER BY due_date DESC
         `);
@@ -6499,14 +7358,14 @@ apiRouter.get('/admin/audit-consistency', bearerAuth(), authenticateAdmin, async
     const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
     const limit = !isNaN(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 200) : 100;
 
-    const rows = await databricksService.executeQuery(`
+    const rows = await dbService.executeQuery(`
         SELECT u.cpf, u.full_name, u.account_status,
                COALESCE(u.days_overdue, 0) AS user_days_overdue,
                i.id AS invoice_id, i.due_date,
                COALESCE(i.dias_atraso, 0) AS invoice_dias_atraso,
                GREATEST(0, (CURRENT_DATE - i.due_date::date)) AS real_time_days
-        FROM ${databricksService.fq('users')} u
-        JOIN ${databricksService.fq('invoices')} i ON i.cpf = u.cpf
+        FROM ${dbService.fq('users')} u
+        JOIN ${dbService.fq('invoices')} i ON i.cpf = u.cpf
         WHERE i.status = 'FECHADA'
           AND i.data_pagamento IS NULL
           AND i.due_date < CURRENT_TIMESTAMP
@@ -6579,13 +7438,13 @@ apiRouter.get('/admin/audit/run-full', bearerAuth(), authenticateAdmin, asyncHan
     const { esc } = repoContext;
 
     // 1. Consistência (mesma query do /admin/audit-consistency)
-    const consistencyRows = await databricksService.executeQuery(`
+    const consistencyRows = await dbService.executeQuery(`
         SELECT u.cpf, u.full_name, u.account_status,
                COALESCE(u.days_overdue, 0) AS user_days_overdue,
                GREATEST(0, (CURRENT_DATE - i.due_date::date)) AS real_time_days,
                COALESCE(i.dias_atraso, 0) AS invoice_dias_atraso
-        FROM ${databricksService.fq('users')} u
-        JOIN ${databricksService.fq('invoices')} i ON i.cpf = u.cpf
+        FROM ${dbService.fq('users')} u
+        JOIN ${dbService.fq('invoices')} i ON i.cpf = u.cpf
         WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL AND i.due_date < CURRENT_TIMESTAMP
         LIMIT 200
     `);
@@ -6610,10 +7469,10 @@ apiRouter.get('/admin/audit/run-full', bearerAuth(), authenticateAdmin, asyncHan
     }
 
     // 2. Double-counting: INVOICE_PAYMENT vs valor_pago
-    const dcRows = await databricksService.executeQuery(`
+    const dcRows = await dbService.executeQuery(`
         SELECT t.cpf, COUNT(*) AS qtd, COALESCE(SUM(t.amount), 0) AS total_pago,
-               COALESCE((SELECT SUM(i.valor_pago) FROM ${databricksService.fq('invoices')} i WHERE i.cpf = t.cpf AND i.status = 'FECHADA'), 0) AS total_invoice
-        FROM ${databricksService.fq('transactions')} t
+               COALESCE((SELECT SUM(i.valor_pago) FROM ${dbService.fq('invoices')} i WHERE i.cpf = t.cpf AND i.status = 'FECHADA'), 0) AS total_invoice
+        FROM ${dbService.fq('transactions')} t
         WHERE t.description LIKE '%INVOICE_PAYMENT%'
         GROUP BY t.cpf
         LIMIT 100
@@ -6626,9 +7485,9 @@ apiRouter.get('/admin/audit/run-full', bearerAuth(), authenticateAdmin, asyncHan
     }
 
     // 3. Saldo negativo: valor_pago > valor_total
-    const nbRows = await databricksService.executeQuery(`
+    const nbRows = await dbService.executeQuery(`
         SELECT i.cpf, i.valor_pago, i.valor_total
-        FROM ${databricksService.fq('invoices')} i
+        FROM ${dbService.fq('invoices')} i
         WHERE i.valor_pago > i.valor_total
         LIMIT 50
     `);
@@ -6667,6 +7526,218 @@ apiRouter.get('/admin/audit/run-full', bearerAuth(), authenticateAdmin, asyncHan
     });
 }));
 
+// GET /admin/audit/orphans-pre005 — Órfãos pré-migration 005 por CPF, com cobertura/delta.
+// Read-only. Exposa a MESMA análise do fix_orphan_payment_step7.cjs --all (dry-run):
+// para cada massa com INVOICE_PAYMENT sem invoice_id criado ANTES da migration 005,
+// mostra os órfãos, as faturas FECHADA que eles deveriam quitar, a cobertura
+// (órfãos consumíveis + pagamentos já vinculados) e o delta (déficit/excedente).
+// Contas de serviço (role='admin' / usuários inexistentes) são excluídas.
+apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { esc } = repoContext;
+
+    // Paginação (padrão do painel): limit (máx 100) e offset
+    const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
+    const rawOffset = parseInt(String(req.query?.offset ?? ''), 10);
+    const limit = !isNaN(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 100) : 20;
+    const offset = !isNaN(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
+
+    const { cpf: cpfFilter } = req.query || {};
+    const allowed = cpfFilter && typeof cpfFilter === 'string' && cpfFilter.replace(/\D/g, '').length === 11;
+    const filterCpf = allowed ? cpfFilter.replace(/\D/g, '') : null;
+
+    // Cutoff dinâmico da migration 005 (mesma precedência do health check diário)
+    const cutoffIso = await resolveOrphanCutoff(dbService);
+    const cutoffFilter = `AND t.date < '${cutoffIso}'::timestamptz`;
+
+    // 1. Total de CPFs com órfãos pré-005 (para metadata, sem paginação)
+    let countSql = `
+        SELECT COUNT(DISTINCT t.cpf) AS total
+        FROM ${dbService.fq('transactions')} t
+        LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
+        WHERE t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+          AND t.invoice_id IS NULL
+          AND (t.status IS NULL OR t.status <> 'cancelled')
+          ${cutoffFilter}
+          AND u.cpf IS NOT NULL
+          AND u.role IS DISTINCT FROM 'admin'
+    `;
+    if (filterCpf) countSql += ` AND t.cpf = ${esc(filterCpf)}`;
+    const countResult = await dbService.executeQuery(countSql);
+    const totalUsers = parseInt(countResult[0]?.total || 0, 10);
+    const totalPages = Math.ceil(totalUsers / limit) || 0;
+    const hasMore = offset + limit < totalUsers;
+
+    // 2. CPFs com órfãos pré-005 (paginado)
+    let listSql = `
+        SELECT t.cpf, u.full_name, COUNT(*) AS orphan_count,
+               COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) AS orphan_sum
+        FROM ${dbService.fq('transactions')} t
+        LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
+        WHERE t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+          AND t.invoice_id IS NULL
+          AND (t.status IS NULL OR t.status <> 'cancelled')
+          ${cutoffFilter}
+          AND u.cpf IS NOT NULL
+          AND u.role IS DISTINCT FROM 'admin'
+    `;
+    if (filterCpf) listSql += ` AND t.cpf = ${esc(filterCpf)}`;
+    listSql += ` GROUP BY t.cpf, u.full_name ORDER BY orphan_sum DESC LIMIT ${limit} OFFSET ${offset}`;
+
+    const users = await dbService.executeQuery(listSql);
+    const results = [];
+    let totalCovered = 0, totalExceeded = 0, totalDeficit = 0;
+
+    // Totais GLOBAIS por status (não só da página atual): mesmo padrão do
+    // aggregate aggDiscrepancies do /admin/audit-orphan-payments — uma única query
+    // em lote para que o summary seja preciso independente da paginação.
+    // UNION ALL agrupa por CPF em 3 subqueries simples (sem FULL JOIN, que não
+    // aceita condição OR no Postgres): órfãos (invoice_id NULL), vinculados
+    // (invoice_id setado) e valor_pago das faturas FECHADA.
+    let aggCovered = 0, aggExceeded = 0, aggDeficit = 0;
+    try {
+        const aggRows = await dbService.executeQuery(`
+            SELECT cpf, SUM(coverage) AS coverage, SUM(valor_pago) AS valor_pago
+            FROM (
+                -- Órfãos PRÉ-005 (mesma semântica da página): invoice_id NULL + cutoff
+                SELECT t.cpf, ABS(CAST(t.amount AS DECIMAL(15,2))) AS coverage, 0 AS valor_pago
+                FROM ${dbService.fq('transactions')} t
+                LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
+                WHERE t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+                  AND t.invoice_id IS NULL
+                  AND (t.status IS NULL OR t.status <> 'cancelled')
+                  ${cutoffFilter}
+                  AND u.cpf IS NOT NULL
+                  AND u.role IS DISTINCT FROM 'admin'
+                UNION ALL
+                -- Pagamentos VINCULADOS (invoice_id setado) — completam a cobertura
+                SELECT t.cpf, ABS(CAST(t.amount AS DECIMAL(15,2))) AS coverage, 0 AS valor_pago
+                FROM ${dbService.fq('transactions')} t
+                LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
+                WHERE t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+                  AND t.invoice_id IS NOT NULL
+                  AND (t.status IS NULL OR t.status <> 'cancelled')
+                  AND u.cpf IS NOT NULL
+                  AND u.role IS DISTINCT FROM 'admin'
+                UNION ALL
+                SELECT i.cpf, 0, CAST(COALESCE(i.valor_pago, 0) AS DECIMAL(15,2))
+                FROM ${dbService.fq('invoices')} i
+                LEFT JOIN ${dbService.fq('users')} u ON u.cpf = i.cpf
+                WHERE i.status = 'FECHADA' AND COALESCE(i.valor_pago, 0) > 0
+                  AND u.cpf IS NOT NULL
+                  AND u.role IS DISTINCT FROM 'admin'
+            ) agg
+            GROUP BY cpf
+        `);
+        for (const r of aggRows || []) {
+            // coverage global = órfãos pré-005 + vinculados (mesma fórmula da página)
+            const delta = round2(parseFloat(r.valor_pago || 0) - parseFloat(r.coverage || 0));
+            if (Math.abs(delta) < 0.02) aggCovered++;
+            else if (delta < 0) aggExceeded++;
+            else aggDeficit++;
+        }
+    } catch (_aggErr) {
+        console.warn('⚠️ [audit/orphans-pre005] Aggregate de status falhou, usando fallback da página:', _aggErr.message);
+        aggCovered = totalCovered; aggExceeded = totalExceeded; aggDeficit = totalDeficit;
+    }
+
+    for (const user of users) {
+        const cpf = user.cpf;
+
+        // 3. Órfãos individuais do CPF
+        const orphanRows = await dbService.executeQuery(`
+            SELECT t.id, t.type, t.amount, t.description, t.date, t.status
+            FROM ${dbService.fq('transactions')} t
+            WHERE t.cpf = ${esc(cpf)}
+              AND t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+              AND t.invoice_id IS NULL
+              AND (t.status IS NULL OR t.status <> 'cancelled')
+              ${cutoffFilter}
+            ORDER BY t.date ASC
+        `);
+        const orphans = orphanRows.map(r => ({
+            id: r.id,
+            type: r.type,
+            amount: round2(Math.abs(parseFloat(r.amount || 0))),
+            description: (r.description || '').trim(),
+            date: r.date,
+        }));
+        const orphanSum = round2(orphans.reduce((s, o) => s + o.amount, 0));
+
+        // 4. Faturas FECHADA do CPF com valor_pago > 0 (cobertura legada)
+        const invoiceRows = await dbService.executeQuery(`
+            SELECT id, due_date, valor_total, valor_pago, data_pagamento, status
+            FROM ${dbService.fq('invoices')}
+            WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND COALESCE(valor_pago, 0) > 0
+            ORDER BY due_date ASC
+        `);
+        const invoices = invoiceRows.map(r => ({
+            id: r.id,
+            dueDate: r.due_date,
+            valorTotal: parseFloat(r.valor_total || 0),
+            valorPago: parseFloat(r.valor_pago || 0),
+            dataPagamento: r.data_pagamento,
+        }));
+        const valorPagoTotal = round2(invoices.reduce((s, i) => s + i.valorPago, 0));
+
+        // 5. Pagamentos JÁ vinculados (invoice_id setado) — completam a cobertura
+        const linkedRes = await dbService.executeQuery(`
+            SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS total
+            FROM ${dbService.fq('transactions')}
+            WHERE cpf = ${esc(cpf)}
+              AND type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+              AND invoice_id IS NOT NULL
+              AND (status IS NULL OR status <> 'cancelled')
+        `);
+        const linkedTotal = round2(parseFloat(linkedRes[0]?.total || 0));
+
+        // 6. Cobertura e delta
+        // coverage = o que os órfãos + vínculos pagam; cobertura contra o valor_pago legado.
+        const coverage = round2(orphanSum + linkedTotal);
+        const delta = round2(valorPagoTotal - coverage);
+        let status;
+        if (Math.abs(delta) < 0.02) status = 'COBERTA';
+        else if (delta < 0) status = 'EXCEDENTE';
+        else status = 'DÉFICIT';
+        if (status === 'COBERTA') totalCovered++;
+        else if (status === 'EXCEDENTE') totalExceeded++;
+        else totalDeficit++;
+
+        results.push({
+            cpf,
+            name: user.full_name || '(sem nome)',
+            orphanCount: parseInt(user.orphan_count, 10),
+            orphanSum,
+            invoices: {
+                count: invoices.length,
+                valorPagoTotal,
+                items: invoices,
+            },
+            linkedPaymentsTotal: linkedTotal,
+            coverage,
+            delta,
+            status, // COBERTA | EXCEDENTE | DÉFICIT
+            orphans: orphans.slice(0, 10), // lista completa no detail por CPF
+        });
+    }
+
+    res.json({
+        success: true,
+        cutoff: cutoffIso,
+        summary: {
+            totalUsers,
+            totalPages,
+            page: Math.floor(offset / limit) + 1,
+            limit,
+            offset,
+            hasMore,
+            totalCovered: aggCovered,
+            totalExceeded: aggExceeded,
+            totalDeficit: aggDeficit,
+        },
+        results,
+    });
+}));
+
 // GET /admin/health/charges — Auditoria de consistência de encargos via calcAllCharges
 // Para cada massa inadimplente, recalcula os encargos com invoiceMath.js e compara
 // com os valores armazenados em billing_charges. Alerta se divergirem.
@@ -6675,16 +7746,16 @@ apiRouter.get('/admin/health/charges', bearerAuth(), authenticateAdmin, asyncHan
     today.setHours(0, 0, 0, 0);
 
     // 1. Buscar inadimplentes com suas faturas fechadas não pagas
-    const users = await databricksService.executeQuery(`
+    const users = await dbService.executeQuery(`
         SELECT u.cpf, u.full_name, COALESCE(u.days_overdue, 0) AS days_overdue
-        FROM ${databricksService.fq('users')} u
+        FROM ${dbService.fq('users')} u
         WHERE u.account_status = 'inadimplente'
         ORDER BY u.cpf
     `);
 
-    const invoices = await databricksService.executeQuery(`
+    const invoices = await dbService.executeQuery(`
         SELECT cpf, due_date, valor_total, COALESCE(valor_pago, 0) AS valor_pago
-        FROM ${databricksService.fq('invoices')}
+        FROM ${dbService.fq('invoices')}
         WHERE status = 'FECHADA' AND data_pagamento IS NULL
         ORDER BY cpf, due_date DESC
     `);
@@ -6700,9 +7771,9 @@ apiRouter.get('/admin/health/charges', bearerAuth(), authenticateAdmin, asyncHan
     }
 
     // 2. Buscar encargos armazenados no banco (billing_charges)
-    const storedCharges = await databricksService.executeQuery(`
+    const storedCharges = await dbService.executeQuery(`
         SELECT cpf, charge_type, SUM(amount) AS amount
-        FROM ${databricksService.fq('billing_charges')}
+        FROM ${dbService.fq('billing_charges')}
         WHERE status = 'pending'
         GROUP BY cpf, charge_type
         ORDER BY cpf
@@ -6858,7 +7929,7 @@ async function applyTransactionCancellation({ cpf, transaction }) {
 
     await transactionsRepo.markCancelled(transaction.id);
 
-    const reversalId = databricksService.generateUUID();
+    const reversalId = dbService.generateUUID();
     const nowIso = new Date().toISOString();
     let voucher = null;
 
@@ -6894,8 +7965,8 @@ apiRouter.post('/transactions/:cpf/:id/cancel', bearerAuth(), pinGuard('pin'), a
     // Compras parceladas têm plano próprio (installment_plans); cancelar a
     // transação principal aqui deixaria o parcelamento cobrando um valor que
     // já não existe mais — bloqueado nesta rota.
-    const activePlan = await databricksService.executeQuery(`
-        SELECT id FROM ${databricksService.fq('installment_plans')}
+    const activePlan = await dbService.executeQuery(`
+        SELECT id FROM ${dbService.fq('installment_plans')}
         WHERE purchase_tx_id = ${esc(id)} AND status = 'ACTIVE'
         LIMIT 1
     `);
@@ -6969,6 +8040,7 @@ bootstrap().then(() => {
                 return res.status(400).json({ success: false, message: 'Dados incompletos para criação da massa.' });
             }
             const created = await usersRepo.createMassUser(payload);
+            telegramService.ensureTopic(created.cpf, created.fullName);
             return res.json({
                 success: true,
                 message: `Massa ${created.fullName} (CPF ${created.cpf}) gravada com sucesso no PostgreSQL!`,
@@ -7009,3 +8081,12 @@ bootstrap().then(() => {
     console.error("❌ Erro no bootstrap:", err.message);
     process.exit(1);
 });
+
+module.exports = {
+    enrichUserCreditCardData,
+    normalizeUser,
+    usersRepo,
+    fetchUnpaidClosedInvoices,
+    app,
+    bootstrap
+};
