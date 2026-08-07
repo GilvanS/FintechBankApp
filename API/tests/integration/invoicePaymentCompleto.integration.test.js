@@ -1,4 +1,3 @@
-jest.mock('@databricks/sql', () => ({}));
 require('dotenv').config();
 const DatabaseFactory = require('../../services/database/DatabaseFactory');
 const createInvoiceController = require('../../src/controllers/invoiceController');
@@ -42,11 +41,15 @@ describe('Teste de Integração E2E — Fluxo de Pagamento de Faturas e Encargos
         `);
 
         // Instanciar o controller injetando as dependências reais
-        const { enrichUserCreditCardData, normalizeUser, usersRepo } = require('../../index.cjs');
+        const { enrichUserCreditCardData, normalizeUser, usersRepo, fetchUnpaidClosedInvoices } = require('../../index.cjs');
         controller = createInvoiceController({
-            databricksService: db,
-            repoContext: { esc: val => val },
+            dbService: db,
+            repoContext: { esc: require('../../repositories/context').esc },
+            cardRepo: require('../../repositories/cardRepo'),
             usersRepo,
+            fetchUnpaidClosedInvoices,
+            notificationsRepo: require('../../repositories/notificationsRepo'),
+            invoiceRepo: require('../../repositories/invoiceRepo'),
             enrichUserCreditCardData,
             normalizeUser,
             paymentGeneratorScriptPath: 'placeholder'
@@ -82,31 +85,53 @@ describe('Teste de Integração E2E — Fluxo de Pagamento de Faturas e Encargos
 
         // Validar alterações no banco de dados
         const userRow = (await db.executeQuery(`SELECT balance, credit_card_available_limit, account_status FROM fintech.users WHERE cpf = '${testCpf}'`))[0];
-        const txPayment = (await db.executeQuery(`SELECT amount, type FROM fintech.transactions WHERE cpf = '${testCpf}' AND type = 'INVOICE_PAYMENT'`))[0];
+        const txPayment = (await db.executeQuery(`SELECT amount, type, invoice_id FROM fintech.transactions WHERE cpf = '${testCpf}' AND type = 'INVOICE_PAYMENT'`))[0];
         const invoiceRow = (await db.executeQuery(`SELECT valor_pago, data_pagamento FROM fintech.invoices WHERE cpf = '${testCpf}' AND id = 'test-inv-id-e2e'`))[0];
 
         // 1. Saldo do usuário deve ter sido debitado no valor completo pago (5623.68)
         // Saldo inicial: 10000.00 - 5623.68 = 4376.32
         expect(parseFloat(userRow.balance)).toBe(4376.32);
 
-        // 2. A transação INVOICE_PAYMENT no banco de dados deve registrar o valor real pago (-5623.68)
+        // 2. A transação INVOICE_PAYMENT no banco de dados deve registrar o valor real pago (-5623.68),
+        // vinculada à fatura FECHADA via invoice_id (pos-migration 005 — quitacao e derivada
+        // do SUM(transactions WHERE invoice_id), nunca gravada dentro da invoice).
         expect(parseFloat(txPayment.amount)).toBe(-5623.68);
+        expect(txPayment.invoice_id).toBe('test-inv-id-e2e');
 
-        // 3. O valor pago registrado na invoice fechada deve ser limitado ao principal original (3870.86)
-        expect(parseFloat(invoiceRow.valor_pago)).toBe(3870.86);
-        expect(invoiceRow.data_pagamento).not.toBeNull();
+        // 3. A fatura FECHADA NAO deve ter sido tocada (docs/REGRAS-NEGOCIO-FATURA.md §19,
+        // trigger trg_invoices_immutable_when_closed). valor_pago e data_pagamento ficam como
+        // o snapshot do seed (0/NULL); a quitacao e derivada da transacao vinculada.
+        expect(parseFloat(invoiceRow.valor_pago)).toBe(0);
+        expect(invoiceRow.data_pagamento).toBeNull();
 
-        // 4. O usuário deve voltar a ser adimplente
+        // 4. O usuario deve voltar a ser adimplente
         expect(userRow.account_status).toBe('adimplente');
 
-        // 5. Validar que ao rodar o enrichUserCreditCardData, a sobra vira saldo credor negativo
-        const { enrichUserCreditCardData, normalizeUser, usersRepo } = require('../../index.cjs');
+        // 5. A soma dos pagamentos vinculados deve igualar o valor pago (quitacao derivavel).
+        const sumLinked = await db.executeQuery(`
+            SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS s
+            FROM fintech.transactions WHERE invoice_id = 'test-inv-id-e2e' AND type = 'INVOICE_PAYMENT'
+        `);
+        expect(parseFloat(sumLinked[0].s)).toBe(5623.68);
+
+        // 6. Validar que ao rodar o enrichUserCreditCardData, a sobra vira saldo credor negativo.
+        // Pagamento: 5623.68. Principal: 3870.86. Excedente: R$ 1752.82 (encargo de atraso que
+        // pertence a fatura ABERTA, conforme §19.3). Valor e sempre negativo: o sinal indica
+        // saldo credor.
+        const { enrichUserCreditCardData, normalizeUser, usersRepo, fetchUnpaidClosedInvoices } = require('../../index.cjs');
         const userRowFull = await usersRepo.findByCpf(testCpf);
         const tempUser = normalizeUser(userRowFull);
         await enrichUserCreditCardData(tempUser, testCpf);
 
-        // Principal: 3870.86. Pago: 5623.68. Sobra em relação ao principal: R$ 1752.82.
-        // O closedInvoiceResidual deve ser -R$ 1752,82 (representando o saldo credor verde negativo)
         expect(tempUser.creditCard.closedInvoiceResidual).toBe(-1752.82);
+
+        // 6. Validar que as taxas de juros pendentes permanecem com status 'pending' para serem herdadas
+        const chargesRowsAfter = await db.executeQuery(`
+            SELECT status FROM fintech.billing_charges WHERE cpf = '${testCpf}'
+        `);
+        expect(chargesRowsAfter.length).toBe(4);
+        for (const row of chargesRowsAfter) {
+            expect(row.status).toBe('pending');
+        }
     });
 });

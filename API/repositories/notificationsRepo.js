@@ -1,5 +1,7 @@
 const { getDb, esc } = require('./context');
 const { nowDb } = require('../utils/timezone');
+// require no topo: lazy dentro da função quebra sob Jest (import após teardown)
+const telegramService = require('../services/telegramService');
 
 async function listByCpf(cpf) {
     const db = getDb();
@@ -56,6 +58,11 @@ async function addNotification({ cpf, title, message, actionUrl }) {
         (id, cpf, title, message, action_url, is_read, created_at)
         VALUES (${esc(id)}, ${esc(cpf)}, ${esc(title)}, ${esc(message)}, ${esc(actionUrl || null)}, false, ${esc(now)})
     `);
+    // Espelha toda notificação in-app no tópico Telegram do CPF.
+    // Comprovantes já trazem o próprio cabeçalho — repetir o title vira "🔔 X" + "💵 X".
+    // Cobre emojis usados como cabeçalho de seção em comprovantes/avisos (💵⚠️✅💰📄📋).
+    const jaTemCabecalho = /^\s*(💵|⚠️|✅|💰|📄|📋|🔔)/.test(message);
+    telegramService.alertUser(cpf, jaTemCabecalho ? message : `🔔 ${title}\n${message}`, null, 'notification');
 }
 
 module.exports = { listByCpf, markRead, ensureSeed, addNotification };

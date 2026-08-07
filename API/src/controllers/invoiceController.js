@@ -11,8 +11,10 @@
  */
 module.exports = function createInvoiceController(deps) {
     const { nowDb } = require('../../utils/timezone');
+    const { toDateOnly } = require('../../utils/dateUtils');
+    const telegramService = require('../../services/telegramService');
     const {
-        databricksService,
+        dbService,
         repoContext,
         usersRepo,
         invoiceRepo,
@@ -26,79 +28,95 @@ module.exports = function createInvoiceController(deps) {
     } = deps;
 
     const { computeCurrentCycle, calcCharges, buildInstallmentOptions } = require('../../utils/billing');
+
+    // Comprovante Telegram: sem essas duas o valor sai '4070.86' e a data '2026-07-15'.
+    const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const dataBR = (v) => {
+        const d = new Date(v);
+        if (Number.isNaN(d.getTime())) return String(v || '');
+        return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    };
+    const diaBR = (v) => {
+        const d = new Date(v);
+        if (Number.isNaN(d.getTime())) return String(v || '');
+        return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    };
     const { computeInvoiceGross, planDistribution } = require('../../utils/invoiceMath');
 
-    // ── Helpers da fatura fechada (movidos verbatim do index.cjs) ────────────
-    async function distributePaymentAmongInvoices(cpf, payAmount) {
-        const { esc } = repoContext;
-        const rows = await fetchUnpaidClosedInvoices(cpf);
-        const plan = planDistribution(rows, payAmount);
-    
-        for (const inv of plan.invoices) {
-            if (inv.appliedAmount <= 0) continue;
-            await databricksService.executeQuery(`
-                UPDATE ${databricksService.fq('invoices')}
-                SET valor_pago = ${inv.newValorPago.toFixed(2)},
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ${esc(inv.id)} AND cpf = ${esc(cpf)}
-            `);
+    // ── Comprovante de pagamento em PDF (evento de pagamento → tópico da massa) ──
+    // Projeto de estudo para automação: todo pagamento de fatura (total, mínimo ou
+    // parcial) gera um comprovante PDF e envia ao tópico Telegram da massa.
+    async function sendPaymentReceipt(cpf, user, data) {
+        try {
+            const { generatePaymentReceiptPDF } = require('../../services/invoicePdfService');
+            const cardFinal = String((user && (user.card_number || user.cardNumber)) || '').replace(/\D/g, '').slice(-4);
+            const pdfData = {
+                nome: (user && user.full_name) || '',
+                cpf,
+                cpfFormatado: telegramService.formatCpf(cpf),
+                cartaoFinal: cardFinal || '—',
+                valorPago: data.valorPago,
+                tipo: data.tipo, // TOTAL | MINIMO | PARCIAL
+                saldoRestante: data.saldoRestante,
+                dataPagamento: data.dataPagamento || new Date().toISOString(),
+                formaPagamento: 'Saldo em conta',
+                vencimento: data.vencimento || null,
+                autenticacao: data.autenticacao || `FB-${Date.now().toString(36).toUpperCase()}`,
+                nota: data.nota || '',
+            };
+            // Toggle payment_receipt no painel admin decide se o comprovante vai ao Telegram (gate via categoria).
+            const buffer = await generatePaymentReceiptPDF(pdfData);
+            await telegramService.sendDocument(cpf, buffer, `comprovante_${cpf}.pdf`, 'payment_receipt');
+        } catch (err) {
+            console.error('[invoiceController] Erro ao gerar/enviar comprovante PDF:', err.message);
         }
-    
-        return plan;
     }
 
-    // Marca data_pagamento em cada fatura FECHADA cujo valor_pago já cobre o valor bruto.
-    // Por invoice, não em bloco: um pagamento que quita só a fatura mais antiga não pode
-    // carimbar como paga a fatura seguinte, que continua devendo.
-    // Quando não sobra nenhuma fechada em aberto, o usuário volta a adimplente.
-    async function markFullyPaidInvoices(cpf, paidAtIso) {
-        const { esc } = repoContext;
-        const rows = await fetchUnpaidClosedInvoices(cpf);
-        const settled = [];
-        let stillOpen = 0;
-    
-        for (const inv of rows) {
-            // Usa valor_total (sem encargos) como target de quitação, igual ao
-            // planDistribution e computeInvoicePaidInfo — encargos não são pagos,
-            // são herdados pela fatura aberta.
-            const target = Math.round(parseFloat(inv.valor_total || 0) * 100) / 100;
-            const pago = parseFloat(inv.valor_pago || 0);
-            if (pago >= target - 0.005) {
-                await databricksService.executeQuery(`
-                    UPDATE ${databricksService.fq('invoices')}
-                    SET data_pagamento = ${esc(paidAtIso)}, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ${esc(inv.id)} AND cpf = ${esc(cpf)}
-                `);
-                settled.push(inv.id);
-            } else {
-                stillOpen++;
-            }
+    // Normaliza data vinda do banco: o driver pg pode retornar due_date como
+    // objeto Date (String(date) não tem 'T' → split('T')[0] devolve lixo).
+    // Sempre produz 'YYYY-MM-DD' para o Python E para o fallback JS.
+    // Usa componentes LOCAIS (não toISOString, que é UTC e pode deslocar o dia
+    // para timestamps com hora ≠ meia-noite — ex.: 22:00 -03:00 → dia seguinte).
+    function normalizeDueDate(d, fallback) {
+        if (!d) return fallback;
+        if (d instanceof Date && !isNaN(d.getTime())) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${dd}`;
         }
-    
-        if (settled.length > 0 && stillOpen === 0) {
-            await databricksService.executeQuery(`
-                UPDATE ${databricksService.fq('users')}
+        const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return m[0];
+        return fallback;
+    }
+
+    // ── Helpers da fatura fechada (movidos verbatim do index.cjs) ────────────
+    // Simula a distribuição do pagamento entre as faturas (mais antiga primeiro) SEM
+    // persistir nada: a fatura FECHADA é imutável (docs/REGRAS-NEGOCIO-FATURA.md).
+    // O vínculo real do pagamento fica em transactions.invoice_id.
+    async function distributePaymentAmongInvoices(cpf, payAmount) {
+        const rows = await fetchUnpaidClosedInvoices(cpf);
+        return planDistribution(rows, payAmount);
+    }
+
+    // Reavalia o status do usuário após um pagamento. Escreve SÓ em `users` — a
+    // quitação de cada fatura é derivada de transactions.invoice_id em
+    // getClosedInvoiceDebt, nunca carimbada dentro da fatura FECHADA (imutável).
+    // Quando não sobra nenhuma fechada devendo, o usuário volta a adimplente.
+    async function refreshAccountStatus(cpf) {
+        const { esc } = repoContext;
+        const debt = await getClosedInvoiceDebt(cpf);
+        const stillOpen = debt ? debt.invoices.length : 0;
+
+        if (stillOpen === 0) {
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('users')}
                 SET account_status = 'adimplente', days_overdue = 0, updated_at = CURRENT_TIMESTAMP
                 WHERE cpf = ${esc(cpf)}
             `);
         }
-    
-        return { settled, stillOpen };
-    }
 
-    // Quitação da fatura FECHADA (pagamento total, parcial ou refinanciamento via
-    // parcelamento): distribui o valor REALMENTE pago entre as faturas em aberto — da mais
-    // antiga para a mais recente — e só então marca as que ficaram quitadas.
-    //
-    // Antes usava Number.MAX_SAFE_INTEGER, o que zerava a dívida de todas as faturas ainda
-    // que o débito cobrado tivesse sido só o da fatura mais recente.
-    async function settleClosedInvoices(cpf, paidAtIso, payAmount) {
-        if (!(typeof payAmount === 'number') || !(payAmount > 0)) {
-            throw new Error('settleClosedInvoices: payAmount deve ser um número positivo');
-        }
-        const distribution = await distributePaymentAmongInvoices(cpf, payAmount);
-        const marked = await markFullyPaidInvoices(cpf, paidAtIso);
-        return { ...distribution, ...marked };
+        return { stillOpen, owed: debt ? debt.owed : 0 };
     }
 
     // Dívida consolidada de TODAS as faturas FECHADAS não pagas: valores congelados no
@@ -113,30 +131,60 @@ module.exports = function createInvoiceController(deps) {
     //
     // `invoice` = a mais RECENTE em aberto e ancora o cutoff das parcelas (o corte precisa
     // cobrir todos os ciclos que estão sendo pagos). `oldest` ancora atraso/encargos.
+    // Quanto já foi pago de cada fatura FECHADA, derivado de transactions.invoice_id.
+    // Fonte da verdade para pagamentos feitos APÓS a migration 005: a fatura fechada é
+    // imutável, então o pago não pode ser lido de dentro dela.
+    async function fetchPaidByInvoice(cpf) {
+        const { esc } = repoContext;
+        const rows = await dbService.executeQuery(`
+            SELECT invoice_id, COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS pago
+            FROM ${dbService.fq('transactions')}
+            WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            GROUP BY invoice_id
+        `);
+        const map = new Map();
+        for (const r of rows) map.set(r.invoice_id, parseFloat(r.pago || 0));
+        return map;
+    }
+
     async function getClosedInvoiceDebt(cpf) {
         const { esc } = repoContext;
-        const rows = await databricksService.executeQuery(`
+        const rows = await dbService.executeQuery(`
             SELECT id, due_date, created_at, valor_total, saldo_anterior, valor_iof,
                    valor_multa, valor_juros_remuneratorios, valor_juros_mora,
                    COALESCE(valor_pago, 0) AS valor_pago
-            FROM ${databricksService.fq('invoices')}
+            FROM ${dbService.fq('invoices')}
             WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
             ORDER BY due_date ASC
         `);
         if (!rows.length) return null;
-    
+
+        const paidByInvoice = await fetchPaidByInvoice(cpf);
         const round2 = n => Math.round(n * 100) / 100;
         const invoices = rows.map(row => {
-            // owed = valor_total - valor_pago (NÃO inclui encargos: multa, juros, IOF).
+            // owed = valor_total - pago (NÃO inclui encargos: multa, juros, IOF).
             // Encargos são calculados separadamente em enrichUserCreditCardData para exibição
             // (closedInvoiceCharges). Incluí-los no valor devido faz o pagamento "total"
             // cobrar mais que a fatura — ex: R$ 4.284,94 em vez de R$ 3.870,86.
+            //
+            // HÍBRIDO: pagamentos vinculados (invoice_id) são a fonte da verdade. Faturas
+            // anteriores à migration 005 não têm vínculo — para essas, o valor_pago
+            // congelado no fechamento segue valendo. Ler o campo não fere a imutabilidade;
+            // escrever nele, sim.
             const gross = round2(computeInvoiceGross(row));
-            const residual = round2(parseFloat(row.valor_total || 0) - parseFloat(row.valor_pago || 0));
-            return { ...row, gross, owed: Math.max(0, residual) };
-        });
+            const pagoVinculado = paidByInvoice.get(row.id);
+            const pago = pagoVinculado !== undefined
+                ? pagoVinculado
+                : parseFloat(row.valor_pago || 0);
+            const residual = round2(parseFloat(row.valor_total || 0) - pago);
+            return { ...row, gross, valor_pago_efetivo: round2(pago), owed: Math.max(0, residual) };
+        // Quitada pelo caminho novo: sem data_pagamento (fatura imutável), some da lista
+        // por ter owed zerado — senão seria cobrada de novo a cada pagamento.
+        }).filter(inv => inv.owed > 0.005);
+
+        if (!invoices.length) return null;
         const owed = round2(invoices.reduce((sum, inv) => sum + inv.owed, 0));
-    
+
         return {
             invoice: invoices[invoices.length - 1],
             invoices,
@@ -147,56 +195,30 @@ module.exports = function createInvoiceController(deps) {
 
     function generatePaymentCodesFallback(cpf, name, amount, dueDate, invoiceId) {
         const crypto = require('crypto');
-        const FEBRABAN_BASE = new Date(1997, 9, 7); // 07/10/1997
+        // FONTE ÚNICA: padrão Febraban (fator 5 dígitos, DV do código de barras na
+        // posição 20, campo livre 24) — o MESMO buildBoletoData do PDF garante que a
+        // linha digitável exibida gere o MESMO código de barras da página 4.
+        const { buildBoletoData } = require('../../utils/boletoMath');
         const dueObj = new Date(dueDate + 'T00:00:00');
-        const factor = Math.floor((dueObj - FEBRABAN_BASE) / (1000 * 60 * 60 * 24));
-        const factorStr = String(factor).padStart(4, '0');
-        const amountCents = Math.round(amount * 100);
-        const amountStr = String(amountCents).padStart(10, '0');
-        const hash = crypto.createHash('md5').update(invoiceId).digest('hex');
-        const freeDigits = hash.replace(/[^0-9]/g, '').padEnd(25, '0').slice(0, 25);
-    
-        // Mod11
-        function mod11(digits) {
-            const weights = [2, 3, 4, 5, 6, 7, 8, 9];
-            let total = 0;
-            for (let i = digits.length - 1, w = 0; i >= 0; i--, w++) {
-                total += parseInt(digits[i]) * weights[w % weights.length];
-            }
-            const r = total % 11;
-            const dv = 11 - r;
-            return (dv === 0 || dv === 10 || dv === 11) ? 1 : dv;
-        }
-    
-        // Mod10
-        function mod10(digits) {
-            const weights = [2, 1];
-            let total = 0;
-            for (let i = digits.length - 1, w = 0; i >= 0; i--, w++) {
-                const product = parseInt(digits[i]) * weights[w % 2];
-                total += Math.floor(product / 10) + (product % 10);
-            }
-            const r = total % 10;
-            return r === 0 ? 0 : 10 - r;
-        }
-    
-        const barcodeNoDv = `598${9}${factorStr}${amountStr}${freeDigits}`;
-        const dv = mod11(barcodeNoDv);
-        const barcode = `5989${dv}${factorStr}${amountStr}${freeDigits}`;
-    
-        // Linha digitavel
-        const f1raw = barcode.slice(0, 4) + barcode.slice(19, 24);
-        const dv1 = mod10(f1raw);
-        const f1 = `${f1raw.slice(0, 5)}.${f1raw.slice(5)}${dv1}`;
-        const f2raw = barcode.slice(24, 34);
-        const dv2 = mod10(f2raw);
-        const f2 = `${f2raw.slice(0, 5)}.${f2raw.slice(5)}${dv2}`;
-        const f3raw = barcode.slice(34, 44);
-        const dv3 = mod10(f3raw);
-        const f3 = `${f3raw.slice(0, 5)}.${f3raw.slice(5)}${dv3}`;
-        const f4 = barcode[4];
-        const f5 = barcode.slice(5, 19);
-        const linhaDigitavel = `${f1} ${f2} ${f3} ${f4} ${f5}`;
+        // Nosso número derivado do CPF (últimos 10 dígitos) — MESMA regra da rota
+        // send-pdf (index.cjs), para o label impresso no PDF bater com o campo
+        // livre codificado no código de barras. O DV do código de barras fica na
+        // POSIÇÃO 20 (módulo 11) e o fator de vencimento tem 5 dígitos.
+        const nossoNumero = String(cpf).replace(/\D/g, '').slice(-10);
+        const boletoData = buildBoletoData({
+            banco: '598', bancoDv: 9, bancoNome: '598 - Fintech Bank App',
+            agencia: '0001', conta: '00000001', carteira: '09',
+            nossoNumero,
+            documento: String(invoiceId).replace(/[^0-9]/g, '').slice(0, 20) || nossoNumero,
+            vencimento: dueDate + 'T00:00:00',
+            emissao: new Date().toISOString(),
+            valor: amount,
+            sacado: name, sacadoCpf: cpf,
+        });
+        const barcode = boletoData.codigoBarras;
+        const linhaDigitavel = boletoData.linhaDigitavel;
+        const linhaDigitavelRaw = boletoData.linhaDigitavelRaw;
+        const factor = parseInt(boletoData.fator, 10);
     
         // PIX EMV
         function emvField(tag, value) {
@@ -241,7 +263,7 @@ module.exports = function createInvoiceController(deps) {
         return {
             invoice: { id: invoiceId, amount, amountFormatted: amountFmt, dueDate, dueDateFormatted: dueFmt, payerName: name, payerCpf: cpf },
             boleto: {
-                barcode, linhaDigitavel, linhaDigitavelRaw: linhaDigitavel.replace(/[. ]/g, ''),
+                barcode, linhaDigitavel, linhaDigitavelRaw: linhaDigitavelRaw,
                 amount, amountFormatted: amountFmt, dueDate, dueDateFormatted: dueFmt, dueDateFactor: factor,
                 beneficiary: { name: 'Fintech Bank App S.A.', cnpj: '00000000000191', bankCode: '598', bankName: '598 - Fintech Bank App' },
                 payer: { name, cpf: cpfClean, cpfFormatted: cpfFmt }, invoiceId
@@ -258,7 +280,11 @@ module.exports = function createInvoiceController(deps) {
 
     // ── Handlers (movidos verbatim do index.cjs) ─────────────────────────────
     const generatePaymentCodes = async (req, res) => {
-        const { cpf, name, amount, dueDate, invoiceId } = req.body;
+        const { cpf, name, amount, dueDate: rawDueDate, invoiceId } = req.body;
+        // Normaliza também o body: o cliente pode enviar 'YYYY-MM-DDTHH:mm:ss' ou
+        // até Date string — sem isso o fallback faz 'dueDate + T00:00:00' inválido
+        // e o fator zera de novo.
+        const dueDate = normalizeDueDate(rawDueDate, rawDueDate || null);
     
         if (!cpf || !name || !amount || !dueDate || !invoiceId) {
             return res.status(400).json({
@@ -294,19 +320,30 @@ module.exports = function createInvoiceController(deps) {
         
         const name = user.full_name;
         const amount = parseFloat(invoice.valor_total || 3870.86);
-        const dueDate = invoice.due_date ? String(invoice.due_date).split('T')[0] : '2026-07-15';
+        const dueDate = normalizeDueDate(invoice.due_date, '2026-07-15');
         
+        let boletoData;
+        let usedFallback = false;
         try {
             const { execSync } = require('child_process');
             const scriptPath = paymentGeneratorScriptPath;
             const cmd = `python "${scriptPath}" --cpf "${cpf}" --name "${name}" --amount ${amount} --duedate "${dueDate}" --invoiceid "${invoiceId}" --json`;
             const output = execSync(cmd, { encoding: 'utf-8', timeout: 15000 });
             const result = JSON.parse(output);
-            res.json({ success: true, data: result.boleto });
+            boletoData = result.boleto;
         } catch (error) {
+            usedFallback = true;
+            console.error('[boleto] Gerador Python indisponível, usando fallback JS:', error.message);
             const fallbackResult = generatePaymentCodesFallback(cpf, name, amount, dueDate, invoiceId);
-            res.json({ success: true, data: fallbackResult.boleto, fallback: true });
+            boletoData = fallbackResult.boleto;
         }
+
+        // Postar no telegram da massa
+        if (boletoData) {
+            telegramService.send('boleto_request', { cpf, text: `📄 <b>Boleto gerado para pagamento</b>\n\n<b>Valor:</b> R$ ${amount.toFixed(2)}\n<b>Vencimento:</b> ${dueDate}\n<b>Linha Digitável:</b>\n<code>${boletoData.linhaDigitavel}</code>` }).catch(() => {});
+        }
+
+        res.json({ success: true, data: boletoData, fallback: usedFallback });
     };
     
     const pix = async (req, res) => {
@@ -320,32 +357,43 @@ module.exports = function createInvoiceController(deps) {
         
         const name = user.full_name;
         const amount = req.body.amount ? parseFloat(req.body.amount) : parseFloat(invoice.valor_total || 0);
-        const dueDate = invoice.due_date ? String(invoice.due_date).split('T')[0] : new Date().toISOString().split('T')[0];
+        const dueDate = normalizeDueDate(invoice.due_date, toDateOnly(new Date()));
         
+        let pixData;
+        let usedFallback = false;
         try {
             const { execSync } = require('child_process');
             const scriptPath = paymentGeneratorScriptPath;
             const cmd = `python "${scriptPath}" --cpf "${cpf}" --name "${name}" --amount ${amount} --duedate "${dueDate}" --invoiceid "${invoiceId}" --json`;
             const output = execSync(cmd, { encoding: 'utf-8', timeout: 15000 });
             const result = JSON.parse(output);
-            res.json({ success: true, data: result.pix });
+            pixData = result.pix;
         } catch (error) {
+            usedFallback = true;
+            console.error('[pix] Gerador Python indisponível, usando fallback JS:', error.message);
             const fallbackResult = generatePaymentCodesFallback(cpf, name, amount, dueDate, invoiceId);
-            res.json({ success: true, data: fallbackResult.pix, fallback: true });
+            pixData = fallbackResult.pix;
         }
+
+        // Postar no telegram da massa
+        if (pixData) {
+            telegramService.send('qrcode_request', { cpf, text: `🔑 <b>PIX Copia e Cola gerado</b>\n\n<b>Valor:</b> R$ ${amount.toFixed(2)}\n<b>Código PIX:</b>\n<code>${pixData.payload}</code>` }).catch(() => {});
+        }
+
+        res.json({ success: true, data: pixData, fallback: usedFallback });
     };
     
     const invoiceStatus = async (req, res) => {
         const cpf = req.user.cpf;
     
-        const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+        const configRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
         const cfg = configRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3, is_active: true };
     
-        const userRows = await databricksService.executeQuery(`
+        const userRows = await dbService.executeQuery(`
             SELECT credit_card_invoice_due_date, credit_card_available_limit, credit_card_total_limit,
                    COALESCE(account_status,'adimplente') AS account_status,
                    COALESCE(days_overdue, 0) AS days_overdue
-            FROM ${databricksService.fq('users')} WHERE cpf = '${cpf}'
+            FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'
         `);
         if (!userRows.length) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
         const u = userRows[0];
@@ -355,8 +403,8 @@ module.exports = function createInvoiceController(deps) {
             parseFloat(u.credit_card_total_limit || 5000) - parseFloat(u.credit_card_available_limit || 0)
         );
     
-        const pendingCharges = await databricksService.executeQuery(`
-            SELECT charge_type, amount FROM ${databricksService.fq('billing_charges')}
+        const pendingCharges = await dbService.executeQuery(`
+            SELECT charge_type, amount FROM ${dbService.fq('billing_charges')}
             WHERE cpf = '${cpf}' AND invoice_reference = '${cycle.invoiceRef}' AND status = 'pending'
         `);
         const pendingTotal = pendingCharges.reduce((s, c) => s + parseFloat(c.amount), 0);
@@ -416,8 +464,8 @@ module.exports = function createInvoiceController(deps) {
             principal = closedDebt.owed;
         } else {
             // Legado (sem registro em invoices): soma das parcelas vencidas
-            const dueRows = await databricksService.executeQuery(`
-                SELECT amount FROM ${databricksService.fq('transactions')}
+            const dueRows = await dbService.executeQuery(`
+                SELECT amount FROM ${dbService.fq('transactions')}
                 WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
             `);
             principal = dueRows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
@@ -428,8 +476,8 @@ module.exports = function createInvoiceController(deps) {
     
         // O saldo antigo é refinanciado no novo plano: remove as parcelas/valor vencido
         // que estão sendo substituídas pelas novas parcelas com encargos.
-        await databricksService.executeQuery(`
-            DELETE FROM ${databricksService.fq('transactions')}
+        await dbService.executeQuery(`
+            DELETE FROM ${dbService.fq('transactions')}
             WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
         `);
     
@@ -440,20 +488,19 @@ module.exports = function createInvoiceController(deps) {
         const currentInvDue = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
         const nextInvDue = new Date(currentInvDue);
         nextInvDue.setMonth(currentInvDue.getMonth() + 1);
-        await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('users')}
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')}
             SET credit_card_available_limit = ${restoredLimit.toFixed(2)},
                 credit_card_is_blocked = false,
                 credit_card_invoice_due_date = '${nextInvDue.toISOString()}'
             WHERE cpf = '${cpf}'
         `);
     
-        // Fatura fechada quitada via refinanciamento: sem isso, a fatura continuaria "não paga"
-        // e o valor refinanciado seria cobrado de novo em /cards/invoice/pay.
-        // O valor refinanciado é exatamente `principal` (= closedDebt.owed), então é ele que
-        // é distribuído entre as faturas em aberto.
+        // Fatura fechada quitada via refinanciamento: a quitação é derivada de
+        // transactions.invoice_id (próxima fatura registra o pagamento com o vínculo).
+        // Sem escrever em invoices, basta reavaliar o status do usuário.
         if (closedDebt) {
-            await settleClosedInvoices(cpf, nowDb(), principal);
+            await refreshAccountStatus(cpf);
         }
     
         const plan = await cardRepo.createInstallments({ cpf, amount: principal, installments });
@@ -461,7 +508,20 @@ module.exports = function createInvoiceController(deps) {
         await notificationsRepo.addNotification({
             cpf,
             title: 'Fatura parcelada',
-            message: `Fatura de R$ ${principal.toFixed(2)} parcelada em ${installments}x de R$ ${plan.installmentValue.toFixed(2)}.`,
+            message: [
+                '💵 <b>COMPROVANTE DE PARCELAMENTO DE FATURA</b>',
+                '',
+                `<b>Cliente</b>    ${user.full_name}`,
+                `<b>CPF</b>        <code>${telegramService.formatCpf(cpf)}</code>`,
+                '',
+                `<b>Financiado</b> <code>R$ ${brl(principal)}</code>`,
+                `<b>Parcelas</b>   ${installments}x de <code>R$ ${brl(plan.installmentValue)}</code>`,
+                `<b>Total</b>      <code>R$ ${brl(plan.totalAmount)}</code>`,
+                `<b>1ª parcela</b> ${plan.firstDueDate ? diaBR(plan.firstDueDate) : 'Próxima fatura'}`,
+                `<b>Contratado</b> ${dataBR(nowDb())}`,
+                '',
+                '<b>Status</b>     CONTRATADO ✅'
+            ].join('\n'),
             actionUrl: '/dashboard'
         });
     
@@ -513,8 +573,8 @@ module.exports = function createInvoiceController(deps) {
             totalDue = closedDebt.owed;
         } else {
             // Legado (sem registro em invoices): soma das parcelas vencidas
-            const dueRows = await databricksService.executeQuery(`
-                SELECT amount FROM ${databricksService.fq('transactions')}
+            const dueRows = await dbService.executeQuery(`
+                SELECT amount FROM ${dbService.fq('transactions')}
                 WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
             `);
             totalDue = dueRows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
@@ -528,16 +588,19 @@ module.exports = function createInvoiceController(deps) {
         const effectiveMin = balance > 0 ? Math.min(balance, minPayment) : minPayment;
 
         // Obter o total de encargos pendentes no banco
-        const chargesRows = await databricksService.executeQuery(`
+        const chargesRows = await dbService.executeQuery(`
             SELECT COALESCE(SUM(CAST(amount AS DECIMAL(15,2))), 0) AS total
-            FROM ${databricksService.fq('billing_charges')}
+            FROM ${dbService.fq('billing_charges')}
             WHERE cpf = '${cpf}' AND status = 'pending'
         `);
         const pendingChargesTotal = parseFloat(chargesRows[0]?.total || 0);
         const totalDueComplete = Math.round((totalDue + pendingChargesTotal) * 100) / 100;
 
+        // NÃO capar ao total devido: pagamento acima do devido é aceito e o excedente
+        // vira saldo credor (closedInvoiceResidual negativo) — bug reportado: pagar
+        // 5623.68 registrava só 3870.86.
         const requestedAmount = typeof amount === 'number' && amount > 0 ? amount : totalDueComplete;
-        const payAmount = Math.min(requestedAmount, totalDueComplete);
+        const payAmount = requestedAmount;
 
         // Valor mínimo é apenas sugestão de UI — o usuário pode pagar menos, mais, ou o total.
         // Pagar abaixo do mínimo mantém saldo devedor e encargos via fluxo de pagamento parcial abaixo.
@@ -557,34 +620,33 @@ module.exports = function createInvoiceController(deps) {
                 : 'Pagamento parcial de fatura';
             // Pagamento parcial: registrar sem deletar parcelas
             const nowIso = nowDb();
-            const payId = databricksService.generateUUID();
-            await databricksService.executeQuery(`
-                INSERT INTO ${databricksService.fq('transactions')}
-                (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-                VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-payAmount).toFixed(2))}, ${esc(payDescription)}, NULL, NULL, NULL, ${esc(nowIso)})
+            const payId = dbService.generateUUID();
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('transactions')}
+                (id, cpf, type, amount, description, from_user, to_user, to_key, date, invoice_id)
+                VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-payAmount).toFixed(2))}, ${esc(payDescription)}, NULL, NULL, NULL, ${esc(nowIso)}, ${esc(closedDebt?.oldest?.id || null)})
             `);
             await usersRepo.updateBalance(cpf, (balance - payAmount).toFixed(2));
             const restoredLimit = Math.min(totalLimit, availableLimit + payAmount);
-            await databricksService.executeQuery(`
-                UPDATE ${databricksService.fq('users')}
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('users')}
                 SET credit_card_available_limit = ${restoredLimit.toFixed(2)}
                 WHERE cpf = '${cpf}'
             `);
-            // Distribui entre as faturas (mais antiga primeiro) e carimba data_pagamento nas
-            // que o pagamento parcial tiver quitado — um parcial pode zerar a fatura antiga
-            // mesmo sem cobrir a dívida consolidada.
-            await settleClosedInvoices(cpf, nowIso, payAmount);
+            // A quitação é derivada de transactions.invoice_id (getClosedInvoiceDebt):
+            // a fatura FECHADA não recebe escrita. Só o status do usuário é reavaliado.
+            await refreshAccountStatus(cpf);
             const remaining = totalDue - payAmount;
             const daysOverdue = parseInt(user.days_overdue || 0);
-            const billingCfgForRef = (await databricksService.executeQuery(
-                `SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`
+            const billingCfgForRef = (await dbService.executeQuery(
+                `SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`
             ))[0] || { close_day: 20, due_day: 10, grace_period_days: 3 };
             const { invoiceRef } = computeCurrentCycle(billingCfgForRef);
             const { multa, juros } = calcCharges(remaining, daysOverdue);
             if (multa > 0 || juros > 0) {
-                const chargeBase = databricksService.generateUUID();
-                await databricksService.executeQuery(`
-                    INSERT INTO ${databricksService.fq('billing_charges')}
+                const chargeBase = dbService.generateUUID();
+                await dbService.executeQuery(`
+                    INSERT INTO ${dbService.fq('billing_charges')}
                     (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
                     VALUES
                     ('${chargeBase}_m', ${esc(cpf)}, ${esc(invoiceRef)}, 'multa', ${multa}, ${daysOverdue}, ${remaining.toFixed(2)}),
@@ -598,9 +660,27 @@ module.exports = function createInvoiceController(deps) {
             const notifTitle = isPaymentAbaixo
                 ? '⚠️ Pagamento abaixo do mínimo crítico'
                 : 'Pagamento mínimo de fatura ✅';
-            const notifMessage = isPaymentAbaixo
-                ? `Apenas R$ ${payAmount.toFixed(2)} pagos (${(payAmount / totalDue * 100).toFixed(0)}% do total). Mínimo necessário: R$ ${minPayment.toFixed(2)}. Saldo residual: R$ ${remaining.toFixed(2)}. Encargos TOTAIS continuam sobre o saldo!`
-                : `R$ ${payAmount.toFixed(2)} pagos (mínimo). Multa e juros de mora ESTACIONADOS! Juros remuneratórios continuam sobre o saldo devedor de R$ ${remaining.toFixed(2)}.`;
+            const notifMessage = [
+                isPaymentAbaixo
+                    ? '💵 <b>COMPROVANTE DE PAGAMENTO PARCIAL (ABAIXO DO MÍNIMO)</b>'
+                    : '💵 <b>COMPROVANTE DE PAGAMENTO PARCIAL (MÍNIMO)</b>',
+                '',
+                `<b>Cliente</b>    ${user.full_name}`,
+                `<b>CPF</b>        <code>${telegramService.formatCpf(cpf)}</code>`,
+                '',
+                `<b>Valor pago</b> <code>R$ ${brl(payAmount)}</code>`,
+                `<b>Saldo</b>      <code>R$ ${brl(remaining)}</code>`,
+                `<b>Vencimento</b> ${diaBR(cutoffIso)}`,
+                `<b>Pago em</b>    ${dataBR(nowIso)}`,
+                '',
+                isPaymentAbaixo
+                    ? '<b>Status</b>     ABAIXO DO MÍNIMO CRÍTICO ⚠️'
+                    : '<b>Status</b>     MÍNIMO PAGO ✅',
+                '',
+                isPaymentAbaixo
+                    ? '<blockquote>Encargos adicionais de atraso (multa e juros) continuam incidindo sobre o saldo devedor restante.</blockquote>'
+                    : '<blockquote>Multa e juros de mora estão estacionados. Juros remuneratórios continuam a incidir sobre o saldo devedor restante.</blockquote>'
+            ].join('\n');
             await notificationsRepo.addNotification({
                 cpf,
                 title: notifTitle,
@@ -609,37 +689,78 @@ module.exports = function createInvoiceController(deps) {
                 // Admin vê as ABAIXO via GET /admin/notifications/abaixo (rota dedicada).
                 actionUrl: '/dashboard'
             });
+            // Comprovante PDF no tópico da massa (pagamento mínimo/parcial)
+            await sendPaymentReceipt(cpf, user, {
+                valorPago: payAmount,
+                tipo: isExactMin ? 'MINIMO' : 'PARCIAL',
+                saldoRestante: remaining,
+                dataPagamento: nowIso,
+                vencimento: cutoffIso,
+                nota: isPaymentAbaixo
+                    ? 'Pagamento abaixo do mínimo crítico. Encargos adicionais de atraso continuam incidindo sobre o saldo devedor restante.'
+                    : 'Multa e juros de mora estão estacionados. Juros remuneratórios continuam a incidir sobre o saldo devedor restante.'
+            });
             return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining, charges: { multa, juros } });
         }
     
-        // Pagamento total: registrar pagamento pelo valor devido da fatura, limpar parcelas
-        // do ciclo fechado, restaurar limite, avançar vencimento
-        const result = await cardRepo.payDueInstallments({ cpf, cutoffIso, amount: payAmount, paymentDateIso: nowDb() });
-        await usersRepo.updateBalance(cpf, (balance - result.totalDue).toFixed(2));
+        // Pagamento total: registrar o valor REALMENTE pago (payAmount, não o devido),
+        // vinculado à fatura fechada mais recente; limpar parcelas do ciclo, restaurar limite.
+        // O excedente sobre o principal vira saldo credor e abate a fatura ABERTA
+        // (docs/REGRAS-NEGOCIO-FATURA.md §19.3) — não pode ser capado aqui.
+        const result = await cardRepo.payDueInstallments({
+            cpf,
+            cutoffIso,
+            amount: payAmount,
+            paymentDateIso: nowDb(),
+            invoiceId: closedDebt?.invoice?.id || null
+        });
+        await usersRepo.updateBalance(cpf, (balance - payAmount).toFixed(2));
         const restoredLimit = Math.min(totalLimit, availableLimit + principalToPay);
         // NÃO avançar credit_card_invoice_due_date aqui — o motor de faturamento (invoiceEngine)
         // o faz naturalmente no fechamento do ciclo. Avançar manualmente desloca as janelas de
         // cálculo do enrichUserCreditCardData (close = due-7d, prevClose = close-1m), fazendo
         // com que transações do ciclo atual caiam FORA da janela "aberta", sumindo do extrato
         // e reduzindo currentInvoice incorretamente.
-        await databricksService.executeQuery(`
-            UPDATE ${databricksService.fq('users')}
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')}
             SET credit_card_available_limit = ${restoredLimit.toFixed(2)},
                 credit_card_is_blocked = false
             WHERE cpf = '${cpf}'
         `);
 
-        // Sem marcar data_pagamento a fatura seguiria "não paga" e poderia ser cobrada de novo.
-        // Distribui o valor efetivamente cobrado (principalToPay), nunca mais
-        // que isso: quitar faturas sem ter recebido por elas é perda de receita.
+        // Quitação registrada pelo invoice_id no payDueInstallments acima. A fatura
+        // FECHADA não é tocada: a leitura em getClosedInvoiceDebt derivará o saldado
+        // do SUM de payments.
         if (closedDebt) {
-            await settleClosedInvoices(cpf, nowDb(), principalToPay);
+            await refreshAccountStatus(cpf);
         }
         await notificationsRepo.addNotification({
             cpf,
             title: 'Pagamento de fatura',
-            message: 'Fatura paga com sucesso. Limite restaurado e novo vencimento definido.',
+            message: [
+                '💵 <b>COMPROVANTE DE PAGAMENTO INTEGRAL</b>',
+                '',
+                `<b>Cliente</b>    ${user.full_name}`,
+                `<b>CPF</b>        <code>${telegramService.formatCpf(cpf)}</code>`,
+                '',
+                `<b>Valor pago</b> <code>R$ ${brl(payAmount)}</code>`,
+                `<b>Vencimento</b> ${diaBR(cutoffIso)}`,
+                `<b>Pago em</b>    ${dataBR(nowDb())}`,
+                '',
+                '<b>Status</b>     QUITADO ✅',
+                '',
+                '<blockquote>Limite de crédito reestabelecido e conta regularizada com sucesso.</blockquote>'
+            ].join('\n'),
             actionUrl: '/dashboard'
+        });
+        // Comprovante PDF no tópico da massa (pagamento total)
+        await sendPaymentReceipt(cpf, user, {
+            valorPago: payAmount,
+            tipo: 'TOTAL',
+            saldoRestante: 0,
+            dataPagamento: nowDb(),
+            vencimento: cutoffIso,
+            nota: 'Limite de crédito reestabelecido e conta regularizada com sucesso.'
         });
         res.json({ success: true, message: 'Fatura paga com sucesso.' });
     };
@@ -649,7 +770,7 @@ module.exports = function createInvoiceController(deps) {
         const { cpf } = req.user;
         const { esc } = repoContext;
     
-        const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+        const configRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
         const cfg = configRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3 };
         const cycle = computeCurrentCycle(cfg);
     
@@ -657,7 +778,7 @@ module.exports = function createInvoiceController(deps) {
             if (!d) return '15/jul./2026';
             let dt = d;
             if (!(dt instanceof Date)) {
-                const str = String(d).split('T')[0];
+                const str = toDateOnly(d);
                 const parts = str.split('-');
                 if (parts.length === 3) {
                     dt = new Date(Date.UTC(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)));
@@ -795,7 +916,7 @@ module.exports = function createInvoiceController(deps) {
     const history = async (req, res) => {
         const { cpf } = req.user;
         const { esc } = repoContext;
-        const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+        const configRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
         const cfg = configRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3 };
         const cycle = computeCurrentCycle(cfg);
         const closeDay = parseInt(cfg.close_day) || 20;
@@ -803,8 +924,8 @@ module.exports = function createInvoiceController(deps) {
         // Valor da fatura aberta = soma das compras do ciclo corrente (mesma regra do
         // endpoint /summary/aberta). Não usar total_limit - available_limit: o limite
         // bloqueado inclui saldo de fatura fechada e encargos, que não pertencem à aberta.
-        const _histCardTx = await databricksService.executeQuery(`
-            SELECT amount, type, date FROM ${databricksService.fq('transactions')}
+        const _histCardTx = await dbService.executeQuery(`
+            SELECT amount, type, date FROM ${dbService.fq('transactions')}
             WHERE cpf = ${esc(cpf)} AND type IN ('SHOP_CREDIT', 'CREDIT', 'INVOICE_INSTALLMENT')
               AND (status IS NULL OR status <> 'cancelled')
         `);
@@ -814,8 +935,8 @@ module.exports = function createInvoiceController(deps) {
             return txDate > _histPrevCloseMs && txDate <= cycle.dueDate.getTime();
         }).reduce((sum, tx) => sum + Math.abs(parseFloat(tx.amount || 0)), 0);
     
-        const closed = await databricksService.executeQuery(`
-            SELECT * FROM ${databricksService.fq('invoices')}
+        const closed = await dbService.executeQuery(`
+            SELECT * FROM ${dbService.fq('invoices')}
             WHERE cpf = ${esc(cpf)} AND status = 'FECHADA'
             ORDER BY due_date DESC
         `);
@@ -867,7 +988,7 @@ module.exports = function createInvoiceController(deps) {
         let invoiceDueDate = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : null;
         
         if (!invoiceDueDate) {
-            const configRows = await databricksService.executeQuery(`SELECT * FROM ${databricksService.fq('billing_config')} WHERE id = 1`);
+            const configRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
             const cfg = configRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3 };
             const cycle = computeCurrentCycle(cfg);
             invoiceDueDate = cycle.dueDate;
@@ -875,9 +996,9 @@ module.exports = function createInvoiceController(deps) {
         
         let openInvoiceAmount = 0;
         if (invoiceDueDate) {
-            const openTransactions = await databricksService.executeQuery(`
+            const openTransactions = await dbService.executeQuery(`
                 SELECT amount
-                FROM ${databricksService.fq('transactions')}
+                FROM ${dbService.fq('transactions')}
                 WHERE cpf = '${cpf}'
                   AND type IN ('SHOP_CREDIT', 'CREDIT', 'INVOICE_INSTALLMENT')
                   AND date <= '${invoiceDueDate.toISOString()}'
@@ -911,6 +1032,24 @@ module.exports = function createInvoiceController(deps) {
     
         await cardRepo.anticipateInstallments({ cpf, transactionIds });
         auditLog(req, 'card_anticipate', 'info', { count: transactionIds.length });
+        await notificationsRepo.addNotification({
+            cpf,
+            title: 'Antecipação de parcelas',
+            message: [
+                '💵 <b>COMPROVANTE DE ANTECIPAÇÃO DE PARCELAS</b>',
+                '',
+                `<b>Cliente</b>    ${user.full_name}`,
+                `<b>CPF</b>        <code>${telegramService.formatCpf(cpf)}</code>`,
+                '',
+                `<b>Parcelas</b>   ${transactionIds.length} antecipada(s)`,
+                `<b>Processado</b> ${dataBR(nowDb())}`,
+                '',
+                '<b>Status</b>     PROCESSADO ✅',
+                '',
+                '<blockquote>O abatimento e recálculo do limite serão consolidados na fatura corrente.</blockquote>'
+            ].join('\n'),
+            actionUrl: '/dashboard'
+        });
         res.json({ success: true, message: 'Parcelas antecipadas com sucesso' });
     };
 
@@ -926,6 +1065,6 @@ module.exports = function createInvoiceController(deps) {
         history,
         open,
         anticipate,
-        helpers: { getClosedInvoiceDebt, distributePaymentAmongInvoices, markFullyPaidInvoices, settleClosedInvoices, generatePaymentCodesFallback },
+        helpers: { getClosedInvoiceDebt, distributePaymentAmongInvoices, refreshAccountStatus, generatePaymentCodesFallback },
     };
 };
