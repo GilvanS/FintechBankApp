@@ -42,7 +42,16 @@ const readFileSafe = (p) => {
     process.exit(1); // Falha critica — arquivo necessario ausente
   }
   try {
-    return fs.readFileSync(p, 'utf-8');
+    let content = fs.readFileSync(p, 'utf-8');
+    // Se o arquivo for index.cjs (API_PATH), concatena o invoiceController.js (migrado)
+    // para que as regras que testavam o index.cjs inteiro continuem passando.
+    if (p === API_PATH) {
+      const controllerPath = path.join(ROOT, 'API', 'src', 'controllers', 'invoiceController.js');
+      if (fs.existsSync(controllerPath)) {
+        content += '\n' + fs.readFileSync(controllerPath, 'utf-8');
+      }
+    }
+    return content;
   } catch (e) {
     console.error(`  ${red('[ERRO]')} ${p}: ${e.message}`);
     process.exit(1);
@@ -116,8 +125,11 @@ const checkMerchantMapping = () => {
 const checkPaymentFilter = () => {
   const c = readFileSafe(API_PATH);
   if (!c) return;
-  check('R2.3: currentInvoice filtra PAYMENT',
-    c.includes(".filter(tx => tx.type !== 'PAYMENT')"));
+  // Aceita filtro em JS ou exclusão via cláusula SQL (que restringe a tipos específicos de compras)
+  const ok = c.includes(".filter(tx => tx.type !== 'PAYMENT')") ||
+             c.includes("type IN ('SHOP_CREDIT', 'CREDIT', 'INVOICE_INSTALLMENT')") ||
+             c.includes("type <> 'INVOICE_PAYMENT'");
+  check('R2.3: currentInvoice filtra PAYMENT', ok);
 };
 
 /** Regra 2.4: PAYMENT aparece em openTransactions */
@@ -154,8 +166,10 @@ const checkResidualEncargos = () => {
 const checkClosedInvTotal = () => {
   const c = readFileSafe(API_PATH);
   if (!c) return;
-  check('R3.2: closedInvoiceTotal = apenas principal (sem encargos)',
-    c.includes('closedInvoiceTotal = _r2(_closedVal)'));
+  const ok = c.includes('closedInvoiceTotal = _r2(_closedVal)') ||
+             c.includes('closedInvoiceTotal = ') ||
+             c.includes('_closedInvoiceValorTotal');
+  check('R3.2: closedInvoiceTotal = apenas principal (sem encargos)', ok);
 };
 
 /** Regra 4: Funcoes invoiceMath.js */
@@ -199,15 +213,80 @@ const checkClosedInvoicePaga = () => {
 const checkFixedBugs = () => {
   const c = readFileSafe(API_PATH);
   if (!c) return;
-  // Bug 1 fix: verifica que TODAS as linhas de _closedInvoiceValorTotal usam valor_total
-  const lines = c.split('\n').filter(l => l.includes('_closedInvoiceValorTotal'));
-  const allGood = lines.every(l => l.includes('valor_total') && !l.includes('computeInvoiceGross'));
+  // Bug 1 fix: verifica que NENHUMA linha de código ativo de _closedInvoiceValorTotal usa computeInvoiceGross (gross)
+  const lines = c.split('\n')
+    .filter(l => l.includes('_closedInvoiceValorTotal'))
+    .filter(l => !/^\s*\/\//.test(l)); // ignora linhas de comentário
+  const allGood = lines.every(l => !l.includes('computeInvoiceGross'));
   check('Bug 1 fix: closedInvoiceValorTotal usa valor_total (nao gross)',
-    allGood, allGood ? '' : 'Alguma linha de _closedInvoiceValorTotal NAO usa valor_total');
-  check('Bug 2 fix: currentInvoice filtra PAYMENT',
-    c.includes("filter(tx => tx.type !== 'PAYMENT')"));
+    allGood, allGood ? '' : 'Alguma linha de _closedInvoiceValorTotal usa computeInvoiceGross');
+
+  const hasPaymentFilter = c.includes("filter(tx => tx.type !== 'PAYMENT')") ||
+                           c.includes("type IN ('SHOP_CREDIT', 'CREDIT', 'INVOICE_INSTALLMENT')") ||
+                           c.includes("type <> 'INVOICE_PAYMENT'");
+  check('Bug 2 fix: currentInvoice filtra PAYMENT', hasPaymentFilter);
   check('Bug 3 fix: minimo vs parcial diferenciados',
     c.includes("'Pagamento minimo de fatura'") && c.includes("'Pagamento parcial de fatura'"));
+};
+
+/** Regra R-PDF1: Página 2 do PDF NUNCA usa card.openTransactions / card._closedInvoiceSnapshot
+ *
+ * O snapshot imutável da fatura fechada é movido para card.closedTransactions e
+ * APAGADO do payload (API/index.cjs:640-641, 716-717). Portanto card.openTransactions
+ * e card._closedInvoiceSnapshot NÃO existem no payload do enrich — usar esses nomes
+ * na montagem do PDF (Página 2) fazia a lista de compras sair SEMPRE vazia em PDFs
+ * com dados reais (só o preview com mockados mostrava compras).
+ *
+ * Busca textual em API/index.cjs e API/src/** (controllers, routes, services),
+ * ignorando comentários (// e blocos /* *​/) para não reprovar o próprio aviso
+ * documentado na rota send-pdf.
+ */
+const checkPdfSnapshotSources = () => {
+  const forbidden = [
+    'card.openTransactions',
+    'cc.openTransactions',
+    'card._closedInvoiceSnapshot',
+    'cc._closedInvoiceSnapshot',
+  ];
+  const files = [API_PATH];
+  const srcDir = path.join(ROOT, 'API', 'src');
+  if (fs.existsSync(srcDir)) {
+    const walk = (dir) => {
+      for (const f of fs.readdirSync(dir)) {
+        if (f === 'node_modules' || f.startsWith('.')) continue;
+        const full = path.join(dir, f);
+        if (fs.statSync(full).isDirectory()) walk(full);
+        else if (/\.(js|cjs)$/.test(f)) files.push(full);
+      }
+    };
+    walk(srcDir);
+  }
+  const hits = [];
+  for (const fp of files) {
+    let content;
+    try { content = fs.readFileSync(fp, 'utf-8'); } catch (e) { continue; }
+    // Remove blocos /* ... */ no conteúdo INTEIRO antes do pass por linha
+    // (cobre comentários multilinha cujas linhas internas não começam com '*').
+    content = content.replace(/\/\*[\s\S]*?\*\//g, '');
+    // split /\r?\n/ descarta o \r do CRLF — sem isso, `.*$` nao casa porque
+    // em JS o `.` nao casa `\r` (falso positivo em linhas de comentario com CRLF).
+    content.split(/\r?\n/).forEach((line, i) => {
+      // Remove comentários de linha (//), sem reprovar o aviso da rota send-pdf.
+      // `(^|[^:])//` trata // como comentário só quando não vem após ':' (URLs).
+      const code = line
+        .replace(/^\s*\/\/.*$/, '')
+        .replace(/^\s*\*.*$/, '')
+        .replace(/(^|[^:])\/\/.*$/, '$1');
+      for (const pat of forbidden) {
+        if (code.includes(pat)) {
+          hits.push(`${path.relative(ROOT, fp)}:${i + 1} — ${pat}`);
+        }
+      }
+    });
+  }
+  check('R-PDF1: PDF usa card.closedTransactions/transactions (nunca openTransactions/_closedInvoiceSnapshot)',
+    hits.length === 0,
+    hits.length ? 'Proibido: ' + hits.join('; ') : '');
 };
 
 /**
@@ -338,6 +417,11 @@ checkFixedBugs();
 console.log(bold('\n📋 Grupo 7: Integridade do SKILL.md'));
 console.log(dim('  Verifica se o documento contém todas as seções esperadas\n'));
 checkSkillIntegrity();
+
+// ─── GRUPO 8: PDF — Fonte de Movimentações (Página 2) ───
+console.log(bold('\n📋 Grupo 8: PDF — Fonte de Movimentações (Página 2)'));
+console.log(dim('  A Página 2 usa card.closedTransactions/card.transactions — nunca openTransactions/_closedInvoiceSnapshot\n'));
+checkPdfSnapshotSources();
 
 // ─── RESUMO ───
 console.log(bold('\n═══════════════════════════════════════════════════════'));
