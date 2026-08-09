@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { User } from '../../types';
 import { calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcAllCharges } from '../../utils/invoiceMath.js';
-import { FileSpreadsheet, CheckCheck } from 'lucide-react';
+import { FileSpreadsheet, CheckCheck, Send, FileText } from 'lucide-react';
+import { adminTelegramSendTable, adminTelegramSendPdf } from '../../services/api';
+import { showToast } from '../../utils/toast';
 
 interface BackofficeInvoiceSectionProps {
     searchedUser: User;
@@ -17,6 +19,10 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
     isMidnight,
 }) => {
     const [copiedExcelSuccess, setCopiedExcelSuccess] = useState(false);
+    const [copiedTelegramSuccess, setCopiedTelegramSuccess] = useState(false);
+    const [sendingTelegram, setSendingTelegram] = useState(false);
+    const [sendingPdf, setSendingPdf] = useState(false);
+    const [sentPdfSuccess, setSentPdfSuccess] = useState(false);
 
     const openAmount = searchedUser.creditCard?.currentInvoice !== undefined && searchedUser.creditCard?.currentInvoice !== null ? searchedUser.creditCard.currentInvoice : 2365.05;
     // Valor ORIGINAL da fatura fechada (antes do pagamento), para exibição.
@@ -38,6 +44,17 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
     const isPaid = (searchedUser.creditCard as any)?.closedInvoiceIsPaid ?? false;
     const valorPago = (searchedUser.creditCard as any)?._closedInvoiceValorPago ?? 0;
     const closedInvoiceResidual = (searchedUser.creditCard as any)?.closedInvoiceResidual ?? 0;
+    // Data de quitação da fatura fechada (ex.: "04/ago") para rótulos de PDF/tabela enviados ao Telegram.
+    // Array fixo de meses pt-BR: determinístico e independente de ICU do ambiente (toLocaleDateString
+    // pode cair para inglês sem dados de locale instalados).
+    const paidAtLabel = (() => {
+        const raw = String((searchedUser.creditCard as any)?.closedInvoicePaidAt || '');
+        if (!raw) return '';
+        const d = new Date(raw);
+        if (isNaN(d.getTime())) return raw.split('T')[0] || '';
+        const _months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+        return String(d.getDate()).padStart(2, '0') + '/' + (_months[d.getMonth()] || '');
+    })();
     const previousAmount = 1120.00; // Fatura Anterior (Mai/26) - Paga
     // Cálculos centralizados via invoiceMath.js (fonte única — mesma função usada
     // pelo motor runBillingValidation no backend). Antes liamos de bkCharges
@@ -155,6 +172,114 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                         <>
                             <FileSpreadsheet className="w-3.5 h-3.5" />
                             <span>📊 Copiar p/ Excel</span>
+                        </>
+                    )}
+                </button>
+
+                <button
+                    type="button"
+                    disabled={sendingTelegram}
+                    onClick={async () => {
+                        setSendingTelegram(true);
+                        const title = `Relatório de Fatura (${selectedBackofficeInvoice === 'closed' ? 'Fechada Jun/26' : selectedBackofficeInvoice === 'open' ? 'Aberta Jul/26' : 'Mai/26 Paga'})`;
+                        const headers = ['CÓDIGO', 'ITEM', 'TAXA / REGRA', 'VALOR (R$)'];
+                        const rows: string[][] = [];
+
+                        if (selectedBackofficeInvoice === 'closed') {
+                            rows.push(['BASE', 'Valor Original Fatura Fechada (Invariável)', 'Fixo Fechamento', originalClosedAmount.toFixed(2)]);
+                            rows.push(['MIN', 'Pagamento Mínimo Fixado no Corte (10%)', '10.00%', minClosedOriginal.toFixed(2)]);
+                            rows.push(['CÓD 3000', 'Taxa de Multa por Atraso (Informativo)', '2.00%', multa.toFixed(2)]);
+                            rows.push(['CÓD 2001', 'Juros de Mora (Informativo)', '0.0333%/dia', jurosMora.toFixed(2)]);
+                            rows.push(['CÓD 2000', 'Juros Remuneratórios / Financiamento', '0.513%/dia', jurosRemun.toFixed(2)]);
+                            rows.push(['CÓD 4001', 'IOF Adicional (Fixo - Compras)', '0.38%', iofFixo.toFixed(2)]);
+                            rows.push(['CÓD 4000', 'IOF Diário (Atraso)', '0.0082%/dia', iofDiario.toFixed(2)]);
+                            rows.push(['TOTAL_ENC', 'Valor Total dos Encargos do Atraso (Memória)', `Acumulado (${overdueDays}d)`, totalEncargos.toFixed(2)]);
+                            rows.push(['NOTA', 'Encargos herdados e consolidados na FATURA ABERTA', 'Somente no Corte', '0.00']);
+                            rows.push(['MIN_REGULARIZAR', 'Pagamento Mínimo Obrigatório p/ Regularizar Atraso', 'Mínimo + 100% Encargos', minClosedWithCharges.toFixed(2)]);
+                        } else if (selectedBackofficeInvoice === 'open') {
+                            rows.push(['BASE', 'Novas Compras do Mês Corrente (Jul/26)', 'Aberto', openAmount.toFixed(2)]);
+                            rows.push(['MIN', 'Pagamento Mínimo Compras Correntes (10%)', '10.00%', minOpenOriginal.toFixed(2)]);
+                            rows.push(['HERANCA', isPaid ? `Fatura Fechada Anterior PAGA${paidAtLabel ? ` em ${paidAtLabel}` : ''} (Jun/26)` : 'Fatura Fechada Anterior em Atraso (Jun/26)', 'Invariável', originalClosedAmount.toFixed(2)]);
+                            rows.push(['CÓD 3000', 'Taxa de Multa por Atraso (Herdada)', '2.00%', multa.toFixed(2)]);
+                            rows.push(['CÓD 2001', 'Juros de Mora (Herdado)', '0.0333%/dia', jurosMora.toFixed(2)]);
+                            rows.push(['CÓD 2000', 'Juros Remuneratórios (Herdado)', '0.513%/dia', jurosRemun.toFixed(2)]);
+                            rows.push(['CÓD 4001', 'IOF Adicional Fixo (Herdado)', '0.38%', iofFixo.toFixed(2)]);
+                            rows.push(['CÓD 4000', 'IOF Diário (Herdado)', '0.0082%/dia', iofDiario.toFixed(2)]);
+                            rows.push(['TOTAL_HER', 'Total Encargos Herdados', `Acumulado (${overdueDays}d)`, totalEncargos.toFixed(2)]);
+                            rows.push(['TOTAL_CORTE', 'Total Consolidado no Fechamento/Corte', 'Compras + Herança + Encargos', totalOpenConsolidated.toFixed(2)]);
+                            rows.push(['MIN_CORTE', 'Pagamento Mínimo Consolidado no Corte', 'Mínimo + Herança + Encargos', minOpenConsolidated.toFixed(2)]);
+                        } else {
+                            rows.push(['BASE', 'Fatura Anterior Mai/26 Quitada', '15/05/2026', previousAmount.toFixed(2)]);
+                            rows.push(['MIN', 'Pagamento Mínimo da Época (10%)', '10.00%', minPreviousOriginal.toFixed(2)]);
+                            rows.push(['CÓD 3000', 'Taxa de Multa por Atraso', '0.00%', '0.00']);
+                            rows.push(['CÓD 2001', 'Juros de Mora', '0.00%/dia', '0.00']);
+                            rows.push(['CÓD 2000', 'Juros Remuneratórios', '0.00%/dia', '0.00']);
+                            rows.push(['CÓD 4001', 'IOF Adicional Fixo (Compras)', '0.38%', (previousAmount * 0.0038).toFixed(2)]);
+                            rows.push(['CÓD 4000', 'IOF Diário', '0.00%/dia', '0.00']);
+                            rows.push(['STATUS', 'Status da Fatura', '100% Quitada', '0.00']);
+                        }
+
+                        const result = await adminTelegramSendTable(searchedUser.cpf, { title, headers, rows });
+                        setSendingTelegram(false);
+                        if (result.success) {
+                            setCopiedTelegramSuccess(true);
+                            setTimeout(() => setCopiedTelegramSuccess(false), 3000);
+                            showToast('Tabela enviada ao Telegram da massa com sucesso!', 'success');
+                        } else {
+                            showToast(result.message || 'Erro ao enviar tabela.', 'error');
+                        }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm ${
+                        copiedTelegramSuccess
+                            ? 'bg-blue-600 text-white border-blue-500'
+                            : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20'
+                    }`}
+                    title="Enviar dados da fatura em formato de tabela monospace diretamente para o tópico Telegram desta massa"
+                >
+                    {copiedTelegramSuccess ? (
+                        <>
+                            <CheckCheck className="w-3.5 h-3.5" />
+                            <span>Tabela Enviada! 💬</span>
+                        </>
+                    ) : (
+                        <>
+                            <Send className="w-3.5 h-3.5" />
+                            <span>💬 Enviar p/ Telegram</span>
+                        </>
+                    )}
+                </button>
+
+                <button
+                    type="button"
+                    disabled={sendingPdf}
+                    onClick={async () => {
+                        setSendingPdf(true);
+                        const result = await adminTelegramSendPdf(searchedUser.cpf, selectedBackofficeInvoice);
+                        setSendingPdf(false);
+                        if (result.success) {
+                            setSentPdfSuccess(true);
+                            setTimeout(() => setSentPdfSuccess(false), 3000);
+                            showToast('PDF enviado ao Telegram da massa com sucesso!', 'success');
+                        } else {
+                            showToast(result.message || 'Erro ao enviar PDF.', 'error');
+                        }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm ${
+                        sentPdfSuccess
+                            ? 'bg-blue-600 text-white border-blue-500'
+                            : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20'
+                    }`}
+                    title="Gerar relatório em PDF e enviar diretamente ao Telegram desta massa"
+                >
+                    {sentPdfSuccess ? (
+                        <>
+                            <CheckCheck className="w-3.5 h-3.5" />
+                            <span>PDF Enviado! 💬</span>
+                        </>
+                    ) : (
+                        <>
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>📄 Enviar PDF p/ Telegram</span>
                         </>
                     )}
                 </button>

@@ -1,11 +1,11 @@
-// Real API implementation that connects to the backend
+﻿// Real API implementation that connects to the backend
 import { User, PasswordResetRequest, LimitIncreaseRequest, AppNotification, PixKey, PixContact, Transaction, PurchasedItem, CreditCard, CardTransaction } from '../types';
 
 const API_BASE = '/api'; // Vite proxy will forward to http://localhost:3001
 
-// ── Token Management ───────────────────────────────────────────────────
-// AdminDashboard.tsx chama esta função para guardar o token da sessão admin
-// no sessionStorage, garantindo que esteja disponível mesmo quando o
+// Ã¢â€â‚¬Ã¢â€â‚¬ Token Management Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// AdminDashboard.tsx chama esta funÃƒÂ§ÃƒÂ£o para guardar o token da sessÃƒÂ£o admin
+// no sessionStorage, garantindo que esteja disponÃƒÂ­vel mesmo quando o
 // localStorage.adminToken expirar ou for sobrescrito.
 export function setAdminSessionToken(token: string | null): void {
   if (token) {
@@ -19,7 +19,7 @@ export function setAdminSessionToken(token: string | null): void {
 // authToken do cliente), pois user e admin coexistem no mesmo localStorage (mesma
 // origem). Assim logar uma massa nao derruba a sessao admin, e vice-versa.
 //
-// Ordem de precedência para admin:
+// Ordem de precedÃƒÂªncia para admin:
 //   1. sessionStorage.sessionAdminToken (setado pelo AdminDashboard ao montar)
 //   2. localStorage.adminToken (setado pelo Login para admin)
 //   3. localStorage.authToken (fallback)
@@ -107,7 +107,7 @@ export const getUserByCpf = async (cpf: string): Promise<{ success: boolean; mes
     });
     return result;
   } catch (error: any) {
-    return { success: false, message: error.message || 'Erro ao buscar usuário' };
+    return { success: false, message: error.message || 'Erro ao buscar usuÃƒÂ¡rio' };
   }
 };
 
@@ -118,7 +118,7 @@ export const getUserMe = async (): Promise<{ success: boolean; message?: string;
     });
     return result;
   } catch (error: any) {
-    return { success: false, message: error.message || 'Erro ao buscar usuário' };
+    return { success: false, message: error.message || 'Erro ao buscar usuÃƒÂ¡rio' };
   }
 };
 
@@ -138,7 +138,7 @@ export interface ApiCard {
   createdAt: string;
 }
 
-// Cartões reais (fintech.cards) — número exibido SEMPRE truncado no app (numberMasked)
+// CartÃƒÂµes reais (fintech.cards) Ã¢â‚¬â€ nÃƒÂºmero exibido SEMPRE truncado no app (numberMasked)
 export const getMyCards = async (): Promise<{ success: boolean; cards?: ApiCard[] }> => {
   try {
     return await apiCall<{ success: boolean; cards: ApiCard[] }>('/cards/my-cards');
@@ -158,7 +158,7 @@ export const revealCard = async (cardId: string, pin: string): Promise<{ success
   }
 };
 
-// ── Resumo e histórico de faturas ──────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Resumo e histÃƒÂ³rico de faturas Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 export interface InvoiceSummary {
   saldoAnterior: number;
   closedInvoiceResidual?: number;
@@ -208,7 +208,7 @@ export const getInvoiceSummary = async (type: 'fechada' | 'aberta'): Promise<{ s
     }
     return { success: false, summary: null };
   } catch (error: any) {
-    // Se falhar por erro de rede ou autenticação, propaga o erro e não faz fallback
+    // Se falhar por erro de rede ou autenticaÃƒÂ§ÃƒÂ£o, propaga o erro e nÃƒÂ£o faz fallback
     // para o mock indevido, evitando mascarar dados.
     return { success: false, message: error.message || 'Erro ao carregar resumo de fatura' };
   }
@@ -229,7 +229,7 @@ export const generateVirtualCard = async (nickname: string): Promise<{ success: 
       body: JSON.stringify({ nickname }),
     });
   } catch (e: any) {
-    return { success: false, message: e?.message || 'Erro ao gerar cartão virtual.' };
+    return { success: false, message: e?.message || 'Erro ao gerar cartÃƒÂ£o virtual.' };
   }
 };
 
@@ -245,7 +245,7 @@ export const deleteVirtualCard = async (cardId: string): Promise<{ success: bool
   try {
     return await apiCall<{ success: boolean; message?: string }>(`/cards/${cardId}`, { method: 'DELETE' });
   } catch (e: any) {
-    return { success: false, message: e?.message || 'Erro ao excluir cartão.' };
+    return { success: false, message: e?.message || 'Erro ao excluir cartÃƒÂ£o.' };
   }
 };
 
@@ -348,7 +348,7 @@ export const getPixRecipientInfo = async (key: string, senderCpf: string): Promi
     });
     return result;
   } catch (error: any) {
-    return { success: false, message: error.message || 'Erro ao buscar informações do destinatário' };
+    return { success: false, message: error.message || 'Erro ao buscar informaÃƒÂ§ÃƒÂµes do destinatÃƒÂ¡rio' };
   }
 };
 
@@ -360,7 +360,7 @@ export const performPixCreditInstallment = async (cpf: string, amount: number, i
     });
     return result;
   } catch (error: any) {
-    return { success: false, message: error.message || 'Erro ao realizar PIX no crédito' };
+    return { success: false, message: error.message || 'Erro ao realizar PIX no crÃƒÂ©dito' };
   }
 };
 
@@ -389,7 +389,7 @@ export const deletePixContact = async (cpf: string, key: string): Promise<{ succ
 
 export const purchaseWithCard = async (cpf: string, items: PurchasedItem[], cashbackUsed: number, installments: number, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
-    if (!pin || pin.length !== 4) return { success: false, message: 'PIN inválido. Deve ter 4 dígitos.' };
+    if (!pin || pin.length !== 4) return { success: false, message: 'PIN invÃƒÂ¡lido. Deve ter 4 dÃƒÂ­gitos.' };
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/shop/checkout', {
       method: 'POST',
@@ -406,13 +406,13 @@ export const purchaseWithCard = async (cpf: string, items: PurchasedItem[], cash
     });
     return result;
   } catch (error: any) {
-    return { success: false, message: error.message || 'Erro ao realizar compra com cartão' };
+    return { success: false, message: error.message || 'Erro ao realizar compra com cartÃƒÂ£o' };
   }
 };
 
 export const purchaseWithDebit = async (cpf: string, items: PurchasedItem[], cashbackUsed: number, pin?: string): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'> }> => {
   try {
-    if (!pin || pin.length !== 4) return { success: false, message: 'PIN inválido. Deve ter 4 dígitos.' };
+    if (!pin || pin.length !== 4) return { success: false, message: 'PIN invÃƒÂ¡lido. Deve ter 4 dÃƒÂ­gitos.' };
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/shop/checkout', {
       method: 'POST',
@@ -428,7 +428,7 @@ export const purchaseWithDebit = async (cpf: string, items: PurchasedItem[], cas
     });
     return result;
   } catch (error: any) {
-    return { success: false, message: error.message || 'Erro ao realizar compra com débito' };
+    return { success: false, message: error.message || 'Erro ao realizar compra com dÃƒÂ©bito' };
   }
 };
 
@@ -448,7 +448,7 @@ export const getInvoiceInstallmentOptions = async (): Promise<{ success: boolean
   try {
     return await apiCall<{ success: boolean; amount: number; options: InstallmentPlan[] }>('/cards/invoice/installment-options');
   } catch (error: any) {
-    return { success: false, message: error.message || 'Erro ao buscar opções de parcelamento' };
+    return { success: false, message: error.message || 'Erro ao buscar opÃƒÂ§ÃƒÂµes de parcelamento' };
   }
 };
 
@@ -466,21 +466,21 @@ export const parcelCreditCardInvoice = async (cpf: string, details: { installmen
 
 export const adminGetUserByCpf = async (cpf: string): Promise<{ success: boolean; message?: string; user?: User }> => {
   try {
-    // Garantir que o CPF tem 11 dígitos
+    // Garantir que o CPF tem 11 dÃƒÂ­gitos
     const cleanCpf = cpf.replace(/\D/g, '');
     if (cleanCpf.length !== 11) {
-      return { success: false, message: 'CPF deve ter 11 dígitos.' };
+      return { success: false, message: 'CPF deve ter 11 dÃƒÂ­gitos.' };
     }
 
-    console.log('🔵 [WEB adminGetUserByCpf] Buscando usuário:', cleanCpf);
+    console.log('Ã°Å¸â€Âµ [WEB adminGetUserByCpf] Buscando usuÃƒÂ¡rio:', cleanCpf);
     const result = await apiCall<{ success: boolean; user?: any; message?: string }>(`/admin/users/${cleanCpf}`, {
       method: 'GET',
     });
-    console.log('✅ [WEB adminGetUserByCpf] Resultado:', result);
+    console.log('Ã¢Å“â€¦ [WEB adminGetUserByCpf] Resultado:', result);
     return result;
   } catch (error: any) {
-    console.error('❌ [WEB adminGetUserByCpf] Erro:', error);
-    const errorMessage = error?.response?.data?.message || error.message || 'Erro ao buscar usuário';
+    console.error('Ã¢ÂÅ’ [WEB adminGetUserByCpf] Erro:', error);
+    const errorMessage = error?.response?.data?.message || error.message || 'Erro ao buscar usuÃƒÂ¡rio';
     return { success: false, message: errorMessage };
   }
 };
@@ -489,7 +489,7 @@ export const blockUser = async (cpf: string): Promise<{ success: boolean; messag
   try {
     const cleanCpf = cpf.replace(/\D/g, '');
     if (cleanCpf.length !== 11) {
-      return { success: false, message: 'CPF deve ter 11 dígitos.' };
+      return { success: false, message: 'CPF deve ter 11 dÃƒÂ­gitos.' };
     }
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/admin/users/${cleanCpf}/block`, {
@@ -497,11 +497,11 @@ export const blockUser = async (cpf: string): Promise<{ success: boolean; messag
     });
     
     if (result.success && result.user) {
-      return { success: true, message: result.message || 'Usuário bloqueado com sucesso.', user: result.user };
+      return { success: true, message: result.message || 'UsuÃƒÂ¡rio bloqueado com sucesso.', user: result.user };
     }
-    return { success: result.success || false, message: result.message || 'Falha ao bloquear usuário.' };
+    return { success: result.success || false, message: result.message || 'Falha ao bloquear usuÃƒÂ¡rio.' };
   } catch (error: any) {
-    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao bloquear usuário' };
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao bloquear usuÃƒÂ¡rio' };
   }
 };
 
@@ -509,7 +509,7 @@ export const unblockUser = async (cpf: string): Promise<{ success: boolean; mess
   try {
     const cleanCpf = cpf.replace(/\D/g, '');
     if (cleanCpf.length !== 11) {
-      return { success: false, message: 'CPF deve ter 11 dígitos.' };
+      return { success: false, message: 'CPF deve ter 11 dÃƒÂ­gitos.' };
     }
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/admin/users/${cleanCpf}/unblock`, {
@@ -517,18 +517,18 @@ export const unblockUser = async (cpf: string): Promise<{ success: boolean; mess
     });
     
     if (result.success && result.user) {
-      return { success: true, message: result.message || 'Usuário desbloqueado com sucesso.', user: result.user };
+      return { success: true, message: result.message || 'UsuÃƒÂ¡rio desbloqueado com sucesso.', user: result.user };
     }
-    // Se não retornou user, buscar novamente
+    // Se nÃƒÂ£o retornou user, buscar novamente
     if (result.success) {
       const refreshed = await adminGetUserByCpf(cleanCpf);
       if (refreshed.success && refreshed.user) {
-        return { success: true, message: result.message || 'Usuário desbloqueado com sucesso.', user: refreshed.user };
+        return { success: true, message: result.message || 'UsuÃƒÂ¡rio desbloqueado com sucesso.', user: refreshed.user };
       }
     }
-    return { success: result.success || false, message: result.message || 'Falha ao desbloquear usuário.' };
+    return { success: result.success || false, message: result.message || 'Falha ao desbloquear usuÃƒÂ¡rio.' };
   } catch (error: any) {
-    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao desbloquear usuário' };
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao desbloquear usuÃƒÂ¡rio' };
   }
 };
 
@@ -536,35 +536,35 @@ export const adminDeposit = async (cpf: string, amount: number): Promise<{ succe
   try {
     const cleanCpf = cpf.replace(/\D/g, '');
     if (cleanCpf.length !== 11) {
-      return { success: false, message: 'CPF deve ter 11 dígitos.' };
+      return { success: false, message: 'CPF deve ter 11 dÃƒÂ­gitos.' };
     }
 
     if (typeof amount !== 'number' || amount <= 0) {
-      return { success: false, message: 'Valor do depósito deve ser maior que zero.' };
+      return { success: false, message: 'Valor do depÃƒÂ³sito deve ser maior que zero.' };
     }
 
-    console.log('🔵 [WEB adminDeposit] Realizando depósito:', { cpf: cleanCpf, amount });
+    console.log('Ã°Å¸â€Âµ [WEB adminDeposit] Realizando depÃƒÂ³sito:', { cpf: cleanCpf, amount });
     const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/admin/users/${cleanCpf}/deposit`, {
       method: 'POST',
       body: JSON.stringify({ amount }),
     });
-    console.log('✅ [WEB adminDeposit] Resultado:', result);
+    console.log('Ã¢Å“â€¦ [WEB adminDeposit] Resultado:', result);
     
-    // Se não retornou user, buscar novamente
+    // Se nÃƒÂ£o retornou user, buscar novamente
     if (result.success && !result.user) {
       const refreshed = await adminGetUserByCpf(cleanCpf);
       if (refreshed.success && refreshed.user) {
-        return { success: true, message: result.message || 'Depósito realizado com sucesso.', user: refreshed.user };
+        return { success: true, message: result.message || 'DepÃƒÂ³sito realizado com sucesso.', user: refreshed.user };
       }
     }
     
     if (result.success && result.user) {
-      return { success: true, message: result.message || 'Depósito realizado com sucesso.', user: result.user };
+      return { success: true, message: result.message || 'DepÃƒÂ³sito realizado com sucesso.', user: result.user };
     }
-    return { success: result.success || false, message: result.message || 'Falha ao realizar depósito.' };
+    return { success: result.success || false, message: result.message || 'Falha ao realizar depÃƒÂ³sito.' };
   } catch (error: any) {
-    console.error('❌ [WEB adminDeposit] Erro:', error);
-    const errorMessage = error?.response?.data?.message || error.message || 'Erro ao realizar depósito';
+    console.error('Ã¢ÂÅ’ [WEB adminDeposit] Erro:', error);
+    const errorMessage = error?.response?.data?.message || error.message || 'Erro ao realizar depÃƒÂ³sito';
     return { success: false, message: errorMessage };
   }
 };
@@ -581,7 +581,7 @@ const result = await apiCall<{ success: boolean; requests?: any[] }>('/admin/req
     const requests = result?.requests || [];
     return requests.filter((r: any) => !r.status || r.status === 'pending') as PasswordResetRequest[];
   } catch (error: any) {
-    console.error('Erro ao buscar solicitações de senha:', error);
+    console.error('Erro ao buscar solicitaÃƒÂ§ÃƒÂµes de senha:', error);
     return [];
   }
 };
@@ -594,7 +594,7 @@ export const adminApprovePasswordRequest = async (cpf: string): Promise<{ succes
     });
     return result;
   } catch (error: any) {
-    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao aprovar solicitação de senha' };
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao aprovar solicitaÃƒÂ§ÃƒÂ£o de senha' };
   }
 };
 
@@ -607,7 +607,7 @@ export const adminDenyPasswordRequest = async (cpf: string, reason: string): Pro
     });
     return result;
   } catch (error: any) {
-    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao negar solicitação de senha' };
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao negar solicitaÃƒÂ§ÃƒÂ£o de senha' };
   }
 };
 
@@ -623,7 +623,7 @@ const result = await apiCall<{ success: boolean; requests?: any[] } | any[]>('/a
     const requests = result?.requests || [];
     return requests.filter((r: any) => !r.status || r.status === 'pending') as LimitIncreaseRequest[];
   } catch (error: any) {
-    console.error('Erro ao buscar solicitações de limite:', error);
+    console.error('Erro ao buscar solicitaÃƒÂ§ÃƒÂµes de limite:', error);
     return [];
   }
 };
@@ -677,7 +677,7 @@ export const adminGetOverdueMasses = async (): Promise<{
   }
 };
 
-// --- Motor de Geração de Boleto e PIX por Fatura ---
+// --- Motor de GeraÃƒÂ§ÃƒÂ£o de Boleto e PIX por Fatura ---
 export interface PaymentCodesRequest {
   cpf: string;
   name: string;
@@ -755,7 +755,7 @@ export const generateInvoicePaymentCodes = async (request: PaymentCodesRequest):
   }
 };
 
-// Fallback local para quando o backend não está disponível
+// Fallback local para quando o backend nÃƒÂ£o estÃƒÂ¡ disponÃƒÂ­vel
 function generatePaymentCodesFallbackLocal(req: PaymentCodesRequest): PaymentCodesResponse {
   const { cpf, name, amount, dueDate, invoiceId } = req;
   const FEBRABAN_BASE = new Date(1997, 9, 7);
@@ -880,7 +880,7 @@ export const adminApproveLimitRequest = async (cpf: string): Promise<{ success: 
     });
     return result;
   } catch (error: any) {
-    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao aprovar solicitação de limite' };
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao aprovar solicitaÃƒÂ§ÃƒÂ£o de limite' };
   }
 };
 
@@ -893,7 +893,7 @@ export const adminDenyLimitRequest = async (cpf: string, reason: string): Promis
     });
     return result;
   } catch (error: any) {
-    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao negar solicitação de limite' };
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao negar solicitaÃƒÂ§ÃƒÂ£o de limite' };
   }
 };
 
@@ -901,7 +901,7 @@ export const adminUpdateCardDetails = async (cpf: string, details: { dueDate?: s
   try {
     const cleanCpf = cpf.replace(/\D/g, '');
     if (cleanCpf.length !== 11) {
-      return { success: false, message: 'CPF deve ter 11 dígitos.' };
+      return { success: false, message: 'CPF deve ter 11 dÃƒÂ­gitos.' };
     }
 
     const result = await apiCall<{ success: boolean; message: string; user?: any }>(`/admin/users/${cleanCpf}/card-details`, {
@@ -909,20 +909,20 @@ export const adminUpdateCardDetails = async (cpf: string, details: { dueDate?: s
       body: JSON.stringify(details),
     });
     
-    // Se não retornou user, buscar novamente
+    // Se nÃƒÂ£o retornou user, buscar novamente
     if (result.success && !result.user) {
       const refreshed = await adminGetUserByCpf(cleanCpf);
       if (refreshed.success && refreshed.user) {
-        return { success: true, message: result.message || 'Detalhes do cartão atualizados com sucesso.', user: refreshed.user };
+        return { success: true, message: result.message || 'Detalhes do cartÃƒÂ£o atualizados com sucesso.', user: refreshed.user };
       }
     }
     
     if (result.success && result.user) {
-      return { success: true, message: result.message || 'Detalhes do cartão atualizados com sucesso.', user: result.user };
+      return { success: true, message: result.message || 'Detalhes do cartÃƒÂ£o atualizados com sucesso.', user: result.user };
     }
-    return { success: result.success || false, message: result.message || 'Falha ao atualizar detalhes do cartão.' };
+    return { success: result.success || false, message: result.message || 'Falha ao atualizar detalhes do cartÃƒÂ£o.' };
   } catch (error: any) {
-    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao atualizar detalhes do cartão' };
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao atualizar detalhes do cartÃƒÂ£o' };
   }
 };
 
@@ -944,7 +944,7 @@ export const adminGetStats = async (): Promise<{
   } catch (error: any) {
     return { 
         success: false, 
-        message: error.message || 'Erro ao buscar estatísticas',
+        message: error.message || 'Erro ao buscar estatÃƒÂ­sticas',
         stats: {
             totalClients: 0,
             transactionsToday: 0,
@@ -1002,7 +1002,7 @@ export const checkout = async (payload: CheckoutPayload): Promise<{ success: boo
   }
 };
 
-// ── Admin Billing Mock (issue #42) ──────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Admin Billing Mock (issue #42) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 export const adminSeedTestScenario = async (
     cpf: string | null,
@@ -1016,7 +1016,7 @@ export const adminSeedTestScenario = async (
         });
         return { success: true, applied: result.applied };
     } catch (error: any) {
-        return { success: false, message: error.message || 'Erro ao aplicar cenário.' };
+        return { success: false, message: error.message || 'Erro ao aplicar cenÃƒÂ¡rio.' };
     }
 };
 
@@ -1126,7 +1126,7 @@ export const adminAuditConsistency = async (options?: { cpf?: string; limit?: nu
     const result = await apiCall<any>(`/admin/audit-consistency${qs ? '?'+qs : ''}`);
     return result;
   } catch (error: any) {
-    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao auditar consistência' };
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao auditar consistÃƒÂªncia' };
   }
 };
 
@@ -1186,6 +1186,15 @@ export const adminHealthCharges = async (): Promise<{
   }
 };
 
+
+export const adminAuditOrphansPre005 = async (): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        const res = await apiCall('/admin/audit/orphans-pre005', { method: 'GET' });
+        return { success: true, data: res };
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Erro ao auditar órfãos pré-005' };
+    }
+};
 export const adminFixOrphanPayments = async (): Promise<{
   success: boolean;
   message?: string;
@@ -1199,7 +1208,7 @@ export const adminFixOrphanPayments = async (): Promise<{
     });
     return result;
   } catch (error: any) {
-    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao corrigir pagamentos órfãos' };
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao corrigir pagamentos ÃƒÂ³rfÃƒÂ£os' };
   }
 };
 
@@ -1217,7 +1226,7 @@ export const adminSimulateMass = async (payload: SimulateMassPayload): Promise<{
         });
         return result;
     } catch (error: any) {
-        return { success: false, message: error.message || 'Erro ao simular transações em massa.' };
+        return { success: false, message: error.message || 'Erro ao simular transaÃƒÂ§ÃƒÂµes em massa.' };
     }
 };
 
@@ -1242,7 +1251,7 @@ export const adminAcquirerSimulate = async (payload: AcquirerSimulatePayload): P
         });
         return { success: true, message: result.message };
     } catch (error: any) {
-        return { success: false, message: error.message || 'Erro ao simular transação no adquirente.' };
+        return { success: false, message: error.message || 'Erro ao simular transaÃƒÂ§ÃƒÂ£o no adquirente.' };
     }
 };
 
@@ -1253,7 +1262,7 @@ export const adminGetCpfByCardNumber = async (cardNumber: string): Promise<{ suc
         });
         return result;
     } catch (error: any) {
-        return { success: false, message: error.message || 'Erro na comunicação.' };
+        return { success: false, message: error.message || 'Erro na comunicaÃƒÂ§ÃƒÂ£o.' };
     }
 };
 
@@ -1265,7 +1274,7 @@ export const adminForceRecurringEngine = async (cpf?: string): Promise<{ success
         });
         return result;
     } catch (error: any) {
-        return { success: false, message: error.message || 'Erro ao forçar motor de recorrência.' };
+        return { success: false, message: error.message || 'Erro ao forÃƒÂ§ar motor de recorrÃƒÂªncia.' };
     }
 };
 
@@ -1292,6 +1301,62 @@ export const createRecurringBill = async (cpf: string, data: { name: string; amo
     }
 };
 
+// Pagamento manual de conta recorrente (dÃƒÂ©bito em conta / cartÃƒÂ£o).
+// ACCOUNT_DEBIT debita users.balance; CREDIT_CARD consome o limite do cartÃƒÂ£o.
+// Upsert: se a conta sÃƒÂ³ existe no localStorage do frontend, registra com o billId enviado.
+export const payRecurringBill = async (cpf: string, billId: string, data: { paymentMethod?: 'ACCOUNT_DEBIT' | 'CREDIT_CARD'; name?: string; amount?: number; dueDay?: number; category?: string; frequency?: string }): Promise<{ success: boolean; message?: string; bill?: any; transactionId?: string; paymentMethod?: string; newBalance?: number }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string; bill: any; transactionId: string; paymentMethod: string; newBalance: number }>(`/recurring-bills/${cpf}/${billId}/pay`, {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        return { success: true, ...result };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao pagar conta recorrente.' };
+    }
+};
+
+// Edita uma conta recorrente (PUT /recurring-bills/:cpf/:billId).
+export const updateRecurringBill = async (cpf: string, billId: string, data: { name?: string; amount?: number; dueDay?: number; category?: string }): Promise<{ success: boolean; message?: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string }>(`/recurring-bills/${cpf}/${billId}`, {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        });
+        return { success: true, message: result.message };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao editar conta recorrente.' };
+    }
+};
+
+// Remove (cancela) uma conta recorrente (DELETE /recurring-bills/:cpf/:billId).
+export const removeRecurringBill = async (cpf: string, billId: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+        const result = await apiCall<{ success: boolean; message: string }>(`/recurring-bills/${cpf}/${billId}`, {
+            method: 'DELETE'
+        });
+        return { success: true, message: result.message };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao cancelar conta recorrente.' };
+    }
+};
+
+// Lista TODAS as contas recorrentes de todas as massas (admin) Ã¢â‚¬â€ aba Contas Recorrentes.
+export const adminGetAllRecurringBills = async (opts: { status?: string; cpf?: string } = {}): Promise<{ success: boolean; bills?: any[]; message?: string }> => {
+    try {
+        const params = new URLSearchParams();
+        if (opts.status) params.set('status', opts.status);
+        if (opts.cpf) params.set('cpf', opts.cpf);
+        const qs = params.toString() ? `?${params.toString()}` : '';
+        const result = await apiCall<{ success: boolean; bills: any[] }>(`/admin/recurring-bills${qs}`, {
+            method: 'GET'
+        });
+        return { success: true, bills: result.bills || [] };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao listar contas recorrentes.' };
+    }
+};
+
 export const adminGetTransactionById = async (id: string): Promise<{ success: boolean; transaction?: any; message?: string }> => {
     try {
         const result = await apiCall<{ success: boolean; transaction: any; message?: string }>(`/admin/transactions/${id}`, {
@@ -1299,7 +1364,7 @@ export const adminGetTransactionById = async (id: string): Promise<{ success: bo
         });
         return { success: true, transaction: result.transaction };
     } catch (error: any) {
-        return { success: false, message: error.message || 'Erro ao buscar transação.' };
+        return { success: false, message: error.message || 'Erro ao buscar transaÃƒÂ§ÃƒÂ£o.' };
     }
 };
 
@@ -1310,7 +1375,7 @@ export const adminCancelTransaction = async (cpf: string, id: string): Promise<{
         });
         return { success: true, message: result.message, plan: result.plan };
     } catch (error: any) {
-        return { success: false, message: error.message || 'Erro ao estornar transação.' };
+        return { success: false, message: error.message || 'Erro ao estornar transaÃƒÂ§ÃƒÂ£o.' };
     }
 };
 
@@ -1320,7 +1385,7 @@ export const adminBlockUser = async (cpf: string): Promise<{ success: boolean; m
         const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cpf}/block`, { method: 'POST' });
         return { success: true, message: result.message };
     } catch (error: any) {
-        return { success: false, message: error.message || 'Erro ao bloquear usuário.' };
+        return { success: false, message: error.message || 'Erro ao bloquear usuÃƒÂ¡rio.' };
     }
 };
 
@@ -1329,7 +1394,7 @@ export const adminUnblockUser = async (cpf: string): Promise<{ success: boolean;
         const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cpf}/unblock`, { method: 'POST' });
         return { success: true, message: result.message };
     } catch (error: any) {
-        return { success: false, message: error.message || 'Erro ao desbloquear usuário.' };
+        return { success: false, message: error.message || 'Erro ao desbloquear usuÃƒÂ¡rio.' };
     }
 };
 
@@ -1353,7 +1418,7 @@ export const adminUpdateCreditLimit = async (cpf: string, creditLimit: number): 
         });
         return { success: true, message: result.message };
     } catch (error: any) {
-        return { success: false, message: error.message || 'Erro ao atualizar limite de crédito.' };
+        return { success: false, message: error.message || 'Erro ao atualizar limite de crÃƒÂ©dito.' };
     }
 };
 
@@ -1407,7 +1472,7 @@ export const adminCreateMassUser = async (payload: any): Promise<{ success: bool
         });
         return result;
     } catch (error: any) {
-        // Fallback para mockApi se o servidor backend não estiver ativo
+        // Fallback para mockApi se o servidor backend nÃƒÂ£o estiver ativo
         const { adminCreateMassUser: mockCreate } = await import('./mockApi');
         return mockCreate(payload);
     }
@@ -1415,3 +1480,128 @@ export const adminCreateMassUser = async (payload: any): Promise<{ success: bool
 
 // No-op in real API mode; overridden by mockApi.ts alias in demo mode
 export const initializeMockUsers = async (): Promise<void> => {};
+
+// --- TELEGRAM MANAGEMENT APIS ---
+export interface TelegramTopic {
+    cpf: string;
+    topicId: number;
+    fullName?: string;
+}
+
+export interface TelegramSetting {
+    category: string;
+    enabled: boolean;
+    valid_from?: string | null;
+    valid_until?: string | null;
+    ttl_minutes?: number | null;
+    updated_at?: string;
+    updated_by?: string | null;
+}
+
+export const adminTelegramStatus = async (): Promise<{ configured: boolean; botName?: string; chatId?: string }> => {
+    try {
+        return await apiCall('/admin/telegram/status');
+    } catch {
+        return { configured: false };
+    }
+};
+
+export const adminTelegramTopics = async (): Promise<TelegramTopic[]> => {
+    try {
+        const res = await apiCall<{ success: boolean; topics: TelegramTopic[] }>('/admin/telegram/topics');
+        return res.topics || [];
+    } catch {
+        return [];
+    }
+};
+
+export const adminTelegramCreateTopic = async (cpf: string): Promise<{ success: boolean; message: string; topicId?: number }> => {
+    try {
+        return await apiCall('/admin/telegram/topics', {
+            method: 'POST',
+            body: JSON.stringify({ cpf }),
+        });
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Erro ao criar tÃƒÂ³pico Telegram' };
+    }
+};
+
+export const adminTelegramDeleteTopic = async (cpf: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        return await apiCall('/admin/telegram/topics/' + cpf, { method: 'DELETE' });
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Erro ao remover tÃƒÂ³pico Telegram' };
+    }
+};
+
+export const adminTelegramTest = async (): Promise<{ success: boolean; message: string }> => {
+    try {
+        return await apiCall('/admin/telegram/test', { method: 'POST' });
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Erro ao testar envio Telegram' };
+    }
+};
+
+export const adminTelegramSendMessage = async (cpf: string, text: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        return await apiCall('/admin/telegram/send', {
+            method: 'POST',
+            body: JSON.stringify({ cpf, text }),
+        });
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Erro ao enviar mensagem Telegram' };
+    }
+};
+
+export const adminTelegramSettings = async (): Promise<TelegramSetting[]> => {
+    try {
+        const res = await apiCall<{ success: boolean; settings: TelegramSetting[] }>('/admin/telegram/settings');
+        return res.settings || [];
+    } catch {
+        return [];
+    }
+};
+
+export const adminTelegramUpdateSetting = async (category: string, fields: Partial<TelegramSetting>): Promise<{ success: boolean; message: string }> => {
+    try {
+        return await apiCall('/admin/telegram/settings/' + category, {
+            method: 'PATCH',
+            body: JSON.stringify(fields),
+        });
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Erro ao atualizar configuraÃƒÂ§ÃƒÂ£o do Telegram' };
+    }
+};
+
+export const adminTelegramTestCategory = async (category: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        return await apiCall('/admin/telegram/settings/' + category + '/test', { method: 'POST' });
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Erro ao testar categoria Telegram' };
+    }
+};
+
+export const adminTelegramSendPdf = async (cpf: string, type: 'open' | 'closed' | 'previous'): Promise<{ success: boolean; message: string }> => {
+    try {
+        return await apiCall('/admin/telegram/topics/' + cpf + '/send-pdf', {
+            method: 'POST',
+            body: JSON.stringify({ type }),
+        });
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Erro ao enviar PDF' };
+    }
+};
+
+export const adminTelegramSendTable = async (
+    cpf: string,
+    payload: { title: string; headers: string[]; rows: string[][] }
+): Promise<{ success: boolean; message: string }> => {
+    try {
+        return await apiCall('/admin/telegram/topics/' + cpf + '/send-table', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Erro ao enviar tabela ASCII' };
+    }
+};
