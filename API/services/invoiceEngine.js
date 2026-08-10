@@ -21,9 +21,14 @@ async function runEngine(targetCpf = null) {
     const invoiceRef = computeCurrentCycle(billingCfg).invoiceRef;
 
     let processedCount = 0;
+    const errors = [];
     const now = new Date();
 
     for (const user of users) {
+      // Isolamento por massa: sem este try/catch, um erro em qualquer CPF era capturado
+      // apenas pelo try externo (que relanca), abortando o laco e deixando todas as massas
+      // seguintes sem fechamento no dia. A indentacao do corpo foi preservada de proposito.
+      try {
       const dueDate = new Date(user.credit_card_invoice_due_date);
       if (isNaN(dueDate.getTime())) continue;
 
@@ -253,10 +258,14 @@ async function runEngine(targetCpf = null) {
         
         processedCount++;
       }
+      } catch (massErr) {
+        errors.push({ cpf: user.cpf, etapa: 'invoice_engine', mensagem: massErr.message });
+        console.error(`[InvoiceEngine] Falha na massa ${user.cpf}:`, massErr);
+      }
     }
 
-    console.log(`[InvoiceEngine] Concluído. ${processedCount} faturas fechadas/roladas.`);
-    return { success: true, processed: processedCount };
+    console.log(`[InvoiceEngine] Concluído. ${processedCount} faturas fechadas/roladas${errors.length ? `, ${errors.length} massa(s) com falha` : ''}.`);
+    return { success: true, processed: processedCount, falhas: errors.length, errors };
   } catch (error) {
     console.error(`[InvoiceEngine] Erro durante a execução:`, error);
     throw error;
