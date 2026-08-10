@@ -24,7 +24,10 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
     const [sendingPdf, setSendingPdf] = useState(false);
     const [sentPdfSuccess, setSentPdfSuccess] = useState(false);
 
-    const openAmount = searchedUser.creditCard?.currentInvoice !== undefined && searchedUser.creditCard?.currentInvoice !== null ? searchedUser.creditCard.currentInvoice : 2365.05;
+    // Sem fallback de valor plausível: dado ausente vira 0 (mesma convenção já usada
+    // neste arquivo para closedAmount/valorPago/closedInvoiceResidual), nunca um
+    // número inventado que passa por dado real.
+    const openAmount = searchedUser.creditCard?.currentInvoice ?? 0;
     // Valor ORIGINAL da fatura fechada (antes do pagamento), para exibição.
     // _closedInvoiceValorTotal é enviado pelo backend via enrichUserCreditCardData.
     // Quando a fatura foi paga, closedInvoice (= saldo devedor) é 0, mas o
@@ -55,12 +58,41 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
         const _months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
         return String(d.getDate()).padStart(2, '0') + '/' + (_months[d.getMonth()] || '');
     })();
-    const previousAmount = 1120.00; // Fatura Anterior (Mai/26) - Paga
+    // Fat 1 (fatura anterior) não tem campo próprio no backend — não existe
+    // "fatura anterior fechada e paga" em CreditCard, só closedInvoice (Fat 2) e
+    // currentInvoice (Fat 3). A única fonte real de um ciclo mais antigo é
+    // paymentHistory: um pagamento TOTAL registrado representa uma fatura quitada.
+    // Sem histórico real, o slot Fat 1 fica oculto — nunca preenchido com valor fixo.
+    const previousPayment = (searchedUser.creditCard?.paymentHistory || [])
+        .filter(p => p.paymentType === 'TOTAL')
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+    const hasPreviousInvoice = !!previousPayment;
+    const previousAmount = previousPayment?.amount ?? 0;
+    const previousDate = previousPayment?.date;
+
+    // Rótulos de mês derivados das datas reais das faturas — nunca "Mai/26"/"Jun/26"/
+    // "Jul/26" fixos no código, que ficam errados assim que o mês vira.
+    const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const mesAno = (dataIso?: string | null): string => {
+        if (!dataIso) return '—';
+        const d = new Date(dataIso);
+        if (isNaN(d.getTime())) return '—';
+        return `${MESES_ABREV[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
+    };
+    const closedMonthLabel = mesAno(searchedUser.creditCard?.closedInvoiceDueDate);
+    const openMonthLabel = mesAno(searchedUser.creditCard?.invoiceDueDate);
+    const previousMonthLabel = mesAno(previousDate);
+    const previousDateFmt = previousDate ? new Date(previousDate).toLocaleDateString('pt-BR') : '—';
+
     // Cálculos centralizados via invoiceMath.js (fonte única — mesma função usada
     // pelo motor runBillingValidation no backend). Antes liamos de bkCharges
     // (backend), o que era redundante e podia divergir se o backend mudasse.
-    const diffTime = Math.abs(new Date().getTime() - new Date(searchedUser.creditCard?.closedInvoiceDueDate || searchedUser.creditCard?.invoiceDueDate || '2026-07-15').getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    // Sem fallback de data fixa: sem due date real, diffDays fica 0 (explicitDays,
+    // vindo do backend, é a fonte preferida logo abaixo).
+    const closedOrOpenDueDate = searchedUser.creditCard?.closedInvoiceDueDate || searchedUser.creditCard?.invoiceDueDate;
+    const diffDays = closedOrOpenDueDate
+        ? Math.ceil(Math.abs(new Date().getTime() - new Date(closedOrOpenDueDate).getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
     const explicitDays = (searchedUser as any).daysOverdue ?? (searchedUser.creditCard as any)?.daysOverdue ?? 0;
     // overdueDays usa originalClosedAmount (não closedAmount=0): fatura paga
     // ainda teve dias de atraso antes do pagamento.
@@ -111,7 +143,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     onClick={() => {
                         let tsvData = `RELATÓRIO DE FATURA E ENCARGOS - BACKOFFICE FINTECH\t${new Date().toLocaleDateString('pt-BR')}\n`;
                         tsvData += `Cliente:\t${searchedUser.fullName}\tCPF:\t${searchedUser.cpf}\n`;
-                        tsvData += `Fatura Selecionada:\t${selectedBackofficeInvoice === 'closed' ? 'Fatura Fechada Jun/26' : selectedBackofficeInvoice === 'open' ? 'Fatura Aberta Jul/26' : 'Fatura Mai/26 Paga'}\tDias em Atraso:\t${overdueDays}\n\n`;
+                        tsvData += `Fatura Selecionada:\t${selectedBackofficeInvoice === 'closed' ? `Fatura Fechada ${closedMonthLabel}` : selectedBackofficeInvoice === 'open' ? `Fatura Aberta ${openMonthLabel}` : `Fatura ${previousMonthLabel} Paga`}\tDias em Atraso:\t${overdueDays}\n\n`;
                         tsvData += `CÓDIGO ISO\tITEM / DESCRIÇÃO DO ENCARGO\tTAXA / REGRA\tVALOR (R$)\n`;
 
                         if (selectedBackofficeInvoice === 'closed') {
@@ -126,9 +158,9 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                             tsvData += `NOTA\tEncargos herdados e consolidados na FATURA ABERTA\tSomente no Corte/Fechamento Aberta\t0,00\n`;
                             tsvData += `MIN_REGULARIZAR\tPagamento Mínimo Obrigatório p/ Regularizar Atraso\tMínimo Original (10%) + 100% Encargos\t${minClosedWithCharges.toFixed(2).replace('.', ',')}\n`;
                         } else if (selectedBackofficeInvoice === 'open') {
-                            tsvData += `BASE\tNovas Compras do Mês Corrente (Jul/26)\tAberto\t${openAmount.toFixed(2).replace('.', ',')}\n`;
+                            tsvData += `BASE\tNovas Compras do Mês Corrente (${openMonthLabel})\tAberto\t${openAmount.toFixed(2).replace('.', ',')}\n`;
                             tsvData += `MIN\tPagamento Mínimo Compras Correntes (10%)\t10.00%\t${minOpenOriginal.toFixed(2).replace('.', ',')}\n`;
-                            tsvData += `HERANCA\tFatura Fechada Anterior em Atraso (Jun/26)\tInvariável\t${originalClosedAmount.toFixed(2).replace('.', ',')}\n`;
+                            tsvData += `HERANCA\tFatura Fechada Anterior em Atraso (${closedMonthLabel})\tInvariável\t${originalClosedAmount.toFixed(2).replace('.', ',')}\n`;
                             tsvData += `CÓD 3000\tTaxa de Multa por Atraso (Herdada)\t2.00%\t${multa.toFixed(2).replace('.', ',')}\n`;
                             tsvData += `CÓD 2001\tJuros de Mora (Herdado)\t0.0333%/dia\t${jurosMora.toFixed(2).replace('.', ',')}\n`;
                             tsvData += `CÓD 2000\tJuros Remuneratórios (Herdado)\t0.513%/dia\t${jurosRemun.toFixed(2).replace('.', ',')}\n`;
@@ -137,8 +169,8 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                             tsvData += `TOTAL_HER\tTotal Encargos Herdados\tAcumulado (${overdueDays}d)\t${totalEncargos.toFixed(2).replace('.', ',')}\n`;
                             tsvData += `TOTAL_CORTE\tTotal Consolidado no Fechamento/Corte\tCompras + Herança + Encargos\t${totalOpenConsolidated.toFixed(2).replace('.', ',')}\n`;
                             tsvData += `MIN_CORTE\tPagamento Mínimo Consolidado no Corte\tMínimo + Herança + Encargos\t${minOpenConsolidated.toFixed(2).replace('.', ',')}\n`;
-                        } else {
-                            tsvData += `BASE\tFatura Anterior Mai/26 Quitada\t15/05/2026\t${previousAmount.toFixed(2).replace('.', ',')}\n`;
+                        } else if (hasPreviousInvoice) {
+                            tsvData += `BASE\tFatura Anterior ${previousMonthLabel} Quitada\t${previousDateFmt}\t${previousAmount.toFixed(2).replace('.', ',')}\n`;
                             tsvData += `MIN\tPagamento Mínimo da Época (10%)\t10.00%\t${minPreviousOriginal.toFixed(2).replace('.', ',')}\n`;
                             tsvData += `CÓD 3000\tTaxa de Multa por Atraso\t0.00%\t0,00\n`;
                             tsvData += `CÓD 2001\tJuros de Mora\t0.00%/dia\t0,00\n`;
@@ -146,6 +178,8 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                             tsvData += `CÓD 4001\tIOF Adicional Fixo (Compras)\t0.38%\t${(previousAmount * 0.0038).toFixed(2).replace('.', ',')}\n`;
                             tsvData += `CÓD 4000\tIOF Diário\t0.00%/dia\t0,00\n`;
                             tsvData += `STATUS\tStatus da Fatura\t100% Quitada\t0,00\n`;
+                        } else {
+                            tsvData += `AVISO\tSem fatura anterior registrada para este cliente\t—\t—\n`;
                         }
 
                         try {
@@ -181,7 +215,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     disabled={sendingTelegram}
                     onClick={async () => {
                         setSendingTelegram(true);
-                        const title = `Relatório de Fatura (${selectedBackofficeInvoice === 'closed' ? 'Fechada Jun/26' : selectedBackofficeInvoice === 'open' ? 'Aberta Jul/26' : 'Mai/26 Paga'})`;
+                        const title = `Relatório de Fatura (${selectedBackofficeInvoice === 'closed' ? `Fechada ${closedMonthLabel}` : selectedBackofficeInvoice === 'open' ? `Aberta ${openMonthLabel}` : `${previousMonthLabel} Paga`})`;
                         const headers = ['CÓDIGO', 'ITEM', 'TAXA / REGRA', 'VALOR (R$)'];
                         const rows: string[][] = [];
 
@@ -197,9 +231,9 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                             rows.push(['NOTA', 'Encargos herdados e consolidados na FATURA ABERTA', 'Somente no Corte', '0.00']);
                             rows.push(['MIN_REGULARIZAR', 'Pagamento Mínimo Obrigatório p/ Regularizar Atraso', 'Mínimo + 100% Encargos', minClosedWithCharges.toFixed(2)]);
                         } else if (selectedBackofficeInvoice === 'open') {
-                            rows.push(['BASE', 'Novas Compras do Mês Corrente (Jul/26)', 'Aberto', openAmount.toFixed(2)]);
+                            rows.push(['BASE', `Novas Compras do Mês Corrente (${openMonthLabel})`, 'Aberto', openAmount.toFixed(2)]);
                             rows.push(['MIN', 'Pagamento Mínimo Compras Correntes (10%)', '10.00%', minOpenOriginal.toFixed(2)]);
-                            rows.push(['HERANCA', isPaid ? `Fatura Fechada Anterior PAGA${paidAtLabel ? ` em ${paidAtLabel}` : ''} (Jun/26)` : 'Fatura Fechada Anterior em Atraso (Jun/26)', 'Invariável', originalClosedAmount.toFixed(2)]);
+                            rows.push(['HERANCA', isPaid ? `Fatura Fechada Anterior PAGA${paidAtLabel ? ` em ${paidAtLabel}` : ''} (${closedMonthLabel})` : `Fatura Fechada Anterior em Atraso (${closedMonthLabel})`, 'Invariável', originalClosedAmount.toFixed(2)]);
                             rows.push(['CÓD 3000', 'Taxa de Multa por Atraso (Herdada)', '2.00%', multa.toFixed(2)]);
                             rows.push(['CÓD 2001', 'Juros de Mora (Herdado)', '0.0333%/dia', jurosMora.toFixed(2)]);
                             rows.push(['CÓD 2000', 'Juros Remuneratórios (Herdado)', '0.513%/dia', jurosRemun.toFixed(2)]);
@@ -208,8 +242,8 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                             rows.push(['TOTAL_HER', 'Total Encargos Herdados', `Acumulado (${overdueDays}d)`, totalEncargos.toFixed(2)]);
                             rows.push(['TOTAL_CORTE', 'Total Consolidado no Fechamento/Corte', 'Compras + Herança + Encargos', totalOpenConsolidated.toFixed(2)]);
                             rows.push(['MIN_CORTE', 'Pagamento Mínimo Consolidado no Corte', 'Mínimo + Herança + Encargos', minOpenConsolidated.toFixed(2)]);
-                        } else {
-                            rows.push(['BASE', 'Fatura Anterior Mai/26 Quitada', '15/05/2026', previousAmount.toFixed(2)]);
+                        } else if (hasPreviousInvoice) {
+                            rows.push(['BASE', `Fatura Anterior ${previousMonthLabel} Quitada`, previousDateFmt, previousAmount.toFixed(2)]);
                             rows.push(['MIN', 'Pagamento Mínimo da Época (10%)', '10.00%', minPreviousOriginal.toFixed(2)]);
                             rows.push(['CÓD 3000', 'Taxa de Multa por Atraso', '0.00%', '0.00']);
                             rows.push(['CÓD 2001', 'Juros de Mora', '0.00%/dia', '0.00']);
@@ -217,6 +251,8 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                             rows.push(['CÓD 4001', 'IOF Adicional Fixo (Compras)', '0.38%', (previousAmount * 0.0038).toFixed(2)]);
                             rows.push(['CÓD 4000', 'IOF Diário', '0.00%/dia', '0.00']);
                             rows.push(['STATUS', 'Status da Fatura', '100% Quitada', '0.00']);
+                        } else {
+                            rows.push(['AVISO', 'Sem fatura anterior registrada para este cliente', '—', '—']);
                         }
 
                         const result = await adminTelegramSendTable(searchedUser.cpf, { title, headers, rows });
@@ -294,24 +330,33 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     <p className="font-black text-emerald-600 dark:text-emerald-400 text-sm">R$ {searchedUser.balance.toFixed(2)}</p>
                 </div>
 
-                {/* Fat 1 — Fatura mais antiga (Mai/26) - PAGA */}
-                <button
-                    type="button"
-                    onClick={() => onSelectInvoice('previous')}
-                    className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
-                        selectedBackofficeInvoice === 'previous'
-                            ? 'bg-emerald-500/15 border-emerald-500 shadow-sm ring-2 ring-emerald-500/40'
-                            : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-emerald-300'
-                    }`}
-                >
-                    <div className="flex justify-between items-center">
-                        <p className="opacity-60 text-[10px] uppercase font-bold">Fat 1 · Mai/26</p>
-                        <span className="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full">PAGA ✅</span>
+                {/* Fat 1 — fatura anterior real, derivada de paymentHistory. Sem histórico
+                    de pagamento TOTAL registrado, o slot fica desabilitado — nunca
+                    preenchido com um valor fixo passando por dado real. */}
+                {hasPreviousInvoice ? (
+                    <button
+                        type="button"
+                        onClick={() => onSelectInvoice('previous')}
+                        className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
+                            selectedBackofficeInvoice === 'previous'
+                                ? 'bg-emerald-500/15 border-emerald-500 shadow-sm ring-2 ring-emerald-500/40'
+                                : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-emerald-300'
+                        }`}
+                    >
+                        <div className="flex justify-between items-center">
+                            <p className="opacity-60 text-[10px] uppercase font-bold">Fat 1 · {previousMonthLabel}</p>
+                            <span className="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full">PAGA ✅</span>
+                        </div>
+                        <p className="font-black text-emerald-600 dark:text-emerald-400 text-sm mt-1">R$ {previousAmount.toFixed(2)}</p>
+                    </button>
+                ) : (
+                    <div className="p-2.5 rounded-xl text-left border border-dashed border-black/10 dark:border-white/10 opacity-50 cursor-not-allowed">
+                        <p className="opacity-60 text-[10px] uppercase font-bold">Fat 1</p>
+                        <p className="font-black text-zinc-400 text-sm mt-1">Sem histórico</p>
                     </div>
-                    <p className="font-black text-emerald-600 dark:text-emerald-400 text-sm mt-1">R$ {previousAmount.toFixed(2)}</p>
-                </button>
+                )}
 
-                {/* Fat 2 — Fatura Fechada (Jun/26) - Com ÍCONE DE ATRASO Em Cima */}
+                {/* Fat 2 — Fatura Fechada, com ícone de atraso em cima quando aplicável */}
                 <button
                     type="button"
                     onClick={() => onSelectInvoice('closed')}
@@ -322,7 +367,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     }`}
                 >
                     <div className="flex justify-between items-center">
-                        <p className="opacity-60 text-[10px] uppercase font-bold">Fat 2 · Fechada (Jun)</p>
+                        <p className="opacity-60 text-[10px] uppercase font-bold">Fat 2 · Fechada ({closedMonthLabel})</p>
                         {isPaid ? (
                             <span className="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full">FECHADA</span>
                         ) : isOverdue ? (
@@ -336,7 +381,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     <p className="font-black text-rose-600 dark:text-rose-400 text-sm mt-1">R$ {originalClosedAmount.toFixed(2)}</p>
                 </button>
 
-                {/* Fat 3 — Fatura Aberta/atual (Jul/26) */}
+                {/* Fat 3 — Fatura Aberta/atual */}
                 <button
                     type="button"
                     onClick={() => onSelectInvoice('open')}
@@ -347,7 +392,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     }`}
                 >
                     <div className="flex justify-between items-center">
-                        <p className="opacity-60 text-[10px] uppercase font-bold">Fat 3 · Aberta (Jul)</p>
+                        <p className="opacity-60 text-[10px] uppercase font-bold">Fat 3 · Aberta ({openMonthLabel})</p>
                         <span className="text-[9px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full">ABERTA</span>
                     </div>
                     <p className="font-black text-blue-600 dark:text-blue-400 text-sm mt-1">R$ {totalOpenConsolidated.toFixed(2)}</p>
@@ -363,7 +408,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                             : 'bg-rose-500/10 text-rose-600 dark:text-rose-300'
                     }`}>
                         <span className="flex items-center gap-2">
-                            📄 Fatura Fechada Jun/26 (Valor Original no Fechamento):
+                            📄 Fatura Fechada {closedMonthLabel} (Valor Original no Fechamento):
                             {isPaid && (
                                 <span className="px-1.5 py-0.5 rounded-full bg-emerald-600 text-white font-black text-[9px] uppercase shadow-sm">PAGA ✅</span>
                             )}
@@ -451,7 +496,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                 /* Fatura Aberta Selecionada (Com Herança) */
                 <div className="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]">
                     <div className="flex justify-between items-center bg-blue-500/10 p-2 rounded-lg font-bold text-blue-600 dark:text-blue-300 mb-2">
-                        <span>🛍️ Novas Compras do Mês Corrente (Fatura Aberta Jul/26):</span>
+                        <span>🛍️ Novas Compras do Mês Corrente (Fatura Aberta {openMonthLabel}):</span>
                         <span className="font-mono">R$ {openAmount.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center text-blue-600 dark:text-blue-400">
@@ -483,7 +528,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
 
                     {/* Encargos Herdados em detalhe */}
                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-rose-500 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
-                        <span>Herança de Atraso da Fatura Anterior (Jun/26):</span>
+                        <span>Herança de Atraso da Fatura Anterior ({closedMonthLabel}):</span>
                     </div>
                     <div className="flex justify-between items-center text-rose-500 font-bold">
                         <span>Fatura Fechada Anterior em Atraso (Valor Invariável):</span>
@@ -538,11 +583,16 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                         <span className="font-mono">R$ {minOpenConsolidated.toFixed(2)}</span>
                     </div>
                 </div>
+            ) : !hasPreviousInvoice ? (
+                /* Sem fatura anterior real registrada — nunca preenchida com dado inventado */
+                <div className="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 text-[11px] text-center py-6 text-zinc-400">
+                    Sem fatura anterior registrada para este cliente.
+                </div>
             ) : (
                 /* Fatura Anterior Selecionada (Paga) */
                 <div className="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]">
                     <div className="flex justify-between items-center bg-emerald-500/10 p-2 rounded-lg font-bold text-emerald-600 dark:text-emerald-300 mb-2">
-                        <span>✅ Fatura Anterior Mai/26 (Quitada em 15/05/2026):</span>
+                        <span>✅ Fatura Anterior {previousMonthLabel} (Quitada em {previousDateFmt}):</span>
                         <span className="font-mono">R$ {previousAmount.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400">

@@ -42,6 +42,7 @@ function makeUser(overrides: {
     hasCharges?: boolean;
     daysOverdue?: number;
     closedInvoiceDueDate?: string;
+    withPreviousInvoice?: boolean;
 }): User {
     const {
         isPaid = false,
@@ -51,6 +52,7 @@ function makeUser(overrides: {
         hasCharges = !isPaid,
         daysOverdue = 18,
         closedInvoiceDueDate = '2026-07-15',
+        withPreviousInvoice = true,
     } = overrides;
 
     const charges = hasCharges
@@ -94,6 +96,12 @@ function makeUser(overrides: {
             daysOverdue,
             currentInvoiceTotal: 5490.98,
             currentInvoiceMinimo: 2790.39,
+            // Fat 1 (fatura anterior) é derivada de um pagamento TOTAL real em
+            // paymentHistory — mesmos valores do antigo mock fixo (Mai/26, R$1120),
+            // agora vindos de dado real em vez de literal no componente.
+            paymentHistory: withPreviousInvoice
+                ? [{ id: 'ph1', date: '2026-05-15', amount: 1120.00, description: 'Fatura Mai/26', paymentType: 'TOTAL' as const }]
+                : [],
         },
         daysOverdue,
     } as unknown as User;
@@ -303,7 +311,9 @@ describe('BackofficeInvoiceSection — Estados da Fatura Fechada', () => {
         it('deve chamar onSelectInvoice com "open" ao clicar em Fat 3', () => {
             const onSelect = vi.fn();
             render(<BackofficeInvoiceSection searchedUser={user} selectedBackofficeInvoice="closed" onSelectInvoice={onSelect} isMidnight={false} />);
-            screen.getByText(/Aberta \(Jul\)/i).click();
+            // Rótulo é derivado de creditCard.invoiceDueDate (mock = 2026-08-10) — Ago/26,
+            // não mais "Jul" fixo no componente.
+            screen.getByText(/Aberta \(Ago\/26\)/i).click();
             expect(onSelect).toHaveBeenCalledWith('open');
         });
 
