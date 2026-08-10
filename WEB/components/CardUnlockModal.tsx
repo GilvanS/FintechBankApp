@@ -24,7 +24,6 @@ export default function CardUnlockModal({ isOpen, onClose }: CardUnlockModalProp
   const creditCard = user.creditCard || {
     number: '•••• •••• •••• 8876',
     dueDate: '2031-07-31',
-    invoiceDueDate: '2026-07-25',
     currentInvoice: 0,
     closedInvoice: 0,
     availableLimit: 5000,

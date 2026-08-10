@@ -319,9 +319,18 @@ module.exports = function createInvoiceController(deps) {
         if (!invoice) return res.status(404).json({ success: false, message: 'Fatura não encontrada' });
         
         const name = user.full_name;
-        const amount = parseFloat(invoice.valor_total || 3870.86);
-        const dueDate = normalizeDueDate(invoice.due_date, '2026-07-15');
-        
+        const amount = parseFloat(invoice.valor_total);
+        // Sem fallback numerico aqui: gerar boleto com um valor inventado e a fatura
+        // real vier vazia significa cobrar o cliente por um valor errado. Erro explicito
+        // e melhor que um boleto silenciosamente incorreto.
+        if (!invoice.valor_total || Number.isNaN(amount) || amount <= 0) {
+            return res.status(422).json({ success: false, message: 'Fatura sem valor_total válido — não é possível gerar boleto.' });
+        }
+        const dueDate = normalizeDueDate(invoice.due_date, null);
+        if (!dueDate) {
+            return res.status(422).json({ success: false, message: 'Fatura sem due_date válido — não é possível gerar boleto.' });
+        }
+
         let boletoData;
         let usedFallback = false;
         try {

@@ -6,7 +6,28 @@ import {
   Target, Zap, Wallet, BarChart3, AlertCircle, CheckCircle2,
   Calendar
 } from 'lucide-react';
-import { User } from '../types';
+import { User, Transaction } from '../types';
+
+const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+// Comparativo mensal real, calculado a partir das transações do usuário — nunca uma
+// lista fixa. O bug original mostrava Fev/26–Jun/26 com valores inventados,
+// independente do mês corrente ou do histórico real do cliente.
+export function calcularComparativoMensal(transactions: Transaction[] = [], qtdMeses = 5, refDate: Date = new Date()) {
+  const meses = Array.from({ length: qtdMeses }, (_, i) => {
+    const d = new Date(refDate.getFullYear(), refDate.getMonth() - (qtdMeses - 1 - i), 1);
+    return { month: d.getMonth(), year: d.getFullYear() };
+  });
+  return meses.map(({ month, year }) => {
+    const doMes = transactions.filter(tx => {
+      const d = new Date(tx.date);
+      return d.getMonth() === month && d.getFullYear() === year;
+    });
+    const entradas = doMes.filter(tx => tx.amount > 0).reduce((s, tx) => s + tx.amount, 0);
+    const saidas = doMes.filter(tx => tx.amount < 0).reduce((s, tx) => s + Math.abs(tx.amount), 0);
+    return { month: `${MESES_ABREV[month]}/${String(year).slice(2)}`, in: entradas, out: saidas };
+  });
+}
 
 interface FinancialInsightsCarouselModalProps {
   isOpen: boolean;
@@ -148,24 +169,24 @@ export default function FinancialInsightsCarouselModal({
             <h4 className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400">Comparativo Mensal</h4>
             
             <div className="space-y-2 pt-1">
-              {[
-                { month: 'Fev/26', in: 3100, out: 2300 },
-                { month: 'Mar/26', in: 3500, out: 2800 },
-                { month: 'Abr/26', in: 3400, out: 2900 },
-                { month: 'Mai/26', in: 3800, out: 2400 },
-                { month: 'Jun/26', in: 4200, out: 1800 },
-              ].map((m, idx) => (
-                <div key={idx} className="space-y-1">
-                  <div className="flex justify-between text-[10px] font-black">
-                    <span className="text-gray-700 dark:text-zinc-300">{m.month}</span>
-                    <span className="text-emerald-500">+R$ {m.in - m.out} poupados</span>
+              {(() => {
+                const dados = calcularComparativoMensal(userProfile?.transactions);
+                const maxVal = Math.max(...dados.flatMap(d => [d.in, d.out]), 1);
+                return dados.map((m, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex justify-between text-[10px] font-black">
+                      <span className="text-gray-700 dark:text-zinc-300">{m.month}</span>
+                      <span className={m.in - m.out >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                        {m.in - m.out >= 0 ? '+' : '-'}R$ {Math.abs(m.in - m.out).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} {m.in - m.out >= 0 ? 'poupados' : 'no vermelho'}
+                      </span>
+                    </div>
+                    <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-gray-100 dark:bg-zinc-800 p-0.5">
+                      <div className="bg-emerald-400 h-full rounded-l-full" style={{ width: `${(m.in / maxVal) * 100}%` }} />
+                      <div className="bg-rose-400 h-full rounded-r-full" style={{ width: `${(m.out / maxVal) * 100}%` }} />
+                    </div>
                   </div>
-                  <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-gray-100 dark:bg-zinc-800 p-0.5">
-                    <div className="bg-emerald-400 h-full rounded-l-full" style={{ width: `${(m.in / 5000) * 100}%` }} />
-                    <div className="bg-rose-400 h-full rounded-r-full" style={{ width: `${(m.out / 5000) * 100}%` }} />
-                  </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
 
             <div className="flex justify-between items-center text-[10px] font-bold text-gray-600 dark:text-zinc-400 pt-2 border-t border-black/10 dark:border-white/10">

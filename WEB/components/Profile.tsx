@@ -292,7 +292,14 @@ export default function Profile({ onNavigate }: ProfileProps) {
             <div className="min-w-0 flex-1">
               <p className="text-[10px] uppercase tracking-widest text-black/70 dark:text-zinc-400 font-black">Fatura Atual</p>
               <p className="text-base font-black text-black dark:text-white truncate">
-                R$ {(user?.creditCard?.closedInvoice || user?.creditCard?.currentInvoice || 3870.86).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                {(() => {
+                  // ?? em vez de || — saldo/fatura legitimamente 0 não pode cair no fallback.
+                  // Sem dado do backend, mostra travessão: nunca um valor inventado.
+                  const faturaAtual = user?.creditCard?.closedInvoice ?? user?.creditCard?.currentInvoice;
+                  return faturaAtual != null
+                    ? `R$ ${faturaAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                    : '—';
+                })()}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">

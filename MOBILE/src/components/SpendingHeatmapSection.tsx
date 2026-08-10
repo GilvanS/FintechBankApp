@@ -16,14 +16,26 @@ const CAT_CONFIG: Array<{ id: HeatmapCategory; label: string; color: string }> =
   { id: 'outros', label: 'Outros', color: '#22c55e' },
 ];
 
-const MONTH_OPTIONS = [
-  { value: 'rolling', label: 'Últimos 3 meses', months: [{ month: 3, year: 2026 }, { month: 4, year: 2026 }, { month: 5, year: 2026 }] },
-  { value: 'jun2026', label: 'Junho 2026',  months: [{ month: 5, year: 2026 }] },
-  { value: 'may2026', label: 'Maio 2026',   months: [{ month: 4, year: 2026 }] },
-  { value: 'apr2026', label: 'Abril 2026',  months: [{ month: 3, year: 2026 }] },
-];
-
 const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const MONTH_NAMES_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+// Gera as opções do seletor de período a partir do mês corrente — nunca uma lista fixa
+// que envelhece sozinha (o bug original: em agosto o seletor só oferecia meses até junho).
+export function gerarMonthOptions(refDate: Date = new Date()) {
+  const ultimosTres = Array.from({ length: 3 }, (_, i) => {
+    const d = new Date(refDate.getFullYear(), refDate.getMonth() - (2 - i), 1);
+    return { month: d.getMonth(), year: d.getFullYear() };
+  });
+  const individuais = [...ultimosTres].reverse().map(({ month, year }) => ({
+    value: `${year}-${String(month + 1).padStart(2, '0')}`,
+    label: `${MONTH_NAMES_FULL[month]} ${year}`,
+    months: [{ month, year }],
+  }));
+  return [
+    { value: 'rolling', label: 'Últimos 3 meses', months: ultimosTres },
+    ...individuais,
+  ];
+}
 const DAY_LABELS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const LABEL_ROWS = [1, 3, 5];
 
@@ -50,10 +62,11 @@ const SpendingHeatmapSection: React.FC<Props> = ({ transactions, theme }) => {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
 
+  const MONTH_OPTIONS = useMemo(() => gerarMonthOptions(), []);
   const activeOpt = MONTH_OPTIONS.find(o => o.value === selectedMonth) || MONTH_OPTIONS[0];
 
   const calendarData = useMemo(() => {
-    const today = new Date(2026, 5, 27);
+    const today = new Date();
     return activeOpt.months.flatMap(({ month, year }) => {
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       return Array.from({ length: daysInMonth }, (_, i) => {
