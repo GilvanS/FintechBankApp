@@ -33,11 +33,13 @@
 | Regra 5 — vencimento 01–28 | bug provável | `isInt({min:1,max:28})` | ✅ **CUMPRIDA** |
 | Fase 6 — resto do Notion | pendente | lida 2026-08-07 | ✅ **FEITA** (0 regras novas) |
 | Botões PDF/Resumo Telegram | não estava no plano | restaurado do stash de sexta | ✅ **FEITO** hoje |
+| **Ciclo de vida da fatura** | não estava no plano | 39 de 54 massas sem encargos | 🔴 **P0 ABERTO** — [plano próprio](./PLANO-CICLO-VIDA-FATURA.md) |
 
 ## Ordem consolidada
 
 ```
 P0  Segurança Notion — 4 achados, owner: usuário       — hoje, não bloqueia nada
+P0  Ciclo de vida da fatura — 6 defeitos, 3 deles P0   — ver PLANO-CICLO-VIDA-FATURA.md
 P1  Fase B (resto) — PDF + art. 52 no app              — único P1 que sobrou
 P2  Fase 1+2 (Notion) — Reconciliar + auditar 13 regras
 P2  Resolver conflito de BIN (regra 10 × regras-bins-cartoes-credito.md)
