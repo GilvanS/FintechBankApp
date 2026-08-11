@@ -5315,10 +5315,16 @@ async function runBillingValidation() {
     // PRÃ“XIMO ciclo assim que o corte da fatura atual passa (7 dias antes do vencimento),
     // entÃ£o no dia do vencimento (e durante todo o perÃ­odo de atraso) esse campo jÃ¡
     // aponta para um ciclo futuro, fazendo daysOverdue ficar sempre 0.
+    // ORDER BY ASC (nao DESC): precisamos da fatura NAO PAGA MAIS ANTIGA por CPF, nao a
+    // mais recente. Com DESC + "primeira que chega ganha" no loop abaixo, uma massa com
+    // 2 faturas FECHADA nao pagas (uma vencida ha semanas, outra vencendo agora) tinha a
+    // mais recente escolhida, dava daysOverdue=0 e a massa era marcada adimplente --
+    // parando de acumular multa/juros/IOF silenciosamente. Mesma regra ja usada no
+    // caminho de leitura em enrichUserCreditCardData (_closedInvoiceOldestDueDate).
     const closedInvoiceRows = await dbService.executeQuery(`
         SELECT cpf, due_date, valor_total, COALESCE(valor_pago, 0) AS valor_pago FROM ${dbService.fq('invoices')}
         WHERE status = 'FECHADA' AND data_pagamento IS NULL
-        ORDER BY due_date DESC
+        ORDER BY due_date ASC
     `);
     const closedDueByCpf = new Map();
     for (const row of closedInvoiceRows) {
