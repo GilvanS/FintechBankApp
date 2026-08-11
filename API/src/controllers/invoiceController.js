@@ -721,7 +721,11 @@ module.exports = function createInvoiceController(deps) {
             cutoffIso,
             amount: payAmount,
             paymentDateIso: nowDb(),
-            invoiceId: closedDebt?.invoice?.id || null
+            // `oldest` (mais antiga), nao `invoice` (mais recente): a divida amortiza da
+            // fatura mais velha para a mais nova, e e a mais antiga que ancora atraso e
+            // encargos. O pagamento PARCIAL ja usava oldest (linha ~636) — o total usava
+            // invoice, vinculando a fatura errada quando havia mais de uma em aberto.
+            invoiceId: closedDebt?.oldest?.id || null
         });
         await usersRepo.updateBalance(cpf, (balance - payAmount).toFixed(2));
         const restoredLimit = Math.min(totalLimit, availableLimit + principalToPay);

@@ -23,7 +23,7 @@ async function createInstallments({ cpf, amount, installments }) {
     return { ...plan, planId, firstDueDate, parcela: plan.installmentValue };
 }
 
-async function payDueInstallments({ cpf, cutoffIso, amount, paymentDateIso }) {
+async function payDueInstallments({ cpf, cutoffIso, amount, paymentDateIso, invoiceId }) {
     const db = getDb();
     const payDate = paymentDateIso || nowDb();
     const limitDate = cutoffIso || payDate;
@@ -40,10 +40,15 @@ async function payDueInstallments({ cpf, cutoffIso, amount, paymentDateIso }) {
     }
 
     const payId = db.generateUUID();
+    // invoice_id vincula o pagamento a fatura fechada — e a fonte de verdade da quitacao,
+    // ja que a fatura fechada e imutavel (valor_pago/data_pagamento nunca sao escritos nela).
+    // Ate aqui so o pagamento PARCIAL (invoiceController.js:634-636) vinculava; o pagamento
+    // TOTAL passava por esta funcao sem invoice_id e ficava orfao — a fatura continuava
+    // acumulando multa/juros/IOF mesmo ja paga.
     await db.executeQuery(`
         INSERT INTO ${db.fq('transactions')}
-        (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-        VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-totalDue).toFixed(2))}, ${esc('Pagamento fatura')}, NULL, NULL, NULL, ${esc(payDate)})
+        (id, cpf, type, amount, description, from_user, to_user, to_key, date, invoice_id)
+        VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-totalDue).toFixed(2))}, ${esc('Pagamento fatura')}, NULL, NULL, NULL, ${esc(payDate)}, ${esc(invoiceId || null)})
     `);
 
     await db.executeQuery(`

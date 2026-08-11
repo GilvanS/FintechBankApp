@@ -5329,16 +5329,43 @@ async function runBillingValidation() {
     // mais recente escolhida, dava daysOverdue=0 e a massa era marcada adimplente --
     // parando de acumular multa/juros/IOF silenciosamente. Mesma regra ja usada no
     // caminho de leitura em enrichUserCreditCardData (_closedInvoiceOldestDueDate).
+    // HIBRIDO (mesma regra de getClosedInvoiceDebt em src/controllers/invoiceController.js):
+    // a fatura FECHADA e imutavel, entao valor_pago/data_pagamento ficam zerados/nulos no
+    // fluxo novo (trigger da migration 005 bloqueia a escrita). A fonte de verdade da
+    // quitacao e a SOMA dos INVOICE_PAYMENT vinculados por transactions.invoice_id.
+    // Faturas anteriores a 005 nao tem vinculo — para essas, valor_pago legado segue valendo.
+    // Sem este JOIN o motor cobrava multa/juros/IOF sobre fatura JA PAGA, porque so olhava
+    // data_pagamento IS NULL (que nunca e escrito).
     const closedInvoiceRows = await dbService.executeQuery(`
-        SELECT cpf, due_date, valor_total, COALESCE(valor_pago, 0) AS valor_pago FROM ${dbService.fq('invoices')}
-        WHERE status = 'FECHADA' AND data_pagamento IS NULL
-        ORDER BY due_date ASC
+        SELECT i.cpf, i.due_date, i.valor_total,
+               COALESCE(i.valor_pago, 0) AS valor_pago,
+               COALESCE(pagos.total, 0) AS pago_vinculado,
+               CASE WHEN pagos.total IS NULL THEN 0 ELSE 1 END AS tem_vinculo
+        FROM ${dbService.fq('invoices')} i
+        LEFT JOIN (
+            SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+            FROM ${dbService.fq('transactions')}
+            WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            GROUP BY invoice_id
+        ) pagos ON pagos.invoice_id = i.id
+        WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
+        ORDER BY i.due_date ASC
     `);
     const closedDueByCpf = new Map();
     for (const row of closedInvoiceRows) {
+        const valorTotal = parseFloat(row.valor_total || 0);
+        // Vinculado tem precedencia; sem vinculo, cai no valor_pago legado.
+        const pago = parseInt(row.tem_vinculo, 10) === 1
+            ? parseFloat(row.pago_vinculado || 0)
+            : parseFloat(row.valor_pago || 0);
+        const residual = Math.max(0, valorTotal - pago);
+        // Fatura ja quitada nao entra no mapa: nao gera encargo nem mantem inadimplente.
+        // O `continue` precisa vir ANTES do has(): sem ele, a fatura quitada (mais antiga,
+        // por causa do ORDER BY ASC) ocuparia o slot do CPF e mascararia uma fatura
+        // seguinte legitimamente em aberto.
+        if (residual <= 0.005) continue;
         if (!closedDueByCpf.has(row.cpf)) {
-            const residual = Math.max(0, parseFloat(row.valor_total || 0) - parseFloat(row.valor_pago || 0));
-            closedDueByCpf.set(row.cpf, { dueDate: row.due_date, amount: residual, valorTotal: parseFloat(row.valor_total || 0), valorPago: parseFloat(row.valor_pago || 0) });
+            closedDueByCpf.set(row.cpf, { dueDate: row.due_date, amount: residual, valorTotal, valorPago: pago });
         }
     }
 
@@ -5355,7 +5382,22 @@ async function runBillingValidation() {
       // A indentacao do corpo foi preservada de proposito: o diff mostra apenas as bordas.
       try {
         const closedInvoiceData = closedDueByCpf.get(u.cpf);
-        if (!closedInvoiceData) continue;
+        // Sem fatura FECHADA com residual > 0: o CPF nao tem divida vencida em aberto.
+        // Pode ser que nunca teve, ou que acabou de quitar (o mapa acima agora exclui
+        // faturas cobertas por pagamento vinculado). Nos dois casos o estado correto e
+        // adimplente/0 — antes o `continue` seco deixava o status antigo congelado, e
+        // quem pagava continuava marcado inadimplente para sempre.
+        if (!closedInvoiceData) {
+            if (u.account_status !== 'adimplente' || parseInt(u.days_overdue) !== 0) {
+                await dbService.executeQuery(`
+                    UPDATE ${dbService.fq('users')}
+                    SET account_status = 'adimplente', days_overdue = 0, updated_at = CURRENT_TIMESTAMP
+                    WHERE cpf = '${u.cpf}'
+                `);
+                markedAdimplente++;
+            }
+            continue;
+        }
 
         const dueDate = new Date(closedInvoiceData.dueDate);
         dueDate.setHours(0, 0, 0, 0);
