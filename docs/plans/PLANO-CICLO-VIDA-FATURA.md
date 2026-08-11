@@ -4,9 +4,15 @@
 **Vinculado a:** [`PLANO-CONSOLIDADO.md`](./PLANO-CONSOLIDADO.md) — entra como **P0**, junto com a segurança
 **Evidência:** consultas ao `pgdb` e leitura de código em 2026-08-09
 
-> **Status em 2026-08-11:** T2 (`3d94f4c0`), T4 (`d8df01c3`), T5 (`557fe1f5`) e
-> T1 (`2ab86fdf`) commitadas. T1 validada contra o banco real, não só teste unitário —
-> ver seção própria abaixo. T3, T6, T7, T8 seguem abertas.
+> **Status em 2026-08-11: PLANO CONCLUÍDO.** T1 (`2ab86fdf`), T2 (`3d94f4c0`),
+> T4 (`d8df01c3`), T5 (`557fe1f5`), T6 (`7c2e9455`), T7 (`bb7847c4`) commitadas.
+> T3 (validação) executada como parte da validação de T1. T8 (gate final) verificado:
+> API 570 testes (1 flaky documentado, confirmado passando isolado), WEB 83/96
+> (13 falhas baseline, todas confirmadas pré-existentes e sem relação com os arquivos
+> desta mudança), `tsc --noEmit` 68 erros (≤ baseline 77), grep de zero-mock limpo
+> (só bate em comentários explicando a correção), `account_status='inadimplente'` = 54,
+> estável. Decisão A/B/C sobre reprocessar encargos retroativos das massas afetadas
+> pelo período do bug segue em aberto — não técnica, do dono do produto.
 
 ## Política inegociável deste plano
 
