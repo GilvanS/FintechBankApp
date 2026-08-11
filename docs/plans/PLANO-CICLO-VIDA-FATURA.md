@@ -4,6 +4,10 @@
 **Vinculado a:** [`PLANO-CONSOLIDADO.md`](./PLANO-CONSOLIDADO.md) — entra como **P0**, junto com a segurança
 **Evidência:** consultas ao `pgdb` e leitura de código em 2026-08-09
 
+> **Status em 2026-08-11:** T2 (`3d94f4c0`), T4 (`d8df01c3`), T5 (`557fe1f5`) e
+> T1 (`2ab86fdf`) commitadas. T1 validada contra o banco real, não só teste unitário —
+> ver seção própria abaixo. T3, T6, T7, T8 seguem abertas.
+
 ## Política inegociável deste plano
 
 > **Zero mock. Zero string fixa. Zero fallback numérico.**
@@ -19,14 +23,16 @@ A numeração **é** a ordem. Cada etapa fecha antes da seguinte começar.
 
 | # | Etapa | Sev. | Impacto medido | Skill |
 |---|---|---|---|---|
-| 1 | Motor pega a fatura em aberto errada | **P0** | 39 de 54 massas sem encargos | `systematic-debugging` |
-| 2 | Status `adimplente` gravado errado | **P0** | 30 dias de atraso vira 0 | mesma correção do #1 |
-| 3 | Laços sem isolamento por massa | **P0** | 1 erro derruba o resto do dia | `ecc:silent-failure-hunter` |
-| 4 | Alerta do Telegram sem identificar a massa | P1 | não dá pra saber qual revisar | `ecc:silent-failure-hunter` |
-| 5 | **Mocks no painel do CLIENTE** | **P1** | agosto mostrando maio | `ecc:silent-failure-hunter` + `impeccable` |
-| 6 | Mocks no painel do ADMIN | P1 | fatura fantasma de R$ 1.120 | idem |
+| 1 | ✅ Motor pega a fatura em aberto errada | **P0** | 39 de 54 massas sem encargos | `systematic-debugging` |
+| 2 | ✅ Status `adimplente` gravado errado | **P0** | 30 dias de atraso vira 0 | mesma correção do #1 |
+| 3 | ✅ Laços sem isolamento por massa | **P0** | 1 erro derruba o resto do dia | `ecc:silent-failure-hunter` |
+| 4 | ✅ Alerta do Telegram sem identificar a massa | P1 | não dá pra saber qual revisar | `ecc:silent-failure-hunter` |
+| 5 | ✅ **Mocks no painel do CLIENTE** | **P1** | agosto mostrando maio | `ecc:silent-failure-hunter` + `impeccable` |
+| 6 | ✅ Mocks no painel do ADMIN | P1 | fatura fantasma de R$ 1.120 | idem |
 | 7 | Cron depende da API viva à meia-noite | P2 | dia sem execução | `ecc:architect` |
 | 8 | Gerador de Massas 2.0 — forma canônica | **P1** | massas nascem certas e viram inválidas | `ecc:tdd-guide` + `ecc:database-reviewer` |
+
+Commits: 1+2 em `2ab86fdf` · 3+4 em `3d94f4c0` · 5 em `d8df01c3` · 6 em `557fe1f5`.
 
 Etapas 1–4 param o sangramento financeiro. 5–6 tiram a mentira da tela. 7 evita repetir.
 8 garante que massa nova nasça no formato certo — e **depende da 1 estar pronta**, senão
@@ -120,6 +126,23 @@ cálculo dos encargos. Trocar a fatura escolhida muda a **base de cálculo** de 
 e IOF. Exige teste antes de rodar em massa.
 
 ---
+
+### ✅ Validação em produção (2026-08-11)
+
+Fix aplicado (`ORDER BY due_date ASC`), API reiniciada, `POST /admin/billing/validate-all`
+disparado contra o banco real (não simulação).
+
+| Métrica | Antes | Depois |
+|---|---|---|
+| `account_status='inadimplente'` | 15 | **54** |
+| Falhas no processamento | — | 0 |
+| CPFs do caso original (76671725950, 77551164685, 37810513150) | `adimplente`, 0 dias | `inadimplente`, **31 dias** |
+| CPF 41649264658 (relatado pelo usuário) | — | `inadimplente`, **5 dias**, encargos R$17,82 |
+
+**Diferença investigada:** universo bruto de faturas `FECHADA` vencidas = 111 CPFs, não 54.
+Os 57 restantes têm **todos** `due_date = hoje` (10/08 local) — não é bug residual, é a
+folga do próprio dia do vencimento ("passou da meia-noite do vencimento" só no dia
+seguinte). Comportamento pretendido, confirmado por query agrupando os 57 por data.
 
 ## 2. Status `adimplente` gravado incorretamente (P0)
 
