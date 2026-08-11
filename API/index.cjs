@@ -393,6 +393,28 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         if (invRows.length > 0) {
             latestInvoice = invRows[0];
             normalized.invoiceStatus = latestInvoice.status;
+            // Lista REAL das faturas fechadas desta massa, da mais antiga para a mais
+            // recente. O painel do admin tinha 3 slots fixos (Fat 1/2/3) com meses
+            // cravados no codigo — com esta lista ele renderiza exatamente quantas
+            // faturas a massa tem: 1 se tem 1, 2 se tem 2, nenhuma se for conta nova.
+            normalized.creditCard.closedInvoicesList = invRows
+                .filter(i => i.status === 'FECHADA')
+                .slice()
+                .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))
+                .map(inv => {
+                    const total = parseFloat(inv.valor_total || 0);
+                    const pago = _pagoEfetivo(inv);
+                    return {
+                        id: inv.id,
+                        dueDate: inv.due_date,
+                        valorTotal: Math.round(total * 100) / 100,
+                        valorPago: Math.round(pago * 100) / 100,
+                        // Residual com sinal: negativo = saldo credor (pagou a mais).
+                        residual: Math.round((total - pago) * 100) / 100,
+                        isPaid: (total - pago) <= 0.005,
+                        paidAt: _paidAtByInvoice.get(inv.id) || inv.data_pagamento || null,
+                    };
+                });
             // Fatura fechada de referÃªncia p/ heranÃ§a na fatura aberta: a mais recente
             // FECHADA em ATRASO (nÃ£o paga e com valor > 0). Ignora fechadas pagas e
             // faturas zeradas â€” evita herdar encargos da fatura errada.

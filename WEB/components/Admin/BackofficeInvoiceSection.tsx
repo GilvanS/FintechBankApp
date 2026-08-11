@@ -5,6 +5,18 @@ import { FileSpreadsheet, CheckCheck, Send, FileText } from 'lucide-react';
 import { adminTelegramSendTable, adminTelegramSendPdf } from '../../services/api';
 import { showToast } from '../../utils/toast';
 
+/** Fatura fechada real, como o backend entrega em creditCard.closedInvoicesList. */
+interface ClosedInvoiceItem {
+    id: string;
+    dueDate: string;
+    valorTotal: number;
+    valorPago: number;
+    /** Com sinal: negativo = saldo credor (cliente pagou mais que o devido). */
+    residual: number;
+    isPaid: boolean;
+    paidAt: string | null;
+}
+
 interface BackofficeInvoiceSectionProps {
     searchedUser: User;
     selectedBackofficeInvoice: 'open' | 'closed' | 'previous';
@@ -58,6 +70,12 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
         const _months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
         return String(d.getDate()).padStart(2, '0') + '/' + (_months[d.getMonth()] || '');
     })();
+    // Faturas fechadas REAIS desta massa, vindas do backend (closedInvoicesList),
+    // ordenadas da mais antiga para a mais recente. É a fonte que substitui os slots
+    // fixos Fat 1/2/3: a massa mostra exatamente quantas faturas tem no banco.
+    const closedInvoices: ClosedInvoiceItem[] =
+        (searchedUser.creditCard as any)?.closedInvoicesList ?? [];
+
     // Fat 1 (fatura anterior) não tem campo próprio no backend — não existe
     // "fatura anterior fechada e paga" em CreditCard, só closedInvoice (Fat 2) e
     // currentInvoice (Fat 3). A única fonte real de um ciclo mais antigo é
@@ -321,67 +339,65 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                 </button>
             </div>
 
-            {/* Grid das Últimas 3 Faturas numeradas (Fat 1 = mais antiga → Fat 3 = mais recente).
-                Sempre 3 slots: o mais recente (Fat 3) é a fatura aberta/atual, reservando o
-                espaço para a próxima fatura quando houver. */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+            {/* Grid das faturas REAIS da massa: uma coluna por fatura fechada existente
+                no banco (closedInvoicesList), mais a fatura aberta. Antes eram 3 slots
+                fixos (Fat 1/2/3) com meses cravados no codigo — massa com 1 fatura
+                mostrava 3, e conta nova mostrava faturas que nunca existiram. */}
+            <div className={`grid grid-cols-1 gap-3 text-xs ${
+                closedInvoices.length >= 2 ? 'sm:grid-cols-4' : closedInvoices.length === 1 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+            }`}>
                 <div className="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 flex flex-col justify-between">
                     <p className="opacity-60 text-[10px] uppercase font-bold">Saldo Conta</p>
                     <p className="font-black text-emerald-600 dark:text-emerald-400 text-sm">R$ {searchedUser.balance.toFixed(2)}</p>
                 </div>
 
-                {/* Fat 1 — fatura anterior real, derivada de paymentHistory. Sem histórico
-                    de pagamento TOTAL registrado, o slot fica desabilitado — nunca
-                    preenchido com um valor fixo passando por dado real. */}
-                {hasPreviousInvoice ? (
-                    <button
-                        type="button"
-                        onClick={() => onSelectInvoice('previous')}
-                        className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
-                            selectedBackofficeInvoice === 'previous'
-                                ? 'bg-emerald-500/15 border-emerald-500 shadow-sm ring-2 ring-emerald-500/40'
-                                : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-emerald-300'
-                        }`}
-                    >
-                        <div className="flex justify-between items-center">
-                            <p className="opacity-60 text-[10px] uppercase font-bold">Fat 1 · {previousMonthLabel}</p>
-                            <span className="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full">PAGA ✅</span>
-                        </div>
-                        <p className="font-black text-emerald-600 dark:text-emerald-400 text-sm mt-1">R$ {previousAmount.toFixed(2)}</p>
-                    </button>
-                ) : (
-                    <div className="p-2.5 rounded-xl text-left border border-dashed border-black/10 dark:border-white/10 opacity-50 cursor-not-allowed">
-                        <p className="opacity-60 text-[10px] uppercase font-bold">Fat 1</p>
-                        <p className="font-black text-zinc-400 text-sm mt-1">Sem histórico</p>
-                    </div>
-                )}
+                {/* Uma coluna por fatura fechada real, da mais antiga para a mais recente.
+                    A mais recente e a que o painel de detalhe trata como "closed". */}
+                {closedInvoices.map((inv, idx) => {
+                    const isUltimaFechada = idx === closedInvoices.length - 1;
+                    const selecionada = selectedBackofficeInvoice === (isUltimaFechada ? 'closed' : 'previous');
+                    const paga = inv.isPaid;
+                    return (
+                        <button
+                            key={inv.id}
+                            type="button"
+                            onClick={() => onSelectInvoice(isUltimaFechada ? 'closed' : 'previous')}
+                            className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
+                                selecionada
+                                    ? (paga
+                                        ? 'bg-emerald-500/15 border-emerald-500 shadow-sm ring-2 ring-emerald-500/40'
+                                        : 'bg-rose-500/15 border-rose-500 shadow-sm ring-2 ring-rose-500/40')
+                                    : `bg-black/5 dark:bg-white/5 border-transparent ${paga ? 'hover:border-emerald-300' : 'hover:border-rose-300'}`
+                            }`}
+                        >
+                            <div className="flex justify-between items-center">
+                                <p className="opacity-60 text-[10px] uppercase font-bold">
+                                    Fat {idx + 1} · {mesAno(inv.dueDate)}
+                                </p>
+                                {paga ? (
+                                    <span className="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full">PAGA ✅</span>
+                                ) : isUltimaFechada && isOverdue ? (
+                                    <span className="text-[9px] bg-rose-600 text-white font-black px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-1 shadow-sm">
+                                        ⚠️ {overdueDays}d ATRASO
+                                    </span>
+                                ) : (
+                                    <span className="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full">FECHADA</span>
+                                )}
+                            </div>
+                            <p className={`font-black text-sm mt-1 ${paga ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                R$ {inv.valorTotal.toFixed(2)}
+                            </p>
+                            {/* Saldo credor (pagou a mais) é informação real, não cabe esconder. */}
+                            {paga && inv.residual < -0.005 && (
+                                <p className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">
+                                    saldo credor R$ {Math.abs(inv.residual).toFixed(2)}
+                                </p>
+                            )}
+                        </button>
+                    );
+                })}
 
-                {/* Fat 2 — Fatura Fechada, com ícone de atraso em cima quando aplicável */}
-                <button
-                    type="button"
-                    onClick={() => onSelectInvoice('closed')}
-                    className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
-                        selectedBackofficeInvoice === 'closed'
-                            ? 'bg-rose-500/15 border-rose-500 shadow-sm ring-2 ring-rose-500/40'
-                            : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-rose-300'
-                    }`}
-                >
-                    <div className="flex justify-between items-center">
-                        <p className="opacity-60 text-[10px] uppercase font-bold">Fat 2 · Fechada ({closedMonthLabel})</p>
-                        {isPaid ? (
-                            <span className="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full">FECHADA</span>
-                        ) : isOverdue ? (
-                            <span className="text-[9px] bg-rose-600 text-white font-black px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-1 shadow-sm">
-                                ⚠️ {overdueDays}d ATRASO
-                            </span>
-                        ) : (
-                            <span className="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full">FECHADA</span>
-                        )}
-                    </div>
-                    <p className="font-black text-rose-600 dark:text-rose-400 text-sm mt-1">R$ {originalClosedAmount.toFixed(2)}</p>
-                </button>
-
-                {/* Fat 3 — Fatura Aberta/atual */}
+                {/* Fatura aberta/atual — sempre existe, mesmo em conta nova */}
                 <button
                     type="button"
                     onClick={() => onSelectInvoice('open')}
@@ -392,7 +408,9 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     }`}
                 >
                     <div className="flex justify-between items-center">
-                        <p className="opacity-60 text-[10px] uppercase font-bold">Fat 3 · Aberta ({openMonthLabel})</p>
+                        <p className="opacity-60 text-[10px] uppercase font-bold">
+                            Fat {closedInvoices.length + 1} · Aberta ({openMonthLabel})
+                        </p>
                         <span className="text-[9px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full">ABERTA</span>
                     </div>
                     <p className="font-black text-blue-600 dark:text-blue-400 text-sm mt-1">R$ {totalOpenConsolidated.toFixed(2)}</p>

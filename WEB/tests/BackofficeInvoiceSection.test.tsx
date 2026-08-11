@@ -102,6 +102,31 @@ function makeUser(overrides: {
             paymentHistory: withPreviousInvoice
                 ? [{ id: 'ph1', date: '2026-05-15', amount: 1120.00, description: 'Fatura Mai/26', paymentType: 'TOTAL' as const }]
                 : [],
+            // Faturas fechadas reais — o grid renderiza uma coluna por item desta lista
+            // (substituiu os slots fixos Fat 1/2/3). Com withPreviousInvoice, a massa tem
+            // 2 fechadas: uma anterior quitada e a atual (paga ou em atraso conforme isPaid).
+            closedInvoicesList: [
+                ...(withPreviousInvoice
+                    ? [{
+                        id: 'inv-anterior',
+                        dueDate: '2026-05-15T00:00:00.000Z',
+                        valorTotal: 1120.00,
+                        valorPago: 1120.00,
+                        residual: 0,
+                        isPaid: true,
+                        paidAt: '2026-05-15T00:00:00.000Z',
+                    }]
+                    : []),
+                {
+                    id: 'inv-atual',
+                    dueDate: closedInvoiceDueDate,
+                    valorTotal,
+                    valorPago,
+                    residual: Math.round((valorTotal - valorPago) * 100) / 100,
+                    isPaid,
+                    paidAt: paidAt,
+                },
+            ],
         },
         daysOverdue,
     } as unknown as User;
