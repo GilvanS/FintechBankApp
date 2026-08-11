@@ -355,12 +355,41 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     let latestInvoice = null;
     try {
         const invRows = await dbService.executeQuery(`
-            SELECT status, due_date, valor_total, saldo_anterior, valor_iof, valor_multa,
+            SELECT id, status, due_date, valor_total, saldo_anterior, valor_iof, valor_multa,
                    valor_juros_remuneratorios, valor_juros_mora,
                    COALESCE(valor_pago, 0) AS valor_pago, itemized_transactions, data_pagamento
             FROM ${dbService.fq('invoices')}
             WHERE cpf = '${cpf}' ORDER BY due_date DESC LIMIT 5
         `);
+
+        // Quitacao pos-migration-005: a fatura FECHADA e imutavel, entao valor_pago e
+        // data_pagamento ficam zerados/nulos. A fonte de verdade e a soma dos
+        // INVOICE_PAYMENT vinculados por transactions.invoice_id — mesma regra ja usada
+        // em getClosedInvoiceDebt (invoiceController) e em runBillingValidation.
+        // Sem isto, fatura paga continuava aparecendo como devida na tela.
+        const _paidByInvoice = new Map();
+        const _paidAtByInvoice = new Map();
+        try {
+            const _payRows = await dbService.executeQuery(`
+                SELECT invoice_id,
+                       SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS pago,
+                       MAX(date) AS ultimo_pagamento
+                FROM ${dbService.fq('transactions')}
+                WHERE cpf = '${cpf}' AND type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+                GROUP BY invoice_id
+            `);
+            for (const r of _payRows) {
+                _paidByInvoice.set(r.invoice_id, parseFloat(r.pago || 0));
+                _paidAtByInvoice.set(r.invoice_id, r.ultimo_pagamento);
+            }
+        } catch (_e) { /* sem vinculo: cai no valor_pago legado abaixo */ }
+
+        // Pago efetivo de uma fatura: vinculo tem precedencia, valor_pago legado e fallback
+        // (faturas anteriores a 005 nao tem transacao vinculada).
+        const _pagoEfetivo = (inv) => _paidByInvoice.has(inv.id)
+            ? _paidByInvoice.get(inv.id)
+            : parseFloat(inv.valor_pago || 0);
+        const _residualDe = (inv) => Math.max(0, parseFloat(inv.valor_total || 0) - _pagoEfetivo(inv));
         if (invRows.length > 0) {
             latestInvoice = invRows[0];
             normalized.invoiceStatus = latestInvoice.status;
@@ -373,7 +402,17 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             // para que a linha "Pagamento Realizado" apareÃ§a corretamente.
             // Todas as fechadas ainda nÃ£o pagas â€” o dÃ©bito exibido tem que bater com o
             // que /cards/invoice/pay cobra (getClosedInvoiceDebt), que soma todas elas.
-            const unpaidClosed = invRows.filter(i => i.status === 'FECHADA' && !i.data_pagamento && computeInvoiceGross(i) > 0);
+            // Residual > 0 (nao apenas !data_pagamento): fatura coberta por pagamento
+            // vinculado esta quitada mesmo com data_pagamento NULL, e nao pode continuar
+            // aparecendo como devida.
+            const unpaidClosed = invRows.filter(i =>
+                i.status === 'FECHADA' && !i.data_pagamento && computeInvoiceGross(i) > 0 && _residualDe(i) > 0.005
+            );
+            // Fechadas quitadas pelo vinculo (sem data_pagamento) — usadas para expor
+            // closedInvoiceIsPaid/PaidAt quando nao ha mais nenhuma em aberto.
+            const _quitadasPorVinculo = invRows.filter(i =>
+                i.status === 'FECHADA' && !i.data_pagamento && _paidByInvoice.has(i.id) && _residualDe(i) <= 0.005
+            );
             const closedInvoice = unpaidClosed[0];
             if (closedInvoice) {
                 // Janela de transaÃ§Ãµes da fatura fechada continua ancorada na mais recente
@@ -393,10 +432,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 // serem calculados DUAS VEZES â€” uma nos encargos congelados (dentro do gross)
                 // e outra nos encargos ao vivo (calculados abaixo sobre _closedVal).
                 // O total final (principal + encargos ao vivo) = gross, o que Ã© correto.
-                const _residualClosed = unpaidClosed.reduce(
-                    (sum, inv) => sum + Math.max(0, parseFloat(inv.valor_total || 0) - parseFloat(inv.valor_pago || 0)),
-                    0
-                );
+                const _residualClosed = unpaidClosed.reduce((sum, inv) => sum + _residualDe(inv), 0);
                 // â”€â”€ closedInvoice = VALOR ORIGINAL (imutÃ¡vel), nÃ£o o residual â”€â”€
                 // O residual (saldo ainda devido) vai para closedInvoiceResidual.
                 // Isso garante que a fatura fechada nunca altere seu valor apÃ³s
@@ -410,8 +446,11 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 // como "total original" confunde o cliente â€” a fatura fechada mostra um valor
                 // maior do que foi realmente pago. O principal Ã© o valor_total da invoice.
                 normalized.creditCard._closedInvoiceValorTotal = Math.round(unpaidClosed.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0) * 100) / 100;
-                normalized.creditCard._closedInvoiceValorPago = Math.round(unpaidClosed.reduce((sum, inv) => sum + parseFloat(inv.valor_pago || 0), 0) * 100) / 100;
+                normalized.creditCard._closedInvoiceValorPago = Math.round(unpaidClosed.reduce((sum, inv) => sum + _pagoEfetivo(inv), 0) * 100) / 100;
                 normalized.creditCard._closedInvoiceCount = unpaidClosed.length;
+                // Ainda ha fatura em aberto: nao esta paga. Explicito (em vez de ausente)
+                // para a UI nao precisar adivinhar a partir de campo faltando.
+                normalized.creditCard.closedInvoiceIsPaid = false;
                 if (closedInvoice.itemized_transactions) {
                     try {
                         normalized.creditCard._closedInvoiceSnapshot = JSON.parse(closedInvoice.itemized_transactions);
@@ -421,7 +460,40 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 // â”€â”€ Quando NÃƒO hÃ¡ fatura fechada nÃ£o paga (todas quitadas ou zeradas) â”€â”€
                 // Ainda assim expomos valor_total e valor_pago para o Admin dashboard
                 // e setamos closedInvoice = 0 para refletir que nÃ£o hÃ¡ dÃ­vida.
-                const latestFechada = invRows.find(i => i.status === 'FECHADA' && computeInvoiceGross(i) > 0);
+                // Quitadas pelo vinculo (data_pagamento NULL) entram aqui primeiro: sem
+                // isto, o fluxo pos-005 nunca setava closedInvoiceIsPaid e a UI ficava
+                // sem badge PAGA mesmo com a divida liquidada.
+                // NAO usar `return` aqui: o restante do enrich (closedInvoiceCharges,
+                // currentInvoiceTotal, encargos herdados) precisa rodar do mesmo jeito.
+                if (_quitadasPorVinculo.length > 0) {
+                    const _maisRecente = _quitadasPorVinculo[0];
+                    const _totalVal = _quitadasPorVinculo.reduce((s, inv) => s + parseFloat(inv.valor_total || 0), 0);
+                    const _totalPago = _quitadasPorVinculo.reduce((s, inv) => s + _pagoEfetivo(inv), 0);
+                    const _ultimoPagamento = _quitadasPorVinculo
+                        .map(inv => _paidAtByInvoice.get(inv.id))
+                        .filter(Boolean)
+                        .sort((a, b) => new Date(b) - new Date(a))[0] || null;
+
+                    normalized.creditCard.closedInvoiceDueDate = _maisRecente.due_date;
+                    normalized.creditCard._closedInvoiceValorTotal = Math.round(_totalVal * 100) / 100;
+                    normalized.creditCard._closedInvoiceValorPago = Math.round(_totalPago * 100) / 100;
+                    normalized.creditCard._closedInvoiceDataPagamento = _ultimoPagamento;
+                    normalized.creditCard._closedInvoiceCount = _quitadasPorVinculo.length;
+                    normalized.creditCard.closedInvoice = 0;
+                    // Excedente do pagamento vira saldo credor (residual negativo),
+                    // mesma convencao ja usada no fluxo de pagamento parcial.
+                    normalized.creditCard.closedInvoiceResidual = Math.round((_totalVal - _totalPago) * 100) / 100;
+                    normalized.creditCard.closedInvoiceIsPaid = true;
+                    normalized.creditCard.closedInvoicePaidAt = _ultimoPagamento;
+                    if (_maisRecente.itemized_transactions) {
+                        try {
+                            normalized.creditCard._closedInvoiceSnapshot = JSON.parse(_maisRecente.itemized_transactions);
+                        } catch (_e) { /* snapshot invalido */ }
+                    }
+                }
+                const latestFechada = _quitadasPorVinculo.length > 0
+                    ? null
+                    : invRows.find(i => i.status === 'FECHADA' && computeInvoiceGross(i) > 0);
                 if (latestFechada) {
                     normalized.creditCard.closedInvoiceDueDate = latestFechada.due_date;
 
