@@ -193,7 +193,15 @@ cron.schedule('0 0 * * *', async () => {
         }
     } catch (e) {
         console.error('[Cron] Erro ao sincronizar dias_atraso:', e);
-        telegramService.alertGroup(`ðŸš¨ ERRO ao sincronizar dias_atraso: ${e.message}`, 'system_error');
+        telegramService.alertGroup('ERRO ao sincronizar dias_atraso: ' + e.message, 'system_error');
+    }
+
+    // T6: registra o horario desta execucao para o catch-up de boot saber se o
+    // motor ja rodou hoje.
+    try {
+        await dbService.executeQuery(`UPDATE ${dbService.fq('billing_config')} SET last_engine_run_at = CURRENT_TIMESTAMP WHERE id = 1`);
+    } catch (updErr) {
+        console.warn('[Cron] Nao foi possivel registrar last_engine_run_at:', updErr.message);
     }
     telegramService.alertGroup('âœ… Motor diÃ¡rio concluÃ­do: faturas, billing, assinaturas e sincronizaÃ§Ã£o processados.', 'system_done');
 });
@@ -8070,7 +8078,59 @@ app.get('/api-docs/swagger.yaml', (req, res) => {
 });
 
 // Iniciar servidor apenas apÃ³s conexÃ£o com banco
+// T6: catch-up do motor diario no boot. O cron so dispara com o processo Node vivo
+// a meia-noite; API iniciada manualmente a cada sessao significa que maquina/processo
+// desligado nesse horario deixa o dia inteiro sem fechamento de fatura nem geracao de
+// encargo, sem nenhum aviso. Ao subir, verifica se o motor ja rodou hoje (fuso
+// America/Sao_Paulo, via last_engine_run_at em billing_config) e dispara uma vez se nao.
+async function catchUpDailyMotorIfNeeded() {
+    try {
+        await dbService.executeQuery(`
+            ALTER TABLE ${dbService.fq('billing_config')} ADD COLUMN IF NOT EXISTS last_engine_run_at TIMESTAMP NULL
+        `);
+        const rows = await dbService.executeQuery(
+            `SELECT last_engine_run_at FROM ${dbService.fq('billing_config')} WHERE id = 1`
+        );
+        const lastRun = rows[0] && rows[0].last_engine_run_at ? new Date(rows[0].last_engine_run_at) : null;
+        const hojeLocal = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+        const ultimaExecLocal = lastRun ? lastRun.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : null;
+
+        if (ultimaExecLocal === hojeLocal) {
+            console.log('[BootCatchUp] Motor diario ja rodou hoje (' + hojeLocal + '). Nada a fazer.');
+            return;
+        }
+
+        console.log('[BootCatchUp] Motor diario nao rodou hoje (ultima execucao: ' + (ultimaExecLocal || 'nunca') + '). Disparando catch-up...');
+        telegramService.alertGroup(
+            'Catch-up de boot: motor diario nao rodou hoje (ultima execucao: ' + (ultimaExecLocal || 'nunca') + '). Executando agora.',
+            'system_start'
+        );
+
+        await assertTimezone(dbService);
+        const engineResult = await runEngine();
+        reportarResultadoMotor('Invoice Engine (catch-up)', engineResult);
+
+        const billingResult = await runBillingValidation();
+        reportarResultadoMotor('Validacao de faturamento (catch-up)', billingResult);
+
+        const recurringEngine = require('./services/recurringEngine');
+        await recurringEngine.runEngine();
+
+        await syncInvoiceDiasAtraso();
+
+        await dbService.executeQuery(
+            `UPDATE ${dbService.fq('billing_config')} SET last_engine_run_at = CURRENT_TIMESTAMP WHERE id = 1`
+        );
+        telegramService.alertGroup('Catch-up de boot concluido.', 'system_done');
+    } catch (e) {
+        console.error('[BootCatchUp] Erro ao verificar/disparar catch-up do motor:', e.message);
+        telegramService.alertGroup('ERRO no catch-up de boot: ' + e.message, 'system_error');
+    }
+}
+
 bootstrap().then(() => {
+    catchUpDailyMotorIfNeeded();
+
     // Inicializar o Job/Cron de ConciliaÃ§Ã£o DiÃ¡ria de Faturas e Extratos
     try {
         const { initReconciliationScheduler, runDailyReconciliation } = require('./services/cronReconciliation');
