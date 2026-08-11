@@ -157,6 +157,48 @@ async function seedMassBilling(db, cpf, { accountStatus, daysOverdue, overdueAmo
     }
 }
 
+/**
+ * T7 — Contrato de forma da massa (Gerador 2.0), verificado logo após a geração.
+ *
+ * Perfil A (inadimplente): exatamente 1 fatura FECHADA não paga. Duas ou mais
+ *   indicam corrupção do estado (o mesmo padrão que produziu 39 massas sem
+ *   encargo antes do fix em runBillingValidation — T1). Zero também é inválido:
+ *   inadimplente sem fatura fechada não tem lastro.
+ * Perfil B (adimplente): zero linhas em invoices — a fatura aberta é sempre
+ *   calculada on-the-fly, nunca persistida.
+ *
+ * Não bloqueia a criação da massa (o cadastro já aconteceu); apenas grava um
+ * erro alto no log e retorna o resultado para o chamador decidir o que fazer.
+ * Falhar em silêncio é exatamente o padrão que esta investigação encontrou e
+ * corrigiu em outros pontos do sistema — não repetir aqui.
+ */
+async function validarInvarianteMassa(db, cpf, accountStatus) {
+    const rows = await db.executeQuery(`
+        SELECT COUNT(*) AS total FROM ${db.fq('invoices')}
+        WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
+    `);
+    const fechadasNaoPagas = parseInt(rows[0]?.total || 0, 10);
+
+    let ok = true;
+    let motivo = null;
+    if (accountStatus === 'inadimplente') {
+        if (fechadasNaoPagas !== 1) {
+            ok = false;
+            motivo = `massa inadimplente deveria ter exatamente 1 fatura FECHADA não paga, tem ${fechadasNaoPagas}`;
+        }
+    } else if (accountStatus === 'adimplente') {
+        if (fechadasNaoPagas !== 0) {
+            ok = false;
+            motivo = `massa adimplente deveria ter 0 faturas FECHADA não pagas, tem ${fechadasNaoPagas}`;
+        }
+    }
+
+    if (!ok) {
+        console.error(`❌ [validarInvarianteMassa] CPF ${cpf}: ${motivo}`);
+    }
+    return { ok, motivo, fechadasNaoPagas };
+}
+
 async function findByCpf(cpf) {
     const db = getDb();
     const rows = await db.executeQuery(`
@@ -415,6 +457,14 @@ async function createMassUser(payload) {
         console.warn('⚠️ Erro ao gerar faturamento da massa:', billingErr.message);
     }
 
+    // T7: valida que a massa nasceu na forma canônica (ver validarInvarianteMassa).
+    let massaValidation = null;
+    try {
+        massaValidation = await validarInvarianteMassa(db, cleanCpf, payload.accountStatus || 'adimplente');
+    } catch (validErr) {
+        console.warn('⚠️ Erro ao validar invariante da massa:', validErr.message);
+    }
+
     // Inserir assinatura recorrente padrão (Spotify R$ 19,90 no crédito)
     try {
         const subId = db.generateUUID ? db.generateUUID() : `sub-${cleanCpf}-${Date.now()}`;
@@ -430,7 +480,7 @@ async function createMassUser(payload) {
         console.warn('⚠️ Erro ao inserir assinatura padrão para a massa:', subErr.message);
     }
 
-    return { id, cpf: cleanCpf, fullName: payload.fullName };
+    return { id, cpf: cleanCpf, fullName: payload.fullName, massaValidation };
 }
 
-module.exports = { findByCpf, upsertSeed, updateBalance, restoreAvailableLimit, listUsers, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword, createMassUser, seedMassPixKeys, seedMassBilling };
+module.exports = { findByCpf, upsertSeed, updateBalance, restoreAvailableLimit, listUsers, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword, createMassUser, seedMassPixKeys, seedMassBilling, validarInvarianteMassa };
