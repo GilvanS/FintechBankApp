@@ -3,10 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0b0b12">
 <title>Dashboard — Consistência de Dias em Atraso</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
+    color-scheme: dark;
     --bg: #0b0b12;
     --surface: #161622;
     --surface2: #1e1e32;
@@ -28,6 +30,8 @@
     --cyan: #18ffff;
     --radius: 12px;
     --shadow: 0 4px 24px rgba(0,0,0,0.5);
+    --accent: #18ffff;
+    --accent-soft: rgba(24,255,255,0.06);
   }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
@@ -35,8 +39,26 @@
     color: var(--text);
     padding: 20px;
     min-height: 100vh;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: var(--accent-soft);
   }
   .container { max-width: 1100px; margin: 0 auto; }
+
+  /* Focus visivel unico para todo elemento interativo */
+  a, button, input, summary, [tabindex] { outline-offset: 2px; }
+  a:focus-visible, button:focus-visible, input:focus-visible,
+  summary:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+  }
+  .skip-link {
+    position: absolute; left: 8px; top: -48px; z-index: 200;
+    padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    background: var(--surface2); color: var(--text); text-decoration: none;
+    transition: top 150ms ease-out;
+  }
+  .skip-link:focus-visible { top: 8px; }
+  h1, h2 { text-wrap: balance; }
+  [id] { scroll-margin-top: 16px; }
 
   /* ── Header ── */
   .header {
@@ -66,7 +88,9 @@
     border: 1px solid var(--border); border-radius: var(--radius);
     display: flex; flex-direction: column; gap: 4px;
     position: relative; overflow: hidden;
+    transition: box-shadow 250ms ease-out, transform 250ms ease-out;
   }
+  .kpi-card:hover { box-shadow: 0 12px 32px rgba(0,0,0,0.5); transform: translateY(-2px); }
   .kpi-card::before {
     content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
     border-radius: var(--radius) var(--radius) 0 0;
@@ -76,7 +100,7 @@
   .kpi-card.blue::before { background: var(--blue); }
   .kpi-card.amber::before { background: var(--amber); }
   .kpi-card .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text2); }
-  .kpi-card .value { font-size: 30px; font-weight: 800; letter-spacing: -0.8px; line-height: 1.1; }
+  .kpi-card .value { font-size: 30px; font-weight: 800; letter-spacing: -0.8px; line-height: 1.1; font-variant-numeric: tabular-nums; }
   .kpi-card .sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
   .kpi-card .value.green { color: var(--green); }
   .kpi-card .value.red { color: var(--red); }
@@ -92,7 +116,9 @@
   .chart-card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); padding: 20px;
+    transition: box-shadow 250ms ease-out, transform 250ms ease-out;
   }
+  .chart-card:hover { box-shadow: 0 12px 32px rgba(0,0,0,0.5); transform: translateY(-2px); }
   .chart-card .title {
     font-size: 13px; font-weight: 700; margin-bottom: 14px;
     display: flex; align-items: center; gap: 8px;
@@ -122,7 +148,9 @@
   .section {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); padding: 20px; margin-bottom: 20px;
+    transition: box-shadow 250ms ease-out, transform 250ms ease-out;
   }
+  .section:hover { box-shadow: 0 12px 32px rgba(0,0,0,0.5); transform: translateY(-2px); }
   .section-title {
     font-size: 15px; font-weight: 700; margin-bottom: 16px;
     display: flex; align-items: center; gap: 8px;
@@ -136,15 +164,19 @@
   .filters {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;
   }
+  .filters label { font-size: 12px; font-weight: 600; color: var(--text2); }
   .filters input {
     padding: 8px 14px; background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 8px; color: var(--text); font-size: 13px; outline: none; width: 160px; transition: 0.15s;
+    border-radius: 8px; color: var(--text); font-size: 13px; width: 160px;
+    font-variant-numeric: tabular-nums;
+    transition: border-color 150ms ease-out, background-color 150ms ease-out;
   }
-  .filters input:focus { border-color: var(--blue); }
+  .filters input:focus-visible { border-color: var(--accent); }
   .filters input::placeholder { color: var(--text3); }
   .filters button {
     padding: 8px 18px; border: none; border-radius: 8px; font-size: 12px; font-weight: 700;
-    cursor: pointer; transition: 0.15s; display: flex; align-items: center; gap: 6px;
+    cursor: pointer; display: flex; align-items: center; gap: 6px;
+    transition: background-color 150ms ease-out, box-shadow 150ms ease-out;
   }
   .filters .btn-primary { background: var(--blue); color: #fff; }
   .filters .btn-primary:hover { background: #3d7cff; box-shadow: 0 2px 12px rgba(68,138,255,0.3); }
@@ -159,8 +191,9 @@
     text-transform: uppercase; letter-spacing: 0.7px; color: var(--text2);
     border-bottom: 1px solid var(--border); white-space: nowrap;
   }
-  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; font-variant-numeric: tabular-nums; }
+  tbody tr { transition: background-color 200ms ease-out, opacity 200ms ease-out; }
+  tbody tr:hover { background: var(--accent-soft); }
   tbody tr:last-child td { border-bottom: none; }
   tbody tr.consistent-row td { border-left: 3px solid var(--green); }
   tbody tr.inconsistent-row td { border-left: 3px solid var(--red); }
@@ -185,11 +218,12 @@
   .page-btn {
     padding: 6px 16px; background: var(--surface2); border: 1px solid var(--border);
     border-radius: 8px; color: var(--text); font-size: 12px; font-weight: 600;
-    cursor: pointer; transition: 0.15s;
+    cursor: pointer;
+    transition: background-color 150ms ease-out, border-color 150ms ease-out;
   }
-  .page-btn:hover { background: var(--border); }
+  .page-btn:hover:not(:disabled) { background: var(--border); border-color: var(--accent); }
   .page-btn:disabled { opacity: 0.3; cursor: default; }
-  .page-info { font-size: 12px; color: var(--text2); }
+  .page-info { font-size: 12px; color: var(--text2); font-variant-numeric: tabular-nums; }
 
   /* Empty state */
   .empty-state {
@@ -197,11 +231,20 @@
     font-size: 14px;
   }
   .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .error-box {
+    padding: 12px 16px; background: var(--red-bg); border: 1px solid rgba(255,82,82,0.25);
+    border-radius: 8px; font-size: 13px; color: var(--red); margin-top: 12px;
+  }
 
   /* Loading overlay */
   .loading-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
     z-index: 100; align-items: center; justify-content: center;
+    overscroll-behavior: contain;
   }
   .loading-overlay.active { display: flex; }
   .spinner {
@@ -220,8 +263,9 @@
   .tip-box .tip-icon { font-size: 16px; flex-shrink: 0; }
 
   /* Tooltip */
+  /* tabindex="0" no markup: o tooltip tem que abrir tambem por teclado */
   .tt { position: relative; cursor: help; border-bottom: 1px dotted var(--text3); }
-  .tt:hover::after {
+  .tt:hover::after, .tt:focus-visible::after {
     content: attr(data-tip); position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%);
     background: var(--surface2); color: var(--text); padding: 6px 10px; border-radius: 6px;
     font-size: 11px; white-space: nowrap; border: 1px solid var(--border); z-index: 10;
@@ -237,13 +281,25 @@
     .donut-wrap { flex-direction: column; }
     .filters input { width: 100%; }
   }
+
+  /* Movimento reduzido: obrigatorio onde ha transition/@keyframes */
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+    .section:hover, .kpi-card:hover, .chart-card:hover { transform: none; }
+    .spinner { border-top-color: var(--blue); opacity: 0.8; }
+  }
 </style>
 </head>
 <body>
 
-<div class="loading-overlay" id="loading-overlay"><div class="spinner"></div></div>
+<a class="skip-link" href="#app">Pular para o conteúdo</a>
 
-<div class="container" id="app"></div>
+<div class="loading-overlay" id="loading-overlay" role="status" aria-live="polite">
+  <div class="spinner" aria-hidden="true"></div>
+  <span class="sr-only" id="loading-text"></span>
+</div>
+
+<main class="container" id="app"></main>
 
 <script>
 // ════════════════════════════════════════════════════════════════════════════
@@ -290,7 +346,7 @@ function renderDonut(pct, label, color) {
   const circ = 2 * Math.PI * r;
   const offset = circ * (1 - pct / 100);
   return `<div class="donut">
-    <svg width="160" height="160" viewBox="0 0 160 160">
+    <svg width="160" height="160" viewBox="0 0 160 160" aria-hidden="true" focusable="false">
       <circle cx="80" cy="80" r="${r}" fill="none" stroke="var(--surface2)" stroke-width="14"/>
       <circle cx="80" cy="80" r="${r}" fill="none" stroke="${color}" stroke-width="14"
         stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
@@ -329,8 +385,8 @@ function render(data) {
     <!-- Header -->
     <div class="header">
       <div>
-        <h1>📊 <span>Consistência</span> de Dias em Atraso</h1>
-        <div class="sub">Auditoria de sincronização entre <code>users.days_overdue</code> e <code>invoices.dias_atraso</code></div>
+        <h1><span aria-hidden="true">📊</span> <span>Consistência</span> de Dias em Atraso</h1>
+        <div class="sub">Auditoria de sincronização entre <code translate="no">users.days_overdue</code> e <code translate="no">invoices.dias_atraso</code></div>
       </div>
       <div class="status-badge ${hasIssues ? 'has-issues' : 'all-ok'}">
         ${hasIssues ? '⚠️ ' + (s.usersDesatualizados + s.invoicesDesatualizadas) + ' anomalia(s)' : '✅ Dados íntegros'}
@@ -347,7 +403,7 @@ function render(data) {
       <div class="kpi-card green">
         <div class="label">Usuários Consistentes</div>
         <div class="value green">${fmt(s.usersConsistent)}</div>
-        <div class="sub"><span class="tt" data-tip="Diferença ≤ 1 dia entre users.days_overdue e real-time">days_overdue OK</span></div>
+        <div class="sub"><span class="tt" tabindex="0" data-tip="Diferença ≤ 1 dia entre users.days_overdue e real-time">days_overdue OK</span></div>
       </div>
       <div class="kpi-card ${(s.usersDesatualizados || 0) > 0 ? 'red' : 'green'}">
         <div class="label">Usuários Desatualizados</div>
@@ -357,7 +413,7 @@ function render(data) {
       <div class="kpi-card blue">
         <div class="label">Invoices Consistentes</div>
         <div class="value blue">${fmt(s.invoicesConsistent)}<span style="font-size:16px;color:var(--text3)">/${fmt(s.totalInvoices)}</span></div>
-        <div class="sub"><span class="tt" data-tip="dias_atraso exato (diferença = 0)">dias_atraso OK</span></div>
+        <div class="sub"><span class="tt" tabindex="0" data-tip="dias_atraso exato (diferença = 0)">dias_atraso OK</span></div>
       </div>
       <div class="kpi-card ${(s.invoicesDesatualizadas || 0) > 0 ? 'red' : 'green'}">
         <div class="label">Invoices Desatualizadas</div>
@@ -396,19 +452,23 @@ function render(data) {
     </div>
 
     <!-- Details Section -->
-    <div class="section">
-      <div class="section-title">
-        🔍 Detalhes por Usuário
+    <section class="section" aria-labelledby="sec-detalhes">
+      <h2 class="section-title" id="sec-detalhes">
+        <span aria-hidden="true">🔍</span> Detalhes por Usuário
         <span class="count">${details.length} inconsistente(s)</span>
-      </div>
+      </h2>
 
       <!-- Filters -->
       <div class="filters">
-        <input type="text" id="cpf-input" placeholder="CPF (11 dígitos)" maxlength="11" oninput="this.value=this.value.replace(/\\D/g,'')" />
-        <button class="btn-primary" onclick="fetchData()">🔍 Consultar</button>
-        <button class="btn-secondary" onclick="loadSample()">📦 Dados de Exemplo</button>
-        <span style="font-size:11px;color:var(--text3);margin-left:auto;" id="last-update">Última: ${new Date().toLocaleString('pt-BR')}</span>
+        <label for="cpf-input">CPF</label>
+        <input type="text" id="cpf-input" name="cpf" inputmode="numeric" autocomplete="off" spellcheck="false"
+               placeholder="11 dígitos, ex.: 12310012300…" maxlength="11"
+               oninput="this.value=this.value.replace(/\\D/g,'')" />
+        <button type="button" class="btn-primary" onclick="fetchData()"><span aria-hidden="true">🔍</span> Consultar Consistência</button>
+        <button type="button" class="btn-secondary" onclick="loadSample()"><span aria-hidden="true">📦</span> Carregar Dados de Exemplo</button>
+        <span style="font-size:11px;color:var(--text3);margin-left:auto;" id="last-update" aria-live="polite">Última: ${new Date().toLocaleString('pt-BR')}</span>
       </div>
+      <div id="error-box" role="alert" aria-live="assertive" hidden></div>
 
       <div class="table-wrap">
         <table>
@@ -438,19 +498,19 @@ function render(data) {
 
       ${details.length > 0 ? `
       <div class="pagination">
-        <button class="page-btn" id="page-prev" onclick="prevPage()">← Anterior</button>
-        <span class="page-info" id="page-info">${start + 1}–${end} de ${details.length}</span>
-        <button class="page-btn" id="page-next" onclick="nextPage()">Próximo →</button>
+        <button type="button" class="page-btn" id="page-prev" onclick="prevPage()"><span aria-hidden="true">←</span> Anterior</button>
+        <span class="page-info" id="page-info" aria-live="polite">${start + 1}–${end} de ${details.length}</span>
+        <button type="button" class="page-btn" id="page-next" onclick="nextPage()">Próximo <span aria-hidden="true">→</span></button>
       </div>
       ` : ''}
 
       ${data.tip ? `
       <div class="tip-box">
-        <span class="tip-icon">💡</span>
+        <span class="tip-icon" aria-hidden="true">💡</span>
         <div>${data.tip}</div>
       </div>
       ` : ''}
-    </div>
+    </section>
   `;
 
   // Fill table
@@ -480,23 +540,47 @@ function prevPage() { if (currentPage > 0) { currentPage--; render(data); } }
 function nextPage() { if (currentPage < Math.ceil((data.details||[]).length / PER_PAGE) - 1) { currentPage++; render(data); } }
 
 // ─── Data Fetching ────────────────────────────────────────────────────────
+function showError(msg) {
+  const box = document.getElementById('error-box');
+  if (!box) return;
+  box.className = 'error-box';
+  box.textContent = msg;
+  box.hidden = false;
+}
+
+function clearError() {
+  const box = document.getElementById('error-box');
+  if (box) { box.hidden = true; box.textContent = ''; }
+}
+
+/**
+ * Token de admin. NUNCA embutir credencial neste arquivo — ele e versionado.
+ * O operador faz login no painel admin (mesma origem) e o token fica no
+ * localStorage; este dashboard so o reaproveita.
+ */
+function getAdminToken() {
+  for (const k of ['token', 'authToken', 'admin_token']) {
+    const v = window.localStorage.getItem(k);
+    if (v) return v;
+  }
+  return null;
+}
+
 async function fetchData() {
   const cpf = document.getElementById('cpf-input')?.value.replace(/\D/g, '') || '';
+  clearError();
+
+  const token = getAdminToken();
+  if (!token) {
+    showError('Sessão de admin não encontrada. Faça login no painel admin nesta mesma origem e recarregue esta página, ou use “Carregar Dados de Exemplo”.');
+    return;
+  }
+
   document.getElementById('loading-overlay')?.classList.add('active');
+  const loadingText = document.getElementById('loading-text');
+  if (loadingText) loadingText.textContent = 'Consultando consistência…';
 
   try {
-    // First get auth token
-    const loginRes = await fetch(API_BASE + '/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cpf: '99999999999', password: 'admin999' })
-    });
-    const loginData = await loginRes.json();
-    if (!loginData.success || !loginData.token) {
-      throw new Error('Falha ao autenticar como admin');
-    }
-    const token = loginData.token;
-
     // Build query
     const params = new URLSearchParams();
     if (cpf) params.set('cpf', cpf);
@@ -513,8 +597,8 @@ async function fetchData() {
     render(data);
     document.getElementById('last-update').textContent = '🔄 Atualizado: ' + new Date().toLocaleString('pt-BR');
   } catch (err) {
-    alert('Erro ao consultar API: ' + err.message + '\n\nCarregando dados de exemplo...');
     loadSample();
+    showError('Não foi possível consultar a API: ' + err.message + ' — verifique se o backend está no ar em ' + API_BASE + ' e se sua sessão de admin continua válida. Exibindo dados de exemplo enquanto isso.');
   } finally {
     document.getElementById('loading-overlay')?.classList.remove('active');
   }
