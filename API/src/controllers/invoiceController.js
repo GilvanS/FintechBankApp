@@ -27,7 +27,7 @@ module.exports = function createInvoiceController(deps) {
         paymentGeneratorScriptPath,
     } = deps;
 
-    const { computeCurrentCycle, calcCharges, buildInstallmentOptions } = require('../../utils/billing');
+    const { computeCurrentCycle, buildInstallmentOptions } = require('../../utils/billing');
 
     // Comprovante Telegram: sem essas duas o valor sai '4070.86' e a data '2026-07-15'.
     const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -412,9 +412,13 @@ module.exports = function createInvoiceController(deps) {
             parseFloat(u.credit_card_total_limit || 5000) - parseFloat(u.credit_card_available_limit || 0)
         );
     
+        // Mesma regra do pagamento (pay soma TODAS as billing_charges pending do CPF,
+        // sem filtro de ref — ver totalDueComplete no fluxo de quitação): a ref era o
+        // ciclo corrente (instável, gira a cada execução) e o quote de encargos aparecia
+        // MENOR que o débito real, divergindo do pay e do enrich (closedInvoiceCharges).
         const pendingCharges = await dbService.executeQuery(`
             SELECT charge_type, amount FROM ${dbService.fq('billing_charges')}
-            WHERE cpf = '${cpf}' AND invoice_reference = '${cycle.invoiceRef}' AND status = 'pending'
+            WHERE cpf = '${cpf}' AND status = 'pending'
         `);
         const pendingTotal = pendingCharges.reduce((s, c) => s + parseFloat(c.amount), 0);
     
@@ -594,7 +598,6 @@ module.exports = function createInvoiceController(deps) {
     
         const balance = parseFloat(user.balance || 0);
         const minPayment = Math.max(totalDue * 0.10, 10);
-        const effectiveMin = balance > 0 ? Math.min(balance, minPayment) : minPayment;
 
         // Obter o total de encargos pendentes no banco
         const chargesRows = await dbService.executeQuery(`
@@ -621,10 +624,15 @@ module.exports = function createInvoiceController(deps) {
         const chargesToPay = Math.max(0, payAmount - principalToPay);
 
         if (payAmount < totalDue - 0.01) {
-            // Se o valor pago é EXATAMENTE o mínimo (margem de centavos), é MÍNIMO.
-            // Qualquer outro valor (abaixo do mínimo, ou entre mínimo e total) é PARCIAL.
-            const isExactMin = Math.abs(payAmount - minPayment) <= 0.05 || Math.abs(payAmount - effectiveMin) <= 0.05;
-            const payDescription = isExactMin
+            // Classificação do pagamento (regra de negócio do ciclo de vida da fatura):
+            //  - MÍNIMO  = >= 10% do devido (do mínimo até < total): o contador de dias de
+            //    atraso ZERA e a conta volta a "em dia" (adimplente, dias 0 e assim fica),
+            //    MAS os encargos CONTINUAM acumulando sobre o saldo residual até o total.
+            //  - PARCIAL = abaixo do mínimo (< 10%): segue inadimplente, os dias de atraso
+            //    continuam contando e os encargos continuam acumulando.
+            //  - TOTAL   = >= devido (vai para o branch abaixo): PARA os encargos e os dias.
+            const isMinimo = payAmount >= minPayment - 0.05;
+            const payDescription = isMinimo
                 ? 'Pagamento minimo de fatura'
                 : 'Pagamento parcial de fatura';
             // Pagamento parcial: registrar sem deletar parcelas
@@ -646,20 +654,18 @@ module.exports = function createInvoiceController(deps) {
             // a fatura FECHADA não recebe escrita. Só o status do usuário é reavaliado.
             await refreshAccountStatus(cpf);
             const remaining = totalDue - payAmount;
-            const daysOverdue = parseInt(user.days_overdue || 0);
-            const billingCfgForRef = (await dbService.executeQuery(
-                `SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`
-            ))[0] || { close_day: 20, due_day: 10, grace_period_days: 3 };
-            const { invoiceRef } = computeCurrentCycle(billingCfgForRef);
-            const { multa, juros } = calcCharges(remaining, daysOverdue);
-            if (multa > 0 || juros > 0) {
-                const chargeBase = dbService.generateUUID();
+            // — MÍNIMO (>= 10%): regulariza a conta (dias = 0, adimplente) mantendo os
+            // encargos acumulando. O motor diário (runBillingValidation) reconhece a
+            // fatura com pagamento >= 10% do total e continua os incrementos de
+            // juros/IOF sobre o residual SEM re-marcar inadimplente. PARCIAL (< 10%):
+            // nada é alterado aqui — segue inadimplente e os dias continuam contando.
+            // A multa 2% NÃO é re-inserida aqui (cobrança única por débito; o motor
+            // diário segue os juros/IOF sobre o novo residual).
+            if (isMinimo) {
                 await dbService.executeQuery(`
-                    INSERT INTO ${dbService.fq('billing_charges')}
-                    (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
-                    VALUES
-                    ('${chargeBase}_m', ${esc(cpf)}, ${esc(invoiceRef)}, 'multa', ${multa}, ${daysOverdue}, ${remaining.toFixed(2)}),
-                    ('${chargeBase}_j', ${esc(cpf)}, ${esc(invoiceRef)}, 'juros_mora', ${juros}, ${daysOverdue}, ${remaining.toFixed(2)})
+                    UPDATE ${dbService.fq('users')}
+                    SET account_status = 'adimplente', days_overdue = 0, updated_at = CURRENT_TIMESTAMP
+                    WHERE cpf = '${cpf}'
                 `);
             }
             // ── Notificação específica para ABAIXO do mínimo crítico ──
@@ -687,8 +693,8 @@ module.exports = function createInvoiceController(deps) {
                     : '<b>Status</b>     MÍNIMO PAGO ✅',
                 '',
                 isPaymentAbaixo
-                    ? '<blockquote>Encargos adicionais de atraso (multa e juros) continuam incidindo sobre o saldo devedor restante.</blockquote>'
-                    : '<blockquote>Multa e juros de mora estão estacionados. Juros remuneratórios continuam a incidir sobre o saldo devedor restante.</blockquote>'
+                    ? '<blockquote>Pagamento abaixo do mínimo: segue inadimplente, os dias de atraso continuam contando e os encargos continuam incidindo sobre o saldo devedor restante.</blockquote>'
+                    : '<blockquote>Pagamento mínimo registrado: dias de atraso zerados, mas os encargos continuam acumulando sobre o saldo residual até o pagamento total.</blockquote>'
             ].join('\n');
             await notificationsRepo.addNotification({
                 cpf,
@@ -701,15 +707,15 @@ module.exports = function createInvoiceController(deps) {
             // Comprovante PDF no tópico da massa (pagamento mínimo/parcial)
             await sendPaymentReceipt(cpf, user, {
                 valorPago: payAmount,
-                tipo: isExactMin ? 'MINIMO' : 'PARCIAL',
+                tipo: isMinimo ? 'MINIMO' : 'PARCIAL',
                 saldoRestante: remaining,
                 dataPagamento: nowIso,
                 vencimento: cutoffIso,
                 nota: isPaymentAbaixo
-                    ? 'Pagamento abaixo do mínimo crítico. Encargos adicionais de atraso continuam incidindo sobre o saldo devedor restante.'
-                    : 'Multa e juros de mora estão estacionados. Juros remuneratórios continuam a incidir sobre o saldo devedor restante.'
+                    ? 'Pagamento abaixo do mínimo. Segue inadimplente, dias de atraso continuam contando e encargos continuam incidindo sobre o saldo devedor restante.'
+                    : 'Pagamento mínimo registrado. Dias de atraso zerados, mas os encargos continuam acumulando sobre o saldo residual até o pagamento total.'
             });
-            return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining, charges: { multa, juros } });
+            return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining });
         }
     
         // Pagamento total: registrar o valor REALMENTE pago (payAmount, não o devido),
@@ -747,6 +753,16 @@ module.exports = function createInvoiceController(deps) {
         if (closedDebt) {
             await refreshAccountStatus(cpf);
         }
+        // — PAGAMENTO TOTAL: PARA os encargos e os dias de atraso. As billing_charges
+        // pending desta massa são marcadas 'paid' — não podem continuar somando em
+        // SUM(pending) (pay/enrich só leem pending) nem re-cobrar dívida já quitada.
+        // As colunas congeladas das faturas fechadas (análise mensal) permanecem
+        // intactas (imutáveis pela trigger da migration 005).
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('billing_charges')}
+            SET status = 'paid'
+            WHERE cpf = '${cpf}' AND status = 'pending'
+        `);
         await notificationsRepo.addNotification({
             cpf,
             title: 'Pagamento de fatura',

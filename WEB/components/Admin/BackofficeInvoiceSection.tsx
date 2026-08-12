@@ -15,6 +15,18 @@ interface ClosedInvoiceItem {
     residual: number;
     isPaid: boolean;
     paidAt: string | null;
+    /** Encargos acumulados até o fechamento desta fatura (multa/juros/IOF).
+     *  Regra do ciclo: começa a ser exibido na Fat 2 — a Fat 2 pega do Fat 1
+     *  (início do atraso) e a Fat 3 pega da Fat 2. A Fat 1 fica zerada. */
+    encargosFrozen?: {
+        multa: number;
+        jurosMora: number;
+        jurosRemuneratorios: number;
+        iof: number;
+        total: number;
+    };
+    /** Compras + saldo herdado + encargos congelados (informativo p/ análise mensal). */
+    valorTotalComEncargos?: number;
 }
 
 interface BackofficeInvoiceSectionProps {
@@ -75,6 +87,22 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
     // fixos Fat 1/2/3: a massa mostra exatamente quantas faturas tem no banco.
     const closedInvoices: ClosedInvoiceItem[] =
         (searchedUser.creditCard as any)?.closedInvoicesList ?? [];
+
+    // Encargos CONGELADOS no fechamento da última fatura fechada (a que a aba
+    // "Fechada" detalha). São os encargos acumulados até o corte daquele período —
+    // informação real para análise mensal, não mais zeros fixos no código.
+    const lastClosedInv = closedInvoices[closedInvoices.length - 1];
+    const frozenCharges = lastClosedInv?.encargosFrozen;
+    const frozenMulta = frozenCharges?.multa ?? 0;
+    const frozenJurosMora = frozenCharges?.jurosMora ?? 0;
+    const frozenJurosRem = frozenCharges?.jurosRemuneratorios ?? 0;
+    const frozenIof = frozenCharges?.iof ?? 0;
+    const frozenIofTotal = frozenIof;
+    // IOF congelado = parte fixa (0,38% sobre o principal) + parte diária; quebra
+    // informativa para o detalhamento manter os mesmos códigos das outras abas.
+    const frozenIofFixo = Math.min(frozenIofTotal, Math.round(originalClosedAmount * 0.0038 * 100) / 100);
+    const frozenIofDiario = Math.max(0, Math.round((frozenIofTotal - frozenIofFixo) * 100) / 100);
+    const frozenTotal = frozenCharges?.total ?? 0;
 
     // Fat 1 (fatura anterior) não tem campo próprio no backend — não existe
     // "fatura anterior fechada e paga" em CreditCard, só closedInvoice (Fat 2) e
@@ -387,6 +415,22 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                             <p className={`font-black text-sm mt-1 ${paga ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                 R$ {inv.valorTotal.toFixed(2)}
                             </p>
+                            {/* Encargos acumulados até o fechamento — CONGELADO no valor que a
+                                fatura fechou (herança da anterior não paga), não cresce mais.
+                                Começa a aparecer na Fat 2 (que pega do Fat 1); a Fat 3 aberta é
+                                quem continua acumulando os encargos vivos (abaixo, na herança). */}
+                            {inv.encargosFrozen && inv.encargosFrozen.total > 0.005 && (
+                                <p className="text-[9px] text-amber-600 dark:text-amber-400 font-bold mt-0.5">
+                                    🔒 + R$ {inv.encargosFrozen.total.toFixed(2)} encargos congelados no fechamento
+                                </p>
+                            )}
+                            {/* Total informativo (compras + saldo herdado + encargos congelados)
+                                — a soma que a análise mensal do período precisa. */}
+                            {inv.valorTotalComEncargos !== undefined && inv.valorTotalComEncargos > 0.005 && (
+                                <p className="text-[9px] text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">
+                                    total c/ encargos: R$ {inv.valorTotalComEncargos.toFixed(2)}
+                                </p>
+                            )}
                             {/* Saldo credor (pagou a mais) é informação real, não cabe esconder. */}
                             {paga && inv.residual < -0.005 && (
                                 <p className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">
@@ -452,50 +496,53 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                         </div>
                     )}
 
-                    {/* Encargos: SEMPRE R$ 0,00 na aba Fechada.
-                        Fatura fechada é travada — não recebe encargos.
-                        Os encargos do atraso são herdados e exibidos na Fatura Aberta (Fat 3). */}
-                    <div className="pt-2 font-bold text-[10px] uppercase tracking-wider border-t border-black/5 dark:border-white/5 flex items-center justify-between text-zinc-400">
-                        <span>📄 Encargos do Atraso (herdados pela Fatura Aberta — zerados aqui):</span>
+                    {/* Encargos acumulados no fechamento desta fatura (valor REAL das colunas
+                        da invoice — multa/juros/IOF que a fatura pegou da anterior e acumulou
+                        até o fechamento dela). A Fat 1 (início do atraso) fica zerada; a Fat 2
+                        mostra o que pegou do Fat 1 e a Fat 3 aberta herda e segue acumulando.
+                        Não são os encargos vivos de hoje — esses continuam sendo herdados e
+                        exibidos na Fatura Aberta (Fat seguinte). */}
+                    <div className="pt-2 font-bold text-[10px] uppercase tracking-wider border-t border-black/5 dark:border-white/5 flex items-center justify-between text-amber-500">
+                        <span>📄 Encargos Congelados no Fechamento desta Fatura 🔒 (não cresce mais):</span>
                     </div>
-                    <div className="flex justify-between items-center opacity-40">
+                    <div className="flex justify-between items-center text-amber-600 dark:text-amber-400">
                         <span className="flex items-center gap-1">
                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 3000</span>
                             Taxa de Multa por Atraso (2.0%):
                         </span>
-                        <span className="font-mono font-bold">R$ 0.00</span>
+                        <span className="font-mono font-bold">R$ {frozenMulta.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between items-center opacity-40">
+                    <div className="flex justify-between items-center text-amber-600 dark:text-amber-400">
                         <span className="flex items-center gap-1">
                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2001</span>
                             Juros de Mora (0.0333%/dia):
                         </span>
-                        <span className="font-mono font-bold">R$ 0.00</span>
+                        <span className="font-mono font-bold">R$ {frozenJurosMora.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between items-center opacity-40">
+                    <div className="flex justify-between items-center text-amber-600 dark:text-amber-400">
                         <span className="flex items-center gap-1">
                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 2000</span>
                             Juros Remuneratórios / Financiamento (0.513%/dia):
                         </span>
-                        <span className="font-mono font-bold">R$ 0.00</span>
+                        <span className="font-mono font-bold">R$ {frozenJurosRem.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between items-center opacity-40">
+                    <div className="flex justify-between items-center text-amber-600 dark:text-amber-400">
                         <span className="flex items-center gap-1">
                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4001</span>
                             IOF Adicional (Fixo - 0.38%):
                         </span>
-                        <span className="font-mono font-bold">R$ 0.00</span>
+                        <span className="font-mono font-bold">R$ {frozenIofFixo.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between items-center opacity-40">
+                    <div className="flex justify-between items-center text-amber-600 dark:text-amber-400">
                         <span className="flex items-center gap-1">
                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 4000</span>
                             IOF Diário (0.0082%/dia):
                         </span>
-                        <span className="font-mono font-bold">R$ 0.00</span>
+                        <span className="font-mono font-bold">R$ {frozenIofDiario.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-zinc-400 opacity-60">
-                        <span>Valor Total dos Encargos do Atraso (Memória Informativa):</span>
-                        <span className="font-mono">R$ 0.00</span>
+                    <div className="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-amber-600 dark:text-amber-400">
+                        <span>Total de Encargos Congelados no Fechamento (Análise Mensal):</span>
+                        <span className="font-mono">R$ {frozenTotal.toFixed(2)}</span>
                     </div>
 
                     {isPaid ? (
@@ -506,7 +553,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     ) : (
                         <div className="mt-2 p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1.5">
                             <span>ℹ️</span>
-                            <span>Fatura fechada travada — não recebe encargos. Os encargos do atraso ({overdueDays} dias, R$ {totalEncargos.toFixed(2)}) são herdados e exibidos na <strong>Fatura Aberta (Fat 3)</strong>.</span>
+                            <span>Fatura fechada travada — não recebe novos encargos. Os encargos VIVOS do atraso ({overdueDays} dias, R$ {totalEncargos.toFixed(2)}, acumulados após este corte) são herdados e exibidos na <strong>Fatura Aberta (Fat {closedInvoices.length + 1})</strong>.</span>
                         </div>
                     )}
                 </div>
@@ -544,9 +591,10 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                         </div>
                     )}
 
-                    {/* Encargos Herdados em detalhe */}
+                    {/* Encargos Herdados em detalhe — VIVOS, continuam acumulando até o
+                        fechamento da fatura aberta (Fat 3 pega do Fat 2 e segue). */}
                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-rose-500 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
-                        <span>Herança de Atraso da Fatura Anterior ({closedMonthLabel}):</span>
+                        <span>Herança de Atraso da Fatura Anterior ({closedMonthLabel}) — continua acumulando:</span>
                     </div>
                     <div className="flex justify-between items-center text-rose-500 font-bold">
                         <span>Fatura Fechada Anterior em Atraso (Valor Invariável):</span>
@@ -602,9 +650,53 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     </div>
                 </div>
             ) : !hasPreviousInvoice ? (
-                /* Sem fatura anterior real registrada — nunca preenchida com dado inventado */
-                <div className="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 text-[11px] text-center py-6 text-zinc-400">
-                    Sem fatura anterior registrada para este cliente.
+                /* Primeira Fatura: Exibir campos zerados */
+                <div className="mt-3 pt-3 border-t border-dashed border-black/10 dark:border-white/10 space-y-1.5 text-[11px]">
+                    <div className="flex justify-between items-center bg-zinc-500/10 p-2 rounded-lg font-bold text-zinc-500 dark:text-zinc-400 mb-2">
+                        <span>🔹 Fatura Anterior (Sem historico previo):</span>
+                        <span className="font-mono">R$ 0.00</span>
+                    </div>
+                    <div className="flex justify-between items-center text-zinc-500 dark:text-zinc-400">
+                        <span>🔹 Pagamento Minimo da Fatura Anterior:</span>
+                        <span className="font-mono font-bold">R$ 0.00</span>
+                    </div>
+                    <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-zinc-400 border-t border-black/5 dark:border-white/5">
+                        Encargos do Atraso (0 dias - Sem encargos):
+                    </div>
+                    <div className="flex justify-between items-center opacity-60">
+                        <span className="flex items-center gap-1">
+                            <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cod 3000</span> Taxa de Multa por Atraso (2.0%):
+                        </span>
+                        <span className="font-mono">R$ 0.00</span>
+                    </div>
+                    <div className="flex justify-between items-center opacity-60">
+                        <span className="flex items-center gap-1">
+                            <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cod 2001</span> Juros de Mora (0.0333%/dia):
+                        </span>
+                        <span className="font-mono">R$ 0.00</span>
+                    </div>
+                    <div className="flex justify-between items-center opacity-60">
+                        <span className="flex items-center gap-1">
+                            <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cod 2000</span> Juros Remuneratorios / Financiamento (0.513%/dia):
+                        </span>
+                        <span className="font-mono">R$ 0.00</span>
+                    </div>
+                    <div className="flex justify-between items-center opacity-60">
+                        <span className="flex items-center gap-1">
+                            <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cod 4001</span> IOF Adicional (Fixo - 0.38%):
+                        </span>
+                        <span className="font-mono">R$ 0.00</span>
+                    </div>
+                    <div className="flex justify-between items-center opacity-60">
+                        <span className="flex items-center gap-1">
+                            <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cod 4000</span> IOF Diario (0.0082%/dia):
+                        </span>
+                        <span className="font-mono">R$ 0.00</span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-zinc-400 opacity-60">
+                        <span>Valor Total dos Encargos do Atraso (Memoria Informativa):</span>
+                        <span className="font-mono">R$ 0.00</span>
+                    </div>
                 </div>
             ) : (
                 /* Fatura Anterior Selecionada (Paga) */

@@ -1898,3 +1898,81 @@ $$\text{creditoExcedente} = \text{paymentsTotal} - (\text{principalTotal} + \tex
 - O `creditoExcedente` abate o valor final da fatura aberta:
   $$\text{currentInvoiceTotal} = \text{comprasDoCiclo} + \text{principalFechadoVencido} + \text{encargosPendentes} - \text{creditoExcedente}$$
 - Isso garante que pagamentos a maior reduzam a fatura aberta do cartão.
+
+---
+
+## 20. Regra CREDIT_CARD vs ACCOUNT_DEBIT — Pagamento de Conta Recorrente
+
+> **Regra de negócio do método de pagamento de assinaturas/contas recorrentes.** Vale para os dois fluxos (cobrança automática do `recurringEngine` e pagamento manual da rota `POST /recurring-bills/:cpf/:billId/pay`). Nenhum dos dois métodos polui a fatura do cartão como gasto.
+
+### 20.1 Tabela Comparativa
+
+| Aspecto | `ACCOUNT_DEBIT` (Débito em Conta) | `CREDIT_CARD` (Faturado no Cartão) |
+|:--------|:----------------------------------|:-----------------------------------|
+| **O que consome** | `users.balance` (saldo da conta corrente) | `users.credit_card_available_limit` (limite do cartão) |
+| **Toca o saldo?** | ✅ Sim (decrementa `balance`) | ❌ Não (saldo intacto) |
+| **Toca o limite?** | ❌ Não | ✅ Sim (decrementa o limite disponível) |
+| **Transação gravada** | `PAYMENT` `-amount` — descrição `Pagamento Recorrente: <nome> (Débito em Conta)` | `PAYMENT` `-amount` — descrição `Pagamento Recorrente: <nome> (Faturado no Cartão)` |
+| **Erro sem fundos** | `400 SALDO_INSUFICIENTE` | `400 LIMITE_INSUFICIENTE` |
+| **Onde aparece** | Extrato da home (fora da fatura) | Linha **informativa** na fatura aberta (`informative: true`, sem somar no total) |
+| **Entra na fatura aberta como gasto?** | ❌ Nunca | ❌ Nunca (só linha informativa — ver §20.3) |
+
+### 20.2 Fluxo Automático (`recurringEngine` — cron 00:10)
+
+A cobrança automática roda no `recurringEngine` e usa tipo `SUBSCRIPTION` na transação (não `PAYMENT`):
+
+```
+bill.payment_method || 'CREDIT_CARD'   // default é cartão
+├─ ACCOUNT_DEBIT: balance >= amount? → UPDATE users SET balance = balance - amount
+│                                      → INSERT transactions (SUBSCRIPTION, -amount)
+└─ CREDIT_CARD (default): limite >= amount?
+                          → UPDATE users SET credit_card_available_limit = ... - amount
+                          → INSERT transactions (SUBSCRIPTION, -amount)
+```
+
+- **Falha de cobrança** → `past_due`, `retry_count + 1`, `next_billing_date` +1 dia (política de retentativa diária).
+- **Após `max_retries` (3)** → `suspended` com reason `<MOTIVO>_RETENTATIVAS_EXCEDIDAS`.
+- **Sucesso** → `active`, `retry_count = 0`, `next_billing_date` +1 mês (MONTHLY) ou +1 ano (ANNUAL).
+
+### 20.3 Pagamento Manual (`POST /recurring-bills/:cpf/:billId/pay`)
+
+Pagamento pontual disparado pelo usuário/admin (botão PAGAR). Diferenças do automático:
+
+1. **Tipo `PAYMENT`** na transação (não `SUBSCRIPTION`) — aparece no extrato no filtro "Pagamentos".
+2. **Upsert**: se a conta só existe no localStorage do frontend, a rota a registra no banco com o `billId` do frontend (id estável entre ciclos) — pagar 2x a MESMA conta atualiza a MESMA linha, sem duplicar.
+3. **Resposta**: `{ success, message, bill, transactionId, paymentMethod, newBalance }`.
+4. **Autorização**: dono da conta ou admin (`403` para outro usuário, `401` sem token).
+
+### 20.4 Exibição no Frontend — Linha Informativa na Fatura Aberta
+
+Um `PAYMENT` `CREDIT_CARD` (descrição contendo `Faturado no Cartão`) **não** é compra: o `cardRows` do `enrichUserCreditCardData` nunca o inclui como gasto. Para o cliente visualizar a assinatura na fatura aberta, o enrich adiciona uma linha com `informative: true`:
+
+- Merchant derivado da descrição: `Pagamento Recorrente: Assinatura Netflix Mensal (Faturado no Cartão)` → **`Assinatura Netflix Mensal`** (fallback `Assinatura faturada no cartão`).
+- `type: 'PAYMENT'` + `paymentType: 'TOTAL'` + `informative: true`.
+- **NUNCA soma no total**: `currentInvoice`/`currentInvoiceTotal` já excluem `PAYMENT`, e o totalizador do `CurrentInvoice` ignora `informative`.
+- O `ACCOUNT_DEBIT` **não** aparece na fatura (nem informativo) — vai só para o extrato da home.
+
+### 20.5 Testes de Referência
+
+- `API/tests/unit/recurringBillPay.test.js` — 14 cenários da rota manual (débito, saldo insuficiente, limite insuficiente, upsert, idempotência, autorização, `CREDIT_CARD` sem tocar saldo).
+- `API/services/recurringEngine.js` — fluxo automático com tipo `SUBSCRIPTION` e política de retentativa.
+
+---
+
+> **Fonte do código:** [`API/index.cjs`](../API/index.cjs) — `enrichUserCreditCardData` (linha informativa); [`API/services/recurringEngine.js`](../API/services/recurringEngine.js); [`API/tests/unit/recurringBillPay.test.js`](../API/tests/unit/recurringBillPay.test.js)<br>
+> **Regras relacionadas:** §15 (cronograma/jobs), §13 (enrichUserCreditCardData), §14 (pipeline PAYMENT)
+---
+
+## 22.10 Tratamento de Anomalias de Rateio (Casos Wade e Alexander)
+
+> **Contexto:** Na auditoria de pagamentos órfãos anteriores à migration 005 (pré-005), foram identificados casos em que a transação de encargos foi gerada com o **valor total da transação original** em vez do **excedente de encargos** (pagamento - principal). Exemplo: Wade (-5.623,68) e Alexander (-5.758,44).
+
+1. **Correção Aplicada:** Transações de encargos de rateio corrigidas via UPDATE transactions sem acionar triggers de faturas fechadas (pois não alteram a tabela invoices).
+2. **Regra de Negócio de Encargos Excedentes:**
+   - O valor atribuído aos encargos de rateio retroativo deve **SEMPRE** corresponder exatamente a pagamento - principal.
+   - Transações de encargos nunca podem ter valor (mount) maior ou igual ao valor da transação original (>= 99%).
+   - Transações de encargos criadas pelo rateio retroativo usam a descrição 'Encargos de atraso (rateio retroativo)' e são marcadas com invoice_id NULL intencionalmente, sendo excluídas do pool de futuros rateios.
+3. **Guarda Anti-Regressão no Script (ix_orphan_payment_step7.cjs):**
+   - **Dry-run:** Reprova e falha com exit != 0 se algum lançamento planejado possuir mount >= 99% da transação original.
+   - **Confirmação (--confirm):** Valida antes do INSERT se charge.amount <= originalAmount - totalAlocado. Caso contrário, executa ROLLBACK.
+   - **Exclusão de Re-rateio:** O script explicitamente adiciona AND description IS DISTINCT FROM 'Encargos de atraso (rateio retroativo)' na busca do pool de órfãos.

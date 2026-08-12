@@ -71,7 +71,20 @@ const BillingMockSection: React.FC<BillingMockSectionProps> = ({
         setBillingLoading(false);
     };
 
-    const handleAuditFull = async () => {
+        const handleAuditOrphansPre005 = async () => {
+        const { adminAuditOrphansPre005 } = await import('../../services/api');
+        setBillingLoading(true); setBillingMsg(null);
+        const res = await adminAuditOrphansPre005();
+        if (res.success) {
+            setAuditResult(res);
+            setBillingMsg({ text: 'Auditoria de �rf�os Pr�-005 realizada com sucesso.', ok: true });
+        } else {
+            setBillingMsg({ text: res.message || 'Erro ao auditar �rf�os.', ok: false });
+        }
+        setBillingLoading(false);
+    };
+
+const handleAuditFull = async () => {
         const { adminRunFullAudit } = await import('../../services/api');
         setBillingLoading(true); setBillingMsg(null);
         const res = await adminRunFullAudit();

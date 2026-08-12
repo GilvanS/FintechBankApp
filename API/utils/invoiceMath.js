@@ -1,3 +1,12 @@
+
+function calcEffectiveRates(rate, installments) {
+    const r = Number(rate) || 0;
+    const n = Number(installments) || 1;
+    if (r <= 0 || n <= 1) return { mensal: 0, anual: 0 };
+    const iMensal = Math.pow(1 + r, 1 / n) - 1;
+    const iAnual = Math.pow(1 + iMensal, 12) - 1;
+    return { mensal: round2(iMensal * 100), anual: round2(iAnual * 100) };
+}
 /**
  * Aritmética de fatura — funções puras, sem I/O.
  *
@@ -235,8 +244,39 @@ function calcAllCharges(principal, days) {
     return { multa, jurosMora, jurosRemuneratorios, iofAdicional, iofDiario, iof, total };
 }
 
+/**
+ * Classifica o status de double-counting para um CPF: compara a soma dos
+ * pagamentos (transactions.type = INVOICE_PAYMENT) com a soma de
+ * invoices.valor_pago. Usada por GET /admin/audit-double-count e por
+ * scripts/audit_completo.js (mesma regra, sem duplicar a lógica).
+ * @param {{ paymentTotal: number, invoiceTotalPago: number, invoiceRows: Array<{valor_pago?: number, valor_total?: number, data_pagamento?: any}>, hasPayments: boolean, hasInvoices: boolean }} args
+ * @returns {{ status: 'ok'|'discrepancy'|'resolvido'|'orphan_payments', diff: number }}
+ */
+function classifyDoubleCount({ paymentTotal, invoiceTotalPago, invoiceRows, hasPayments, hasInvoices }) {
+    const diff = round2(Math.abs(paymentTotal - invoiceTotalPago));
+    const isDiscrepancy = diff > 0.02;
+
+    let status = 'ok';
+    if (isDiscrepancy) {
+        status = 'discrepancy';
+        if (invoiceTotalPago > paymentTotal + 0.02) {
+            const allPaidAndCorrected = (invoiceRows || []).every(inv => {
+                const vp = parseFloat(inv.valor_pago || 0);
+                if (vp <= 0) return true;
+                if (!inv.data_pagamento) return false;
+                return vp <= parseFloat(inv.valor_total || 0) + 0.02;
+            });
+            if (allPaidAndCorrected) status = 'resolvido';
+        }
+    }
+    if (hasPayments && !hasInvoices) status = 'orphan_payments';
+
+    return { status, diff };
+}
+
 module.exports = {
     round2,
+    classifyDoubleCount,
     INVOICE_GROSS_FIELDS,
     computeInvoiceGross,
     computeInvoiceOwed,
@@ -257,4 +297,5 @@ module.exports = {
     calcIof,
     calcAllCharges,
     buildClosedInvoiceSummary,
+    calcEffectiveRates,
 };

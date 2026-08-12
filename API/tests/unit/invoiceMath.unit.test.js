@@ -34,6 +34,7 @@ const {
     calcIof,
     calcAllCharges,
     buildClosedInvoiceSummary,
+    classifyDoubleCount,
 } = require('../../utils/invoiceMath');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -847,5 +848,80 @@ describe('buildClosedInvoiceSummary (regra: fechada sempre zera encargos)', () =
         expect(result.iof).toBe(0);
         expect(result.totalEncargos).toBe(0);
         expect(result.daysOverdue).toBe(0);
+    });
+});
+
+// ─── classifyDoubleCount ──────────────────────────────────────────────────────
+// Regra de negócio de GET /admin/audit-double-count (double-counting de
+// pagamentos vs invoices.valor_pago).
+describe('classifyDoubleCount', () => {
+    it('retorna "ok" quando pagamentos e valor_pago batem (diff <= 0.02)', () => {
+        const result = classifyDoubleCount({
+            paymentTotal: 393.07,
+            invoiceTotalPago: 393.07,
+            invoiceRows: [{ valor_pago: 393.07, valor_total: 1500.50, data_pagamento: null }],
+            hasPayments: true,
+            hasInvoices: true,
+        });
+        expect(result.status).toBe('ok');
+        expect(result.diff).toBe(0);
+    });
+
+    it('retorna "discrepancy" quando diff > 0.02 e invoice não está paga/corrigida', () => {
+        const result = classifyDoubleCount({
+            paymentTotal: 4197.63,
+            invoiceTotalPago: 3870.86,
+            invoiceRows: [{ valor_pago: 3870.86, valor_total: 3870.86, data_pagamento: '2026-07-26' }],
+            hasPayments: true,
+            hasInvoices: true,
+        });
+        expect(result.status).toBe('discrepancy');
+        expect(result.diff).toBe(326.77);
+    });
+
+    it('retorna "resolvido" quando valor_pago > pagamentos mas toda invoice paga está com data_pagamento e dentro do total', () => {
+        const result = classifyDoubleCount({
+            paymentTotal: 3870.86,
+            invoiceTotalPago: 4684.93,
+            invoiceRows: [{ valor_pago: 4684.93, valor_total: 3870.86, data_pagamento: '2026-07-26' }],
+            hasPayments: true,
+            hasInvoices: true,
+        });
+        // valor_pago (4684.93) > valor_total (3870.86) + 0.02, então NÃO está "corrigida" -> discrepancy ativa
+        expect(result.status).toBe('discrepancy');
+    });
+
+    it('retorna "resolvido" quando o excesso já foi corrigido (valor_pago <= valor_total)', () => {
+        const result = classifyDoubleCount({
+            paymentTotal: 3500,
+            invoiceTotalPago: 3870.86,
+            invoiceRows: [{ valor_pago: 3870.86, valor_total: 3870.86, data_pagamento: '2026-07-26' }],
+            hasPayments: true,
+            hasInvoices: true,
+        });
+        expect(result.status).toBe('resolvido');
+    });
+
+    it('retorna "orphan_payments" quando há pagamentos mas nenhuma invoice associada', () => {
+        const result = classifyDoubleCount({
+            paymentTotal: 10,
+            invoiceTotalPago: 0,
+            invoiceRows: [],
+            hasPayments: true,
+            hasInvoices: false,
+        });
+        expect(result.status).toBe('orphan_payments');
+        expect(result.diff).toBe(10);
+    });
+
+    it('invoice paga sem data_pagamento não é considerada corrigida (permanece discrepancy)', () => {
+        const result = classifyDoubleCount({
+            paymentTotal: 100,
+            invoiceTotalPago: 200,
+            invoiceRows: [{ valor_pago: 200, valor_total: 200, data_pagamento: null }],
+            hasPayments: true,
+            hasInvoices: true,
+        });
+        expect(result.status).toBe('discrepancy');
     });
 });

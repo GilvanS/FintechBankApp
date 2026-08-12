@@ -246,17 +246,19 @@ async function sendTable(cpf, title, headers, rows, category) {
 }
 
 async function sendDocument(cpf, buffer, filename, category) {
-    if (!ENABLED || !db) return;
+    if (!ENABLED || !db) return { sent: false, reason: 'service_disabled' };
     if (category && !(await isCategoryActive(category))) {
         console.debug(`[telegram:skip] category=${category} reason=disabled (sendDocument cpf=${cpf})`);
-        return;
+        return { sent: false, reason: 'disabled' };
     }
+    const res = { sent: false };
     enqueue(async () => {
         let topicId;
         try {
             topicId = await getOrCreateTopic(cpf);
         } catch (e) {
             console.warn('[telegram] sendDocument getOrCreateTopic:', e.message);
+            res.error = e.message;
             return;
         }
 
@@ -267,34 +269,43 @@ async function sendDocument(cpf, buffer, filename, category) {
         const blob = new Blob([buffer], { type: 'application/pdf' });
         formData.append('document', blob, filename);
 
-        const res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendDocument`, {
-            method: 'POST',
-            body: formData
-        });
-        const json = await res.json();
-        if (!json.ok) {
-            // Tópico órfão (existe no banco mas foi apagado no Telegram) — purga e reenvia 1x.
-            if (json.description && /message thread not found/i.test(json.description)) {
-                console.warn(`[telegram] sendDocument: tópico #${topicId} órfão — recriando para ${cpf}`);
-                topicCache.delete(cpf);
-                await db.executeQuery(`DELETE FROM ${db.fq('telegram_user_topics')} WHERE cpf = '${cpf}'`).catch(() => {});
-                try {
-                    const newId = await getOrCreateTopic(cpf);
-                    const fd2 = new FormData();
-                    fd2.append('chat_id', CHAT_ID);
-                    fd2.append('message_thread_id', String(newId));
-                    fd2.append('document', new Blob([buffer], { type: 'application/pdf' }), filename);
-                    const r2 = await fetch(`https://api.telegram.org/bot${TOKEN}/sendDocument`, { method: 'POST', body: fd2 });
-                    const j2 = await r2.json();
-                    if (!j2.ok) throw new Error(`sendDocument retry: ${j2.description}`);
-                } catch (retryErr) {
-                    console.warn('[telegram] sendDocument retry:', retryErr.message);
+        try {
+            const fetchRes = await fetch(`https://api.telegram.org/bot${TOKEN}/sendDocument`, {
+                method: 'POST',
+                body: formData
+            });
+            const json = await fetchRes.json();
+            if (!json.ok) {
+                // Tópico órfão (existe no banco mas foi apagado no Telegram) — purga e reenvia 1x.
+                if (json.description && /message thread not found/i.test(json.description)) {
+                    console.warn(`[telegram] sendDocument: tópico #${topicId} órfão — recriando para ${cpf}`);
+                    topicCache.delete(cpf);
+                    await db.executeQuery(`DELETE FROM ${db.fq('telegram_user_topics')} WHERE cpf = '${cpf}'`).catch(() => {});
+                    try {
+                        const newId = await getOrCreateTopic(cpf);
+                        const fd2 = new FormData();
+                        fd2.append('chat_id', CHAT_ID);
+                        fd2.append('message_thread_id', String(newId));
+                        fd2.append('document', new Blob([buffer], { type: 'application/pdf' }), filename);
+                        const r2 = await fetch(`https://api.telegram.org/bot${TOKEN}/sendDocument`, { method: 'POST', body: fd2 });
+                        const j2 = await r2.json();
+                        if (!j2.ok) throw new Error(`sendDocument retry: ${j2.description}`);
+                        res.sent = true;
+                    } catch (retryErr) {
+                        console.warn('[telegram] sendDocument retry:', retryErr.message);
+                        res.error = retryErr.message;
+                    }
+                    return;
                 }
-                return;
+                throw new Error(`sendDocument: ${json.description}`);
             }
-            throw new Error(`sendDocument: ${json.description}`);
+            res.sent = true;
+        } catch (err) {
+            console.warn('[telegram] sendDocument:', err.message);
+            res.error = err.message;
         }
     });
+    return res;
 }
 
 // ===== WRAPPER send(category, payload) — toggle-gated multi-destination =====
@@ -368,6 +379,8 @@ async function send(category, payload) {
     const destinations = CATEGORY_DESTINATIONS[category];
     const ttlMinutes = setting.ttl_minutes;
     const results = [];
+    const hasDestinations = destinations.length > 0;
+    const res = { sent: hasDestinations, destinations: results };
 
     if (destinations.includes('cpf') && payload && payload.cpf) {
         enqueue(async () => {
@@ -396,9 +409,11 @@ async function send(category, payload) {
                         throw sendErr;
                     }
                 }
-                results.push({ dest: 'cpf', message_id: msgRes.message_id, topic_id: topicId });
+                results.push({ dest: 'cpf', ok: true, message_id: msgRes.message_id, topic_id: topicId });
             } catch (err) {
                 console.warn(`[telegram] send cpf ${category}:`, err.message);
+                results.push({ dest: 'cpf', ok: false, error: err.message });
+                res.sent = false;
             }
         });
     }
@@ -419,9 +434,11 @@ async function send(category, payload) {
                     message_thread_id: topicId,
                     text: payload && payload.text ? payload.text : ''
                 });
-                results.push({ dest: 'pagamentos', message_id: msgRes.message_id, topic_id: topicId });
+                results.push({ dest: 'pagamentos', ok: true, message_id: msgRes.message_id, topic_id: topicId });
             } catch (err) {
                 console.warn(`[telegram] send pagamentos ${category}:`, err.message);
+                results.push({ dest: 'pagamentos', ok: false, error: err.message });
+                res.sent = false;
             }
         });
     }
@@ -435,7 +452,7 @@ async function send(category, payload) {
                     text: payload && payload.text ? payload.text : ''
                 });
                 const generalMsgId = msgRes.message_id;
-                results.push({ dest: 'general', message_id: generalMsgId });
+                results.push({ dest: 'general', ok: true, message_id: generalMsgId });
 
                 if (ttlMinutes && ttlMinutes > 0) {
                     const timer = setTimeout(() => {
@@ -446,11 +463,13 @@ async function send(category, payload) {
                 }
             } catch (err) {
                 console.warn(`[telegram] send general ${category}:`, err.message);
+                results.push({ dest: 'general', ok: false, error: err.message });
+                res.sent = false;
             }
         });
     }
 
-    return { sent: results.length > 0, destinations: results };
+    return res;
 }
 
 // Helper síncrono para controllers que só precisam saber se devem prosseguir.

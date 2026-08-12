@@ -86,43 +86,60 @@ def calculate_due_date_factor(due_date: date) -> int:
     return delta
 
 
-def generate_barcode_44(amount: float, due_date: date, invoice_id: str) -> str:
-    """Gera o Codigo de Barras de 44 digitos no padrao FEBRABAN."""
+def generate_barcode_44(amount: float, due_date: date, invoice_id: str, cpf: str) -> str:
+    """Gera o Codigo de Barras de 44 digitos no padrao FEBRABAN (Layout 2025+)."""
     factor = calculate_due_date_factor(due_date)
-    factor_str = str(factor).zfill(4)
+    factor_str = str(factor).zfill(5)
     amount_cents = int(round(amount * 100))
     amount_str = str(amount_cents).zfill(10)
-    raw_hash = hashlib.md5(invoice_id.encode()).hexdigest()
-    free_field_digits = ''.join(c for c in raw_hash if c.isdigit())
-    free_field = (free_field_digits + '0' * 25)[:25]
+
+    agencia = '0001'
+    agencia_dv = str(_mod11(agencia))
+    carteira = '09'
+    nosso_numero = cpf.replace('.', '').replace('-', '').zfill(11)[-10:]
+    nosso_numero_dv = str(_mod11(agencia + carteira + nosso_numero))
+    conta = '00000001'[:6]
+    free_field = f"{agencia}{agencia_dv}{carteira}{nosso_numero}{nosso_numero_dv}{conta}"
+
     barcode_no_dv = f"{BANK_CODE}{CURRENCY_CODE}{factor_str}{amount_str}{free_field}"
     dv = _mod11(barcode_no_dv)
-    barcode = f"{BANK_CODE}{CURRENCY_CODE}{dv}{factor_str}{amount_str}{free_field}"
+    # No novo padrao Febraban, o DV do codigo de barras fica na posicao 20 (indice 19)
+    barcode = f"{BANK_CODE}{CURRENCY_CODE}{factor_str}{amount_str}{dv}{free_field}"
     return barcode
 
 
 def barcode_to_linha_digitavel(barcode: str) -> str:
-    """Converte Codigo de Barras de 44 digitos em Linha Digitavel de 47 digitos."""
-    field1_raw = barcode[0:4] + barcode[19:24]
-    dv1 = _mod10(field1_raw)
-    field1 = f"{field1_raw[:5]}.{field1_raw[5:]}{dv1}"
+    """Converte Codigo de Barras de 44 digitos em Linha Digitavel de 47 digitos (Layout 2025+)."""
+    # Campo livre fica em barcode[20:44]
+    free = barcode[20:44]
 
-    field2_raw = barcode[24:34]
-    dv2 = _mod10(field2_raw)
-    field2 = f"{field2_raw[:5]}.{field2_raw[5:]}{dv2}"
+    # Campo 1: banco(3) + moeda(1) + fator(5) => total 9 digitos + DV modulo 10
+    f1_raw = barcode[0:9]
+    dv1 = _mod10(f1_raw)
+    field1 = f"{f1_raw[:5]}.{f1_raw[5:]}{dv1}"
 
-    field3_raw = barcode[34:44]
-    dv3 = _mod10(field3_raw)
-    field3 = f"{field3_raw[:5]}.{field3_raw[5:]}{dv3}"
+    # Campo 2: free[0:10] => total 10 digitos + DV modulo 10
+    f2_raw = free[0:10]
+    dv2 = _mod10(f2_raw)
+    field2 = f"{f2_raw[:5]}.{f2_raw[5:]}{dv2}"
 
-    field4 = barcode[4]
-    field5 = barcode[5:19]
+    # Campo 3: free[10:20] => total 10 digitos + DV modulo 10
+    f3_raw = free[10:20]
+    dv3 = _mod10(f3_raw)
+    field3 = f"{f3_raw[:5]}.{f3_raw[5:]}{dv3}"
+
+    # Campo 4: DV do codigo de barras (posicao 20, indice 19)
+    field4 = barcode[19]
+
+    # Campo 5: valor(10) + free[20:24] => total 14 digitos
+    field5 = barcode[9:19] + free[20:24]
+
     return f"{field1} {field2} {field3} {field4} {field5}"
 
 
 def generate_boleto(cpf: str, name: str, amount: float, due_date: date, invoice_id: str) -> Dict[str, Any]:
     """Gera os dados completos do Boleto Bancario FEBRABAN."""
-    barcode = generate_barcode_44(amount, due_date, invoice_id)
+    barcode = generate_barcode_44(amount, due_date, invoice_id, cpf)
     linha = barcode_to_linha_digitavel(barcode)
     cpf_clean = cpf.replace('.', '').replace('-', '').zfill(11)
     cpf_fmt = f"{cpf_clean[:3]}.{cpf_clean[3:6]}.{cpf_clean[6:9]}-{cpf_clean[9:11]}"
@@ -290,21 +307,29 @@ def detect_payment_type(code: str) -> str:
 
 
 def decode_boleto_from_code(code: str) -> Dict[str, Any]:
-    """Decodifica um codigo de boleto e extrai as informacoes embutidas."""
+    """Decodifica um codigo de boleto e extrai as informacoes embutidas (Layout 2025+)."""
     digits = code.replace('.', '').replace(' ', '').replace('-', '')
     if len(digits) == 47:
-        f1 = digits[0:9]
-        f2 = digits[10:20]
-        f3 = digits[21:31]
-        f4 = digits[32]
-        f5 = digits[33:47]
-        barcode = f1[0:4] + f4 + f5 + f1[4:9] + f2 + f3
+        f1 = digits[0:9]       # banco(3) + moeda(1) + fator(5)
+        f2 = digits[10:20]     # free_field[0..10]
+        f3 = digits[21:31]     # free_field[10..20]
+        f4 = digits[32]        # DV do codigo de barras
+        f5 = digits[33:47]     # valor(10) + free_field[20..24]
+
+        banco_moeda_fator = f1
+        valor = f5[0:10]
+        dv_bar = f4
+        free_part1 = f2
+        free_part2 = f3
+        free_part3 = f5[10:14]
+
+        barcode = banco_moeda_fator + valor + dv_bar + free_part1 + free_part2 + free_part3
     elif len(digits) == 44:
         barcode = digits
     else:
         barcode = digits[:44].ljust(44, '0')
     bank_code = barcode[0:3]
-    factor_str = barcode[5:9]
+    factor_str = barcode[4:9] # Fator Febraban tem 5 digitos no layout 2025+
     amount_str = barcode[9:19]
     try:
         factor = int(factor_str)

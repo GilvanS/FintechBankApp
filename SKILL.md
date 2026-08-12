@@ -651,3 +651,29 @@ INSERT → SELECT → .map() → Filtro janela → Renderização
 | Auditoria Completa | Semanal dom 02:00 |
 
 ---
+
+## 17. Regra CREDIT_CARD vs ACCOUNT_DEBIT — Pagamento de Conta Recorrente
+
+> 🔗 Detalhe completo: [seção 20 do documento completo](docs/REGRAS-NEGOCIO-FATURA.md#20-regra-credit_card-vs-account_debit--pagamento-de-conta-recorrente)
+
+### Regra essencial
+
+| | `ACCOUNT_DEBIT` | `CREDIT_CARD` (default) |
+|:--|:--|:--|
+| Consome | `users.balance` | `credit_card_available_limit` |
+| Transação | `PAYMENT` `(Débito em Conta)` | `PAYMENT` `(Faturado no Cartão)` |
+| Sem fundos | `400 SALDO_INSUFICIENTE` | `400 LIMITE_INSUFICIENTE` |
+| Fatura aberta | Nunca aparece | Só linha informativa (`informative: true`) |
+
+### Regras críticas
+
+1. **NUNCA polui a fatura como gasto** — PAYMENT/SUBSCRIPTION ficam fora do `cardRows`; o total da fatura não muda.
+2. **`CREDIT_CARD` faturado no cartão** aparece na aberta como linha informativa com merchant real (ex.: `Assinatura Netflix Mensal`), `informative: true`, sem somar no total.
+3. **`ACCOUNT_DEBIT`** vai só para o extrato da home — nunca na fatura (nem informativo).
+4. **Automático (`recurringEngine`)** grava `SUBSCRIPTION`; **manual (`POST /recurring-bills/:cpf/:billId/pay`)** grava `PAYMENT` — diferença intencional.
+5. **Upsert idempotente**: pagar 2x a mesma conta atualiza a MESMA linha (billId do frontend), sem duplicar.
+6. **Retentativa automática**: falha → `past_due` +1 dia; após 3 → `suspended`.
+
+---
+
+- **Rateio de Órfãos Pré-005**: O script ix_orphan_payment_step7.cjs ignora txs 'Encargos de atraso (rateio retroativo)' para evitar re-rateio duplo e valida que o valor de encargos nunca exceda 99% do total da tx (Guarda anti-regressão Wade/Alexander).

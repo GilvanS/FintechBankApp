@@ -7,6 +7,16 @@ const path = require('path');
 // Carregar variÃ¡veis de ambiente com caminho absoluto para evitar erros de CWD
 dotenv.config({ path: path.join(__dirname, '.env') });
 
+// Ambiente de teste (jest): desliga os efeitos colaterais do LOAD do mÃ³dulo
+// (crons, catch-up do motor real, reconciliation scheduler e app.listen). O
+// bootstrap continua conectando o banco e rodando o seed — necessÃ¡rio para os
+// testes de integraÃ§Ã£o que importam este mÃ³dulo — mas nada Ã© agendado nem
+// disparado contra o banco real durante a suÃ­te. Sem este guard, o require de
+// index.cjs disparava o motor de encargos (escrevendo no banco de produÃ§Ã£o)
+// e mantinha timers vivos que logavam depois do fim dos testes ("Cannot log
+// after tests are done").
+const IS_TEST = process.env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
+
 const express = require('express');
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
@@ -35,7 +45,7 @@ const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequeste
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate } = require('./utils/billing');
 const cardEngine = require('./utils/cardEngine');
-const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates } = require('./utils/invoiceMath');
+const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates, classifyDoubleCount } = require('./utils/invoiceMath');
 
 // art. 52 CDC â€” payload Ãºnico de encargos de juros exposto nas rotas de compra
 // (shop/checkout e acquirer-simulate) e nas transaÃ§Ãµes enriquecidas do cartÃ£o.
@@ -103,6 +113,7 @@ const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const createInvoiceController = require('./src/controllers/invoiceController');
 const registerInvoiceRoutes = require('./src/routes/invoice.routes');
+const registerRecurringBillsRoutes = require('./src/routes/recurringBills.routes');
 
 // --- ConfiguraÃ§Ãµes ---
 const PORT = process.env.PORT || 3001;
@@ -117,6 +128,14 @@ const dbService = DatabaseFactory.createDatabaseService();
 
 // --- Motor de Faturas ---
 const cron = require('node-cron');
+
+// Registra um cron apenas fora do ambiente de teste: durante a suÃ­te do jest,
+// os timers de agendamento ficariam vivos apÃ³s o fim (open handle + logs
+// assÃ­ncronos) e poderiam disparar o motor real no meio dos testes.
+const scheduleCron = (expr, fn) => {
+    if (IS_TEST) return;
+    cron.schedule(expr, fn);
+};
 const { runEngine } = require('./services/invoiceEngine');
 const { runDailyAudit } = require('./services/dailyAudit');
 const { runInvoiceImmutabilityHealth, resolveOrphanCutoff } = require('./services/invoiceImmutabilityHealth');
@@ -145,7 +164,7 @@ function reportarResultadoMotor(nomeMotor, result) {
     );
 }
 
-cron.schedule('0 0 * * *', async () => {
+scheduleCron('0 0 * * *', async () => {
     telegramService.alertGroup('âš™ï¸ Motor diÃ¡rio iniciando: fechamento de faturas, billing, recorrÃªncias e sincronizaÃ§Ã£o...', 'system_start');
     console.log('[Cron] Executando Invoice Engine...');
     try {
@@ -207,7 +226,7 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // Cron de auditoria diÃ¡ria de anomalias (executa Ã s 02:00 BRT)
-cron.schedule('0 2 * * *', async () => {
+scheduleCron('0 2 * * *', async () => {
     telegramService.alertGroup('âš™ï¸ Job de auditoria diÃ¡ria iniciando: varredura de anomalias...', 'system_start');
     try {
         await assertTimezone(dbService);
@@ -222,7 +241,7 @@ cron.schedule('0 2 * * *', async () => {
 // Health check diÃ¡rio da imutabilidade de fatura FECHADA.
 // Roda em paralelo ao audit (4h BrasÃ­lia) â€” se a trigger for burlada, este job
 // detecta e alerta via Telegram na categoria 'daily_anomaly'.
-cron.schedule('0 4 * * *', async () => {
+scheduleCron('0 4 * * *', async () => {
     telegramService.alertGroup('âš™ï¸ Health check de imutabilidade iniciando...', 'system_start');
     console.log('[Cron-Immutability] Verificando violaÃ§Ãµes de imutabilidade...');
     try {
@@ -238,7 +257,7 @@ cron.schedule('0 4 * * *', async () => {
 
 // Cron semanal: corrige pagamentos Ã³rfÃ£os automaticamente (domingo 3h da manhÃ£, horÃ¡rio de BrasÃ­lia)
 // Reutiliza a mesma funÃ§Ã£o runOrphanPaymentFix() da rota POST /admin/fix-orphan-payments
-cron.schedule('0 3 * * 0', async () => {
+scheduleCron('0 3 * * 0', async () => {
     telegramService.alertGroup('âš™ï¸ Job semanal iniciando: correÃ§Ã£o de pagamentos Ã³rfÃ£os...', 'system_start');
     console.log('[Cron-Semanal] Executando correÃ§Ã£o automÃ¡tica de pagamentos Ã³rfÃ£os...');
     try {
@@ -402,8 +421,26 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 .slice()
                 .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))
                 .map(inv => {
-                    const total = parseFloat(inv.valor_total || 0);
+                    // Exibição da fatura fechada = compras do ciclo + saldo herdado.
+                    // Quitação/residual continuam usando apenas valor_total: saldo_anterior
+                    // já pertence à fatura anterior e não pode ser cobrado duas vezes.
+                    const total = parseFloat(inv.valor_total || 0) + parseFloat(inv.saldo_anterior || 0);
                     const pago = _pagoEfetivo(inv);
+                    // Encargos CONGELADOS no fechamento (multa/juros/IOF acumulados até o
+                    // corte). O invoiceEngine os consolida nas colunas da fechada a partir
+                    // do billing_charges — o freeze é DISPLAY-ONLY (as charges continuam
+                    // 'pending': a rota de pagamento cobra principal + SUM(pending)). Para
+                    // análise mensal, cada fatura expõe o que foi acumulado no período dela.
+                    // Estes NÃO entram em valorTotal/residual (a quitação usa apenas o
+                    // principal) — a fatura aberta herda apenas os encargos ainda 'pending'
+                    // (pós-fechamento).
+                    const _frozen = {
+                        multa: parseFloat(inv.valor_multa || 0),
+                        jurosMora: parseFloat(inv.valor_juros_mora || 0),
+                        jurosRemuneratorios: parseFloat(inv.valor_juros_remuneratorios || 0),
+                        iof: parseFloat(inv.valor_iof || 0),
+                    };
+                    _frozen.total = round2(_frozen.multa + _frozen.jurosMora + _frozen.jurosRemuneratorios + _frozen.iof);
                     return {
                         id: inv.id,
                         dueDate: inv.due_date,
@@ -413,6 +450,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                         residual: Math.round((total - pago) * 100) / 100,
                         isPaid: (total - pago) <= 0.005,
                         paidAt: _paidAtByInvoice.get(inv.id) || inv.data_pagamento || null,
+                        // Informativo (análise mensal): compras + saldo herdado + encargos congelados.
+                        valorTotalComEncargos: Math.round((total + _frozen.total) * 100) / 100,
+                        encargosFrozen: _frozen,
                     };
                 });
             // Fatura fechada de referÃªncia p/ heranÃ§a na fatura aberta: a mais recente
@@ -470,6 +510,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 normalized.creditCard._closedInvoiceValorTotal = Math.round(unpaidClosed.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0) * 100) / 100;
                 normalized.creditCard._closedInvoiceValorPago = Math.round(unpaidClosed.reduce((sum, inv) => sum + _pagoEfetivo(inv), 0) * 100) / 100;
                 normalized.creditCard._closedInvoiceCount = unpaidClosed.length;
+                // Escopo da fechada: o frontend filtra paymentHistory por estes ids em
+                // vez de ler PAYMENT de closedTransactions (que nao tem mais PAYMENT).
+                normalized.creditCard._closedInvoiceIds = unpaidClosed.map(i => String(i.id));
                 // Ainda ha fatura em aberto: nao esta paga. Explicito (em vez de ausente)
                 // para a UI nao precisar adivinhar a partir de campo faltando.
                 normalized.creditCard.closedInvoiceIsPaid = false;
@@ -501,6 +544,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                     normalized.creditCard._closedInvoiceValorPago = Math.round(_totalPago * 100) / 100;
                     normalized.creditCard._closedInvoiceDataPagamento = _ultimoPagamento;
                     normalized.creditCard._closedInvoiceCount = _quitadasPorVinculo.length;
+                    normalized.creditCard._closedInvoiceIds = _quitadasPorVinculo.map(i => String(i.id));
                     normalized.creditCard.closedInvoice = 0;
                     // Excedente do pagamento vira saldo credor (residual negativo),
                     // mesma convencao ja usada no fluxo de pagamento parcial.
@@ -779,6 +823,19 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     // O paymentHistory aparece no frontend como histÃ³rico de pagamentos do cliente.
     // A lÃ³gica de determinaÃ§Ã£o do paymentType (TOTAL/MINIMO/PARCIAL) Ã© IDÃŠNTICA
     // Ã  do admin dashboard (linha ~2933) â€” mantÃ©m-se consistente entre as duas fontes.
+    // Vinculo tx -> invoice (migration 005). Sem isto o frontend nao consegue saber a
+    // qual fatura cada pagamento pertence depois que o PAYMENT saiu de closedTransactions.
+    const _invoiceIdByTx = new Map();
+    try {
+        const _linkRows = await dbService.executeQuery(`
+            SELECT id, invoice_id
+            FROM ${dbService.fq('transactions')}
+            WHERE cpf = '${cpf}' AND invoice_id IS NOT NULL
+              AND type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+        `);
+        for (const r of _linkRows) _invoiceIdByTx.set(String(r.id), String(r.invoice_id));
+    } catch (_e) { /* base pre-005 sem invoice_id: paymentHistory fica sem vinculo */ }
+
     try {
         const _paymentEntries = (cardRows || [])
             .filter(r => r.type === 'INVOICE_PAYMENT' || r.type === 'INVOICE_ANTICIPATION')
@@ -794,6 +851,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                     amount: Math.abs(parseFloat(r.amount || 0)),
                     description: r.description || 'Pagamento de fatura',
                     paymentType: _paymentType,
+                    invoiceId: _invoiceIdByTx.get(String(r.id)) || null,
                 };
             });
         // Ordenar do mais recente para o mais antigo
@@ -822,15 +880,11 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     } else {
         closedTransactions = cardTransactions.filter(tx => {
             const txDate = new Date(tx.date).getTime();
-            if (txDate <= _prevPrevCloseMs || txDate > _prevCloseMs) {
-                // Permitir que transaÃ§Ãµes de pagamento (PAYMENT) feitas apÃ³s _prevCloseMs entrem
-                // no histÃ³rico de closedTransactions da fatura fechada que elas pagaram.
-                const isPay = tx.type === 'PAYMENT' || tx.type === 'INVOICE_PAYMENT' || tx.type === 'INVOICE_ANTICIPATION';
-                if (isPay && txDate > _prevCloseMs && txDate <= maxDueTime) {
-                    return true;
-                }
-                return false;
-            }
+            // Janela ESTRITA do ciclo fechado. PAYMENT feito depois do fechamento NAO
+            // entra aqui (regra 6.4.1/8.1: pagamento vive so em openTransactions e em
+            // paymentHistory). Injetar o PAYMENT aqui mutava visualmente a fatura
+            // fechada, que e imutavel pela trigger da migration 005.
+            if (txDate <= _prevPrevCloseMs || txDate > _prevCloseMs) return false;
             if (splitTxIds.has(tx.id)) return false;
             if (tx.type === 'INVOICE_INSTALLMENT') return true;
             if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT' || tx.type === 'SUBSCRIPTION') return true;
@@ -841,8 +895,11 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
 
     const closedSnapshot = normalized.creditCard._closedInvoiceSnapshot;
     delete normalized.creditCard._closedInvoiceSnapshot;
-    normalized.creditCard.closedTransactions = closedSnapshot
-        ? [...closedSnapshot, ...closedTransactions.filter(tx => tx.type === 'PAYMENT')]
+    // Snapshot congelado (itemized_transactions) e a fonte quando existe. NAO anexar
+    // PAYMENT aqui: o snapshot representa os lancamentos do ciclo fechado, e pagamento
+    // nao e lancamento da fatura — vai em paymentHistory/openTransactions.
+    normalized.creditCard.closedTransactions = Array.isArray(closedSnapshot)
+        ? closedSnapshot.filter(tx => tx && tx.type !== 'PAYMENT' && tx.type !== 'INVOICE_PAYMENT' && tx.type !== 'INVOICE_ANTICIPATION')
         : closedTransactions;
     const rawInvoiceTotal = normalized.creditCard.closedTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
     // paidInCycle removido â€” closedInvoice jÃ¡ usa valor_pago (saldo residual do DB).
@@ -5394,7 +5451,26 @@ apiRouter.post('/admin/billing/clear-mock-baseline', bearerAuth(), authenticateA
 // ExtraÃ­da para funÃ§Ã£o prÃ³pria para ser reaproveitada tanto pela rota HTTP quanto pelo
 // cron diÃ¡rio â€” sem isso, nada dispara essa validaÃ§Ã£o automaticamente e days_overdue/
 // billing_charges nunca sÃ£o atualizados dia a dia.
+// Guarda de concorrência do motor diário: o cron (00:00), o boot catch-up e a
+// rota POST /admin/billing/validate-all podem disparar runBillingValidation no
+// mesmo processo. Sem este lock em memória, duas execuções simultâneas inseriam
+// o incremento do MESMO dia 2x (causa raiz das 958 duplicatas em 107 massas).
+let _billingValidationRunning = false;
+
 async function runBillingValidation() {
+    if (_billingValidationRunning) {
+        console.warn('[BillingValidation] Já em execução — chamada concorrente ignorada (anti-duplicata).');
+        return { success: true, message: 'Já em execução (ignorado para evitar duplicatas de incremento diário).', skipped: true, errors: [], processadas: 0, falhas: 0, updated: { inadimplente: 0, adimplente: 0 }, charges: { generated: 0, detail: [] } };
+    }
+    _billingValidationRunning = true;
+    try {
+        return await runBillingValidationInner();
+    } finally {
+        _billingValidationRunning = false;
+    }
+}
+
+async function runBillingValidationInner() {
     const configRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
     if (!configRows.length) return { success: false, message: 'ConfiguraÃ§Ã£o de faturamento nÃ£o encontrada.' };
     const cfg = configRows[0];
@@ -5459,7 +5535,21 @@ async function runBillingValidation() {
         // seguinte legitimamente em aberto.
         if (residual <= 0.005) continue;
         if (!closedDueByCpf.has(row.cpf)) {
-            closedDueByCpf.set(row.cpf, { dueDate: row.due_date, amount: residual, valorTotal, valorPago: pago });
+            closedDueByCpf.set(row.cpf, {
+                dueDate: row.due_date,
+                amount: residual,
+                valorTotal,
+                valorPago: pago,
+                // Pagamento MÍNIMO (>= 10% da fatura) recebido mas com residual em aberto:
+                // a conta é regularizada (dias de atraso zerados e mantidos em 0) mas os
+                // encargos CONTINUAM acumulando até o pagamento total. Pagamento abaixo
+                // do mínimo (< 10%) mantém a inadimplência e os dias contando.
+                // MESMO critério da rota de pay (invoiceController: minPayment =
+                // Math.max(totalDue * 0.10, 10)): o piso de R$ 10 evita que faturas
+                // pequenas (ex.: R$ 50) tenham mínimo irrisório de R$ 5 e classifiquem
+                // PARCIAL como MÍNIMO.
+                pagamentoMinimo: pago >= Math.max(valorTotal * 0.10, 10) - 0.01,
+            });
         }
     }
 
@@ -5501,14 +5591,24 @@ async function runBillingValidation() {
         const diffMs = todayMidnight - dueDate;
         const daysOverdue = diffMs > 0 ? Math.floor(diffMs / 86400000) : 0;
         
-        // Regra atualizada: Se passou de meia noite do vencimento (daysOverdue >= 1), jÃ¡ Ã© inadimplente
-        const newStatus = daysOverdue >= 1 ? 'inadimplente' : 'adimplente';
+        // Pagamento mínimo (>= 10%) mantém o contador ZERADO (regra de negócio): mesmo com
+        // a fatura ainda devendo, o cliente fez acordo e a conta fica "em dia" — os
+        // encargos continuam acumulando (bloco abaixo), mas os dias de atraso exibidos
+        // ficam 0 até a quitação TOTAL. Abaixo do mínimo (< 10%): segue inadimplente,
+        // os dias continuam contando e os encargos continuam acumulando.
+        const displayDays = closedInvoiceData.pagamentoMinimo ? 0 : daysOverdue;
+        const newStatus = closedInvoiceData.pagamentoMinimo
+            ? 'adimplente'
+            : (daysOverdue >= 1 ? 'inadimplente' : 'adimplente');
 
-        console.log(`[DEBUG] CPF: ${u.cpf}, dueDate: ${dueDate}, today: ${todayMidnight}, diffMs: ${diffMs}, daysOverdue: ${daysOverdue}, newStatus: ${newStatus}`);
+        console.log(`[DEBUG] CPF: ${u.cpf}, dueDate: ${dueDate}, today: ${todayMidnight}, diffMs: ${diffMs}, daysOverdue: ${daysOverdue}, displayDays: ${displayDays}, newStatus: ${newStatus}`);
 
         // Recalcular encargos diariamente enquanto em atraso (multa 2%, IOF 0,38% + 0,0082%/dia,
         // juros remuneratÃ³rios 15,39% a.m., juros de mora 1% a.m.)
-        if (daysOverdue > 0) {
+        // Acumula encargos enquanto houver residual em aberto E (fatura vencida OU pagamento
+        // mínimo já feito). Com mínimo o contador de dias fica 0 mas os juros/IOF seguem
+        // incrementando sobre o residual até o pagamento TOTAL.
+        if (daysOverdue > 0 || closedInvoiceData.pagamentoMinimo) {
             // Usa o saldo RESIDUAL da fatura fechada (valor_total - valor_pago) para calcular os encargos.
             // Para massas com pagamento parcial, o encargo incide apenas sobre o que 
             // efetivamente falta pagar â€” NÃƒO sobre o valor_total bruto.
@@ -5528,15 +5628,78 @@ async function runBillingValidation() {
                 // o valor_total ORIGINAL (nÃ£o o residual). Juros de mora, juros
                 // remuneratÃ³rios e IOF diÃ¡rio sÃ£o incrementos DIÃRIOS sobre o
                 // residual â€” sempre inseridos a cada execuÃ§Ã£o.
+                // REF ESTÁVEL (fix da análise mensal e da multa duplicada): a referência das
+                // charges NÃO pode ser o ciclo corrente. cycle.invoiceRef muda conforme a
+                // config de faturamento e, na massa 805.357.576-54, girou (2026-07 → 2026-08
+                // → 2026-09) fazendo o motor recriar a multa de 2% (cobrança ÚNICA) a cada
+                // troca de ref — duplicando a cobrança. A ref agora é o MÊS DA FATURA MAIS
+                // ANTIGA NÃO PAGA (a que ancora os encargos): estável enquanto essa dívida
+                // existir, e todas as charges do mesmo débito compartilham a mesma ref.
+                const stableRef = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
+                // Checagem de "encargos únicos" (multa 2% e IOF adicional) GLOBAL por CPF:
+                // sem filtro de invoice_reference — qualquer multa/IOF pending do CPF já
+                // inibe nova inserção. Com o filtro por ref instável, cada troca de ref
+                // criava multa duplicada (77,42 em 2026-07 E em 2026-08 na massa 805).
                 const existingCharges = await dbService.executeQuery(`
                     SELECT charge_type, COALESCE(SUM(amount), 0) AS total
                     FROM ${dbService.fq('billing_charges')}
-                    WHERE cpf = '${u.cpf}' AND invoice_reference = '${cycle.invoiceRef}' AND status = 'pending'
+                    WHERE cpf = '${u.cpf}' AND status = 'pending'
                     GROUP BY charge_type
                 `);
                 const getExisting = (type) => {
                     const row = existingCharges.find(e => e.charge_type === type);
                     return row ? parseFloat(row.total) : 0;
+                };
+
+                // IDEMPOTÊNCIA DIÁRIA: o motor roda 1x/dia (cron 00:00) mas também é
+                // disparado pelo boot catch-up e pela rota admin. Sem esta checagem,
+                // cada execução adicional inseria o incremento do MESMO dia de novo
+                // (juros_mora/juros_remuneratorios/iof duplicados por dia — 958 linhas
+                // em 107 massas). Regra: 1 incremento por (cpf, invoice_reference,
+                // charge_type, days_overdue) — a chave inclui a ref estável para não
+                // colidir caso a âncora mude (fatura mais antiga não paga) ou existam
+                // charges legadas de refs antigas no histórico. Multa/IOF adicional
+                // continuam no check global acima (uma única vez por débito).
+                const existingDayRows = await dbService.executeQuery(`
+                    SELECT invoice_reference, charge_type, days_overdue
+                    FROM ${dbService.fq('billing_charges')}
+                    WHERE cpf = '${u.cpf}' AND status = 'pending'
+                `);
+                // A chave usa o invoice_reference REAL de cada linha existente (não o
+                // stableRef corrente): linhas legadas de refs antigas (ex.: 2026-09 com
+                // dias 1-27 do período de base errada) NÃO bloqueiam o incremento correto
+                // de hoje sob a ref estável — só bloqueia quem tem a MESMA ref e o MESMO
+                // dia. Se usasse stableRef aqui, uma linha legada 2026-09|dia 27 viraria
+                // "juros_mora|2026-07|27" e o motor pularia o incremento real de hoje
+                // para as massas que ainda têm histórico legado (bug reportado no review).
+                const existingDays = new Set((existingDayRows || []).map(r => `${r.charge_type}|${r.invoice_reference}|${r.days_overdue}`));
+                const dayAlreadyInserted = (type) => existingDays.has(`${type}|${stableRef}|${daysOverdue}`);
+                const markDayInserted = (type) => existingDays.add(`${type}|${stableRef}|${daysOverdue}`);
+
+                // INSERT com guarda TOCTOU (race cross-process): o SELECT acima e o INSERT
+                // abaixo têm uma janela entre si — se 2 processos (cron + catch-up de outro
+                // worker, dev API + teste) passarem pelo SELECT juntos e chegarem ao INSERT
+                // juntos, o unique index billing_charges_daily_unique (fase 2 da limpeza)
+                // rejeita o segundo com 23505. Isto NÃO é erro de massa: o dia já existe.
+                // Captura 23505 e trata como "já inserido" — sem ON CONFLICT porque o índice
+                // pode ainda não existir em ambientes que não rodaram a limpeza.
+                const insertCharge = async (chargeType, amount) => {
+                    const idBase = `${u.cpf}_${stableRef}_${Date.now()}_${chargeType}`;
+                    try {
+                        await dbService.executeQuery(`
+                            INSERT INTO ${dbService.fq('billing_charges')}
+                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
+                            VALUES
+                            ('${idBase}', '${u.cpf}', '${stableRef}', '${chargeType}', ${amount}, ${daysOverdue}, ${invoiceAmount})
+                        `);
+                        return true;
+                    } catch (err) {
+                        if (err && (err.code === '23505' || /duplicate key/i.test(err.message || ''))) {
+                            console.warn(`[BillingValidation] ${u.cpf}: ${chargeType} do dia ${daysOverdue} já inserido por outro processo — ignorado.`);
+                            return false;
+                        }
+                        throw err;
+                    }
                 };
 
                 const originalValorTotal = parseFloat(closedInvoiceData.valorTotal || 0);
@@ -5546,15 +5709,11 @@ async function runBillingValidation() {
                 if (getExisting('multa') < 0.005) {
                     const multa = calcMulta(originalValorTotal);
                     if (multa > 0.005) {
-                        const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_multa`;
-                        await dbService.executeQuery(`
-                            INSERT INTO ${dbService.fq('billing_charges')}
-                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
-                            VALUES
-                            ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'multa', ${multa}, ${daysOverdue}, ${invoiceAmount})
-                        `);
-                        chargesGenerated++;
-                        totalLineCharges += multa;
+                        markDayInserted('multa');
+                        if (await insertCharge('multa', multa)) {
+                            chargesGenerated++;
+                            totalLineCharges += multa;
+                        }
                     }
                 } else {
                     totalLineCharges += getExisting('multa');
@@ -5566,29 +5725,21 @@ async function runBillingValidation() {
                     // Primeira cobranÃ§a: IOF adicional (Ãºnica, sobre original) + IOF diÃ¡rio acumulado
                     const iof = calcIof(originalValorTotal, daysOverdue);
                     if (iof > 0.005) {
-                        const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_iof`;
-                        await dbService.executeQuery(`
-                            INSERT INTO ${dbService.fq('billing_charges')}
-                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
-                            VALUES
-                            ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'iof', ${iof}, ${daysOverdue}, ${invoiceAmount})
-                        `);
-                        chargesGenerated++;
-                        totalLineCharges += iof;
+                        markDayInserted('iof');
+                        if (await insertCharge('iof', iof)) {
+                            chargesGenerated++;
+                            totalLineCharges += iof;
+                        }
                     }
                 } else {
                     // CobranÃ§as subsequentes: apenas IOF diÃ¡rio (1 dia) sobre o residual
                     const dailyIof = calcIofDiario(invoiceAmount, 1);
-                    if (dailyIof > 0.005) {
-                        const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_iof`;
-                        await dbService.executeQuery(`
-                            INSERT INTO ${dbService.fq('billing_charges')}
-                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
-                            VALUES
-                            ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'iof', ${dailyIof}, ${daysOverdue}, ${invoiceAmount})
-                        `);
-                        chargesGenerated++;
-                        totalLineCharges += dailyIof;
+                    if (!dayAlreadyInserted('iof') && dailyIof > 0.005) {
+                        markDayInserted('iof');
+                        if (await insertCharge('iof', dailyIof)) {
+                            chargesGenerated++;
+                            totalLineCharges += dailyIof;
+                        }
                     } else {
                         totalLineCharges += getExisting('iof');
                     }
@@ -5597,16 +5748,12 @@ async function runBillingValidation() {
                 // â”€â”€ JUROS DE MORA: incremento diÃ¡rio sobre o residual â”€â”€
                 {
                     const dailyJurosMora = calcJurosMora(invoiceAmount, 1);
-                    if (dailyJurosMora > 0.005) {
-                        const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_juros_mora`;
-                        await dbService.executeQuery(`
-                            INSERT INTO ${dbService.fq('billing_charges')}
-                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
-                            VALUES
-                            ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'juros_mora', ${dailyJurosMora}, ${daysOverdue}, ${invoiceAmount})
-                        `);
-                        chargesGenerated++;
-                        totalLineCharges += dailyJurosMora;
+                    if (!dayAlreadyInserted('juros_mora') && dailyJurosMora > 0.005) {
+                        markDayInserted('juros_mora');
+                        if (await insertCharge('juros_mora', dailyJurosMora)) {
+                            chargesGenerated++;
+                            totalLineCharges += dailyJurosMora;
+                        }
                     } else {
                         totalLineCharges += getExisting('juros_mora');
                     }
@@ -5615,22 +5762,18 @@ async function runBillingValidation() {
                 // â”€â”€ JUROS REMUNERATÃ“RIOS: incremento diÃ¡rio sobre o residual â”€â”€
                 {
                     const dailyJurosRem = calcJurosRemuneratorios(invoiceAmount, 1);
-                    if (dailyJurosRem > 0.005) {
-                        const idBase = `${u.cpf}_${cycle.invoiceRef}_${Date.now()}_juros_rem`;
-                        await dbService.executeQuery(`
-                            INSERT INTO ${dbService.fq('billing_charges')}
-                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
-                            VALUES
-                            ('${idBase}', '${u.cpf}', '${cycle.invoiceRef}', 'juros_remuneratorios', ${dailyJurosRem}, ${daysOverdue}, ${invoiceAmount})
-                        `);
-                        chargesGenerated++;
-                        totalLineCharges += dailyJurosRem;
+                    if (!dayAlreadyInserted('juros_remuneratorios') && dailyJurosRem > 0.005) {
+                        markDayInserted('juros_remuneratorios');
+                        if (await insertCharge('juros_remuneratorios', dailyJurosRem)) {
+                            chargesGenerated++;
+                            totalLineCharges += dailyJurosRem;
+                        }
                     } else {
                         totalLineCharges += getExisting('juros_remuneratorios');
                     }
                 }
                 chargesDetail.push({
-                    cpf: u.cpf, invoiceRef: cycle.invoiceRef,
+                    cpf: u.cpf, invoiceRef: stableRef,
                     invoiceAmount,
                     multa: getExisting('multa') || calcMulta(originalValorTotal),
                     iof: getExisting('iof') || calcIof(invoiceAmount, daysOverdue),
@@ -5702,10 +5845,10 @@ async function runBillingValidation() {
             }
         }
 
-        if (newStatus !== u.account_status || daysOverdue !== parseInt(u.days_overdue)) {
+        if (newStatus !== u.account_status || displayDays !== parseInt(u.days_overdue)) {
             await dbService.executeQuery(`
                 UPDATE ${dbService.fq('users')}
-                SET account_status = '${newStatus}', days_overdue = ${daysOverdue}, updated_at = CURRENT_TIMESTAMP
+                SET account_status = '${newStatus}', days_overdue = ${displayDays}, updated_at = CURRENT_TIMESTAMP
                 WHERE cpf = '${u.cpf}'
             `);
             if (newStatus === 'inadimplente') markedInadimplente++;
@@ -5718,6 +5861,9 @@ async function runBillingValidation() {
     }
 
     // â”€â”€ Sincronizar dias_atraso nas invoices (sempre, nÃ£o apenas quando users muda) â”€â”€
+    // 1) dias reais (hoje - vencimento) em todas as fechadas nÃ£o pagas;
+    // 2) ZERO nas que receberam pagamento MÃNIMO (>= 10%): a regra de negÃ³cio zera o
+    //    contador de atraso nesses casos e ele fica 0 atÃ© a quitaÃ§Ã£o total.
     try {
         await dbService.executeQuery(`
             UPDATE ${dbService.fq('invoices')}
@@ -5727,6 +5873,20 @@ async function runBillingValidation() {
               AND data_pagamento IS NULL
               AND due_date < CURRENT_TIMESTAMP
               AND COALESCE(dias_atraso, -1) != GREATEST(0, (CURRENT_DATE - due_date::date))
+        `);
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('invoices')} inv
+            SET dias_atraso = 0, updated_at = CURRENT_TIMESTAMP
+            FROM (
+                SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS pago
+                FROM ${dbService.fq('transactions')}
+                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+                GROUP BY invoice_id
+            ) pg
+            WHERE inv.id = pg.invoice_id
+              AND inv.status = 'FECHADA' AND inv.data_pagamento IS NULL
+              AND pg.pago >= GREATEST(inv.valor_total * 0.10, 10) - 0.01
+              AND inv.dias_atraso != 0
         `);
     } catch (invoiceSyncErr) {
         console.warn('âš ï¸ Erro ao sincronizar dias_atraso nas invoices:', invoiceSyncErr.message);
@@ -5765,6 +5925,22 @@ const syncInvoiceDiasAtraso = async () => {
               AND data_pagamento IS NULL
               AND due_date < CURRENT_TIMESTAMP
               AND COALESCE(dias_atraso, -1) != GREATEST(0, (CURRENT_DATE - due_date::date))
+        `);
+        // Pagamento MÍNIMO (>= 10%): zera dias_atraso na invoice (regra de negócio) —
+        // a conta fica "em dia" (dias 0) mas os encargos continuam acumulando.
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('invoices')} inv
+            SET dias_atraso = 0, updated_at = CURRENT_TIMESTAMP
+            FROM (
+                SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS pago
+                FROM ${dbService.fq('transactions')}
+                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+                GROUP BY invoice_id
+            ) pg
+            WHERE inv.id = pg.invoice_id
+              AND inv.status = 'FECHADA' AND inv.data_pagamento IS NULL
+              AND pg.pago >= GREATEST(inv.valor_total * 0.10, 10) - 0.01
+              AND inv.dias_atraso != 0
         `);
         const updatedCount = result?.rowCount || result?.length || 0;
         
@@ -6020,53 +6196,9 @@ apiRouter.get('/financial-health/:cpf', bearerAuth(), asyncHandler(async (req, r
     res.json({ success: true, score, creditUtilization: Math.round(utilization), suggestions, balance });
 }));
 
-// Contas Recorrentes CRUD
-apiRouter.get('/recurring-bills/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
-    const cpf = req.params.cpf;
-    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
-        return res.status(403).json({ success: false, message: 'Acesso negado.' });
-    }
-    const rows = await recurringBillsRepo.list(cpf);
-    res.json({ success: true, bills: rows });
-}));
-
-apiRouter.post('/recurring-bills/:cpf', bearerAuth(), [
-    body('name').isString().notEmpty().withMessage('Nome da conta Ã© obrigatÃ³rio.'),
-    body('amount').isFloat({ min: 0.01 }).withMessage('Valor deve ser maior que zero.'),
-    body('dueDay').isInt({ min: 1, max: 31 }).withMessage('Dia de vencimento deve ser entre 1 e 31.'),
-    body('category').optional().isString(),
-], handleValidationErrors, asyncHandler(async (req, res) => {
-    const cpf = req.params.cpf;
-    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
-        return res.status(403).json({ success: false, message: 'Acesso negado.' });
-    }
-    const { name, amount, dueDay, category } = req.body;
-    const bill = await recurringBillsRepo.create({ cpf, name, amount, dueDay, category });
-    res.status(201).json({ success: true, bill: recurringBillsRepo.normalize(bill) });
-}));
-
-apiRouter.put('/recurring-bills/:cpf/:billId', bearerAuth(), asyncHandler(async (req, res) => {
-    const { cpf, billId } = req.params;
-    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
-        return res.status(403).json({ success: false, message: 'Acesso negado.' });
-    }
-    const { name, amount, dueDay, category, status } = req.body || {};
-    if (status && !['pending', 'paid'].includes(status)) {
-        return res.status(400).json({ success: false, message: 'Status deve ser pending ou paid.' });
-    }
-    const updated = await recurringBillsRepo.update({ cpf, billId, name, amount, dueDay, category, status });
-    if (!updated) return res.status(404).json({ success: false, message: 'Conta recorrente nÃ£o encontrada.' });
-    res.json({ success: true, message: 'Conta atualizada com sucesso.' });
-}));
-
-apiRouter.delete('/recurring-bills/:cpf/:billId', bearerAuth(), asyncHandler(async (req, res) => {
-    const { cpf, billId } = req.params;
-    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
-        return res.status(403).json({ success: false, message: 'Acesso negado.' });
-    }
-    await recurringBillsRepo.remove({ cpf, billId });
-    res.json({ success: true, message: 'Conta recorrente removida.' });
-}));
+// Contas Recorrentes CRUD — extraído para src/routes/recurringBills.routes.js (Fase D)
+registerRecurringBillsRoutes({ apiRouter, bearerAuth, asyncHandler, body, dbService, escapeSQL, 
+    handleValidationErrors, nowDb, recurringBillsRepo, toISO, auditLog });
 
 apiRouter.post('/statement/export', bearerAuth(), [
     body('format').isIn(['pdf', 'csv']).withMessage('Formato deve ser pdf ou csv.'),
@@ -6962,7 +7094,7 @@ async function bootstrap() {
         }
     } catch (error) {
         console.error("âŒ Erro ao inicializar:", error.message);
-        process.exit(1);
+        if (!IS_TEST) process.exit(1); // em teste, deixa a suite reportar a falha
     }
 
     // Guarda de fuso: aborta se o fuso do processo ou do banco divergir de America/Sao_Paulo
@@ -6972,7 +7104,7 @@ async function bootstrap() {
         console.log('âœ… [Timezone Guard] Fuso de processo e banco validados: America/Sao_Paulo');
     } catch (err) {
         console.error('âŒ [Timezone Guard] ' + err.message);
-        process.exit(1);
+        if (!IS_TEST) process.exit(1); // em teste, nao derruba o worker do jest
     }
 }
 
@@ -7628,6 +7760,99 @@ apiRouter.get('/admin/audit-consistency', bearerAuth(), authenticateAdmin, async
     });
 }));
 
+// â”€â”€ Auditoria de double-counting: pagamentos (INVOICE_PAYMENT) vs valor_pago das invoices â”€â”€
+// LÃ³gica extraÃ­da de scripts/audit_completo.js::runDoubleCountAudit (somente leitura, sem --fix,
+// sem console.log). Para cada CPF com INVOICE_PAYMENT, compara soma dos pagamentos com a soma de
+// invoices.valor_pago; diff > R$0,02 conta como discrepÃ¢ncia.
+async function runDoubleCountAuditQuery(cpfFilter, limit) {
+    const { esc } = repoContext;
+
+    let usersQuery = `SELECT DISTINCT t.cpf, u.full_name
+        FROM ${dbService.fq('transactions')} t
+        LEFT JOIN ${dbService.fq('users')} u ON t.cpf = u.cpf
+        WHERE t.type = 'INVOICE_PAYMENT'`;
+    if (cpfFilter) usersQuery += ` AND t.cpf = ${esc(cpfFilter)}`;
+    usersQuery += ` ORDER BY t.cpf LIMIT ${limit}`;
+
+    const users = await dbService.executeQuery(usersQuery);
+    const report = { scanned: users.length, withPayments: 0, discrepancies: 0, details: [] };
+
+    for (const user of users || []) {
+        const cpf = user.cpf;
+        const detail = { cpf, name: user.full_name || '(sem nome)', payments: [], invoices: [], status: 'ok' };
+
+        const paymentRows = await dbService.executeQuery(`
+            SELECT id, amount, description, date
+            FROM ${dbService.fq('transactions')}
+            WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT'
+                AND (status IS NULL OR status <> 'cancelled')
+            ORDER BY date ASC
+        `);
+        const paymentTotal = (paymentRows || []).reduce((s, r) => s + Math.abs(parseFloat(r.amount || 0)), 0);
+        detail.payments = (paymentRows || []).map(r => ({
+            id: r.id,
+            amount: Math.abs(parseFloat(r.amount || 0)),
+            description: (r.description || '').trim(),
+            date: r.date
+        }));
+
+        const invoiceRows = await dbService.executeQuery(`
+            SELECT id, due_date, status, valor_total, valor_pago, data_pagamento
+            FROM ${dbService.fq('invoices')}
+            WHERE cpf = ${esc(cpf)} AND COALESCE(valor_pago, 0) > 0
+            ORDER BY due_date DESC
+        `);
+        const invoiceTotalPago = (invoiceRows || []).reduce((s, r) => s + parseFloat(r.valor_pago || 0), 0);
+        detail.invoices = (invoiceRows || []).map(r => ({
+            id: r.id,
+            dueDate: r.due_date,
+            status: r.status,
+            valorTotal: parseFloat(r.valor_total || 0),
+            valorPago: parseFloat(r.valor_pago || 0),
+            dataPagamento: r.data_pagamento
+        }));
+
+        const { status, diff } = classifyDoubleCount({
+            paymentTotal,
+            invoiceTotalPago,
+            invoiceRows,
+            hasPayments: (paymentRows || []).length > 0,
+            hasInvoices: (invoiceRows || []).length > 0
+        });
+
+        report.withPayments++;
+        if (diff > 0.02) report.discrepancies++; // inclui 'resolvido': diff residual de correção anterior ainda conta
+        detail.status = status;
+        detail.paymentTotal = round2(paymentTotal);
+        detail.invoiceTotalPago = round2(invoiceTotalPago);
+        detail.diff = diff;
+        report.details.push(detail);
+    }
+
+    return report;
+}
+
+apiRouter.get('/admin/audit-double-count', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const rawCpf = typeof req.query?.cpf === 'string' ? req.query.cpf.replace(/\D/g, '') : '';
+    const filterCpf = rawCpf.length === 11 ? rawCpf : null;
+    const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
+    const limit = !isNaN(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 200) : 100;
+
+    const report = await runDoubleCountAuditQuery(filterCpf, limit);
+
+    res.json({
+        success: true,
+        scanned: report.scanned,
+        withPayments: report.withPayments,
+        discrepancies: report.discrepancies,
+        details: report.details,
+        filters: { cpf: filterCpf || null, limit },
+        tip: report.discrepancies > 0
+            ? 'Execute node scripts/audit_completo.js --fix --confirm para corrigir discrepÃ¢ncias.'
+            : undefined
+    });
+}));
+
 // GET /admin/audit/run-full â€” Auditoria completa (consistÃªncia + pagamentos) em uma chamada
 apiRouter.get('/admin/audit/run-full', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { esc } = repoContext;
@@ -8264,8 +8489,9 @@ async function catchUpDailyMotorIfNeeded() {
     }
 }
 
-bootstrap().then(() => {
-    catchUpDailyMotorIfNeeded();
+if (!IS_TEST) {
+    bootstrap().then(() => {
+        catchUpDailyMotorIfNeeded();
 
     // Inicializar o Job/Cron de ConciliaÃ§Ã£o DiÃ¡ria de Faturas e Extratos
     try {
@@ -8326,8 +8552,9 @@ bootstrap().then(() => {
     });
 }).catch((err) => {
     console.error("âŒ Erro no bootstrap:", err.message);
-    process.exit(1);
+    if (!IS_TEST) process.exit(1);
 });
+}
 
 module.exports = {
     enrichUserCreditCardData,
@@ -8335,5 +8562,6 @@ module.exports = {
     usersRepo,
     fetchUnpaidClosedInvoices,
     app,
-    bootstrap
+    bootstrap,
+    runBillingValidation
 };

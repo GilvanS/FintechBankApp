@@ -69,7 +69,10 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: cu
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(tx);
   }
-  const total = currentTransactions.reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
+  // Linhas informativas (informative: true — ex.: 'Assinatura faturada no cartão',
+  // PAYMENT com invoice_id null) NUNCA entram no totalizador do rodapé: são apenas
+  // memória visual; o total real vem de creditCard.currentInvoice/currentInvoiceTotal.
+  const total = currentTransactions.reduce((sum, tx) => sum + (tx.informative ? 0 : (tx.amount ?? 0)), 0);
 
   return (
     <div className={`${isMidnight ? 'text-white' : 'text-black'} bg-volt-dark min-h-full flex flex-col w-full max-w-md mx-auto pb-28`}>

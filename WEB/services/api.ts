@@ -1130,6 +1130,37 @@ export const adminAuditConsistency = async (options?: { cpf?: string; limit?: nu
   }
 };
 
+export const adminAuditDoubleCount = async (options?: { cpf?: string; limit?: number }): Promise<{
+  success: boolean;
+  message?: string;
+  scanned?: number;
+  withPayments?: number;
+  discrepancies?: number;
+  details?: Array<{
+    cpf: string;
+    name: string;
+    status: string;
+    payments: Array<{ id: string; amount: number; description: string; date: string }>;
+    invoices: Array<{ id: string; dueDate: string; status: string; valorTotal: number; valorPago: number; dataPagamento: string | null }>;
+    paymentTotal: number;
+    invoiceTotalPago: number;
+    diff: number;
+  }>;
+  filters?: { cpf: string | null; limit: number };
+  tip?: string;
+}> => {
+  try {
+    const params = new URLSearchParams();
+    if (options?.cpf) params.set('cpf', options.cpf);
+    if (options?.limit) params.set('limit', String(options.limit));
+    const qs = params.toString();
+    const result = await apiCall<any>(`/admin/audit-double-count${qs ? '?'+qs : ''}`);
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao auditar double-counting' };
+  }
+};
+
 export const adminRunFullAudit = async (): Promise<{
   success: boolean;
   message?: string;

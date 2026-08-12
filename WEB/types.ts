@@ -36,6 +36,8 @@ export interface PaymentEntry {
     amount: number;
     description: string;
     paymentType: 'TOTAL' | 'MINIMO' | 'PARCIAL';
+    /** Fatura quitada por este pagamento (transactions.invoice_id, migration 005). */
+    invoiceId?: string | null;
 }
 
 export interface CreditCard {
@@ -72,6 +74,8 @@ export interface CreditCard {
     transactions: CardTransaction[];
     closedTransactions: CardTransaction[];
     paymentHistory?: PaymentEntry[];
+    /** Ids das faturas fechadas em escopo — usado para filtrar paymentHistory na aba Fechada. */
+    _closedInvoiceIds?: string[];
     futureInstallments?: Record<string, number>;
     futureInstallmentsDetail?: Record<string, { description: string; amount: number; num: number; total: number }[]>;
 }

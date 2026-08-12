@@ -34,6 +34,7 @@ node index.js
 - Admin:
   - `GET/POST /admin/users/*`
   - `GET/POST /admin/requests/*`
+  - `GET /admin/recurring-bills?status=active&cpf=11111111111` (contas recorrentes de todas as massas, com `userFullName`/`userRole` via join; filtros opcionais `status` e `cpf`)
 - Proxy:
   - `GET /proxy/news` (cache simples + bearer)
 

@@ -1,6 +1,5 @@
 const { getDb, esc } = require('../repositories/context');
 const { v4: uuidv4 } = require('uuid');
-const { computeCurrentCycle } = require('../utils/billing');
 
 async function runEngine(targetCpf = null) {
   const db = getDb();
@@ -14,11 +13,6 @@ async function runEngine(targetCpf = null) {
 
     const users = await db.executeQuery(query);
     console.log(`[InvoiceEngine] ${users.length} usuários encontrados para verificação.`);
-
-    // Ciclo atual (para referenciar os encargos pendentes gerados pelo billing)
-    const cfgRows = await db.executeQuery(`SELECT * FROM ${db.fq('billing_config')} WHERE id = 1`);
-    const billingCfg = cfgRows[0] || { close_day: 20, due_day: 10, grace_period_days: 3 };
-    const invoiceRef = computeCurrentCycle(billingCfg).invoiceRef;
 
     let processedCount = 0;
     const errors = [];
@@ -42,9 +36,15 @@ async function runEngine(targetCpf = null) {
         // Passou da data de corte: fechar fatura atual e rolar vencimento para próximo mês
         console.log(`[InvoiceEngine] Fatura do CPF ${user.cpf} passou da data de corte (${cutoffDate.toISOString()}) ou override de teste. Fechando fatura...`);
 
-        // 1. Obter o último fechamento para definir o início do ciclo
+        // 1. Obter o último fechamento para definir o início do ciclo.
+        // created_at (não só due_date) é o discriminador do freeze de encargos:
+        // as charges geradas pelo runBillingValidation nascem com o created_at
+        // da fatura que as originou (o seed cria charge + invoice no mesmo
+        // instante) — filtrar por created_at >= última fechada pega exatamente o
+        // que acumulou no período desta fatura e NÃO re-congela o que já foi
+        // congelado na fechada anterior.
         const lastClosed = await db.executeQuery(`
-          SELECT due_date FROM ${db.fq('invoices')}
+          SELECT due_date, created_at FROM ${db.fq('invoices')}
           WHERE cpf = ${esc(user.cpf)} AND status = 'FECHADA'
           ORDER BY due_date DESC LIMIT 1
         `);
@@ -158,10 +158,33 @@ async function runEngine(targetCpf = null) {
         `))[0];
         const saldoAnterior = prevUnpaidInvoice ? parseFloat(prevUnpaidInvoice.valor_total || 0) : 0.00;
 
-        // Buscar charges pendentes geradas para o ciclo que está fechando
+        // Buscar TODAS as charges pendentes geradas APÓS a última fechada para congelar
+        // nas colunas da fatura que está fechando. NÃO filtrar por invoice_reference do
+        // ciclo ATUAL: o runBillingValidation grava os encargos do atraso sob a referência
+        // da fatura VENCIDA que os gerou (mês do vencimento dela), e o engine roda ANTES
+        // da validação no cron — a referência é instável e o filtro antigo deixava as
+        // charges do ciclo anterior órfãs: ex. o Fat 2 fechava com encargos congelados
+        // ZERO enquanto a multa/juros/IOF de julho ficavam 'pending' e eram herdados pela
+        // fatura aberta, sumindo da análise mensal do período correto.
+        //
+        // O recorte `created_at >= última fechada` (em vez de TODAS as pending) impede o
+        // re-congelamento: uma charge já consolidada na fechada anterior tem created_at
+        // anterior a ela e não pode aparecer de novo na próxima (senão a análise mensal
+        // contaria o mesmo encargo em duas faturas).
+        //
+        // O congelamento é DISPLAY-ONLY (análise mensal por período). As charges NÃO são
+        // marcadas 'paid' aqui: a rota de pagamento (invoiceController.pay) cobra
+        // `principal (valor_total - pago) + SUM(billing_charges pending)`, e
+        // getClosedInvoiceDebt.owed usa apenas valor_total — as colunas congeladas não
+        // entram na cobrança. Marcar 'paid' removeria os encargos da coleta (perda de
+        // dívida) enquanto eles continuam exibidos na fatura fechada.
+        const chargesWhere = ['cpf = ' + esc(user.cpf), "status = 'pending'"];
+        if (lastClosed.length > 0 && lastClosed[0].created_at) {
+            chargesWhere.push('created_at >= ' + esc(lastClosed[0].created_at.toISOString ? lastClosed[0].created_at.toISOString() : String(lastClosed[0].created_at)));
+        }
         const charges = await db.executeQuery(`
           SELECT charge_type, SUM(amount) as amount FROM ${db.fq('billing_charges')}
-          WHERE cpf = ${esc(user.cpf)} AND invoice_reference = ${esc(invoiceRef)} AND status = 'pending'
+          WHERE ${chargesWhere.join(' AND ')}
           GROUP BY charge_type
         `);
         const getCharge = (type) => parseFloat(charges.find(c => c.charge_type === type)?.amount || 0);
@@ -171,17 +194,21 @@ async function runEngine(targetCpf = null) {
         const jurosRem = getCharge('juros_remuneratorios');
         const jurosMora = getCharge('juros_mora');
 
+        const frozenChargesTotal = Math.round((multa + jurosMora + jurosRem + iof) * 100) / 100;
+        if (frozenChargesTotal > 0) {
+            console.log(`[InvoiceEngine] CPF ${user.cpf}: congelando R$ ${frozenChargesTotal.toFixed(2)} de encargos pendentes nas colunas da fatura fechada (multa ${multa.toFixed(2)}, juros mora ${jurosMora.toFixed(2)}, juros rem ${jurosRem.toFixed(2)}, IOF ${iof.toFixed(2)}). Charges continuam 'pending' para a coleta.`);
+        }
+
         await db.executeQuery(`
           INSERT INTO ${db.fq('invoices')} (id, cpf, status, due_date, valor_total, created_at, updated_at, saldo_anterior, valor_iof, valor_juros_remuneratorios, valor_juros_mora, valor_multa, itemized_transactions)
           VALUES (${esc(invoiceId)}, ${esc(user.cpf)}, 'FECHADA', ${esc(dueDate.toISOString())}, ${invoiceAmount.toFixed(2)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${saldoAnterior}, ${iof}, ${jurosRem}, ${jurosMora}, ${multa}, ${esc(itemizedTransactionsJson)})
         `);
 
-        // Marcar charges do ciclo como consolidadas na fatura fechada
-        await db.executeQuery(`
-          UPDATE ${db.fq('billing_charges')}
-          SET status = 'paid'
-          WHERE cpf = ${esc(user.cpf)} AND invoice_reference = ${esc(invoiceRef)}
-        `);
+        // NOTA: as charges congeladas acima NÃO são marcadas 'paid' de propósito. A
+        // coleta real é `SUM(billing_charges pending)` (invoiceController.pay) e o
+        // congelamento nas colunas é apenas exibição/histórico por período — ver
+        // comentário acima. (Antes o engine marcava 'paid' por ref, o que removia os
+        // encargos da cobrança se o ref batesse.)
 
         // 2. Calcular nova data de vencimento baseada no due_day do usuário
         const dueDay = user.credit_card_due_day || 15;

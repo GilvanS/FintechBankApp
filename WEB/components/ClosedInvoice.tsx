@@ -99,11 +99,16 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
     : isNextMonth
       ? []
       : (creditCard.closedTransactions ?? []);
-  // Pagamentos já aplicados nesta fatura (mais recente primeiro). O backend expõe o
-  // acumulado em _closedInvoiceValorPago; a lista vem das transações do ciclo.
-  const paymentTxs = closedTxs
-    .filter(tx => isPaymentTx(tx.type))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Pagamentos já aplicados nesta fatura (mais recente primeiro). O PAYMENT não vive
+  // mais em closedTransactions — a fatura fechada é imutável (§6.4.1/§8.1). A lista sai
+  // de creditCard.paymentHistory, filtrada pelos ids das fechadas em escopo; o acumulado
+  // continua vindo de _closedInvoiceValorPago.
+  const closedInvoiceIds = creditCard._closedInvoiceIds ?? [];
+  const paymentTxs = (!isOpenInvoice && !isNextMonth && closedInvoiceIds.length > 0)
+    ? (creditCard.paymentHistory ?? [])
+        .filter(p => !!p.invoiceId && closedInvoiceIds.includes(p.invoiceId))
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    : [];
   const valorPagoBackend = (creditCard as any)?._closedInvoiceValorPago;
   const totalPaid = typeof valorPagoBackend === 'number' && valorPagoBackend > 0
     ? valorPagoBackend
@@ -508,7 +513,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                   <span className={isMidnight ? 'text-gray-300' : 'text-gray-700'}>
                     {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     {' · '}
-                    {tx.merchant || 'Pagamento de fatura'}
+                    {tx.description || 'Pagamento de fatura'}
                   </span>
                   <span className={`font-bold ${isMidnight ? 'text-emerald-300' : 'text-emerald-600'}`}>
                     +{fmt(Math.abs(tx.amount))}

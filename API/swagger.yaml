@@ -171,6 +171,9 @@ components:
 
     RecurringBill:
       type: object
+      description: |
+        Conta recorrente normalizada (recurringBillsRepo.normalize).
+        Os campos userFullName/userRole só existem na rota admin (join com users).
       properties:
         id:
           type: string
@@ -184,17 +187,48 @@ components:
         amount:
           type: number
           format: float
-          example: 39.90
+          example: 29.90
         dueDay:
           type: integer
           example: 15
         category:
           type: string
           example: "cultura"
+        frequency:
+          type: string
+          enum: [MONTHLY, ANNUAL]
+          example: "MONTHLY"
+        paymentMethod:
+          type: string
+          enum: [ACCOUNT_DEBIT, CREDIT_CARD]
+          example: "ACCOUNT_DEBIT"
         status:
           type: string
-          enum: [pending, paid]
-          example: "pending"
+          enum: [active, past_due, suspended, canceled, paid]
+          example: "active"
+        cardToken:
+          type: string
+          nullable: true
+        planId:
+          type: string
+          nullable: true
+        nextBillingDate:
+          type: string
+          format: date-time
+          nullable: true
+        retryCount:
+          type: integer
+          example: 0
+        maxRetries:
+          type: integer
+          example: 3
+        lastRetryAt:
+          type: string
+          format: date-time
+          nullable: true
+        failureReason:
+          type: string
+          nullable: true
         paidAt:
           type: string
           format: date-time
@@ -205,6 +239,14 @@ components:
         updatedAt:
           type: string
           format: date-time
+        userFullName:
+          type: string
+          nullable: true
+          description: Nome do cliente (somente na rota GET /admin/recurring-bills)
+        userRole:
+          type: string
+          nullable: true
+          description: Role do cliente (somente na rota GET /admin/recurring-bills)
 
     RecurringBillRequest:
       type: object
@@ -226,6 +268,45 @@ components:
         category:
           type: string
           example: "cultura"
+
+    RecurringBillPayRequest:
+      type: object
+      properties:
+        paymentMethod:
+          type: string
+          enum: [ACCOUNT_DEBIT, CREDIT_CARD]
+          default: ACCOUNT_DEBIT
+          example: ACCOUNT_DEBIT
+          description: >
+            ACCOUNT_DEBIT debita users.balance (não toca a fatura);
+            CREDIT_CARD consome credit_card_available_limit e grava
+            PAYMENT com sufixo (Faturado no Cartão) — fora da fatura.
+        name:
+          type: string
+          description: Obrigatório apenas no upsert (conta existe só no localStorage do frontend).
+          example: "Netflix"
+        amount:
+          type: number
+          format: float
+          minimum: 0.01
+          description: Obrigatório apenas no upsert.
+          example: 29.90
+        dueDay:
+          type: integer
+          minimum: 1
+          maximum: 31
+          description: 'Opcional no upsert (default: dia atual).'
+          example: 7
+        category:
+          type: string
+          description: 'Opcional no upsert (default: outros).'
+          example: "cultura"
+        frequency:
+          type: string
+          enum: [MONTHLY, ANNUAL]
+          default: MONTHLY
+          description: Opcional no upsert — define o avanço do ciclo (next_billing_date).
+          example: MONTHLY
 
     StatementExportRequest:
       type: object
@@ -256,6 +337,10 @@ components:
 
     Subscription:
       type: object
+      description: |
+        Assinatura de cobrança recorrente — linha crua da tabela subscriptions
+        (sem normalize, ao contrário do RecurringBill): chaves em snake_case e
+        amount como string numérica (coluna NUMERIC retornada pelo driver pg).
       properties:
         id:
           type: string
@@ -267,28 +352,33 @@ components:
           type: string
           example: "Netflix"
         amount:
-          type: number
-          format: float
-          example: 55.90
+          type: string
+          description: 'Valor em string numérica (coluna NUMERIC do pg); ex.: "29.90"'
+          example: "29.90"
         frequency:
           type: string
           enum: [monthly, yearly]
+          description: 'Ciclo de cobrança (computeNextBillingDate: +1 mês ou +1 ano)'
           example: "monthly"
         payment_method:
           type: string
           enum: [debit, credit]
+          description: debit → debita users.balance; credit → consome o limite do cartão
           example: "debit"
         status:
           type: string
           enum: [active, cancelled]
+          description: active (cobrança recorrente ativa) | cancelled (cancelada pelo cliente)
           example: "active"
         next_billing_date:
           type: string
           format: date-time
+          description: Próxima cobrança agendada (consumida pelo cron de assinaturas)
         last_billing_date:
           type: string
           format: date-time
           nullable: true
+          description: Última cobrança efetivada (null antes da primeira)
         created_at:
           type: string
           format: date-time
@@ -548,6 +638,63 @@ paths:
                     type: array
                     items:
                       type: object
+
+  /admin/recurring-bills:
+    get:
+      tags:
+        - Administração
+      summary: Listar contas recorrentes de todas as massas (Admin)
+      description: |
+        Lista todas as contas recorrentes do banco com join em users
+        (traz userFullName/userRole). Apenas administradores.
+        Filtros opcionais por query string:
+        - `status`: active | past_due | suspended | canceled | paid
+        - `cpf`: CPF sem máscara (somente dígitos)
+        Ordenação por updated_at DESC.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, past_due, suspended, canceled, paid]
+          description: Filtra pelo status da conta recorrente
+        - name: cpf
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9]{11}$'
+          description: Filtra pelo CPF da massa (dígitos apenas)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de contas recorrentes (com nome/role do cliente)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  bills:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RecurringBill'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (não é admin)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /admin/users:
     get:
@@ -1120,6 +1267,87 @@ paths:
               schema: { $ref: '#/components/schemas/SuccessResponse' }
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /recurring-bills/{cpf}/{billId}/pay:
+    post:
+      tags: [Financeiro]
+      summary: Pagar conta recorrente (débito em conta ou cartão)
+      description: |
+        Pagamento manual de uma conta recorrente.
+
+        - ACCOUNT_DEBIT debita users.balance (a transação PAYMENT aparece no
+          extrato da home, nunca na fatura do cartão); saldo insuficiente
+          retorna code=SALDO_INSUFICIENTE.
+        - CREDIT_CARD consome credit_card_available_limit e grava PAYMENT com
+          sufixo "(Faturado no Cartão)" (linha informativa na fatura aberta,
+          sem alterar o total); limite insuficiente retorna code=LIMITE_INSUFICIENTE.
+        - O ciclo da conta avança (next_billing_date +1 mês ou +1 ano) e o
+          status volta a active com retryCount=0.
+        - Upsert: se a conta não existir no banco (só no localStorage do
+          frontend), registra com o billId enviado usando name/amount do body.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cpf
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{11}$' }
+        - name: billId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecurringBillPayRequest' }
+      responses:
+        '200':
+          description: Pagamento realizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message:
+                    type: string
+                    example: "Pagamento de Netflix realizado com sucesso via débito em conta."
+                  bill: { $ref: '#/components/schemas/RecurringBill' }
+                  transactionId:
+                    type: string
+                    example: "a1b2c3d4-0000-4000-8000-000000000000"
+                  paymentMethod:
+                    type: string
+                    enum: [ACCOUNT_DEBIT, CREDIT_CARD]
+                    example: ACCOUNT_DEBIT
+                  newBalance:
+                    type: number
+                    format: float
+                    description: Saldo atualizado (sempre retornado; para CREDIT_CARD é o saldo em conta, não o limite).
+                    example: 6960.16
+        '400':
+          description: |
+            Método inválido, saldo/limite insuficiente (code=SALDO_INSUFICIENTE |
+            LIMITE_INSUFICIENTE) ou conta inexistente sem name/amount para upsert.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Acesso negado (não é o dono nem admin)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Usuário não encontrado
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }

@@ -65,6 +65,23 @@ function auditLog(req, action, level = 'info', meta = {}) {
   if (level === 'error') console.error(line);
   else if (level === 'warn') console.warn(line);
   else console.log(line);
+
+  try {
+    const { getDb, esc } = require('../repositories/context');
+    const db = getDb();
+    if (db) {
+      const id = db.generateUUID();
+      const cpf = req.user ? req.user.cpf : null;
+      db.executeQuery(`
+        INSERT INTO ${db.fq('audit_log')} (id, req_id, cpf, action, level, meta)
+        VALUES ( ${esc(id)}, ${esc(req.id || null)}, ${esc(cpf)}, ${esc(action)}, ${esc(level)}, ${esc(JSON.stringify(safeMeta))} )
+      `).catch(err => {
+        console.error('⚠️ [AuditLog] Falha ao gravar log no banco:', err.message);
+      });
+    }
+  } catch (err) {
+    // Banco não inicializado ou erro de contexto
+  }
 }
 
 module.exports = { bearerAuth, requireScope, pinGuard, withReqId, auditLog };
