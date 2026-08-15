@@ -12,9 +12,9 @@
  */
 
 const http = require('http');
-const BASE_URL = 'http://localhost:3001';
-const CPF = '72330955820';  // Fahad Al-Ghamdi
-const PASSWORD = 'admin999';
+const BASE_URL = process.env.API_BASE || 'http://localhost:3001';
+const CPF = process.env.MASSA_USER_CPF || '11111111111';
+const PASSWORD = process.env.MASSA_PASSWORD || 'admin999';
 const PAY_AMOUNT = 10.00;
 
 const round2 = n => Math.round(n * 100) / 100;

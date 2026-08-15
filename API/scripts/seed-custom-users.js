@@ -4,11 +4,18 @@ const env = process.env.NODE_ENV === 'production' ? 'production' : 'development'
 const knex = require('knex')(knexConfig[env]);
 const schema = process.env.DB_SCHEMA || 'fintech';
 
+// Load test credentials from environment
+const MASSA_PASSWORD = process.env.MASSA_PASSWORD || 'admin999';
+const MASSA_ADMIN_CPF = process.env.MASSA_ADMIN_CPF || '99999999999';
+const MASSA_USER_CPF = process.env.MASSA_USER_CPF || '11111111111';
+const MASSA_USER_2_CPF = process.env.MASSA_USER_2_CPF || '22222222222';
+const MASSA_USER_3_CPF = process.env.MASSA_USER_3_CPF || '33333333333';
+
 const CUSTOM_USERS = [
-    { cpf: '99999999999', password: 'admin999', fullName: 'admin', email: 'admin@test.com' },
-    { cpf: '11111111111', password: 'admin999', fullName: 'Gilvan Sousa', email: 'gilvan@example.co' },
-    { cpf: '22222222222', password: 'admin999', fullName: 'Sheila Sousa', email: 'sheila@test.com' },
-    { cpf: '33333333333', password: 'admin999', fullName: 'Jean Sousa', email: 'jean@test.com' }
+    { cpf: MASSA_ADMIN_CPF, password: MASSA_PASSWORD, fullName: 'admin', email: 'admin@test.com' },
+    { cpf: MASSA_USER_CPF, password: MASSA_PASSWORD, fullName: 'Gilvan Sousa', email: 'gilvan@example.co' },
+    { cpf: MASSA_USER_2_CPF, password: MASSA_PASSWORD, fullName: 'Sheila Sousa', email: 'sheila@test.com' },
+    { cpf: MASSA_USER_3_CPF, password: MASSA_PASSWORD, fullName: 'Jean Sousa', email: 'jean@test.com' }
 ];
 
 async function seed() {

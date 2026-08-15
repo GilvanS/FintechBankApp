@@ -7,9 +7,9 @@
  * 5. Verificar que currentInvoice NÃO inflou
  */
 
-const API_BASE = 'http://localhost:3001/api';
-const CPF = '12312312399';
-const PASSWORD = 'admin999';
+const API_BASE = process.env.API_BASE || 'http://localhost:3001/api';
+const CPF = process.env.MASSA_USER_CPF || '11111111111';
+const PASSWORD = process.env.MASSA_PASSWORD || 'admin999';
 const PAY_AMOUNT = 10;
 
 async function login() {
