@@ -38,10 +38,14 @@ const BASE = {
 // computada via buildBoletoData (fonte única, padrão Febraban novo: fator 5 dígitos,
 // DV na posição 20, campo livre 24) — idêntica ao gerador Python e à API. Nunca
 // hardcoded: o preview antigo travava a linha no layout velho (fator 00000).
+// nossoNumero/conta/documento são DERIVADOS do CPF — MESMA regra da rota real
+// send-pdf (index.cjs) e do invoice_payment_generator.py (fonte única), para o
+// preview espelhar exatamente o que a API gera para a mesma fatura.
 const BOLETO_BASE = {
     banco: '598', bancoDv: 9, bancoNome: '598 - Fintech Bank App',
-    agencia: '0001', agenciaDv: 9, conta: '012480', contaDv: 3, carteira: '09',
-    nossoNumero: '9500022450', nossoNumeroDv: 1, documento: '00015091',
+    agencia: '0001', conta: '00000001', carteira: '09',
+    nossoNumero: String(BASE.cpf).replace(/\D/g, '').slice(-10),
+    documento: String(BASE.cpf).replace(/\D/g, ''),
     cedente: 'Fintech Bank App S.A.', cedenteCpf: '12.345.678/0001-90',
     sacado: BASE.nome, sacadoCpf: BASE.cpfFormatado,
 };
