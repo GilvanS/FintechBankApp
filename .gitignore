@@ -58,3 +58,16 @@ exemplos/
 
 # Base para melhorias (não versionar no projeto principal)
 WEB/new-base-fintechbank/
+
+# Segredos locais e credenciais de teste (nunca versionar)
+API/.env.test
+
+# Scripts locais de operação da máquina (fora do projeto)
+.freebuff/*.ps1
+.freebuff/*.cjs
+
+# Skills locais de agentes
+WEB/.agents/
+
+# Scripts one-off de manutenção de massas (runbook na skill manutencao-massas)
+scripts/manutencao/
