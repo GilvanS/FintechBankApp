@@ -71,3 +71,17 @@ jobs:
 
       - name: Check intra-doc anchors (REGRAS-NEGOCIO-FATURA.md)
         run: cd API && node scripts/validate_anchors.js
+
+      # Smoke dos scripts de auditoria/sincronização (sintaxe + import sem banco).
+      # O auditor em si precisa de Postgres real e roda no Windows Task Scheduler
+      # (AuditConsistencyDaily) — aqui garantimos que um push não quebre a sintaxe
+      # ou o carregamento do módulo puro (audit_helpers.cjs), que os scripts
+      # dependem. `node --check` valida sintaxe; o require de audit_helpers.cjs é
+      # side-effect-free (sem dotenv/banco), então importar valida o contrato.
+      - name: Smoke scripts de auditoria (sintaxe + import)
+        run: |
+          cd API
+          node --check scripts/audit_helpers.cjs
+          node --check scripts/sync_dias_atraso.cjs
+          node --check scripts/run_audit_consistency_report.js
+          node -e "const h = require('./scripts/audit_helpers.cjs'); if (!h.selectAnchors || !h.pagoEfetivo || !h.ANCHOR_SQL || !h.expectedUserStateFor) process.exit(1); console.log('audit_helpers OK')"

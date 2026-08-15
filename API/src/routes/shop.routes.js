@@ -18,6 +18,7 @@ module.exports = function registerShopRoutes({
     generateAndSendPurchaseReceipt,
     round2,
     buildJurosPayload,
+    buildPurchaseTelegramMessage,
     toLocalSqlTimestamp,
 }) {
     // --- Loja ---
@@ -141,7 +142,15 @@ module.exports = function registerShopRoutes({
                 INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
                 VALUES (${esc(txId)}, ${esc(req.user.cpf)}, ${esc('SHOP_DEBIT')}, ${-netDebit.toFixed(2)}, ${esc(productDesc)}, ${esc(now)})
             `);
-            telegramService.send('purchase', { cpf: req.user.cpf, text: `🛒 Compra no débito: R$ ${netDebit.toFixed(2)} — ${productDesc}` }).catch(() => {});
+            telegramService.send('purchase', { cpf: req.user.cpf, text: buildPurchaseTelegramMessage({
+                tipo: 'DEBIT',
+                estabelecimento: productDesc,
+                original: netDebit,
+                totalParcelado: netDebit,
+                installments: 1,
+                interestRate: 0,
+                dataCompra: now,
+            }) }).catch(() => {});
             // Comprovante de compra (art. 52 CDC) no tópico da massa — fire-and-forget
             generateAndSendPurchaseReceipt({
                 cpf: req.user.cpf,
@@ -251,7 +260,17 @@ module.exports = function registerShopRoutes({
                 VALUES (${esc(billId)}, ${esc(req.user.cpf)}, ${esc(safeProductDesc)}, ${total.toFixed(2)}, ${now.getDate()}, 'outros', 'active', ${esc(freq)}, 'ACCOUNT_DEBIT', ${esc(nowIso)}, ${esc(nowIso)})
             `);
 
-            telegramService.send('purchase', { cpf: req.user.cpf, text: `🔄 Assinatura em Débito Automático: R$ ${total.toFixed(2)} — ${productDesc}` }).catch(() => {});
+            // Transparência de encargos (CDC art. 52 · Res. BCB 96/2021 e 365/2023): quando a assinatura
+            // tiver encargos, a mensagem expõe juros R$ e total com/sem financiamento (mesmo padrão da loja).
+            telegramService.send('purchase', { cpf: req.user.cpf, text: buildPurchaseTelegramMessage({
+                tipo: 'SUBSCRIPTION',
+                estabelecimento: productDesc,
+                original: total,
+                totalParcelado: total,
+                installments: 1,
+                interestRate: 0,
+                dataCompra: nowIso,
+            }) }).catch(() => {});
 
             generateAndSendPurchaseReceipt({
                 cpf: req.user.cpf,
@@ -388,11 +407,31 @@ module.exports = function registerShopRoutes({
             `);
             // Transparência de encargos (CDC art. 52 · Res. BCB 96/2021 e 365/2023): quando a compra
             // tiver juros, a mensagem expõe juros R$, taxa efetiva e total com/sem financiamento.
-            const _jpMsg = buildJurosPayload({ original: total, totalWithInterest: qty >= 2 ? totalParcelado : creditAmount, installments: qty, interestRate: rate });
-            const _msgJuros = _jpMsg.jurosTotal > 0
-                ? ` · juros R$ ${_jpMsg.jurosTotal.toFixed(2)} (${(_jpMsg.interestRate * 100).toFixed(1)}% no total) · taxa efetiva ${_jpMsg.taxaEfetivaMensal.toFixed(2)}% a.m. · total c/ juros R$ ${_jpMsg.totalParcelado.toFixed(2)}`
-                : '';
-            telegramService.send('purchase', { cpf: req.user.cpf, text: `💳 Compra no crédito: R$ ${creditAmount.toFixed(2)} — ${productDesc}${_msgJuros}` }).catch(() => {});
+            // Vencimentos das parcelas (mesma regra do bloco abaixo: corte = vencimento - 7 dias;
+            // parcela i = corte + (i-1) mês) — p/ listar PARC 1..N na tabela da mensagem.
+            const parcelasVenc = [];
+            if (qty >= 2) {
+                const _due = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
+                const _firstDue = new Date(_due);
+                _firstDue.setDate(_firstDue.getDate() - 7);
+                _firstDue.setUTCHours(23, 59, 59, 999);
+                const _parcela = totalParcelado / qty;
+                for (let i = 0; i < qty; i++) {
+                    const d = new Date(_firstDue);
+                    d.setUTCMonth(_firstDue.getUTCMonth() + i);
+                    parcelasVenc.push({ vencimento: d, valor: _parcela });
+                }
+            }
+            telegramService.send('purchase', { cpf: req.user.cpf, text: buildPurchaseTelegramMessage({
+                tipo: 'CREDIT',
+                estabelecimento: productDesc,
+                original: creditAmount,
+                totalParcelado: qty >= 2 ? totalParcelado : creditAmount,
+                installments: qty,
+                interestRate: rate,
+                dataCompra: nowIso,
+                parcelas: parcelasVenc,
+            }) }).catch(() => {});
 
             // Gerar somente a 1a parcela na fatura atual e criar plano agregado para as futuras
             if (qty >= 2) {

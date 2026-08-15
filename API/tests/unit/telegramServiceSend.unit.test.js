@@ -275,13 +275,19 @@ describe('telegramService.send(category, payload)', () => {
         });
         repoMock.getPersistentTopic.mockResolvedValue(null);
 
+        // Baseline relativo: fetches assíncronos de testes anteriores (fila enqueue
+        // compartilhada) podem ainda estar pendentes quando este teste começa e cair
+        // no spy — contar só o que ESTE teste envia elimina o flake intermitente.
+        const baseline = fetchSpy.mock.calls.filter(c => c[0].includes('/sendMessage')).length;
+
         await svc.send('system_start', { text: 'motor subiu' });
         await new Promise(r => setTimeout(r, 500));
 
         const sendCalls = fetchSpy.mock.calls.filter(c => c[0].includes('/sendMessage'));
+        const ownCalls = sendCalls.slice(baseline);
         // só 1 sendMessage (general), sem message_thread_id
-        expect(sendCalls.length).toBe(1);
-        const body = JSON.parse(sendCalls[0][1].body);
+        expect(ownCalls.length).toBe(1);
+        const body = JSON.parse(ownCalls[0][1].body);
         expect(body.message_thread_id).toBeUndefined();
     });
 

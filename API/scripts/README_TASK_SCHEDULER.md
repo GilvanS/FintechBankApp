@@ -1,10 +1,11 @@
 # Agendador de Tarefas (Windows Task Scheduler)
 
-Duas tarefas agendadas para manter o sistema FintechBank sincronizado automaticamente:
+Três tarefas agendadas para manter o sistema FintechBank sincronizado automaticamente:
 
 | Tarefa | Frequência | Horário | O que faz |
 |:-------|:-----------|:--------|:----------|
 | **Validação de Faturamento** | Diária | 01:00 | `runBillingValidation` — sincroniza inadimplência e encargos |
+| **Auditoria de Consistência** | Diária | 01:30 | Confere `users.days_overdue` × `invoices.dias_atraso` × real-time (todas as invoices fechadas não pagas) |
 | **Auditoria Completa** | Semanal (domingo) | 02:00 | Consistência + double-counting + saldo negativo |
 
 ---
@@ -42,7 +43,82 @@ scripts/logs/billing_validate_2026-07-27_01-00-00.log
 
 ---
 
-## 2. Auditoria Completa (semanal — domingo às 02:00)
+## 2. Auditoria de Consistência (diária às 01:30)
+
+Roda **30 minutos após** a Validação de Faturamento (01:00). Enquanto a validação
+*sincroniza* o banco, esta auditoria *verifica* — conferindo **TODAS** as invoices
+fechadas não pagas (não só a âncora) contra a regra do motor: sem dívida → 0,
+pagamento mínimo → 0, senão real-time individual. Detecta qualquer drift
+reintroduzido pelo motor no mesmo dia, sem esperar o relatório semanal.
+
+### Arquivos
+
+| Arquivo | Descrição |
+|:--------|:----------|
+| `schtask_audit_consistency.bat` | Script batch que executa `node scripts/run_audit_consistency_report.js --csv` (Node.js direto no BD) |
+| `schtask_audit_consistency.xml` | Definição da tarefa no Windows Task Scheduler |
+| `logs/` | Diretório de logs (criado automaticamente) |
+
+### Instalação
+
+```powershell
+schtasks /Create /XML "F:\GITHUB\FintechBankApp\API\scripts\schtask_audit_consistency.xml" /TN "FintechBank\AuditConsistencyDaily" /F
+```
+
+### Testar
+
+```powershell
+schtasks /Run /TN "FintechBank\AuditConsistencyDaily"
+```
+
+### Execução manual
+
+```cmd
+F:\GITHUB\FintechBankApp\API\scripts\schtask_audit_consistency.bat
+
+:: Ou via npm (equivalentes)
+cd F:\GITHUB\FintechBankApp\API
+npm run audit:consistency
+npm run audit:csv
+```
+
+### Relatórios gerados
+
+```
+scripts/audit_report_2026-07-27_14-45-00.html    (HTML)
+scripts/audit_report_2026-07-27_14-45-00.csv     (CSV)
+scripts/logs/audit_consistency_2026-07-27_01-30-00.log
+```
+
+### Exit codes
+
+| Código | Significado | Ação |
+|:-------|:------------|:-----|
+| `0` | Sem discrepâncias nem anomalias | Nenhuma |
+| `2` | Discrepâncias OU anomalias estruturais (`--fail-on-discrepancies`) | Rodar `node scripts/sync_dias_atraso.cjs --confirm` e investigar o HTML |
+| `1` | Erro de execução | Verificar `.env`/conexão e o log |
+
+> ℹ️ A tarefa diária passa `--fail-on-discrepancies`, então drift vira exit code 2
+> visível no histórico do Task Scheduler. O `run_audit_all.js` semanal NÃO passa
+> a flag — continua tratando o auditor como read-only (exit 0 com achados).
+
+### Varredura de Anomalias Estruturais (desde 15/08/2026)
+
+Além da consistência users × invoices, o auditor agora varre **estados de massa**
+que precisam de análise/correção manual e os reporta no HTML e no console:
+
+| Anomalia | O que detecta | Ação |
+|:---------|:--------------|:-----|
+| **Pagamento dividido** | 2+ transações `INVOICE_PAYMENT` da mesma massa no mesmo segundo — o bug em que UM pagamento virava DUAS transações (web mostrava 2 lançamentos em vez de 1, divergindo do comprovante) | Juntar em 1 tx única com o valor total (`scripts/_fix_massa_1tx.cjs`) |
+| **Encargo pós-quitação** | `billing_charges` `pending` criadas DEPOIS do último pagamento da massa em fatura JÁ QUITADA pela cascata — o cron da meia-noite com código sem cascata inseria encargos em fatura paga (regressão 381/805) | Limpar charges com `created_at > último pagamento` em massa sem âncora |
+
+> Encargos acumulados ANTES do pagamento (enquanto a fatura estava devida) são
+> legítimos e NÃO são acusados — a varredura compara `created_at` da charge com o
+> último `INVOICE_PAYMENT` da massa.
+
+---
+
+## 3. Auditoria Completa (semanal — domingo às 02:00)
 
 Executa **3 auditorias** em sequência e gera relatório HTML unificado:
 
@@ -94,7 +170,7 @@ npm run audit:all
 
 ---
 
-## Pré-requisitos (ambas as tarefas)
+## Pré-requisitos (todas as tarefas)
 
 - Windows 10/11 ou Windows Server 2016+
 - Node.js instalado (`C:\Program Files\nodejs\node.exe`)
@@ -107,6 +183,7 @@ npm run audit:all
 |:---------|:---------------|:--------|
 | `Exit code 1` na validação | API offline | Verificar `node index.cjs` |
 | `Exit code 1` na auditoria | BD offline | Verificar `.env` e conexão |
+| `Exit code 2` na consistência diária | Discrepâncias (drift) OU anomalias estruturais | Rodar `sync_dias_atraso.cjs --confirm`; se for anomalia estrutural (pagamento dividido / encargo pós-quitação), analisar e corrigir a massa no HTML |
 | Tarefa não executa | Notebook na bateria | Desmarcar "Iniciar apenas se estiver na CA" |
 | Relatório não gerou | Permissão de escrita | Verificar permissões em `scripts/` |
 
@@ -116,6 +193,8 @@ npm run audit:all
 API/scripts/logs/
 ├── billing_validate_2026-07-27_01-00-00.log    (validação diária)
 ├── billing_validate_2026-07-28_01-00-00.log
+├── audit_consistency_2026-07-27_01-30-00.log   (consistência diária)
+├── audit_consistency_2026-07-28_01-30-00.log
 ├── audit_all_2026-07-27_02-00-00.log           (auditoria semanal)
 ├── audit_all_2026-07-28_02-00-00.log
 ```

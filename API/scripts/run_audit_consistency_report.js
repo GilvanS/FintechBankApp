@@ -32,7 +32,15 @@ const { esc } = require('../repositories/context');
 const FILTER_CPF = (process.argv.find(a => a.startsWith('--cpf=')) || '').replace('--cpf=', '').replace(/\D/g, '') || null;
 const OPEN_BROWSER = process.argv.includes('--open');
 const GENERATE_CSV = process.argv.includes('--csv');
-const LIMIT = 200;
+// Exit code 2 se houver discrepâncias (para o Windows Task Scheduler sinalizar
+// drift no histórico da tarefa). Opt-in: o run_audit_all.js (semanal) NÃO passa
+// esta flag e continua tratando o auditor como read-only (exit 0 com achados).
+const FAIL_ON_DISCREPANCIES = process.argv.includes('--fail-on-discrepancies');
+// Sem LIMIT: a auditoria confere TODAS as invoices fechadas não pagas da base.
+// Um LIMIT por linha truncaria por invoice e poderia excluir a âncora de uma massa
+// inteira da checagem (nível A de users deriva dos CPFs das linhas retornadas),
+// produzindo uma auditoria silenciosamente incompleta. A base real tem ~150
+// invoices — irrelevante para o volume, correto para a completude.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtDate = () => {
@@ -62,7 +70,7 @@ async function main() {
 
   // ── 1. Conectar ──────────────────────────────────────────────────────────────
   console.log('[1/4] Conectando ao banco de dados...');
-  const db = DatabaseFactory.create();
+  const db = DatabaseFactory.createDatabaseService();
   await db.connect();
   const fq = t => db.fq(t);
   console.log('      ✅ Conectado.');
@@ -71,58 +79,123 @@ async function main() {
     // ── 2. Executar auditoria ──────────────────────────────────────────────────
     console.log('[2/4] Executando auditoria de consistência...');
 
-    const sql = `
-      SELECT u.cpf, u.full_name, u.account_status,
-             COALESCE(u.days_overdue, 0) AS user_days_overdue,
-             i.id AS invoice_id, i.due_date,
-             COALESCE(i.dias_atraso, 0) AS invoice_dias_atraso,
-             GREATEST(0, (CURRENT_DATE - i.due_date::date)) AS real_time_days
-      FROM ${fq('users')} u
-      JOIN ${fq('invoices')} i ON i.cpf = u.cpf
-      WHERE i.status = 'FECHADA'
-        AND i.data_pagamento IS NULL
-        AND i.due_date < CURRENT_TIMESTAMP
-        ${FILTER_CPF ? `AND u.cpf = ${esc(FILTER_CPF)}` : ''}
-      ORDER BY u.full_name ASC
-      LIMIT ${LIMIT}
-    `;
+    // Fonte de verdade HÍBRIDA (mesma do motor e do sync_dias_atraso.cjs): a
+    // quitação é a SOMA dos INVOICE_PAYMENT vinculados por transactions.invoice_id
+    // (migration 005) com precedência; sem vínculo, cai no valor_pago legado.
+    // Sem este LEFT JOIN o auditor divergiria do motor (ex.: fatura com vínculo
+    // cobrindo 100% mas valor_pago=0 pareceria quitada só para o motor).
+    //
+    // A auditoria agora confere DOIS níveis:
+    //   A) USERS: days_overdue/account_status devem refletir a ÂNCORA (fatura
+    //      fechada não paga mais antiga COM DÍVIDA — mesma seleção do sync, via
+    //      selectAnchors). Massa sem âncora (só faturas fantasma/quitadas) deve
+    //      estar em 0/adimplente.
+    //   B) INVOICES: TODAS as fechadas não pagas, cada uma com a própria regra
+    //      (sem dívida → 0; pagamento mínimo → 0; senão real-time individual).
+    //      Cobre o caso de borda da 2ª fatura com dívida sob âncora fantasma.
+    //
+    // Lógica de âncora/pago/dias esperados vem do módulo PURO audit_helpers.cjs
+    // (sem dotenv, sem banco — require seguro de qualquer CWD). Require direto
+    // do sync_dias_atraso.cjs disparava dotenv.config() sem path no load, que
+    // poderia carregar um .env diferente se o auditor rodasse de outro diretório.
+    const { selectAnchors, pagoEfetivo, expectedUserStateFor, invoiceExpectedStateFor, ANCHOR_SQL, buildCascadePago } = require('./audit_helpers.cjs');
+
+    // A query reusa o ANCHOR_SQL do módulo puro (mesma do sync e do motor): o
+    // SELECT já traz full_name, account_status (coalescido), days_overdue,
+    // invoice_dias_atraso, pago/vínculo e real-time — o auditor e o sync
+    // selecionam as MESMAS âncoras por construção, sem replace de string.
+    const sql = ANCHOR_SQL(fq, FILTER_CPF ? `AND i.cpf = ${esc(FILTER_CPF)}` : '');
     const rows = await db.executeQuery(sql);
 
     // ── 3. Processar resultados ────────────────────────────────────────────────
     console.log(`      ✅ ${rows.length} registro(s) retornado(s).`);
     console.log('[3/4] Processando dados...');
 
+    // Âncora por massa: réplica exata do sync (fatura mais antiga COM DÍVIDA;
+    // fatura quitada/fantasma é pulada ANTES de ocupar o slot do CPF).
+    // CASCATA: 1 transação única (valor total, igual ao comprovante) cobre as
+    // faturas da massa da mais antiga para a mais nova. O mapa de pago por fatura
+    // é derivado — as checagens de nível A e B usam a MESMA regra do motor.
+    const cascadePago = buildCascadePago(rows);
+
+    const anchors = selectAnchors(rows, cascadePago);
+    const anchorByCpf = new Map(anchors.map(a => [a.cpf, a]));
+
     const consistencyResults = [];
     const uniqueCpfs = new Set();
     const cpfComIssue = new Set();
     let invoiceOk = 0, invoiceDiff = 0;
 
+    // B) Checagem de TODAS as invoices fechadas não pagas (individual).
     for (const r of rows || []) {
       uniqueCpfs.add(r.cpf);
-      const ud = parseInt(r.user_days_overdue || 0);
-      const rt = parseInt(r.real_time_days || 0);
       const invD = parseInt(r.invoice_dias_atraso || 0);
-      const diffUser = ud - rt;
-      const diffInvoice = invD - rt;
+      // Regra ÚNICA do módulo puro (mesma do sync e do motor): sem dívida ou
+      // pagamento mínimo → dias 0; senão real-time individual da fatura.
+      const { days: expectedInvoiceDays, semDivida, pagMinimo: pagamentoMinimo } = invoiceExpectedStateFor(r, cascadePago);
+      const invoiceConsistent = invD === expectedInvoiceDays;
 
-      const userConsistent = Math.abs(diffUser) <= 1;
-      const invoiceConsistent = Math.abs(diffInvoice) <= 0;
-
-      if (!userConsistent) cpfComIssue.add(r.cpf);
       if (invoiceConsistent) invoiceOk++;
       else invoiceDiff++;
 
-      if (!userConsistent || !invoiceConsistent) {
+      if (!invoiceConsistent) {
+        cpfComIssue.add(r.cpf);
         consistencyResults.push({
+          tipo: 'invoice',
           cpf: r.cpf,
           name: r.full_name,
           status: r.account_status,
           dueDate: r.due_date,
-          userDaysOverdue: ud,
+          userDaysOverdue: parseInt(r.days_overdue || 0),
           invoiceDiasAtraso: invD,
-          realTimeDays: rt,
-          diffUser,
-          diffInvoice
+          realTimeDays: expectedInvoiceDays,
+          expectedInvoiceDays,
+          diffUser: null,
+          diffInvoice: invD - expectedInvoiceDays,
+          pagamentoMinimo,
+          semDivida
+        });
+      }
+    }
+
+    // A) Checagem de USERS: days/status devem refletir a âncora; sem âncora
+    //    (só faturas fantasma/quitadas), deve estar em 0/adimplente.
+    //
+    // CRITÉRIO ESTRITO (ud === expectedDays), SEM tolerância de ±1 dia — decisão
+    // documentada: o sync_dias_atraso.cjs corrige com comparação estrita
+    // (curUserDays !== expUserDays), então o auditor deve reportar EXATAMENTE o
+    // que o sync corrigiria. Uma tolerância de 1 dia faria o auditor aprovar uma
+    // massa que o sync corrigiria (ferramentas divergentes). O falso positivo
+    // possível (massa 1 dia atrás em manhãs pós-boot, antes do catch-up diário do
+    // motor) é legítimo: o sync --confirm resolve, e o HTML mostra o diff em
+    // vermelho — não é escondido por tolerância.
+    for (const cpf of uniqueCpfs) {
+      const anchor = anchorByCpf.get(cpf);
+      const rowInfo = (rows || []).find(r => r.cpf === cpf);
+      const ud = parseInt(rowInfo?.days_overdue || 0);
+      const curStatus = rowInfo?.account_status || 'adimplente';
+
+      const { days: expectedDays, status: expectedStatus, flag } = expectedUserStateFor(anchor, cascadePago);
+
+      const userConsistent = ud === expectedDays && curStatus === expectedStatus;
+      if (!userConsistent) {
+        cpfComIssue.add(cpf);
+        consistencyResults.push({
+          tipo: 'user',
+          cpf,
+          name: rowInfo?.full_name || '—',
+          status: curStatus,
+          dueDate: anchor?.due_date || null,
+          userDaysOverdue: ud,
+          invoiceDiasAtraso: null,
+          realTimeDays: expectedDays,
+          expectedUserDays: expectedDays,
+          expectedStatus,
+          diffUser: ud - expectedDays,
+          diffInvoice: null,
+          pagamentoMinimo: flag === 'pagamento mínimo',
+          semAncora: !anchor,
+          flag
         });
       }
     }
@@ -131,6 +204,88 @@ async function main() {
     const usersConsistent = uniqueCpfs.size - cpfComIssue.size;
     const usersDesatualizados = cpfComIssue.size;
     const totalInvoices = invoiceOk + invoiceDiff;
+
+    // ── 3.5 Anomalias estruturais (estado de massa) ───────────────────────────
+    // Varredura extra que o usuário pediu: a auditoria deve AVISAR quando achar
+    // uma massa no estado errado (ou parecido) para ANALISAR e CORRIGIR:
+    //   A) PAGAMENTO DIVIDIDO: 2+ INVOICE_PAYMENT da MESMA massa no MESMO segundo —
+    //      o bug 805/381 em que UM pagamento virava DUAS transações (a web mostrava
+    //      dois lançamentos em vez de um, divergindo do comprovante). Correto = 1 tx
+    //      com o valor total, distribuição derivada por cascata na leitura.
+    //   B) ENCARGOS PÓS-QUITAÇÃO: billing_charges 'pending' cuja invoice_reference
+    //      (YYYY-MM) aponta para fatura fechada JÁ QUITADA pela cascata (residual
+    //      <= 0.005) — o cron da meia-noite com código sem cascata inseriu encargos
+    //      em faturas pagas (regressão 381/805).
+    const anomalias = [];
+    const cpfFilterSql = FILTER_CPF ? ` AND cpf = '${FILTER_CPF}'` : '';
+
+    // A) Pagamento dividido (mesmo segundo = mesma operação de pagamento)
+    const splitRows = await db.executeQuery(`
+        SELECT cpf, date_trunc('second', date) AS instante, COUNT(*) AS qtd,
+               SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+        FROM ${fq('transactions')}
+        WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL${cpfFilterSql}
+        GROUP BY cpf, date_trunc('second', date)
+        HAVING COUNT(*) > 1
+        ORDER BY cpf, instante
+    `);
+    for (const s of splitRows || []) {
+        anomalias.push({
+            tipo: 'pagamento_dividido',
+            cpf: s.cpf,
+            qtd: parseInt(s.qtd, 10),
+            total: parseFloat(s.total || 0),
+            data: s.instante,
+        });
+    }
+
+    // Mapa fatura -> residual via cascata (mesma regra do resto do auditor)
+    const invResidual = new Map();
+    for (const r of rows || []) {
+        const total = parseFloat(r.valor_total || 0);
+        const pago = pagoEfetivo(r, cascadePago);
+        invResidual.set(String(r.invoice_id), Math.max(0, total - pago));
+    }
+
+    // B) Encargos 'pending' sobre fatura fechada JÁ QUITADA pela cascata.
+    // Só acusa quando a charge foi criada DEPOIS do último pagamento da massa:
+    // encargos acumulados ANTES do pagamento (enquanto a fatura estava devida) são
+    // legítimos e ficam como histórico/encargos herdados — só o incremento PÓS-
+    // quitação é o bug (o cron da meia-noite com código sem cascata inseriu encargos
+    // em faturas já pagas — regressão 381/805).
+    const chargeRows = await db.executeQuery(`
+        SELECT bc.cpf, bc.invoice_reference, bc.charge_type, bc.amount, bc.created_at,
+               i.id AS invoice_id, ult.ultimo_pagamento
+        FROM ${fq('billing_charges')} bc
+        JOIN ${fq('invoices')} i
+          ON i.cpf = bc.cpf AND to_char(i.due_date, 'YYYY-MM') = bc.invoice_reference
+        LEFT JOIN (
+            SELECT cpf, MAX(date) AS ultimo_pagamento
+            FROM ${fq('transactions')}
+            WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            GROUP BY cpf
+        ) ult ON ult.cpf = bc.cpf
+        WHERE bc.status = 'pending'${FILTER_CPF ? ` AND bc.cpf = '${FILTER_CPF}'` : ''}
+        ORDER BY bc.cpf, bc.created_at
+    `);
+    for (const c of chargeRows || []) {
+        // Fatura fora do escopo do ANCHOR_SQL (data_pagamento setada / não fechada):
+        // legitima — não acusa. Só acusa fatura fechada não paga SEM residual (quitada).
+        if (!invResidual.has(String(c.invoice_id))) continue;
+        if (invResidual.get(String(c.invoice_id)) > 0.005) continue; // ainda tem dívida
+        const criadaEm = new Date(c.created_at).getTime();
+        const ultPago = c.ultimo_pagamento ? new Date(c.ultimo_pagamento).getTime() : 0;
+        if (!ultPago) continue; // sem pagamento registrado: massa nunca pagou — não é o bug
+        if (criadaEm <= ultPago) continue; // encargo anterior ao pagamento = legítimo
+        anomalias.push({
+            tipo: 'encargo_pos_quitacao',
+            cpf: c.cpf,
+            chargeType: c.charge_type,
+            amount: parseFloat(c.amount || 0),
+            invoiceRef: c.invoice_reference,
+            data: c.created_at,
+        });
+    }
 
     // ── 4. Gerar relatório HTML ────────────────────────────────────────────────
     console.log('[4/4] Gerando relatório' + (GENERATE_CSV ? ' HTML + CSV...' : ' HTML...'));
@@ -147,19 +302,28 @@ async function main() {
     let detailsRows = '';
     if (consistencyResults.length > 0) {
       for (const d of consistencyResults) {
-        const userBad = Math.abs(d.diffUser) > 1;
-        const invBad = Math.abs(d.diffInvoice) > 0;
+        const isUser = d.tipo === 'user';
+        // Estrito (diff !== 0), alinhado ao critério do nível A — um diff de ±1
+        // é discrepância reportada e deve aparecer em vermelho no HTML, não ser
+        // mascarado por tolerância antiga de 1 dia.
+        const userBad = isUser ? d.diffUser !== 0 : false;
+        const invBad = !isUser ? Math.abs(d.diffInvoice) > 0 : false;
+        const badgeTipo = isUser
+          ? '<span class="badge badge-user">user</span>'
+          : '<span class="badge badge-inv">invoice</span>';
+        const flag = d.pagamentoMinimo ? ' <span class="badge badge-neutral">pag. mínimo</span>'
+          : ((d.semAncora || d.semDivida) ? ' <span class="badge badge-neutral">sem dívida</span>' : '');
         detailsRows += `
           <tr>
             <td class="cpf">${fmtCpf(d.cpf)}</td>
-            <td>${d.name || '—'}</td>
+            <td>${d.name || '—'} ${badgeTipo}${flag}</td>
             <td><span class="badge badge-${d.status === 'inadimplente' ? 'danger' : 'success'}">${d.status || 'adimplente'}</span></td>
             <td>${fmtBr(d.dueDate)}</td>
-            <td class="${userBad ? 'diff-bad' : 'diff-ok'}">${d.userDaysOverdue}</td>
-            <td class="${invBad ? 'diff-bad' : 'diff-ok'}">${d.invoiceDiasAtraso}</td>
-            <td>${d.realTimeDays}</td>
-            <td class="${userBad ? 'diff-bad' : 'diff-ok'}">${d.diffUser > 0 ? '+' : ''}${d.diffUser}</td>
-            <td class="${invBad ? 'diff-bad' : 'diff-ok'}">${d.diffInvoice > 0 ? '+' : ''}${d.diffInvoice}</td>
+            <td class="${userBad ? 'diff-bad' : 'diff-ok'}">${d.userDaysOverdue ?? '—'}</td>
+            <td class="${invBad ? 'diff-bad' : 'diff-ok'}">${d.invoiceDiasAtraso ?? '—'}</td>
+            <td>${d.realTimeDays ?? '—'}</td>
+            <td class="${userBad ? 'diff-bad' : 'diff-ok'}">${d.diffUser == null ? '—' : (d.diffUser > 0 ? '+' : '') + d.diffUser}</td>
+            <td class="${invBad ? 'diff-bad' : 'diff-ok'}">${d.diffInvoice == null ? '—' : (d.diffInvoice > 0 ? '+' : '') + d.diffInvoice}</td>
           </tr>`;
       }
     } else {
@@ -230,6 +394,9 @@ async function main() {
   .badge-success { background: #166534; color: #4ade80; }
   .badge-danger { background: #7f1d1d; color: #fca5a5; }
   .badge-neutral { background: #334155; color: #94a3b8; }
+  .badge-user { background: #1e3a5f; color: #60a5fa; }
+  .badge-inv { background: #3b1d5f; color: #c084fc; }
+  .badge-purple { background: #3b1d5f; color: #e9d5ff; }
   .diff-ok { color: #4ade80; }
   .diff-bad { color: #f87171; font-weight: 600; }
 
@@ -271,6 +438,10 @@ async function main() {
     <div class="card ${invoiceDiff > 0 ? 'amber' : 'green'}">
       <div class="label">Invoices com Diferença</div>
       <div class="value">${invoiceDiff}</div>
+    </div>
+    <div class="card ${anomalias.length > 0 ? 'purple' : 'green'}">
+      <div class="label">Anomalias Estruturais</div>
+      <div class="value">${anomalias.length}</div>
     </div>
   </div>
 
@@ -328,6 +499,30 @@ async function main() {
     <p>Nenhuma discrepância encontrada!<br>Todos os ${totalScanned} usuários e ${totalInvoices} invoices estão consistentes.</p>
   </div>`}
 
+  <!-- Anomalias Estruturais -->
+  ${anomalias.length > 0 ? `
+  <h3 style="margin:2rem 0 0.75rem;font-size:1rem;color:#c084fc">⚠️ Anomalias Estruturais (${anomalias.length})</h3>
+  <div style="overflow-x:auto;border-radius:12px;background:#0f172a">
+  <table>
+    <thead>
+      <tr>
+        <th>CPF</th><th>Tipo</th><th>Detalhe</th><th>Quando</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${anomalias.map(a => {
+        const t = a.tipo === 'pagamento_dividido'
+          ? '<span class="badge badge-danger">pagamento dividido</span>'
+          : '<span class="badge badge-purple">encargo pós-quitação</span>';
+        const det = a.tipo === 'pagamento_dividido'
+          ? `${a.qtd} transações INVOICE_PAYMENT no mesmo instante (total R$ ${a.total.toFixed(2).replace('.', ',')}) — deve ser 1 tx única`
+          : `${a.chargeType} R$ ${a.amount.toFixed(2).replace('.', ',')} (ref ${a.invoiceRef}) em fatura JÁ quitada pela cascata`;
+        return `<tr><td class="cpf">${fmtCpf(a.cpf)}</td><td>${t}</td><td>${det}</td><td>${fmtBr(a.data)}</td></tr>`;
+      }).join('\n')}
+    </tbody>
+  </table>
+  </div>` : ''}
+
   <div class="footer">
     <p>Relatório gerado automaticamente por <strong>run_audit_consistency_report.js</strong></p>
     <p>${new Date().toLocaleString('pt-BR')}</p>
@@ -358,18 +553,27 @@ async function main() {
       // Cabeçalho CSV (separador ; para abrir direto no Excel PT-BR)
       const header = 'CPF;Nome;Status;Vencimento;User Days;Invoice Dias;Real-Time;Diff U;Diff I';
 
-      // Linhas: TODOS os registros (não apenas discrepâncias), para análise completa no Excel
+      // Linhas: TODOS os registros (não apenas discrepâncias), para análise completa no Excel.
+      // Diff calculado contra o DIA ESPERADO — mesma regra do HTML:
+      //  - Diff I: semDivida/pagamentoMinimo → 0, senão real-time (evita diff fantasma nas
+      //    faturas de R$ 0 e nas 2ªs faturas que seguem a própria regra);
+      //  - Diff U: contra os dias da ÂNCORA da massa (ou 0 se a massa não tem âncora),
+      //    replicando o nível A — evita acusar -2 na Morgan (fantasma) ou 31 na 2ª fatura
+      //    da Flore (que herda os dias da âncora, não da invoice individual).
       const csvRows = ['\ufeff' + header]; // BOM UTF-8 para Excel reconhecer acentos
       for (const r of rows || []) {
         const cpf = fmtCpf(r.cpf);
         const name = escCsv(r.full_name);
         const status = r.account_status || 'adimplente';
         const due = fmtBr(r.due_date);
-        const ud = parseInt(r.user_days_overdue || 0);
+        const ud = parseInt(r.days_overdue || 0);
         const invD = parseInt(r.invoice_dias_atraso || 0);
         const rt = parseInt(r.real_time_days || 0);
-        const diffU = ud - rt;
-        const diffI = invD - rt;
+        const { days: expectedInv } = invoiceExpectedStateFor(r, cascadePago);
+        const anchor = anchorByCpf.get(r.cpf);
+        const expectedUser = expectedUserStateFor(anchor, cascadePago).days;
+        const diffU = ud - expectedUser;
+        const diffI = invD - expectedInv;
         csvRows.push(`${cpf};${name};${status};${due};${ud};${invD};${rt};${diffU};${diffI}`);
       }
 
@@ -412,13 +616,29 @@ async function main() {
     console.log(`  ✅ Invoices OK:          ${invoiceOk}`);
     console.log(`  ⚠️  Invoices com diff:    ${invoiceDiff}`);
     console.log('');
+    if (anomalias.length > 0) {
+      console.log(`  ⚠️  ${anomalias.length} anomalia(s) estrutural(is) — analisar e corrigir:`);
+      for (const a of anomalias.slice(0, 10)) {
+        if (a.tipo === 'pagamento_dividido') {
+          console.log(`     • [pagamento dividido] ${fmtCpf(a.cpf)} | ${a.qtd} txs no mesmo instante (total R$ ${a.total.toFixed(2).replace('.', ',')}) | ${fmtBr(a.data)}`);
+        } else {
+          console.log(`     • [encargo pós-quitação] ${fmtCpf(a.cpf)} | ${a.chargeType} R$ ${a.amount.toFixed(2).replace('.', ',')} (ref ${a.invoiceRef}) | ${fmtBr(a.data)}`);
+        }
+      }
+      if (anomalias.length > 10) console.log(`     ... e mais ${anomalias.length - 10} anomalia(s) — veja o HTML.`);
+      console.log('');
+    }
     if (consistencyResults.length > 0) {
       console.log(`  🔍 ${consistencyResults.length} discrepância(s) encontrada(s):`);
-      for (const d of consistencyResults.slice(0, 5)) {
-        console.log(`     • ${fmtCpf(d.cpf)} | ${d.name || '?'} | User: ${d.userDaysOverdue}→${d.realTimeDays} (${d.diffUser > 0 ? '+' : ''}${d.diffUser}) | Invoice: ${d.invoiceDiasAtraso}→${d.realTimeDays} (${d.diffInvoice > 0 ? '+' : ''}${d.diffInvoice})`);
+      for (const d of consistencyResults.slice(0, 8)) {
+        if (d.tipo === 'user') {
+          console.log(`     • [user] ${fmtCpf(d.cpf)} | ${d.name || '?'} | User: ${d.userDaysOverdue}→${d.realTimeDays} (${d.diffUser > 0 ? '+' : ''}${d.diffUser}) | esperado: ${d.expectedStatus || d.status}${d.flag ? ` [${d.flag}]` : ''}`);
+        } else {
+          console.log(`     • [invoice] ${fmtCpf(d.cpf)} | ${d.name || '?'} | Invoice: ${d.invoiceDiasAtraso}→${d.realTimeDays} (${d.diffInvoice > 0 ? '+' : ''}${d.diffInvoice})${d.pagamentoMinimo ? ' [pagamento mínimo]' : d.semDivida ? ' [sem dívida]' : ''}`);
+        }
       }
-      if (consistencyResults.length > 5) {
-        console.log(`     ... e mais ${consistencyResults.length - 5} discrepância(s) — veja o HTML.`);
+      if (consistencyResults.length > 8) {
+        console.log(`     ... e mais ${consistencyResults.length - 8} discrepância(s) — veja o HTML.`);
       }
     } else {
       console.log('  ✅ Tudo consistente! Nenhuma discrepância.');
@@ -438,6 +658,15 @@ async function main() {
         if (err) console.warn('      ⚠️  Não foi possível abrir o navegador.');
       });
       console.log('      🌐 Abrindo no navegador...');
+    }
+
+    // Exit code 2 = discrepâncias encontradas (apenas com --fail-on-discrepancies,
+    // usado pela tarefa diária AuditConsistencyDaily). process.exitCode em vez de
+    // process.exit(2): o fluxo segue para o finally (disconnect único) e o processo
+    // encerra com código 2 naturalmente — sem perder o último log no stdout.
+    if (FAIL_ON_DISCREPANCIES && (consistencyResults.length > 0 || anomalias.length > 0)) {
+      console.log(`      ⚠️  ${consistencyResults.length} discrepância(s) + ${anomalias.length} anomalia(s) estrutural(is) — exit code 2 (--fail-on-discrepancies).`);
+      process.exitCode = 2;
     }
 
   } finally {

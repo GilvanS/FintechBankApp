@@ -5,6 +5,18 @@ const { computeNextInvoiceDueDate } = require('../utils/billing');
 const MASS_MERCHANTS = ['iFood', 'Amazon BR', 'Posto Shell', 'Farmacia Pague Menos', 'Netflix', 'Uber', 'Magazine Luiza', 'Zara', 'Mercado Livre', 'Spotify'];
 const round2 = (n) => Math.round(n * 100) / 100;
 
+// Tier de atraso do gerador de massas (WEB/utils/massGenerator.ts OverdueState),
+// derivado do estado real — usado para manter users.overdue_status sincronizado
+// com account_status × days_overdue (o campo nunca era gravado: toda massa nascia
+// com o DEFAULT 'EM_DIA', mesmo as inadimplentes).
+function overdueStatusFor(accountStatus, daysOverdue) {
+    const days = Number(daysOverdue) || 0;
+    if (accountStatus !== 'inadimplente' || days <= 0) return 'EM_DIA';
+    if (days <= 7) return 'EM_ATRASO_7D';
+    if (days <= 15) return 'EM_ATRASO_15D';
+    return 'EM_ATRASO_30D';
+}
+
 // Divide um total em `parts` compras com pesos decrescentes, ajustando a última
 // para bater a soma exata (evita drift de arredondamento).
 function splitAmount(total, parts) {
@@ -116,6 +128,7 @@ async function seedMassBilling(db, cpf, { accountStatus, daysOverdue, overdueAmo
             SET credit_card_available_limit = GREATEST(0, COALESCE(credit_card_available_limit, ${Number(creditLimit) || 5000}) - ${principal.toFixed(2)}),
                 account_status = 'inadimplente',
                 days_overdue = ${daysOverdue},
+                overdue_status = ${esc(overdueStatusFor('inadimplente', daysOverdue))},
                 updated_at = CURRENT_TIMESTAMP
             WHERE cpf = ${esc(cpf)}
         `);
@@ -151,6 +164,7 @@ async function seedMassBilling(db, cpf, { accountStatus, daysOverdue, overdueAmo
             SET credit_card_available_limit = GREATEST(0, COALESCE(credit_card_available_limit, ${Number(creditLimit) || 5000}) - ${totalGasto.toFixed(2)}),
                 account_status = 'adimplente',
                 days_overdue = 0,
+                overdue_status = 'EM_DIA',
                 updated_at = CURRENT_TIMESTAMP
             WHERE cpf = ${esc(cpf)}
         `);
@@ -315,6 +329,7 @@ async function createMassUser(payload) {
     const id = db.generateUUID ? db.generateUUID() : `user-${cleanCpf}`;
     const bcrypt = require('bcryptjs');
     const hash = bcrypt.hashSync(payload.password || 'admin999', 10);
+    const email = payload.email ? payload.email.replace('@', `_${cleanCpf}@`) : `massa_${cleanCpf}@fintech.com`;
     const now = nowDb();
 
     const tutor = payload.tutor || {};
@@ -329,7 +344,7 @@ async function createMassUser(payload) {
             id, full_name, cpf, email, password_hash, balance, pix_daily_limit, role, is_blocked,
             birth_date, age, has_tutor, tutor_name, tutor_cpf, tutor_relationship, country_origin,
             address_cep, address_street, address_number, address_complement, address_neighborhood, address_city, address_state,
-            card_brand, card_due_day, credit_card_due_day, credit_card_invoice_due_date, days_overdue, account_status,
+            card_brand, card_due_day, credit_card_due_day, credit_card_invoice_due_date, days_overdue, account_status, overdue_status,
             credit_card_total_limit, credit_card_available_limit, created_at, updated_at
         )
         VALUES (
@@ -338,7 +353,7 @@ async function createMassUser(payload) {
             ${esc(payload.birthDate || null)}, ${esc(payload.age || null)}, ${esc(payload.hasTutor || false)},
             ${esc(tutor.fullName || null)}, ${esc(tutor.cpf || null)}, ${esc(tutor.relationship || null)}, ${esc(payload.countryOrigin || 'Brasil')},
             ${esc(addr.cep || null)}, ${esc(addr.street || null)}, ${esc(addr.number || null)}, ${esc(addr.complement || null)}, ${esc(addr.neighborhood || null)}, ${esc(addr.city || null)}, ${esc(addr.state || null)},
-            ${esc(payload.cardBrand || 'MASTERCARD')}, ${esc(dueDay)}, ${esc(dueDay)}, ${esc(invoiceDueDate)}, ${esc(payload.daysOverdue || 0)}, ${esc(payload.accountStatus || 'adimplente')},
+            ${esc(payload.cardBrand || 'MASTERCARD')}, ${esc(dueDay)}, ${esc(dueDay)}, ${esc(invoiceDueDate)}, ${esc(payload.daysOverdue || 0)}, ${esc(payload.accountStatus || 'adimplente')}, ${esc(overdueStatusFor(payload.accountStatus, payload.daysOverdue))},
             ${esc(payload.creditLimit || 5000)}, ${esc(payload.creditLimit || 5000)}, ${esc(now)}, ${esc(now)}
         )
     `);
@@ -483,4 +498,4 @@ async function createMassUser(payload) {
     return { id, cpf: cleanCpf, fullName: payload.fullName, massaValidation };
 }
 
-module.exports = { findByCpf, upsertSeed, updateBalance, restoreAvailableLimit, listUsers, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword, createMassUser, seedMassPixKeys, seedMassBilling, validarInvarianteMassa };
+module.exports = { findByCpf, upsertSeed, updateBalance, restoreAvailableLimit, listUsers, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword, createMassUser, seedMassPixKeys, seedMassBilling, validarInvarianteMassa, overdueStatusFor };

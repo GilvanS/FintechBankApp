@@ -100,9 +100,38 @@ module.exports = function createInvoiceController(deps) {
     }
 
     // Reavalia o status do usuário após um pagamento. Escreve SÓ em `users` — a
-    // quitação de cada fatura é derivada de transactions.invoice_id em
-    // getClosedInvoiceDebt, nunca carimbada dentro da fatura FECHADA (imutável).
-    // Quando não sobra nenhuma fechada devendo, o usuário volta a adimplente.
+    // quitação de cada fatura é derivada da distribuição do pagamento (cascata,
+    // mais antiga primeiro) em getClosedInvoiceDebt, nunca carimbada dentro da
+    // fatura FECHADA (imutável). Quando não sobra nenhuma fechada devendo, o
+    // usuário volta a adimplente.
+    //
+    // PERSISTE UMA ÚNICA transação INVOICE_PAYMENT com o valor total pago — o mesmo
+    // do COMPROVANTE (o usuário pagou uma vez; o extrato mostra um lançamento). A
+    // distribuição entre as faturas em aberto é DERIVADA na leitura por cascata
+    // (planDistribution: mais antiga primeiro, excedente = saldo credor), não
+    // persistida como N transações. Manter 1 pagamento = 1 lançamento era o
+    // comportamento esperado: dividir em N fazia a web exibir "2 pagamentos" para
+    // uma única quitação (feedback 805/381).
+    //
+    // `invoices` = closedDebt.invoices (order by due_date ASC, só faturas com dívida).
+    async function persistPaymentDistribution({ cpf, invoices, payAmount, dateIso, description }) {
+        const { esc } = repoContext;
+        const round2 = n => Math.round(n * 100) / 100;
+        const payId = dbService.generateUUID();
+        const amount = round2(payAmount);
+        if (amount <= 0.005) return [];
+        // Vínculo na fatura MAIS RECENTE em aberto (a que ancora o comprovante).
+        // A quitação das demais é derivada por cascata na leitura — o invoice_id
+        // aqui é apenas a âncora do lançamento no extrato.
+        const anchor = invoices[invoices.length - 1] || null;
+        await dbService.executeQuery(`
+            INSERT INTO ${dbService.fq('transactions')}
+            (id, cpf, type, amount, description, from_user, to_user, to_key, date, invoice_id)
+            VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-amount).toFixed(2))}, ${esc(description)}, NULL, NULL, NULL, ${esc(dateIso)}, ${anchor ? esc(anchor.id) : 'NULL'})
+        `);
+        return [{ invoiceId: anchor ? anchor.id : null, amount }];
+    }
+
     async function refreshAccountStatus(cpf) {
         const { esc } = repoContext;
         const debt = await getClosedInvoiceDebt(cpf);
@@ -111,7 +140,7 @@ module.exports = function createInvoiceController(deps) {
         if (stillOpen === 0) {
             await dbService.executeQuery(`
                 UPDATE ${dbService.fq('users')}
-                SET account_status = 'adimplente', days_overdue = 0, updated_at = CURRENT_TIMESTAMP
+                SET account_status = 'adimplente', days_overdue = 0, overdue_status = 'EM_DIA', updated_at = CURRENT_TIMESTAMP
                 WHERE cpf = ${esc(cpf)}
             `);
         }
@@ -131,20 +160,18 @@ module.exports = function createInvoiceController(deps) {
     //
     // `invoice` = a mais RECENTE em aberto e ancora o cutoff das parcelas (o corte precisa
     // cobrir todos os ciclos que estão sendo pagos). `oldest` ancora atraso/encargos.
-    // Quanto já foi pago de cada fatura FECHADA, derivado de transactions.invoice_id.
-    // Fonte da verdade para pagamentos feitos APÓS a migration 005: a fatura fechada é
-    // imutável, então o pago não pode ser lido de dentro dela.
+    // TOTAL pago de uma massa (soma de TODOS os INVOICE_PAYMENT). A distribuição
+    // entre as faturas é feita por CASCATA na leitura (planDistribution: mais antiga
+    // primeiro, excedente = saldo credor) — o pagamento é UMA transação (igual ao
+    // comprovante), então o pago não pode ser derivado por invoice_id isolado.
     async function fetchPaidByInvoice(cpf) {
         const { esc } = repoContext;
         const rows = await dbService.executeQuery(`
-            SELECT invoice_id, COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS pago
+            SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS total
             FROM ${dbService.fq('transactions')}
             WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
-            GROUP BY invoice_id
         `);
-        const map = new Map();
-        for (const r of rows) map.set(r.invoice_id, parseFloat(r.pago || 0));
-        return map;
+        return parseFloat(rows[0]?.total || 0);
     }
 
     async function getClosedInvoiceDebt(cpf) {
@@ -159,23 +186,21 @@ module.exports = function createInvoiceController(deps) {
         `);
         if (!rows.length) return null;
 
-        const paidByInvoice = await fetchPaidByInvoice(cpf);
+        const totalPago = await fetchPaidByInvoice(cpf);
         const round2 = n => Math.round(n * 100) / 100;
+        // CASCATA: o pagamento é UMA transação com o valor total; a quitação de cada
+        // fatura é derivada distribuindo o total pago da mais antiga para a mais nova
+        // (planDistribution). Fatura com valor_pago legado (pré-migration 005) já entra
+        // com esse pago base; as demais começam em 0 e recebem a parcela da cascata.
+        const dist = planDistribution(rows, totalPago);
+        const pagoPorId = new Map(dist.invoices.map(inv => [inv.id, inv.newValorPago]));
         const invoices = rows.map(row => {
             // owed = valor_total - pago (NÃO inclui encargos: multa, juros, IOF).
             // Encargos são calculados separadamente em enrichUserCreditCardData para exibição
             // (closedInvoiceCharges). Incluí-los no valor devido faz o pagamento "total"
             // cobrar mais que a fatura — ex: R$ 4.284,94 em vez de R$ 3.870,86.
-            //
-            // HÍBRIDO: pagamentos vinculados (invoice_id) são a fonte da verdade. Faturas
-            // anteriores à migration 005 não têm vínculo — para essas, o valor_pago
-            // congelado no fechamento segue valendo. Ler o campo não fere a imutabilidade;
-            // escrever nele, sim.
             const gross = round2(computeInvoiceGross(row));
-            const pagoVinculado = paidByInvoice.get(row.id);
-            const pago = pagoVinculado !== undefined
-                ? pagoVinculado
-                : parseFloat(row.valor_pago || 0);
+            const pago = pagoPorId.get(row.id) ?? parseFloat(row.valor_pago || 0);
             const residual = round2(parseFloat(row.valor_total || 0) - pago);
             return { ...row, gross, valor_pago_efetivo: round2(pago), owed: Math.max(0, residual) };
         // Quitada pelo caminho novo: sem data_pagamento (fatura imutável), some da lista
@@ -635,14 +660,18 @@ module.exports = function createInvoiceController(deps) {
             const payDescription = isMinimo
                 ? 'Pagamento minimo de fatura'
                 : 'Pagamento parcial de fatura';
-            // Pagamento parcial: registrar sem deletar parcelas
+            // Pagamento parcial: registrar SEM deletar parcelas. Persiste UMA transação
+            // com o valor pago (igual ao comprovante); a quitação de cada fatura é
+            // DERIVADA por cascata na leitura (getClosedInvoiceDebt → planDistribution),
+            // nunca escrita na FECHADA (imutável).
             const nowIso = nowDb();
-            const payId = dbService.generateUUID();
-            await dbService.executeQuery(`
-                INSERT INTO ${dbService.fq('transactions')}
-                (id, cpf, type, amount, description, from_user, to_user, to_key, date, invoice_id)
-                VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-payAmount).toFixed(2))}, ${esc(payDescription)}, NULL, NULL, NULL, ${esc(nowIso)}, ${esc(closedDebt?.oldest?.id || null)})
-            `);
+            await persistPaymentDistribution({
+                cpf,
+                invoices: closedDebt?.invoices || [],
+                payAmount,
+                dateIso: nowIso,
+                description: payDescription
+            });
             await usersRepo.updateBalance(cpf, (balance - payAmount).toFixed(2));
             const restoredLimit = Math.min(totalLimit, availableLimit + payAmount);
             await dbService.executeQuery(`
@@ -664,7 +693,7 @@ module.exports = function createInvoiceController(deps) {
             if (isMinimo) {
                 await dbService.executeQuery(`
                     UPDATE ${dbService.fq('users')}
-                    SET account_status = 'adimplente', days_overdue = 0, updated_at = CURRENT_TIMESTAMP
+                    SET account_status = 'adimplente', days_overdue = 0, overdue_status = 'EM_DIA', updated_at = CURRENT_TIMESTAMP
                     WHERE cpf = '${cpf}'
                 `);
             }
@@ -722,17 +751,25 @@ module.exports = function createInvoiceController(deps) {
         // vinculado à fatura fechada mais recente; limpar parcelas do ciclo, restaurar limite.
         // O excedente sobre o principal vira saldo credor e abate a fatura ABERTA
         // (docs/REGRAS-NEGOCIO-FATURA.md §19.3) — não pode ser capado aqui.
-        const result = await cardRepo.payDueInstallments({
+        // PERSISTE UMA ÚNICA transação com o valor TOTAL pago (igual ao comprovante: o
+        // usuário pagou uma vez, o extrato mostra UM lançamento). A distribuição entre as
+        // faturas em aberto é DERIVADA na leitura por cascata (planDistribution, da mais
+        // antiga para a mais nova) em getClosedInvoiceDebt — não persistida como N txs.
+        // Antes o valor inteiro ia num único vínculo para `oldest`, deixando a 2ª fatura
+        // sem pagamento quando havia mais de uma em aberto (bug 805.357.576-54 e
+        // 381.600.813-59). O excedente sobre a soma vira saldo credor na última fatura (§19.3).
+        await persistPaymentDistribution({
             cpf,
-            cutoffIso,
-            amount: payAmount,
-            paymentDateIso: nowDb(),
-            // `oldest` (mais antiga), nao `invoice` (mais recente): a divida amortiza da
-            // fatura mais velha para a mais nova, e e a mais antiga que ancora atraso e
-            // encargos. O pagamento PARCIAL ja usava oldest (linha ~636) — o total usava
-            // invoice, vinculando a fatura errada quando havia mais de uma em aberto.
-            invoiceId: closedDebt?.oldest?.id || null
+            invoices: closedDebt?.invoices || [],
+            payAmount,
+            dateIso: nowDb(),
+            description: 'Pagamento fatura'
         });
+        // Limpa as parcelas legadas do ciclo (mesma ação do antigo payDueInstallments)
+        await dbService.executeQuery(`
+            DELETE FROM ${dbService.fq('transactions')}
+            WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
+        `);
         await usersRepo.updateBalance(cpf, (balance - payAmount).toFixed(2));
         const restoredLimit = Math.min(totalLimit, availableLimit + principalToPay);
         // NÃO avançar credit_card_invoice_due_date aqui — o motor de faturamento (invoiceEngine)
@@ -747,22 +784,34 @@ module.exports = function createInvoiceController(deps) {
             WHERE cpf = '${cpf}'
         `);
 
-        // Quitação registrada pelo invoice_id no payDueInstallments acima. A fatura
+        // Quitação registrada pelos invoice_id na distribuição acima. A fatura
         // FECHADA não é tocada: a leitura em getClosedInvoiceDebt derivará o saldado
         // do SUM de payments.
         if (closedDebt) {
             await refreshAccountStatus(cpf);
         }
-        // — PAGAMENTO TOTAL: PARA os encargos e os dias de atraso. As billing_charges
-        // pending desta massa são marcadas 'paid' — não podem continuar somando em
-        // SUM(pending) (pay/enrich só leem pending) nem re-cobrar dívida já quitada.
+        // — PAGAMENTO TOTAL: PARA os encargos e os dias de atraso.
+        // Só marca as billing_charges pending como 'paid' se o valor pago COBRIU os
+        // encargos (payAmount >= totalDueComplete = principal + encargos). Caso
+        // contrário (pagou o principal, mas não os encargos — ex.: 118.796.467-06
+        // pagou R$ 1.651,69 e ficaram R$ 66,79 de 3 dias de atraso), as charges
+        // permanecem 'pending' e são HERDADAS pela fatura aberta (regra do ciclo de
+        // vida): marcá-las como pagas sem tê-las recebido "perdoava" dívida real e
+        // zerava a herança que a fatura aberta deve exibir.
         // As colunas congeladas das faturas fechadas (análise mensal) permanecem
         // intactas (imutáveis pela trigger da migration 005).
-        await dbService.executeQuery(`
-            UPDATE ${dbService.fq('billing_charges')}
-            SET status = 'paid'
-            WHERE cpf = '${cpf}' AND status = 'pending'
-        `);
+        const pagouEncargos = payAmount >= totalDueComplete - 0.01;
+        if (pagouEncargos) {
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('billing_charges')}
+                SET status = 'paid'
+                WHERE cpf = '${cpf}' AND status = 'pending'
+            `);
+        } else {
+            // Encargos herdados: permanecem pending e migram para a fatura ABERTA
+            // (enrichUserCreditCardData -> closedInvoiceCharges -> currentInvoiceTotal).
+            console.log(`[pay] ${cpf} pagou R$ ${payAmount.toFixed(2)} (principal), deixando R$ ${(totalDueComplete - payAmount).toFixed(2)} de encargos pending para a fatura aberta.`);
+        }
         await notificationsRepo.addNotification({
             cpf,
             title: 'Pagamento de fatura',

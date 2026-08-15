@@ -41,7 +41,7 @@ const shopRepo = require('./repositories/shopRepo');
 const pixRepo = require('./repositories/pixRepo');
 const { addContact } = require('./repositories/pixRepo');
 const usersRepo = require('./repositories/usersRepo');
-const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword } = require('./repositories/usersRepo');
+const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword, overdueStatusFor } = require('./repositories/usersRepo');
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate } = require('./utils/billing');
 const cardEngine = require('./utils/cardEngine');
@@ -66,6 +66,65 @@ const buildJurosPayload = ({ original, totalWithInterest, installments, interest
         taxaEfetivaAnual: ef.anual,
     };
 };
+
+// Mensagem de COMPRA no tópico Telegram da massa — TABELA MONOSPACE no mesmo
+// formato do relatório que o admin envia (sendTable, botão "Enviar Tabela p/
+// Telegram"): colunas CÓDIGO | ITEM | TAXA / REGRA | VALOR (R$) dentro de
+// <pre>, com separador -+- alinhado por largura de coluna. Exibe parcelamento
+// com vencimento (PARC 1..N), juros e total — transparência de encargos
+// (CDC art. 52 · Res. BCB 96/2021 e 365/2023).
+// `parcelas` (opcional): array [{ vencimento, valor }] p/ listar PARC 1..N;
+// sem ele, qty > 1 vira linha única de PARCELAS (fallback p/ pontos sem user).
+function buildPurchaseTelegramMessage({ tipo, estabelecimento, original, totalParcelado, installments, interestRate, dataCompra, parcelas }) {
+    const jp = buildJurosPayload({ original, totalWithInterest: totalParcelado, installments, interestRate });
+    const qty = Number(installments) || 1;
+    const brlR = (n) => `R$ ${(Number(n) || 0).toFixed(2).replace('.', ',')}`;
+    const fx = (n) => (Number(n) || 0).toFixed(2);
+    const isDebito = tipo === 'DEBIT';
+    const isAssinatura = tipo === 'SUBSCRIPTION';
+    const emoji = isAssinatura ? '🔄' : (isDebito ? '🛒' : '💳');
+    const titulo = isAssinatura ? 'ASSINATURA' : (isDebito ? 'COMPRA NO DÉBITO' : 'COMPRA NO CRÉDITO');
+
+    // Linhas da tabela (mesmo vocabulário do relatório do admin: BASE/PARC/JUROS/TOTAL)
+    const headers = ['CÓDIGO', 'ITEM', 'TAXA / REGRA', 'VALOR (R$)'];
+    const rows = [];
+    rows.push(['BASE', String(estabelecimento || ''), qty > 1 ? `${qty}x` : 'À vista', fx(jp.originalAmount)]);
+    if (Array.isArray(parcelas) && parcelas.length >= qty) {
+        for (let i = 0; i < qty; i++) {
+            const p = parcelas[i] || {};
+            rows.push([`PARC ${i + 1}`, `${i + 1}ª Parcela`, p.vencimento ? toDateBR(p.vencimento) : '—', fx(p.valor != null ? p.valor : jp.valorParcela)]);
+        }
+    } else if (qty > 1) {
+        rows.push(['PARCELAS', `${qty}x de ${brlR(jp.valorParcela)}`, jp.jurosTotal > 0 ? `${(jp.interestRate * 100).toFixed(1)}% a.m.` : 'Sem juros', fx(jp.totalParcelado)]);
+    }
+    if (jp.jurosTotal > 0) {
+        rows.push(['JUROS', 'Juros do financiamento', `${(jp.interestRate * 100).toFixed(1)}% a.m. · efetiva ${jp.taxaEfetivaMensal.toFixed(2)}% a.m.`, fx(jp.jurosTotal)]);
+    } else if (qty > 1) {
+        rows.push(['JUROS', 'Sem juros', '0.00% a.m.', '0.00']);
+    }
+    rows.push(['TOTAL', 'Total a pagar', qty > 1 ? `${qty}x de ${brlR(jp.valorParcela)}` : 'À vista', fx(jp.totalParcelado)]);
+
+    // Largura máxima por coluna (mesmo algoritmo do sendTable) p/ alinhar | -+-
+    const colWidths = headers.map((h, i) => {
+        let max = h.length;
+        for (const r of rows) {
+            if (r[i] && r[i].length > max) max = r[i].length;
+        }
+        return max;
+    });
+
+    const linhas = [
+        `${emoji} <b>${titulo}</b>`,
+        '',
+        '<pre>',
+        headers.map((h, i) => h.padEnd(colWidths[i])).join(' | '),
+        colWidths.map(w => '-'.repeat(w)).join('-+-'),
+        ...rows.map(r => r.map((cell, i) => String(cell || '').padEnd(colWidths[i])).join(' | ')),
+        '</pre>',
+        ...(dataCompra ? [`📅 ${toDateBR(dataCompra)}`] : []),
+    ];
+    return linhas.join('\n');
+}
 
 // Gera o COMPROVANTE DE COMPRA em PDF (art. 52 CDC) e envia ao tÃ³pico Telegram
 // da massa. Reusa a categoria 'payment_receipt' (toggle do painel admin que jÃ¡
@@ -388,8 +447,11 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // Sem isto, fatura paga continuava aparecendo como devida na tela.
         const _paidByInvoice = new Map();
         const _paidAtByInvoice = new Map();
+        // Hoisted fora do try: a CASCATA abaixo usa o total por CPF (_payTotalCpf)
+        // mesmo quando a query falha (aí fica vazio e cai no híbrido legado).
+        let _payRows = [];
         try {
-            const _payRows = await dbService.executeQuery(`
+            _payRows = await dbService.executeQuery(`
                 SELECT invoice_id,
                        SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS pago,
                        MAX(date) AS ultimo_pagamento
@@ -405,9 +467,24 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
 
         // Pago efetivo de uma fatura: vinculo tem precedencia, valor_pago legado e fallback
         // (faturas anteriores a 005 nao tem transacao vinculada).
-        const _pagoEfetivo = (inv) => _paidByInvoice.has(inv.id)
-            ? _paidByInvoice.get(inv.id)
-            : parseFloat(inv.valor_pago || 0);
+        // CASCATA (mesma regra do getClosedInvoiceDebt/auditor/sync): o pagamento é UMA
+        // transação com o valor total (comprovante); a quitação de cada fatura fechada é
+        // derivada distribuindo o TOTAL pago do CPF da mais antiga para a mais nova
+        // (planDistribution). Sem cascata, a tx única ficaria só na fatura mais recente
+        // (invoice_id da âncora) e as mais antigas continuariam "devidas" (regressão 381/805).
+        const _payTotalCpf = _payRows.reduce((s, r) => s + parseFloat(r.pago || 0), 0);
+        const _cascadeByInvoice = new Map();
+        if (_payTotalCpf > 0.005) {
+            const _fechadasOrdenadas = invRows
+                .filter(i => i.status === 'FECHADA')
+                .slice()
+                .sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+            const _distEnrich = planDistribution(_fechadasOrdenadas, _payTotalCpf);
+            for (const inv of _distEnrich.invoices) _cascadeByInvoice.set(inv.id, inv.newValorPago);
+        }
+        const _pagoEfetivo = (inv) => _cascadeByInvoice.has(inv.id)
+            ? _cascadeByInvoice.get(inv.id)
+            : (_paidByInvoice.has(inv.id) ? _paidByInvoice.get(inv.id) : parseFloat(inv.valor_pago || 0));
         const _residualDe = (inv) => Math.max(0, parseFloat(inv.valor_total || 0) - _pagoEfetivo(inv));
         if (invRows.length > 0) {
             latestInvoice = invRows[0];
@@ -426,6 +503,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                     // já pertence à fatura anterior e não pode ser cobrado duas vezes.
                     const total = parseFloat(inv.valor_total || 0) + parseFloat(inv.saldo_anterior || 0);
                     const pago = _pagoEfetivo(inv);
+                    // Residual/isPaid usam apenas valor_total (principal): saldo_anterior já
+                    // pertence à fatura anterior — a quitação por cascata paga valor_total.
+                    const _valorTotalPrincipal = parseFloat(inv.valor_total || 0);
                     // Encargos CONGELADOS no fechamento (multa/juros/IOF acumulados até o
                     // corte). O invoiceEngine os consolida nas colunas da fechada a partir
                     // do billing_charges — o freeze é DISPLAY-ONLY (as charges continuam
@@ -447,8 +527,8 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                         valorTotal: Math.round(total * 100) / 100,
                         valorPago: Math.round(pago * 100) / 100,
                         // Residual com sinal: negativo = saldo credor (pagou a mais).
-                        residual: Math.round((total - pago) * 100) / 100,
-                        isPaid: (total - pago) <= 0.005,
+                        residual: Math.round((_valorTotalPrincipal - pago) * 100) / 100,
+                        isPaid: (_valorTotalPrincipal - pago) <= 0.005,
                         paidAt: _paidAtByInvoice.get(inv.id) || inv.data_pagamento || null,
                         // Informativo (análise mensal): compras + saldo herdado + encargos congelados.
                         valorTotalComEncargos: Math.round((total + _frozen.total) * 100) / 100,
@@ -470,10 +550,12 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             const unpaidClosed = invRows.filter(i =>
                 i.status === 'FECHADA' && !i.data_pagamento && computeInvoiceGross(i) > 0 && _residualDe(i) > 0.005
             );
-            // Fechadas quitadas pelo vinculo (sem data_pagamento) — usadas para expor
-            // closedInvoiceIsPaid/PaidAt quando nao ha mais nenhuma em aberto.
+            // Fechadas quitadas (por vínculo direto OU pela CASCATA — a tx única fica
+            // ancorada na fatura mais recente e cobre as mais antigas por distribuição)
+            // — usadas para expor closedInvoiceIsPaid/PaidAt quando nao ha mais nenhuma
+            // em aberto. Faturas zeradas (fantasma) ficam de fora.
             const _quitadasPorVinculo = invRows.filter(i =>
-                i.status === 'FECHADA' && !i.data_pagamento && _paidByInvoice.has(i.id) && _residualDe(i) <= 0.005
+                i.status === 'FECHADA' && !i.data_pagamento && parseFloat(i.valor_total || 0) > 0.005 && _residualDe(i) <= 0.005
             );
             const closedInvoice = unpaidClosed[0];
             if (closedInvoice) {
@@ -533,7 +615,13 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 if (_quitadasPorVinculo.length > 0) {
                     const _maisRecente = _quitadasPorVinculo[0];
                     const _totalVal = _quitadasPorVinculo.reduce((s, inv) => s + parseFloat(inv.valor_total || 0), 0);
-                    const _totalPago = _quitadasPorVinculo.reduce((s, inv) => s + _pagoEfetivo(inv), 0);
+                    // _totalPago inclui o EXCEDENTE (saldo credor): o pagamento é UMA transação
+                    // com o valor total (comprovante); pagou 5.623,68 numa fatura de 3.870,86 →
+                    // excedente -1.752,82 (residual negativo), não 0.
+                    const _totalPago = Math.max(
+                        _quitadasPorVinculo.reduce((s, inv) => s + _pagoEfetivo(inv), 0),
+                        _payTotalCpf
+                    );
                     const _ultimoPagamento = _quitadasPorVinculo
                         .map(inv => _paidAtByInvoice.get(inv.id))
                         .filter(Boolean)
@@ -1041,6 +1129,11 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             _end.setHours(0, 0, 0, 0);
             _daysOverdue = Math.max(0, Math.floor((_end - _d) / 86400000));
         }
+        // Encargos ESTOPADOS quando a fatura está PAGA: o contador exibido vira 0 (usuário
+        // adimplente/EM_DIA) — o histórico até a data do pagamento fica em
+        // _closedInvoiceAtrasoDias para o painel/dashboard não perder o registro.
+        normalized.creditCard._closedInvoiceAtrasoDias = _daysOverdue;
+        if (_isPaid) _daysOverdue = 0;
 
         // Se hÃ¡ billing_charges: usar encargos REAIS.
         // A quitaÃ§Ã£o do principal estopa novos juros (days_overdue=0 no users e data_pagamento definida),
@@ -2413,7 +2506,15 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
             VALUES (${esc(txId)}, ${esc(req.user.cpf)}, ${esc('SHOP_DEBIT')}, ${-netDebit.toFixed(2)}, ${esc(productDesc)}, ${esc(now)})
         `);
-        telegramService.send('purchase', { cpf: req.user.cpf, text: `ðŸ›’ Compra no dÃ©bito: R$ ${netDebit.toFixed(2)} â€” ${productDesc}` }).catch(() => {});
+        telegramService.send('purchase', { cpf: req.user.cpf, text: buildPurchaseTelegramMessage({
+            tipo: 'DEBIT',
+            estabelecimento: productDesc,
+            original: netDebit,
+            totalParcelado: netDebit,
+            installments: 1,
+            interestRate: 0,
+            dataCompra: now,
+        }) }).catch(() => {});
         // Comprovante de compra (art. 52 CDC) no tÃ³pico da massa â€” fire-and-forget
         generateAndSendPurchaseReceipt({
             cpf: req.user.cpf,
@@ -2608,11 +2709,31 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         `);
         // TransparÃªncia de encargos (CDC art. 52 Â· Res. BCB 96/2021 e 365/2023): quando a compra
         // tiver juros, a mensagem expÃµe juros R$, taxa efetiva e total com/sem financiamento.
-        const _jpMsg = buildJurosPayload({ original: total, totalWithInterest: qty >= 2 ? totalParcelado : creditAmount, installments: qty, interestRate: rate });
-        const _msgJuros = _jpMsg.jurosTotal > 0
-            ? ` Â· juros R$ ${_jpMsg.jurosTotal.toFixed(2)} (${(_jpMsg.interestRate * 100).toFixed(1)}% no total) Â· taxa efetiva ${_jpMsg.taxaEfetivaMensal.toFixed(2)}% a.m. Â· total c/ juros R$ ${_jpMsg.totalParcelado.toFixed(2)}`
-            : '';
-        telegramService.send('purchase', { cpf: req.user.cpf, text: `ðŸ’³ Compra no crÃ©dito: R$ ${creditAmount.toFixed(2)} â€” ${productDesc}${_msgJuros}` }).catch(() => {});
+        // Vencimentos das parcelas (mesma regra do bloco abaixo: corte = vencimento - 7 dias;
+        // parcela i = corte + (i-1) mês) — p/ listar PARC 1..N na tabela da mensagem.
+        const parcelasVenc = [];
+        if (qty >= 2) {
+            const _due = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
+            const _firstDue = new Date(_due);
+            _firstDue.setDate(_firstDue.getDate() - 7);
+            _firstDue.setUTCHours(23, 59, 59, 999);
+            const _parcela = totalParcelado / qty;
+            for (let i = 0; i < qty; i++) {
+                const d = new Date(_firstDue);
+                d.setUTCMonth(_firstDue.getUTCMonth() + i);
+                parcelasVenc.push({ vencimento: d, valor: _parcela });
+            }
+        }
+        telegramService.send('purchase', { cpf: req.user.cpf, text: buildPurchaseTelegramMessage({
+            tipo: 'CREDIT',
+            estabelecimento: productDesc,
+            original: creditAmount,
+            totalParcelado: qty >= 2 ? totalParcelado : creditAmount,
+            installments: qty,
+            interestRate: rate,
+            dataCompra: nowIso,
+            parcelas: parcelasVenc,
+        }) }).catch(() => {});
 
         // Gerar somente a 1a parcela na fatura atual e criar plano agregado para as futuras
         if (qty >= 2) {
@@ -4536,7 +4657,15 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             VALUES ('${txId}', '${user.cpf}', 'SHOP_DEBIT', -${numAmount}, '${description}', '${nowDb()}')
         `);
         // Mensagem da compra no tÃ³pico Telegram da massa (padrÃ£o da Loja /shop)
-        telegramService.send('purchase', { cpf: user.cpf, text: `ðŸ›’ Compra no dÃ©bito: R$ ${numAmount.toFixed(2)} â€” ${description}` }).catch(() => {});
+        telegramService.send('purchase', { cpf: user.cpf, text: buildPurchaseTelegramMessage({
+            tipo: 'DEBIT',
+            estabelecimento: description,
+            original: numAmount,
+            totalParcelado: numAmount,
+            installments: 1,
+            interestRate: 0,
+            dataCompra: nowDb(),
+        }) }).catch(() => {});
         // Comprovante de compra (art. 52 CDC) no tÃ³pico da massa â€” fire-and-forget
         generateAndSendPurchaseReceipt({
             cpf: user.cpf,
@@ -4601,12 +4730,28 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
         // Mensagem da compra no tÃ³pico Telegram da massa (padrÃ£o da Loja /shop).
         // TransparÃªncia de encargos (CDC art. 52 Â· Res. BCB 96/2021 e 365/2023): juros R$, taxa
         // efetiva e total com juros sÃ£o expostos quando a compra parcelada tiver encargos.
-        const _label = type === 'SUBSCRIPTION' ? 'Assinatura' : 'Compra no crÃ©dito';
-        const _jpMsg = buildJurosPayload({ original: numAmount, totalWithInterest, installments, interestRate });
-        const _msgJuros = _jpMsg.jurosTotal > 0
-            ? ` Â· juros R$ ${_jpMsg.jurosTotal.toFixed(2)} (${(_jpMsg.interestRate * 100).toFixed(1)}% no total) Â· taxa efetiva ${_jpMsg.taxaEfetivaMensal.toFixed(2)}% a.m. Â· total c/ juros R$ ${_jpMsg.totalParcelado.toFixed(2)}`
-            : '';
-        telegramService.send('purchase', { cpf: user.cpf, text: `ðŸ’³ ${_label}: R$ ${totalWithInterest.toFixed(2)} â€” ${description}${_msgJuros}` }).catch(() => {});
+        // Vencimentos das parcelas (mesma regra do plano abaixo: nextDue = data da compra;
+        // parcela i = nextDue + (i-1) mês) — p/ listar PARC 1..N na tabela da mensagem.
+        const parcelasSim = [];
+        const _simQty = type === 'SUBSCRIPTION' ? 1 : (Number(installments) || 1);
+        if (_simQty > 1) {
+            const _simParcela = totalWithInterest / _simQty;
+            for (let i = 0; i < _simQty; i++) {
+                const d = new Date();
+                d.setUTCMonth(d.getUTCMonth() + i);
+                parcelasSim.push({ vencimento: d, valor: _simParcela });
+            }
+        }
+        telegramService.send('purchase', { cpf: user.cpf, text: buildPurchaseTelegramMessage({
+            tipo: type === 'SUBSCRIPTION' ? 'SUBSCRIPTION' : 'CREDIT',
+            estabelecimento: description,
+            original: numAmount,
+            totalParcelado: totalWithInterest,
+            installments: _simQty,
+            interestRate,
+            dataCompra: nowDb(),
+            parcelas: parcelasSim,
+        }) }).catch(() => {});
 
         // art. 52 CDC â€” expor encargos de juros no payload da resposta
         jurosPayload = {
@@ -4794,14 +4939,14 @@ apiRouter.post('/admin/simulate-purchases', bearerAuth(), authenticateAdmin, asy
         // CenÃ¡rio Inadimplente: Atualiza dias de atraso e status da conta
         await dbService.executeQuery(`
             UPDATE ${dbService.fq('users')} 
-            SET account_status = 'OVERDUE', days_overdue = 15 
+            SET account_status = 'OVERDUE', days_overdue = 15, overdue_status = 'EM_ATRASO_15D' 
             WHERE cpf = '${targetCpf}'
         `);
         healthMessage = 'SimulaÃ§Ã£o (CenÃ¡rio Ruim) concluÃ­da. Conta classificada como inadimplente com 15 dias de atraso.';
     } else {
         await dbService.executeQuery(`
             UPDATE ${dbService.fq('users')} 
-            SET account_status = 'ACTIVE', days_overdue = 0 
+            SET account_status = 'ACTIVE', days_overdue = 0, overdue_status = 'EM_DIA' 
             WHERE cpf = '${targetCpf}'
         `);
     }
@@ -5457,20 +5602,28 @@ apiRouter.post('/admin/billing/clear-mock-baseline', bearerAuth(), authenticateA
 // o incremento do MESMO dia 2x (causa raiz das 958 duplicatas em 107 massas).
 let _billingValidationRunning = false;
 
-async function runBillingValidation() {
+async function runBillingValidation(opts) {
     if (_billingValidationRunning) {
         console.warn('[BillingValidation] Já em execução — chamada concorrente ignorada (anti-duplicata).');
         return { success: true, message: 'Já em execução (ignorado para evitar duplicatas de incremento diário).', skipped: true, errors: [], processadas: 0, falhas: 0, updated: { inadimplente: 0, adimplente: 0 }, charges: { generated: 0, detail: [] } };
     }
     _billingValidationRunning = true;
     try {
-        return await runBillingValidationInner();
+        return await runBillingValidationInner(opts);
     } finally {
         _billingValidationRunning = false;
     }
 }
 
-async function runBillingValidationInner() {
+async function runBillingValidationInner(opts) {
+    // Escopo opcional: com `onlyCpf`, o motor processa APENAS aquele CPF. Usado pelos
+    // testes de integração (engineIdempotency) para NÃO vazar o motor para as outras
+    // suítes que compartilham o mesmo banco — sem filtro, o motor percorria todos os
+    // usuários (inclusive o CPF de teste de pagamento e as massas reais), re-marcando
+    // account_status e inserindo charges em corrida com o teste de pagamento.
+    const { onlyCpf } = opts || {};
+    const scopeFilter = onlyCpf ? `WHERE cpf = '${onlyCpf}'` : '';
+    const invoiceScopeFilter = onlyCpf ? `AND i.cpf = '${onlyCpf}'` : '';
     const configRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
     if (!configRows.length) return { success: false, message: 'ConfiguraÃ§Ã£o de faturamento nÃ£o encontrada.' };
     const cfg = configRows[0];
@@ -5486,6 +5639,7 @@ async function runBillingValidationInner() {
                COALESCE(credit_card_available_limit, 0) AS credit_card_available_limit,
                COALESCE(credit_card_total_limit, 5000) AS credit_card_total_limit
         FROM ${dbService.fq('users')}
+        ${scopeFilter}
     `);
 
     // Vencimento real de cada fatura FECHADA ainda nÃ£o paga â€” nÃ£o usar
@@ -5507,10 +5661,11 @@ async function runBillingValidationInner() {
     // Sem este JOIN o motor cobrava multa/juros/IOF sobre fatura JA PAGA, porque so olhava
     // data_pagamento IS NULL (que nunca e escrito).
     const closedInvoiceRows = await dbService.executeQuery(`
-        SELECT i.cpf, i.due_date, i.valor_total,
+        SELECT i.id, i.cpf, i.due_date, i.valor_total,
                COALESCE(i.valor_pago, 0) AS valor_pago,
                COALESCE(pagos.total, 0) AS pago_vinculado,
-               CASE WHEN pagos.total IS NULL THEN 0 ELSE 1 END AS tem_vinculo
+               CASE WHEN pagos.total IS NULL THEN 0 ELSE 1 END AS tem_vinculo,
+               COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
         FROM ${dbService.fq('invoices')} i
         LEFT JOIN (
             SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
@@ -5518,16 +5673,43 @@ async function runBillingValidationInner() {
             WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
             GROUP BY invoice_id
         ) pagos ON pagos.invoice_id = i.id
+        LEFT JOIN (
+            SELECT cpf, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+            FROM ${dbService.fq('transactions')}
+            WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            GROUP BY cpf
+        ) pagos_cpf ON pagos_cpf.cpf = i.cpf
         WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
+          ${invoiceScopeFilter}
         ORDER BY i.due_date ASC
     `);
+    // CASCATA (mesma regra do enrich/auditor/sync): o pagamento é UMA transação com o
+    // valor total (comprovante); a quitação de cada fatura é derivada distribuindo o
+    // TOTAL de INVOICE_PAYMENT do CPF da mais antiga para a mais nova (planDistribution).
+    const _cascadeMotor = new Map();
+    {
+        const _byCpfMotor = new Map();
+        for (const _r of closedInvoiceRows) {
+            if (!_byCpfMotor.has(_r.cpf)) _byCpfMotor.set(_r.cpf, []);
+            _byCpfMotor.get(_r.cpf).push(_r);
+        }
+        for (const [cpf, rs] of _byCpfMotor) {
+            const _totalCpf = parseFloat(rs[0]?.pago_total_cpf || 0);
+            if (_totalCpf <= 0.005) continue;
+            const _dist = planDistribution(rs, _totalCpf);
+            for (const inv of _dist.invoices) _cascadeMotor.set(inv.id, inv.newValorPago);
+        }
+    }
     const closedDueByCpf = new Map();
     for (const row of closedInvoiceRows) {
         const valorTotal = parseFloat(row.valor_total || 0);
-        // Vinculado tem precedencia; sem vinculo, cai no valor_pago legado.
-        const pago = parseInt(row.tem_vinculo, 10) === 1
-            ? parseFloat(row.pago_vinculado || 0)
-            : parseFloat(row.valor_pago || 0);
+        // CASCATA tem precedência (1 tx única cobre as faturas da massa); sem cascata,
+        // híbrido legado — vínculo por invoice_id; sem vínculo, valor_pago (pré-005).
+        const pago = _cascadeMotor.has(row.id)
+            ? _cascadeMotor.get(row.id)
+            : (parseInt(row.tem_vinculo, 10) === 1
+                ? parseFloat(row.pago_vinculado || 0)
+                : parseFloat(row.valor_pago || 0));
         const residual = Math.max(0, valorTotal - pago);
         // Fatura ja quitada nao entra no mapa: nao gera encargo nem mantem inadimplente.
         // O `continue` precisa vir ANTES do has(): sem ele, a fatura quitada (mais antiga,
@@ -5575,7 +5757,7 @@ async function runBillingValidationInner() {
             if (u.account_status !== 'adimplente' || parseInt(u.days_overdue) !== 0) {
                 await dbService.executeQuery(`
                     UPDATE ${dbService.fq('users')}
-                    SET account_status = 'adimplente', days_overdue = 0, updated_at = CURRENT_TIMESTAMP
+                    SET account_status = 'adimplente', days_overdue = 0, overdue_status = 'EM_DIA', updated_at = CURRENT_TIMESTAMP
                     WHERE cpf = '${u.cpf}'
                 `);
                 markedAdimplente++;
@@ -5848,7 +6030,7 @@ async function runBillingValidationInner() {
         if (newStatus !== u.account_status || displayDays !== parseInt(u.days_overdue)) {
             await dbService.executeQuery(`
                 UPDATE ${dbService.fq('users')}
-                SET account_status = '${newStatus}', days_overdue = ${displayDays}, updated_at = CURRENT_TIMESTAMP
+                SET account_status = '${newStatus}', days_overdue = ${displayDays}, overdue_status = '${overdueStatusFor(newStatus, displayDays)}', updated_at = CURRENT_TIMESTAMP
                 WHERE cpf = '${u.cpf}'
             `);
             if (newStatus === 'inadimplente') markedInadimplente++;
@@ -5860,33 +6042,51 @@ async function runBillingValidationInner() {
       }
     }
 
-    // â”€â”€ Sincronizar dias_atraso nas invoices (sempre, nÃ£o apenas quando users muda) â”€â”€
-    // 1) dias reais (hoje - vencimento) em todas as fechadas nÃ£o pagas;
-    // 2) ZERO nas que receberam pagamento MÃNIMO (>= 10%): a regra de negÃ³cio zera o
-    //    contador de atraso nesses casos e ele fica 0 atÃ© a quitaÃ§Ã£o total.
+    // ── Sincronizar dias_atraso nas invoices (sempre, não apenas quando users muda) ──
+    // Usa a CASCATA (mesma regra do enrich/auditor/sync): o pago por fatura é derivado
+    // do TOTAL de INVOICE_PAYMENT do CPF via planDistribution (1 tx única cobre as
+    // faturas da mais antiga para a mais nova) — NÃO do valor_pago do DB (sempre 0 na
+    // pós-005, fechada imutável) nem do vínculo por invoice_id isolado (a tx única fica
+    // só na fatura mais recente). Sem cascata, fatura quitada por tx única voltava a
+    // exibir dias reais a cada execução (regressão 381/805).
+    // 1) ZERO nas fechadas sem dívida (residual <= 0.005) ou com pagamento mínimo (>= 10%);
+    // 2) demais: real-time (hoje - vencimento).
     try {
+        const _zeroIds = new Set();
+        for (const row of closedInvoiceRows) {
+            const valorTotal = parseFloat(row.valor_total || 0);
+            const pago = _cascadeMotor.has(row.id)
+                ? _cascadeMotor.get(row.id)
+                : (parseInt(row.tem_vinculo, 10) === 1
+                    ? parseFloat(row.pago_vinculado || 0)
+                    : parseFloat(row.valor_pago || 0));
+            const residual = Math.max(0, valorTotal - pago);
+            const pagMin = pago >= Math.max(valorTotal * 0.10, 10) - 0.01;
+            if (residual <= 0.005 || pagMin) _zeroIds.add(row.id);
+        }
+        if (_zeroIds.size) {
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('invoices')}
+                SET dias_atraso = 0, updated_at = CURRENT_TIMESTAMP
+                WHERE status = 'FECHADA' AND data_pagamento IS NULL
+                  ${onlyCpf ? `AND cpf = '${onlyCpf}'` : ''}
+                  AND id IN (${[..._zeroIds].map(id => `'${id}'`).join(',')})
+                  AND dias_atraso != 0
+            `);
+        }
+        const _idsSqlZero = _zeroIds.size
+            ? ` AND id NOT IN (${[..._zeroIds].map(id => `'${id}'`).join(',')})`
+            : '';
+        // Demais (dívida real): real-time individual do vencimento.
         await dbService.executeQuery(`
             UPDATE ${dbService.fq('invoices')}
             SET dias_atraso = GREATEST(0, (CURRENT_DATE - due_date::date)),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE status = 'FECHADA'
-              AND data_pagamento IS NULL
+            WHERE status = 'FECHADA' AND data_pagamento IS NULL
               AND due_date < CURRENT_TIMESTAMP
-              AND COALESCE(dias_atraso, -1) != GREATEST(0, (CURRENT_DATE - due_date::date))
-        `);
-        await dbService.executeQuery(`
-            UPDATE ${dbService.fq('invoices')} inv
-            SET dias_atraso = 0, updated_at = CURRENT_TIMESTAMP
-            FROM (
-                SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS pago
-                FROM ${dbService.fq('transactions')}
-                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
-                GROUP BY invoice_id
-            ) pg
-            WHERE inv.id = pg.invoice_id
-              AND inv.status = 'FECHADA' AND inv.data_pagamento IS NULL
-              AND pg.pago >= GREATEST(inv.valor_total * 0.10, 10) - 0.01
-              AND inv.dias_atraso != 0
+              ${onlyCpf ? `AND cpf = '${onlyCpf}'` : ''}
+              ${_idsSqlZero}
+              AND dias_atraso IS DISTINCT FROM GREATEST(0, (CURRENT_DATE - due_date::date))
         `);
     } catch (invoiceSyncErr) {
         console.warn('âš ï¸ Erro ao sincronizar dias_atraso nas invoices:', invoiceSyncErr.message);
@@ -5917,30 +6117,80 @@ async function runBillingValidationInner() {
 // - Pode ser chamada a qualquer momento sem efeitos colaterais
 const syncInvoiceDiasAtraso = async () => {
     try {
+        // CASCATA (mesma regra do motor/enrich/auditor): o pago por fatura é derivado
+        // do TOTAL de INVOICE_PAYMENT do CPF via planDistribution — não do valor_pago
+        // do DB (0 na pós-005) nem do vínculo por invoice_id isolado. Busca as fechadas
+        // não pagas com o total por CPF, distribui da mais antiga para a mais nova e
+        // zera dias das quitadas/mínimo; as demais seguem real-time.
+        const invRowsSync = await dbService.executeQuery(`
+            SELECT i.id, i.cpf, i.due_date, i.valor_total,
+                   COALESCE(i.valor_pago, 0) AS valor_pago,
+                   COALESCE(pagos.total, 0) AS pago_vinculado,
+                   CASE WHEN pagos.total IS NULL THEN 0 ELSE 1 END AS tem_vinculo,
+                   COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
+            FROM ${dbService.fq('invoices')} i
+            LEFT JOIN (
+                SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+                FROM ${dbService.fq('transactions')}
+                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+                GROUP BY invoice_id
+            ) pagos ON pagos.invoice_id = i.id
+            LEFT JOIN (
+                SELECT cpf, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+                FROM ${dbService.fq('transactions')}
+                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+                GROUP BY cpf
+            ) pagos_cpf ON pagos_cpf.cpf = i.cpf
+            WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
+            ORDER BY i.due_date ASC
+        `);
+        const _cascadeSync = (() => {
+            const map = new Map();
+            const byCpf = new Map();
+            for (const r of invRowsSync) {
+                if (!byCpf.has(r.cpf)) byCpf.set(r.cpf, []);
+                byCpf.get(r.cpf).push(r);
+            }
+            for (const [cpf, rs] of byCpf) {
+                const total = parseFloat(rs[0]?.pago_total_cpf || 0);
+                if (total <= 0.005) continue;
+                const dist = planDistribution(rs, total);
+                for (const inv of dist.invoices) map.set(inv.id, inv.newValorPago);
+            }
+            return map;
+        })();
+        const _zeroIdsSync = new Set();
+        for (const row of invRowsSync) {
+            const valorTotal = parseFloat(row.valor_total || 0);
+            const pago = _cascadeSync.has(row.id)
+                ? _cascadeSync.get(row.id)
+                : (parseInt(row.tem_vinculo, 10) === 1
+                    ? parseFloat(row.pago_vinculado || 0)
+                    : parseFloat(row.valor_pago || 0));
+            const residual = Math.max(0, valorTotal - pago);
+            const pagMin = pago >= Math.max(valorTotal * 0.10, 10) - 0.01;
+            if (residual <= 0.005 || pagMin) _zeroIdsSync.add(row.id);
+        }
+        if (_zeroIdsSync.size) {
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('invoices')}
+                SET dias_atraso = 0, updated_at = CURRENT_TIMESTAMP
+                WHERE status = 'FECHADA' AND data_pagamento IS NULL
+                  AND id IN (${[..._zeroIdsSync].map(id => `'${id}'`).join(',')})
+                  AND dias_atraso != 0
+            `);
+        }
+        const _idsSqlSync = _zeroIdsSync.size
+            ? ` AND id NOT IN (${[..._zeroIdsSync].map(id => `'${id}'`).join(',')})`
+            : '';
         const result = await dbService.executeQuery(`
             UPDATE ${dbService.fq('invoices')}
             SET dias_atraso = GREATEST(0, (CURRENT_DATE - due_date::date)),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE status = 'FECHADA'
-              AND data_pagamento IS NULL
+            WHERE status = 'FECHADA' AND data_pagamento IS NULL
               AND due_date < CURRENT_TIMESTAMP
-              AND COALESCE(dias_atraso, -1) != GREATEST(0, (CURRENT_DATE - due_date::date))
-        `);
-        // Pagamento MÍNIMO (>= 10%): zera dias_atraso na invoice (regra de negócio) —
-        // a conta fica "em dia" (dias 0) mas os encargos continuam acumulando.
-        await dbService.executeQuery(`
-            UPDATE ${dbService.fq('invoices')} inv
-            SET dias_atraso = 0, updated_at = CURRENT_TIMESTAMP
-            FROM (
-                SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS pago
-                FROM ${dbService.fq('transactions')}
-                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
-                GROUP BY invoice_id
-            ) pg
-            WHERE inv.id = pg.invoice_id
-              AND inv.status = 'FECHADA' AND inv.data_pagamento IS NULL
-              AND pg.pago >= GREATEST(inv.valor_total * 0.10, 10) - 0.01
-              AND inv.dias_atraso != 0
+              ${_idsSqlSync}
+              AND dias_atraso IS DISTINCT FROM GREATEST(0, (CURRENT_DATE - due_date::date))
         `);
         const updatedCount = result?.rowCount || result?.length || 0;
         

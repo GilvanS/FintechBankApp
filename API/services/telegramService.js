@@ -391,7 +391,11 @@ async function send(category, payload) {
                     msgRes = await tg('sendMessage', {
                         chat_id: CHAT_ID,
                         message_thread_id: topicId,
-                        text: payload.text || ''
+                        text: payload.text || '',
+                        // Mensagens com tags <b>/<code> (comprovantes, compras ricas) são
+                        // HTML; textos simples (PIX) seguem plain — '<' em descrições
+                        // livres não quebra o envio.
+                        ...(payload.text && payload.text.includes('<') ? { parse_mode: 'HTML' } : {})
                     });
                 } catch (sendErr) {
                     // Tópico órfão: purga e reenvia 1x.
@@ -432,7 +436,8 @@ async function send(category, payload) {
                 const msgRes = await tg('sendMessage', {
                     chat_id: CHAT_ID,
                     message_thread_id: topicId,
-                    text: payload && payload.text ? payload.text : ''
+                    text: payload && payload.text ? payload.text : '',
+                    ...(payload && payload.text && payload.text.includes('<') ? { parse_mode: 'HTML' } : {})
                 });
                 results.push({ dest: 'pagamentos', ok: true, message_id: msgRes.message_id, topic_id: topicId });
             } catch (err) {
@@ -449,7 +454,8 @@ async function send(category, payload) {
             try {
                 const msgRes = await tg('sendMessage', {
                     chat_id: CHAT_ID,
-                    text: payload && payload.text ? payload.text : ''
+                    text: payload && payload.text ? payload.text : '',
+                    ...(payload && payload.text && payload.text.includes('<') ? { parse_mode: 'HTML' } : {})
                 });
                 const generalMsgId = msgRes.message_id;
                 results.push({ dest: 'general', ok: true, message_id: generalMsgId });

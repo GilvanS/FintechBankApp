@@ -3,7 +3,9 @@ const DatabaseFactory = require('../../services/database/DatabaseFactory');
 
 describe('Teste de Integração — Transações SUBSCRIPTION (Assinatura) na Fatura Aberta e Extrato', () => {
     let db;
-    const testCpf = '99999999993';
+    // CPF exclusivo desta suíte: 99999999993 é usado pelo engineIdempotency, e as
+    // suítes de integração rodam em workers paralelos compartilhando o mesmo banco.
+    const testCpf = '99999999994';
 
     beforeAll(async () => {
         db = DatabaseFactory.createDatabaseService();
