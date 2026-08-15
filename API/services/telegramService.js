@@ -259,6 +259,7 @@ async function sendDocument(cpf, buffer, filename, category) {
         } catch (e) {
             console.warn('[telegram] sendDocument getOrCreateTopic:', e.message);
             res.error = e.message;
+            await logSend({ cpf, topicId: null, category, destination: 'cpf', messageType: 'document', messageId: null, ok: false, error: e.message });
             return;
         }
 
@@ -291,18 +292,30 @@ async function sendDocument(cpf, buffer, filename, category) {
                         const j2 = await r2.json();
                         if (!j2.ok) throw new Error(`sendDocument retry: ${j2.description}`);
                         res.sent = true;
+                        res.message_id = j2.result && j2.result.message_id;
                     } catch (retryErr) {
                         console.warn('[telegram] sendDocument retry:', retryErr.message);
                         res.error = retryErr.message;
+                    }
+                    if (res.sent) {
+                        await logSend({ cpf, topicId, category, destination: 'cpf', messageType: 'document', messageId: res.message_id || null, ok: true });
+                    } else {
+                        await logSend({ cpf, topicId, category, destination: 'cpf', messageType: 'document', messageId: null, ok: false, error: res.error || 'sendDocument retry falhou' });
                     }
                     return;
                 }
                 throw new Error(`sendDocument: ${json.description}`);
             }
             res.sent = true;
+            res.message_id = json.result && json.result.message_id;
         } catch (err) {
             console.warn('[telegram] sendDocument:', err.message);
             res.error = err.message;
+        }
+        if (res.sent) {
+            await logSend({ cpf, topicId, category, destination: 'cpf', messageType: 'document', messageId: res.message_id || null, ok: true });
+        } else {
+            await logSend({ cpf, topicId, category, destination: 'cpf', messageType: 'document', messageId: null, ok: false, error: res.error || 'unknown' });
         }
     });
     return res;
@@ -317,6 +330,40 @@ function getSettingsRepo() {
         settingsRepoModule = require('../repositories/telegramSettingsRepo');
     }
     return settingsRepoModule;
+}
+
+// ===== Log persistente (telegram_message_log) =====
+// O Telegram não expõe API para ler o histórico de tópicos; cada envio grava
+// uma linha aqui para a operação auditar por massa mesmo após restart da API.
+
+let messageLogRepoModule = null;
+function getMessageLogRepo() {
+    if (!messageLogRepoModule) {
+        messageLogRepoModule = require('../repositories/telegramMessageLogRepo');
+    }
+    return messageLogRepoModule;
+}
+
+let logTableEnsured = null;
+// Garante a tabela UMA vez por processo (CREATE TABLE IF NOT EXISTS é barato,
+// mas o INDEX por envio não). Falha de DDL não pode bloquear o envio.
+function ensureLogTable() {
+    if (!logTableEnsured) {
+        logTableEnsured = getMessageLogRepo().ensureTable().catch(err => {
+            console.warn('[telegram:log] ensureTable:', err.message);
+        });
+    }
+    return logTableEnsured;
+}
+
+// Grava o resultado de um destino. NUNCA lança: falha de log não bloqueia o envio.
+async function logSend({ cpf, topicId, category, destination, messageType, messageId, ok, error }) {
+    try {
+        await ensureLogTable();
+        await getMessageLogRepo().add({ cpf, topicId, category, destination, messageType, messageId, ok, error });
+    } catch (err) {
+        console.warn('[telegram:log] add:', err.message);
+    }
 }
 
 async function getCachedSetting(category) {
@@ -414,10 +461,12 @@ async function send(category, payload) {
                     }
                 }
                 results.push({ dest: 'cpf', ok: true, message_id: msgRes.message_id, topic_id: topicId });
+                await logSend({ cpf: payload.cpf, topicId, category, destination: 'cpf', messageType: 'text', messageId: msgRes.message_id, ok: true });
             } catch (err) {
                 console.warn(`[telegram] send cpf ${category}:`, err.message);
                 results.push({ dest: 'cpf', ok: false, error: err.message });
                 res.sent = false;
+                await logSend({ cpf: payload.cpf, topicId: null, category, destination: 'cpf', messageType: 'text', messageId: null, ok: false, error: err.message });
             }
         });
     }
@@ -440,10 +489,12 @@ async function send(category, payload) {
                     ...(payload && payload.text && payload.text.includes('<') ? { parse_mode: 'HTML' } : {})
                 });
                 results.push({ dest: 'pagamentos', ok: true, message_id: msgRes.message_id, topic_id: topicId });
+                await logSend({ cpf: null, topicId, category, destination: 'pagamentos', messageType: 'text', messageId: msgRes.message_id, ok: true });
             } catch (err) {
                 console.warn(`[telegram] send pagamentos ${category}:`, err.message);
                 results.push({ dest: 'pagamentos', ok: false, error: err.message });
                 res.sent = false;
+                await logSend({ cpf: null, topicId: null, category, destination: 'pagamentos', messageType: 'text', messageId: null, ok: false, error: err.message });
             }
         });
     }
@@ -459,6 +510,7 @@ async function send(category, payload) {
                 });
                 const generalMsgId = msgRes.message_id;
                 results.push({ dest: 'general', ok: true, message_id: generalMsgId });
+                await logSend({ cpf: null, topicId: null, category, destination: 'general', messageType: 'text', messageId: generalMsgId, ok: true });
 
                 if (ttlMinutes && ttlMinutes > 0) {
                     const timer = setTimeout(() => {
@@ -471,6 +523,7 @@ async function send(category, payload) {
                 console.warn(`[telegram] send general ${category}:`, err.message);
                 results.push({ dest: 'general', ok: false, error: err.message });
                 res.sent = false;
+                await logSend({ cpf: null, topicId: null, category, destination: 'general', messageType: 'text', messageId: null, ok: false, error: err.message });
             }
         });
     }

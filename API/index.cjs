@@ -32,6 +32,7 @@ const { nowDb } = require('./utils/timezone');
 const { toDateOnly, toDateBR } = require('./utils/dateUtils');
 const telegramService = require('./services/telegramService');
 const telegramSettingsRepo = require('./repositories/telegramSettingsRepo');
+const telegramMessageLogRepo = require('./repositories/telegramMessageLogRepo');
 
 // --- RepositÃ³rios / Contexto ---
 const repoContext = require('./repositories/context');
@@ -3350,6 +3351,14 @@ apiRouter.patch('/admin/telegram/settings/:category', bearerAuth(), authenticate
 apiRouter.get('/admin/telegram/persistent-topics', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     const topics = await telegramSettingsRepo.listPersistentTopics();
     res.json({ success: true, topics });
+}));
+
+// Log persistente de envios (telegram_message_log) — histórico durável de mensagens
+// por massa, sobrevive a restart (o Telegram não expõe API de histórico de tópicos).
+apiRouter.get('/admin/telegram/log', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
+    const { cpf, category, destination, limit } = req.query;
+    const rows = await telegramMessageLogRepo.listRecent({ cpf, category, destination, limit });
+    res.json({ success: true, count: rows.length, entries: rows });
 }));
 
 apiRouter.post('/admin/telegram/settings/:category/test', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {

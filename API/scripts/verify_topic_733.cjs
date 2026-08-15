@@ -82,5 +82,25 @@ const PDFS = [
     } catch (e) {
         console.log('(banco indisponível para confirmar dono:', e.message, ')');
     }
+
+    // Histórico persistente de envios do CPF (telegram_message_log) — em vez de
+    // grep no log efêmero da API, que é sobrescrito a cada restart (plano C3).
+    try {
+        const { rows } = await p.query(
+            `SELECT category, destination, message_type, message_id, ok, error, created_at
+             FROM fintech.telegram_message_log
+             WHERE cpf = $1
+             ORDER BY created_at DESC, id DESC
+             LIMIT 10`, [CPF]);
+        console.log(`=== últimos envios persistidos da massa ${CPF} ===`);
+        if (!rows.length) console.log('  (nenhum envio registrado na tabela telegram_message_log)');
+        for (const r of rows) {
+            const status = r.ok ? `✅ msg#${r.message_id}` : `❌ ${r.error || 'erro'}`;
+            console.log(`  ${r.created_at?.toISOString?.() || r.created_at} | ${r.category} → ${r.destination} (${r.message_type}) ${status}`);
+        }
+    } catch (e) {
+        // Tabela pode não existir em ambientes antigos — não é fatal para a verificação.
+        console.log('(log persistente indisponível:', e.message, ')');
+    }
     await p.end();
 })().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
