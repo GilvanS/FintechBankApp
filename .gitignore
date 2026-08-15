@@ -69,5 +69,8 @@ API/.env.test
 # Skills locais de agentes
 WEB/.agents/
 
+# IDE local
+.idea/
+
 # Scripts one-off de manutenção de massas (runbook na skill manutencao-massas)
 scripts/manutencao/
