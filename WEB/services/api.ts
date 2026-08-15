@@ -1520,6 +1520,19 @@ export interface TelegramTopic {
     fullName?: string;
 }
 
+export interface TelegramLogEntry {
+    id: number;
+    cpf: string;
+    topic_id?: number | null;
+    category: string;
+    destination: string;
+    message_type: string;
+    message_id?: string | null;
+    ok: boolean;
+    error?: string | null;
+    created_at: string;
+}
+
 export interface TelegramSetting {
     category: string;
     enabled: boolean;
@@ -1635,5 +1648,21 @@ export const adminTelegramSendTable = async (
         });
     } catch (err: any) {
         return { success: false, message: err.message || 'Erro ao enviar tabela ASCII' };
+    }
+};
+
+export const adminTelegramLog = async (filters?: { cpf?: string; category?: string; destination?: string; limit?: number }): Promise<TelegramLogEntry[]> => {
+    try {
+        const params = new URLSearchParams();
+        if (filters?.cpf) params.set('cpf', filters.cpf.replace(/\D/g, ''));
+        if (filters?.category) params.set('category', filters.category);
+        if (filters?.destination) params.set('destination', filters.destination);
+        if (filters?.limit) params.set('limit', String(filters.limit));
+        const qs = params.toString();
+        const res = await apiCall<{ success: boolean; entries: TelegramLogEntry[] }>('/admin/telegram/log' + (qs ? '?' + qs : ''));
+        return res.entries || [];
+    } catch (err: any) {
+        console.warn('[api] adminTelegramLog:', err?.message || err);
+        return [];
     }
 };

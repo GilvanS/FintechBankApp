@@ -1,8 +1,8 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { adminTelegramStatus, adminTelegramTopics, adminTelegramCreateTopic, adminTelegramDeleteTopic, adminTelegramTest, adminTelegramSendMessage, adminTelegramSettings, adminTelegramUpdateSetting, adminTelegramTestCategory, adminTelegramSendPdf, adminTelegramSendTable, TelegramTopic, TelegramSetting } from '../../services/api';
+import { adminTelegramStatus, adminTelegramTopics, adminTelegramCreateTopic, adminTelegramDeleteTopic, adminTelegramTest, adminTelegramSendMessage, adminTelegramSettings, adminTelegramUpdateSetting, adminTelegramTestCategory, adminTelegramSendPdf, adminTelegramSendTable, adminTelegramLog, TelegramTopic, TelegramSetting, TelegramLogEntry } from '../../services/api';
 import { formatCPF } from '../../utils/formatters';
 import { useAppState } from '../../contexts/AppStateContext';
-import { Send, RefreshCw, Trash2, MessageSquare, Mail, AlertTriangle, Calendar, Clock, Save, FileText, Table } from 'lucide-react';
+import { Send, RefreshCw, Trash2, MessageSquare, Mail, AlertTriangle, Calendar, Clock, Save, FileText, Table, History, Search } from 'lucide-react';
 import { showToast } from '../../utils/toast';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -41,6 +41,12 @@ const TelegramManagement: React.FC = () => {
     const [busyCpf, setBusyCpf] = useState<string | null>(null);
     const [busyCategory, setBusyCategory] = useState<string | null>(null);
     const [drafts, setDrafts] = useState<Record<string, { valid_from: string; valid_until: string; ttl_minutes: string }>>({});
+    const [logEntries, setLogEntries] = useState<TelegramLogEntry[]>([]);
+    const [logLoading, setLogLoading] = useState(false);
+    const [logCpf, setLogCpf] = useState('');
+    const [logCategory, setLogCategory] = useState('');
+    const [logLimit, setLogLimit] = useState(30);
+    const [logLoaded, setLogLoaded] = useState(false);
 
     const btnClass = 'h-5 px-2.5 rounded-full font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1 text-[10px] cursor-pointer shrink-0';
     const primaryBtnClass = isMidnight ? 'bg-volt-green text-black hover:bg-[#a3ff12]' : 'bg-volt-yellow border border-black text-black font-black uppercase hover:bg-volt-yellow-pastel shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none';
@@ -75,6 +81,30 @@ const TelegramManagement: React.FC = () => {
     };
 
     useEffect(() => { load(); }, []);
+
+    const loadLog = async () => {
+        setLogLoading(true);
+        try {
+            const entries = await adminTelegramLog({
+                cpf: logCpf || undefined,
+                category: logCategory || undefined,
+                limit: logLimit,
+            });
+            setLogEntries(entries);
+            setLogLoaded(true);
+        } catch (err: any) {
+            showToast('Erro ao carregar histórico: ' + (err.message || err), 'error');
+        } finally {
+            setLogLoading(false);
+        }
+    };
+
+    const formatLogDate = (value: string) => {
+        const d = new Date(value);
+        if (isNaN(d.getTime())) return value || '—';
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
 
     const handleToggle = async (setting: TelegramSetting) => {
         const next = !setting.enabled;
@@ -357,6 +387,102 @@ const TelegramManagement: React.FC = () => {
                                         </tr>
                                     );
                                 })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {/* Histórico Persistente de Envios (telegram_message_log) */}
+            <div className={`p-4 rounded-2xl ${cardClass}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <History className="text-volt-green" size={16} />
+                            <h3 className="font-black uppercase text-xs">Histórico de Envios (Log Persistente)</h3>
+                        </div>
+                        <p className="text-[10px] opacity-60 mt-0.5">Registro durável de mensagens enviadas por massa — sobrevive a restart (rota GET /admin/telegram/log).</p>
+                    </div>
+                    <button onClick={loadLog} disabled={logLoading} className={`${outlineBtnClass} py-1.5 px-3 h-auto text-xs`}>
+                        <RefreshCw size={12} className={logLoading ? 'animate-spin' : ''} /> {logLoading ? 'Carregando...' : 'Carregar Histórico'}
+                    </button>
+                </div>
+
+                <div className="flex flex-wrap items-end gap-3 mb-3">
+                    <div>
+                        <label className="block text-[10px] font-bold uppercase opacity-60 mb-1">CPF da Massa</label>
+                        <input
+                            value={logCpf}
+                            onChange={e => setLogCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                            placeholder="Somente números"
+                            className={`${inputClass} w-40 text-left`}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold uppercase opacity-60 mb-1">Categoria</label>
+                        <select
+                            value={logCategory}
+                            onChange={e => setLogCategory(e.target.value)}
+                            className={`${inputClass} w-40 text-left`}
+                        >
+                            <option value="">Todas</option>
+                            {Object.entries(CATEGORY_LABELS).map(([cat, label]) => (
+                                <option key={cat} value={cat}>{label} ({cat})</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold uppercase opacity-60 mb-1">Limite</label>
+                        <select value={logLimit} onChange={e => setLogLimit(Number(e.target.value))} className={`${inputClass} w-20`}>
+                            <option value={20}>20</option>
+                            <option value={30}>30</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                        </select>
+                    </div>
+                    <button onClick={loadLog} className={`${primaryBtnClass} py-1.5 px-3 h-auto text-xs flex items-center gap-1`}>
+                        <Search size={12} /> Filtrar
+                    </button>
+                </div>
+
+                {logLoading ? (
+                    <p className="text-xs opacity-60">Carregando histórico...</p>
+                ) : !logLoaded ? (
+                    <p className="text-xs opacity-60">Clique em "Carregar Histórico" para consultar o log persistente de envios.</p>
+                ) : logEntries.length === 0 ? (
+                    <p className="text-xs opacity-60">Nenhum envio registrado com os filtros informados.</p>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className={isMidnight ? 'text-white/60' : 'text-black/60'}>
+                                    <th className="text-left py-1.5 font-bold">Data/Hora</th>
+                                    <th className="text-left py-1.5 font-bold">CPF</th>
+                                    <th className="text-left py-1.5 font-bold">Categoria</th>
+                                    <th className="text-left py-1.5 font-bold">Destino</th>
+                                    <th className="text-left py-1.5 font-bold">Tipo</th>
+                                    <th className="text-left py-1.5 font-bold">Msg ID</th>
+                                    <th className="text-center py-1.5 font-bold">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {logEntries.map(e => (
+                                    <tr key={e.id} className={isMidnight ? 'border-t border-white/10' : 'border-t border-black/10'}>
+                                        <td className="py-2 font-mono whitespace-nowrap">{formatLogDate(e.created_at)}</td>
+                                        <td className="py-2 font-mono">{formatCPF(e.cpf)}</td>
+                                        <td className="py-2">{CATEGORY_LABELS[e.category] || e.category}</td>
+                                        <td className="py-2">{e.destination}</td>
+                                        <td className="py-2 font-mono">{e.message_type}</td>
+                                        <td className="py-2 font-mono">{e.message_id ? '#' + e.message_id : '—'}</td>
+                                        <td className="py-2 text-center">
+                                            {e.ok ? (
+                                                <span className="px-1.5 py-0.2 text-[9px] font-black rounded uppercase bg-green-500/20 text-green-400">✓ OK</span>
+                                            ) : (
+                                                <span title={e.error || ''} className="px-1.5 py-0.2 text-[9px] font-black rounded uppercase bg-red-500/20 text-red-400">✗ Erro</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </div>
