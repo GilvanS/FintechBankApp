@@ -105,6 +105,12 @@ massa, é de canal.
   (art. 52 CDC). Pagamentos (`PAYMENT`) só na fatura ABERTA, valor negativo em
   verde na seção "PAGAMENTOS" — a fechada nunca exibe pagamentos. Ver §23 do
   `docs/REGRAS-NEGOCIO-FATURA.md`.
+- **Boleto/PIX (Página 4)** — padrão Febraban 598: fator 5 dígitos, DV do
+  código de barras na posição 20, campo livre 24; nosso número = cpf[-10:];
+  DVs calculados (módulo 11), nunca hardcoded. Python é a fonte primária,
+  `buildBoletoData` (JS) o fallback idêntico. Datas SEM fuso (`fatorVencimento`
+  extrai YYYY-MM-DD da string ISO) — nunca `new Date(iso)` + getDate(). Ver
+  §24 do `docs/REGRAS-NEGOCIO-FATURA.md`.
 
 ## 3. Correção
 
@@ -169,3 +175,5 @@ confirme `ok:true` + `message_id` no `telegram_message_log` (ver §1b).
 | `scripts/manutencao/` | Scripts one-off de correção pontual (gitignorado) |
 | `docs/REGRAS-NEGOCIO-FATURA.md` §23 | Regra da Página 2 do PDF (fonte das movimentações, PARCELA, juros art. 52, pagamentos) |
 | `API/services/invoicePdfService.js` → `drawMovimentacoes` | Renderiza a Página 2 (compras + PAGAMENTOS verde) |
+| `API/utils/boletoMath.js` → `buildBoletoData` | Fonte única JS do boleto 598 (linha digitável + barcode, padrão Febraban novo) |
+| `scripts/invoice_payment_generator.py` | Gerador Python (primário) de boleto/PIX — JS fallback idêntico (§24) |

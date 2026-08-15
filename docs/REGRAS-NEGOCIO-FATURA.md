@@ -2042,3 +2042,71 @@ Um `PAYMENT` `CREDIT_CARD` (descrição contendo `Faturado no Cartão`) **não**
   a linha de juros).
 - Preview: `API/scripts/render_massa_pdf_preview.cjs` espelha a mesma regra.
 
+---
+
+## 24. Padrão Febraban (Boleto 598 + PIX) — Fonte Única Python↔JS
+
+> **Fonte do código:** [`API/utils/boletoMath.js`](../API/utils/boletoMath.js) — `buildBoletoData`/`fatorVencimento`/`modulo10`/`modulo11`; [`scripts/invoice_payment_generator.py`](../scripts/invoice_payment_generator.py) — gerador Python (primário); [`API/src/controllers/invoiceController.js`](../API/src/controllers/invoiceController.js) — `generatePaymentCodesFallback` (fallback JS)<br>
+> **Regras relacionadas:** §23 (Página 2 do PDF), §3.1 (datas sem fuso), R8.1 (validador)
+---
+
+### 24.1 Layout novo (2025+) — banco 598
+
+- **Código de barras (44 dígitos):** banco(3) + moeda(1) + fator de vencimento(5)
+  + valor(10) + **DV(1, posição 20)** + campo livre(24).
+- **Linha digitável (47 dígitos):**
+  - campo 1 = banco+moeda+fator (9) + DV módulo 10 → 10;
+  - campo 2 = campo livre[0..10] (10) + DV módulo 10 → 11;
+  - campo 3 = campo livre[10..20] (10) + DV módulo 10 → 11;
+  - campo 4 = DV do código de barras (posição 20) → 1;
+  - campo 5 = valor (10) + campo livre[20..24] (4) → 14.
+- **Campo livre Fintech (24):** agência(4) + DV agência(1) + carteira(2) +
+  nosso número(11: 10+DV) + conta(6 — truncada para 6 dígitos, ex.
+  `00000001` → `000000`). O DV da conta NÃO entra no campo livre (só no
+  rótulo exibido).
+- **Nosso número derivado do CPF** (últimos 10 dígitos) — `cpf[-10:]` — MESMA
+  regra na rota `send-pdf` (index.cjs), no `generatePaymentCodesFallback` e no
+  Python. DVs (agência e nosso número) são CALCULADOS (módulo 11), nunca
+  hardcoded — hardcodar divergia o preview do que a API real gera.
+
+### 24.2 Fonte única — Python é primário, JS é fallback (e idêntico)
+
+- As rotas `POST /invoices/:cpf/:invoiceId/pix`, `POST /invoices/:cpf/:invoiceId/boleto`
+  e `POST /invoices/generate-payment-codes` chamam o gerador **Python**
+  (`invoice_payment_generator.py`); se o Python não estiver disponível, usam
+  `generatePaymentCodesFallback` (JS puro) marcando `fallback: true`.
+- `buildBoletoData` (JS) é a fonte canônica do PDF (Página 4) e do fallback —
+  produz EXATAMENTE o mesmo barcode/linha digitável do Python (garantido pelo
+  teste `pythonBoletoConsistency.unit.test.js`: 8 casos).
+- Regra: linha digitável exibida **sempre** gera o MESMO código de barras do
+  PDF — sem reconstrução divergente.
+
+### 24.3 Datas SEM fuso — nunca `new Date(iso)` + componentes locais
+
+- `fatorVencimento` e `ddmmYYYY` extraem `YYYY-MM-DD` da string ISO (regex) —
+  `2026-08-10T00:00:00.000Z` é UTC; `new Date` + `getDate()` devolve 09/08 no
+  Brasil (21h do dia anterior) e o fator divergiria do Python (data pura 10/08).
+- Regra do driver pg: datas vêm como `Date` → usar `toDateOnly`, nunca
+  `String(x).split('T')[0]`.
+- Validado: `dueDate: '2026-08-10T00:00:00.000Z'` → fator **10534** (≠ 0);
+  caso de borda `03:00Z` (vira 00:00 BRT do mesmo dia) também → **10534**.
+
+### 24.4 PIX EMV (BR Code)
+
+- Payload: campos 00 (Payload Format), 26 (Merchant Account com GUI
+  `BR.GOV.BCB.PIX` + chave), 52/53 (categoria/986), 54 (valor), 58/59/60
+  (BR/beneficiário/cidade), 62 (txid = invoiceId sem hífens, máx. 25), 6304 +
+  **CRC16-CCITT** (4 hex).
+- Validado: `POST /invoices/:cpf/:invoiceId/pix` com fatura real devolve o
+  payload **idêntico byte-a-byte** ao Python (mesmo CRC16), `fallback: false`.
+
+### 24.5 Validação
+
+- `npm run validate:rules` (R8.1 — reprova `split('T')[0]` e datas via fuso).
+- `npm run audit:consistency` não cobre boleto — a garantia é o teste
+  `pythonBoletoConsistency.unit.test.js` (8 casos: linha, barcode, round-trip,
+  decode, dados do pagador).
+- Preview: `API/scripts/render_universal_pdf_preview.cjs` usa os MESMOS campos
+  da API real (nossoNumero do CPF, DVs calculados) — Página 4 bate com o
+  Python campo a campo.
+
