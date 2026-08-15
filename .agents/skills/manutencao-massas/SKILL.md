@@ -97,6 +97,14 @@ massa, é de canal.
 - **Fatura aberta NÃO zera**: continua somando compras + encargos restantes.
 - **Fatura FECHADA é imutável** — nunca escrever `data_pagamento`/`valor_pago`
   nela; a quitação é derivada na leitura.
+- **PDF da fatura (Página 2)** — regra R-PDF1 (`validate_skill_rules.js`): a
+  Página 2 usa `card.transactions` (aberta) / `card.closedTransactions`
+  (fechada, snapshot `itemized_transactions`) — **NUNCA**
+  `card.openTransactions`/`card._closedInvoiceSnapshot` (apagados do payload).
+  Parcelada exibe coluna PARCELA; com juros, linha vermelha "Total financiado"
+  (art. 52 CDC). Pagamentos (`PAYMENT`) só na fatura ABERTA, valor negativo em
+  verde na seção "PAGAMENTOS" — a fechada nunca exibe pagamentos. Ver §23 do
+  `docs/REGRAS-NEGOCIO-FATURA.md`.
 
 ## 3. Correção
 
@@ -159,3 +167,5 @@ confirme `ok:true` + `message_id` no `telegram_message_log` (ver §1b).
 | `API/scripts/verify_topic_733.cjs` | Verifica PDFs no tópico + lista envios persistidos (`--cpf`/`--topic`) |
 | `GET /admin/telegram/log` | Rota admin do histórico (cpf/category/destination/limit) |
 | `scripts/manutencao/` | Scripts one-off de correção pontual (gitignorado) |
+| `docs/REGRAS-NEGOCIO-FATURA.md` §23 | Regra da Página 2 do PDF (fonte das movimentações, PARCELA, juros art. 52, pagamentos) |
+| `API/services/invoicePdfService.js` → `drawMovimentacoes` | Renderiza a Página 2 (compras + PAGAMENTOS verde) |

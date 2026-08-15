@@ -1976,3 +1976,69 @@ Um `PAYMENT` `CREDIT_CARD` (descrição contendo `Faturado no Cartão`) **não**
    - **Dry-run:** Reprova e falha com exit != 0 se algum lançamento planejado possuir mount >= 99% da transação original.
    - **Confirmação (--confirm):** Valida antes do INSERT se charge.amount <= originalAmount - totalAlocado. Caso contrário, executa ROLLBACK.
    - **Exclusão de Re-rateio:** O script explicitamente adiciona AND description IS DISTINCT FROM 'Encargos de atraso (rateio retroativo)' na busca do pool de órfãos.
+---
+
+## 23. PDF Fatura Universal — Página 2 (Fonte de Movimentações)
+
+> **Fonte do código:** [`API/index.cjs`](../API/index.cjs) — map de `movimentacoes` na rota `send-pdf` (Página 2); [`API/services/invoicePdfService.js`](../API/services/invoicePdfService.js) — `drawMovimentacoes`; [`API/scripts/validate_skill_rules.js`](../API/scripts/validate_skill_rules.js) — regra R-PDF1<br>
+> **Regras relacionadas:** §13 (enrichUserCreditCardData), §6.4 (PAYMENT no frontend), art. 52 CDC + Res. BCB 96/2021 e 365/2023
+---
+
+### 23.1 Fonte de dados — o que entra na Página 2 (R-PDF1)
+
+- A Página 2 é montada a partir de **compras reais**: `card.transactions` para a
+  fatura **ABERTA** e `card.closedTransactions` (snapshot imutável
+  `itemized_transactions`) para a **FECHADA** — com fallback para `card.transactions`
+  quando o snapshot está vazio.
+- **NUNCA** usar `card.openTransactions`, `cc.openTransactions`,
+  `card._closedInvoiceSnapshot` ou `cc._closedInvoiceSnapshot` (regra **R-PDF1**
+  do `validate_skill_rules.js`): o snapshot imutável é movido para
+  `card.closedTransactions` e **apagado do payload** do enrich — usar os nomes
+  proibidos faz a lista de compras sair SEMPRE vazia em PDFs com dados reais.
+- A ordem no payload da rota `send-pdf` é: compras → pagamentos (somente aberta) →
+  total. A fechada nunca exibe pagamentos (imutável; pagamento vive em
+  `openTransactions`/`paymentHistory`).
+
+### 23.2 Coluna PARCELA (obrigatória para compras parceladas)
+
+- Toda compra parcelada exibe a coluna **PARCELA** (`02/04`) entre
+  ESTABELECIMENTO e VALOR — zero-padded, centralizada (`x=350`).
+- À vista exibe `—` (em fonte normal). Parcelada exibe o indicador em
+  **bold**.
+- A fechada (snapshot `itemized_transactions`) é enriquecida com os
+  `installment_plans` ativos (casamento por nº de parcelas + valor da parcela)
+  para preencher PARCELA e os campos de juros.
+
+### 23.3 Juros do financiamento (art. 52 CDC · Res. BCB 96/2021 e 365/2023)
+
+- Compras com juros exibem, em **vermelho** logo abaixo da linha, o total
+  financiado com os encargos:
+  `Total financiado R$ X (juros R$ Y · taxa efetiva Z% a.m.)`.
+- Campos obrigatórios por linha: `jurosTotal` (R$), `taxaEfetivaMensal` (×100),
+  `originalAmount` (sem juros) e `totalParcelado` (com juros).
+- A fatura **aberta** recebe esses campos via `attachPlanJurosInfo` no enrich; a
+  **fechada** é enriquecida com o plano correspondente (`_jurosFromPlan`), com a
+  taxa efetiva calculada por `calcEffectiveRates`.
+
+### 23.4 Pagamentos na fatura ABERTA (plano 1.2)
+
+- Na fatura **aberta**, transações `PAYMENT`/`INVOICE_PAYMENT`/
+  `INVOICE_ANTICIPATION` entram nas movimentações com `tipo: pagamento` e
+  **valor NEGATIVO**.
+- `drawMovimentacoes` renderiza em **verde** (`#16a34a`) com sinal `-` (ASCII —
+  a fonte padrão Helvetica/WinAnsi não tem o glifo U+2212) e separa em um
+  **sub-bloco próprio "PAGAMENTOS"** (sub-header com fundo verde claro + subtotal
+  verde "Total de pagamentos").
+- Regra de negócio mantida: **PAYMENT não altera `currentInvoice`** — aparece
+  apenas como transação na Página 2.
+- A **fechada** é imutável e **nunca** exibe pagamentos (snapshot não os contém;
+  o histórico vive em `openTransactions`/`paymentHistory`).
+
+### 23.5 Validação
+
+- `npm run validate:rules` (regra R-PDF1 reprova os nomes proibidos).
+- Teste determinístico: `API/tests/unit/invoicePdfPage2.unit.test.js` — 3 casos
+  (compra+pagamento gera PDF válido; fechada sem pagamentos; pagamento não quebra
+  a linha de juros).
+- Preview: `API/scripts/render_massa_pdf_preview.cjs` espelha a mesma regra.
+
