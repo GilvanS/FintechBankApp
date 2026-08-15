@@ -149,4 +149,16 @@ function normalize(row) {
     };
 }
 
-module.exports = { list, create, update, cancel, remove, normalize, ensureTable };
+async function listAll(opts = {}) {
+    await ensureTable();
+    const db = getDb();
+    const where = [];
+    if (opts.cpf) where.push(`cpf = '${esc(opts.cpf)}'`);
+    if (opts.status) where.push(`status = '${esc(opts.status)}'`);
+    const clause = where.length ? ' WHERE ' + where.join(' AND ') : '';
+    const rows = await db.executeQuery(`SELECT * FROM ${db.fq('recurring_bills')}${clause} ORDER BY created_at DESC`);
+    return (rows || []).map(normalize);
+}
+
+module.exports = { list, listAll, create, update, cancel, remove, normalize, ensureTable };
+

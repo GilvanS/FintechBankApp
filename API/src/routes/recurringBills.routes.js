@@ -6,6 +6,15 @@
  * injeta os serviços/repos/helpers compartilhados.
  */
 module.exports = function registerRecurringBillsRoutes({ apiRouter, asyncHandler, bearerAuth, body, dbService, escapeSQL, handleValidationErrors, nowDb, recurringBillsRepo, toISO, auditLog }) {
+    apiRouter.get('/admin/recurring-bills', bearerAuth(), asyncHandler(async (req, res) => {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Acesso negado. Requer perfil de administrador.' });
+        }
+        const { status, cpf } = req.query;
+        const rows = await recurringBillsRepo.listAll({ status, cpf });
+        res.json({ success: true, bills: rows });
+    }));
+
     apiRouter.get('/recurring-bills/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
         const cpf = req.params.cpf;
         if (req.user.cpf !== cpf && req.user.role !== 'admin') {
