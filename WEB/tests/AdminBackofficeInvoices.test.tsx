@@ -33,10 +33,36 @@ vi.mock('../services/api', () => ({
                 dueDate: '08/30',
                 currentInvoice: 2365.05,
                 closedInvoiceAmount: 3870.86,
-                closedInvoiceDueDate: '2026-07-15',
+                invoiceDueDate: '2026-07-15T00:00:00.000Z',
+                closedInvoiceDueDate: '2026-06-15T00:00:00.000Z',
                 totalLimit: 5000,
                 dueDay: 10,
                 isBlocked: false,
+                // Faturas fechadas reais — o grid renderiza uma coluna por item desta lista
+                // (substituiu os slots fixos Fat 1/2/3) + paymentHistory para a anterior quitada.
+                paymentHistory: [
+                    { id: 'ph1', date: '2026-05-15', amount: 1120.00, description: 'Fatura Mai/26', paymentType: 'TOTAL' },
+                ],
+                closedInvoicesList: [
+                    {
+                        id: 'inv-anterior',
+                        dueDate: '2026-05-15T00:00:00.000Z',
+                        valorTotal: 1120.00,
+                        valorPago: 1120.00,
+                        residual: 0,
+                        isPaid: true,
+                        paidAt: '2026-05-15T00:00:00.000Z',
+                    },
+                    {
+                        id: 'inv-atual',
+                        dueDate: '2026-06-15T00:00:00.000Z',
+                        valorTotal: 3870.86,
+                        valorPago: 0,
+                        residual: 3870.86,
+                        isPaid: false,
+                        paidAt: null,
+                    },
+                ],
             },
             cards: [
                 {
@@ -83,17 +109,15 @@ describe('Admin Backoffice - 3 Visible Invoices & Card Interactions', () => {
         const searchButton = screen.getByRole('button', { name: /buscar/i });
         fireEvent.click(searchButton);
 
-        // Aguarda a renderização dos dados do usuário
-        const openInvoiceBtn = await screen.findByText(/Fatura Aberta \(Jul\)/i, {}, { timeout: 10000 });
+        // Aguarda a renderização dos dados do usuário (rótulos derivados das datas reais)
+        const openInvoiceBtn = await screen.findByText(/Aberta \(Jul\/26\)/i, {}, { timeout: 10000 });
         expect(openInvoiceBtn).toBeDefined();
 
-        const closedInvoiceBtn = screen.getByText(/Fatura Fechada \(Jun\)/i);
-        expect(closedInvoiceBtn).toBeDefined();
+        // "Jun/26" e "Mai/26" aparecem no botão da fatura E no detalhamento — usar getAllByText.
+        expect(screen.getAllByText(/Jun\/26/i).length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText(/Mai\/26/i).length).toBeGreaterThanOrEqual(1);
 
-        const previousInvoiceBtn = screen.getByText(/Fatura Mai\/26/i);
-        expect(previousInvoiceBtn).toBeDefined();
-
-        // Verifica o selo de atraso no botão da fatura fechada
+        // Verifica o selo de atraso no botão da fatura fechada não paga
         expect(screen.getAllByText(/ATRASO/i)[0]).toBeDefined();
     }, 25000);
 

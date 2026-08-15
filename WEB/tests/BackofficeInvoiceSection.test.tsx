@@ -125,6 +125,11 @@ function makeUser(overrides: {
                     residual: Math.round((valorTotal - valorPago) * 100) / 100,
                     isPaid,
                     paidAt: paidAt,
+                    // Encargos congelados no fechamento (real da invoice) — o componente
+                    // exibe na aba "Fechada" via encargosFrozen da closedInvoicesList.
+                    ...(hasCharges
+                        ? { encargosFrozen: { multa: 77.42, jurosMora: 23.20, jurosRemuneratorios: 357.44, iof: 20.42, total: 478.48 } }
+                        : {}),
                 },
             ],
         },
@@ -160,10 +165,11 @@ describe('BackofficeInvoiceSection — Estados da Fatura Fechada', () => {
             expect(hasText(/18d ATRASO/i)).toBe(true);
         });
 
-        it('deve exibir header Encargos do Atraso com 18 dias', () => {
+        it('deve exibir header Encargos Congelados com 18 dias', () => {
             render(<BackofficeInvoiceSection searchedUser={user} selectedBackofficeInvoice="closed" onSelectInvoice={vi.fn()} isMidnight={false} />);
-            expect(hasText(/Encargos do Atraso/i)).toBe(true);
-            expect(hasText(/18 dias acumulados no per\u00edodo/i)).toBe(true);
+            expect(hasText(/Encargos Congelados no Fechamento/i)).toBe(true);
+            // Nota viva: os encargos de 18 dias são herdados para a Fatura Aberta.
+            expect(hasText(/18 dias/i)).toBe(true);
         });
 
         it('deve exibir valor original R$ 3870.86', () => {
@@ -195,7 +201,9 @@ describe('BackofficeInvoiceSection — Estados da Fatura Fechada', () => {
 
         it('deve exibir nota de heranca para a fatura aberta', () => {
             render(<BackofficeInvoiceSection searchedUser={user} selectedBackofficeInvoice="closed" onSelectInvoice={vi.fn()} isMidnight={false} />);
-            expect(hasText(/herdados e somados na FATURA ABERTA/i)).toBe(true);
+            // O texto é quebrado pelo <strong> em elementos separados — verificar as partes.
+            expect(hasText(/são herdados e exibidos na/i)).toBe(true);
+            expect(hasText(/Fatura Aberta/i)).toBe(true);
         });
 
         it('NAO deve exibir secao de pagamento realizado', () => {
@@ -225,9 +233,10 @@ describe('BackofficeInvoiceSection — Estados da Fatura Fechada', () => {
             expect(countText(/R\$ 3870\.86/)).toBeGreaterThanOrEqual(1);
         });
 
-        it('deve exibir header Encargos do Atraso (0 dias - Pago em dia)', () => {
+        it('deve exibir header Encargos Congelados e nota de quitação', () => {
             render(<BackofficeInvoiceSection searchedUser={user} selectedBackofficeInvoice="closed" onSelectInvoice={vi.fn()} isMidnight={false} />);
-            expect(hasText(/Encargos do Atraso.*0 dias - Pago em dia/i)).toBe(true);
+            expect(hasText(/Encargos Congelados no Fechamento/i)).toBe(true);
+            expect(hasText(/Fatura quitada em/i)).toBe(true);
         });
 
         it('deve exibir encargos zerados (multiplos R$ 0.00)', () => {
@@ -236,9 +245,10 @@ describe('BackofficeInvoiceSection — Estados da Fatura Fechada', () => {
             expect(zeroElements.length).toBeGreaterThanOrEqual(4);
         });
 
-        it('deve exibir nota "nao houve heranca de fatura anterior"', () => {
+        it('deve exibir nota de encargos consolidados na fatura aberta (paga em dia)', () => {
             render(<BackofficeInvoiceSection searchedUser={user} selectedBackofficeInvoice="closed" onSelectInvoice={vi.fn()} isMidnight={false} />);
-            expect(hasText(/n\u00e3o houve heran\u00e7a de fatura anterior/i)).toBe(true);
+            expect(hasText(/Fatura quitada em/i)).toBe(true);
+            expect(hasText(/consolidados na Fatura Aberta/i)).toBe(true);
         });
 
         it('deve exibir secao de pagamento realizado com valor R$ 3870.86', () => {
@@ -274,15 +284,18 @@ describe('BackofficeInvoiceSection — Estados da Fatura Fechada', () => {
             expect(hasText(/\d+d ATRASO/i)).toBe(false);
         });
 
-        it('deve exibir header Encargos do Atraso (0 dias - Pago em dia) mesmo com atraso anterior', () => {
+        it('deve exibir header Encargos Congelados e nota de quitação mesmo com atraso anterior', () => {
             render(<BackofficeInvoiceSection searchedUser={user} selectedBackofficeInvoice="closed" onSelectInvoice={vi.fn()} isMidnight={false} />);
-            expect(hasText(/Encargos do Atraso.*0 dias - Pago em dia/i)).toBe(true);
+            expect(hasText(/Encargos Congelados no Fechamento/i)).toBe(true);
+            expect(hasText(/Fatura quitada em/i)).toBe(true);
         });
 
-        it('deve exibir encargos zerados na secao (R$ 0.00) herdados para aberta', () => {
+        it('deve exibir encargos congelados como memoria informativa (mesmo paga)', () => {
             render(<BackofficeInvoiceSection searchedUser={user} selectedBackofficeInvoice="closed" onSelectInvoice={vi.fn()} isMidnight={false} />);
-            const zeroElements = screen.getAllByText(/R\$ 0\.00/);
-            expect(zeroElements.length).toBeGreaterThanOrEqual(4);
+            // Componente novo: fatura paga mantém os encargos congelados reais no
+            // fechamento como memória informativa (não zera mais a seção).
+            expect(hasText(/Encargos Congelados no Fechamento/i)).toBe(true);
+            expect(hasText(/R\$ 478\.48/)).toBe(true);
         });
 
         it('deve exibir nota "Encargos HERDADOS para a fatura aberta"', () => {
@@ -301,9 +314,9 @@ describe('BackofficeInvoiceSection — Estados da Fatura Fechada', () => {
             expect(hasText(/Saldo Devedor Restante/i)).toBe(true);
         });
 
-        it('deve exibir linha "Valor Total dos Encargos" como memoria informativa', () => {
+        it('deve exibir linha "Total de Encargos Congelados" como memoria informativa', () => {
             render(<BackofficeInvoiceSection searchedUser={user} selectedBackofficeInvoice="closed" onSelectInvoice={vi.fn()} isMidnight={false} />);
-            expect(hasText(/Valor Total dos Encargos do Atraso \(Mem\u00f3ria Informativa\)/i)).toBe(true);
+            expect(hasText(/Total de Encargos Congelados no Fechamento/i)).toBe(true);
         });
 
         it('deve exibir badge PAGA no detalhe da fatura fechada', () => {

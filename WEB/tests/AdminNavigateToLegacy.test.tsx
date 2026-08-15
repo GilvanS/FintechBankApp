@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import Admin from '../components/Admin';
 import AdminDashboard from '../components/Admin/AdminDashboard';
 import RequestsManagement from '../components/Admin/RequestsManagement';
@@ -132,12 +132,12 @@ describe('Admin - Navegação Massa Inadimplente → Legado/Gerenciar Cliente', 
         };
     });
 
-    it('1. RequestsManagement deve disparar evento admin-navigate-to-legacy ao clicar no nome da massa', () => {
+    it('1. RequestsManagement deve disparar evento admin-navigate-to-legacy ao clicar no nome da massa', async () => {
         const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
         render(<RequestsManagement />);
 
-        // Verifica se o nome da massa inadimplente está visível e clicável
-        const massNameBtn = screen.getByText('Cliente Teste Massa 111');
+        // O dashboard carrega via Promise.all (async) — aguardar o nome aparecer.
+        const massNameBtn = await screen.findByText('Cliente Teste Massa 111');
         expect(massNameBtn).toBeDefined();
         expect(massNameBtn.tagName).toBe('BUTTON');
 
@@ -192,7 +192,7 @@ describe('Admin - Navegação Massa Inadimplente → Legado/Gerenciar Cliente', 
     });
 
     it('4. Admin (Legacy) com initialSearchCpf: fallback mockApi é chamado quando API real retorna erro', async () => {
-        // Força API real a falhar E mockApi fallback a falhar também
+        // Força API real a falhar (Acesso negado) E mockApi fallback a falhar também
         mockApiResult = { success: false, message: 'Usuário não encontrado no mock.' };
 
         render(<Admin onClose={vi.fn()} initialSearchCpf="99999999999" />);
@@ -201,9 +201,11 @@ describe('Admin - Navegação Massa Inadimplente → Legado/Gerenciar Cliente', 
         const input = screen.getByPlaceholderText(/Buscar por CPF/i) as HTMLInputElement;
         expect(input.value).toBe('999.999.999-99');
 
-        // Aguarda a mensagem de erro do fallback
-        const errorMsg = await screen.findByText(/Usuário não encontrado/i, {}, { timeout: 10000 });
-        expect(errorMsg).toBeDefined();
+        // API real retorna "Acesso negado" → isAccessDenied=true → com o fallback
+        // também falhando, o toast (state local, renderizado no DOM) mostra a
+        // mensagem de sessão expirada.
+        const toastMsg = await screen.findByText(/Sessão expirada|faça login novamente/i, {}, { timeout: 10000 });
+        expect(toastMsg).toBeDefined();
     });
 
     it('5. Fluxo completo: evento → AdminDashboard → AdminLegacy com auto-busca (integração)', async () => {

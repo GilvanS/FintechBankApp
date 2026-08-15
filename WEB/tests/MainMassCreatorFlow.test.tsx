@@ -35,16 +35,16 @@ describe('⚡ MainMassCreatorFlow & 360 Global Mass Engine', () => {
         expect(saData.fullName).toMatch(/^[A-Za-z\s-]+$/);
     });
 
-    it('deve exigir o cadastro do Tutor Legal quando a idade for menor que 18 ou maior que 80 anos', () => {
-        const under18 = generateRandomMassData('Brasil', 'under18');
-        expect(under18.age).toBeLessThan(18);
-        expect(under18.hasTutor).toBe(true);
-        expect(under18.tutor?.fullName).toBeTruthy();
-
-        const over80 = generateRandomMassData('Brasil', 'over80');
-        expect(over80.age).toBeGreaterThan(80);
-        expect(over80.hasTutor).toBe(true);
-        expect(over80.tutor?.fullName).toBeTruthy();
+    it('gera idade sempre no range 18–80 sem tutor (regra de tutor removida do gerador)', () => {
+        // O gerador foi refatorado: idade sempre entre 18 e 80 (comentário no código:
+        // "Idade sempre entre 18 e 80 (regra de tutor removida)") — o forceAgeCondition
+        // é ignorado e hasTutor é sempre false.
+        for (let i = 0; i < 20; i++) {
+            const data = generateRandomMassData('Brasil');
+            expect(data.age).toBeGreaterThanOrEqual(18);
+            expect(data.age).toBeLessThanOrEqual(80);
+            expect(data.hasTutor).toBe(false);
+        }
     });
 
     it('deve renderizar a jornada multi-telas de 4 etapas e navegar com sucesso', () => {

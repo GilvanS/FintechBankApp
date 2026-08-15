@@ -61,9 +61,76 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
           📊 Copiar p/ Excel
         </span>
       </button>
+      <button
+        class="px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20"
+        title="Enviar dados da fatura em formato de tabela monospace diretamente para o tópico Telegram desta massa"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-send w-3.5 h-3.5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"
+          />
+          <path
+            d="m21.854 2.147-10.94 10.939"
+          />
+        </svg>
+        <span>
+          💬 Enviar p/ Telegram
+        </span>
+      </button>
+      <button
+        class="px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20"
+        title="Gerar relatório em PDF e enviar diretamente ao Telegram desta massa"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-file-text w-3.5 h-3.5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"
+          />
+          <path
+            d="M14 2v5a1 1 0 0 0 1 1h5"
+          />
+          <path
+            d="M10 9H8"
+          />
+          <path
+            d="M16 13H8"
+          />
+          <path
+            d="M16 17H8"
+          />
+        </svg>
+        <span>
+          📄 Enviar PDF p/ Telegram
+        </span>
+      </button>
     </div>
     <div
-      class="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs"
+      class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-4"
     >
       <div
         class="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 flex flex-col justify-between"
@@ -90,7 +157,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
           <p
             class="opacity-60 text-[10px] uppercase font-bold"
           >
-            Fat 1 · Mai/26
+            Fat 
+            1
+             · 
+            Mai/26
           </p>
           <span
             class="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full"
@@ -99,7 +169,7 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
           </span>
         </div>
         <p
-          class="font-black text-emerald-600 dark:text-emerald-400 text-sm mt-1"
+          class="font-black text-sm mt-1 text-emerald-600 dark:text-emerald-400"
         >
           R$ 
           1120.00
@@ -115,7 +185,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
           <p
             class="opacity-60 text-[10px] uppercase font-bold"
           >
-            Fat 2 · Fechada (Jun)
+            Fat 
+            2
+             · 
+            Jul/26
           </p>
           <span
             class="text-[9px] bg-rose-600 text-white font-black px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-1 shadow-sm"
@@ -126,10 +199,17 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
           </span>
         </div>
         <p
-          class="font-black text-rose-600 dark:text-rose-400 text-sm mt-1"
+          class="font-black text-sm mt-1 text-rose-600 dark:text-rose-400"
         >
           R$ 
           3870.86
+        </p>
+        <p
+          class="text-[9px] text-amber-600 dark:text-amber-400 font-bold mt-0.5"
+        >
+          🔒 + R$ 
+          478.48
+           encargos congelados no fechamento
         </p>
       </button>
       <button
@@ -142,7 +222,11 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
           <p
             class="opacity-60 text-[10px] uppercase font-bold"
           >
-            Fat 3 · Aberta (Jul)
+            Fat 
+            3
+             · Aberta (
+            Ago/26
+            )
           </p>
           <span
             class="text-[9px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full"
@@ -167,7 +251,9 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
         <span
           class="flex items-center gap-2"
         >
-          📄 Fatura Fechada Jun/26 (Valor Original no Fechamento):
+          📄 Fatura Fechada 
+          Jul/26
+           (Valor Original no Fechamento):
         </span>
         <span
           class="font-mono"
@@ -193,17 +279,17 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
         class="pt-2 font-bold text-[10px] uppercase tracking-wider border-t border-black/5 dark:border-white/5 flex items-center justify-between text-amber-500"
       >
         <span>
-          ⚠️
-           Encargos do Atraso (
-          18 dias acumulados no período
-          ):
+          📄 Encargos Congelados no Fechamento desta Fatura 🔒 (não cresce mais):
         </span>
       </div>
       <div
-        class="flex justify-between items-center "
+        class="border-t border-black/10 dark:border-white/10 my-1.5"
+      />
+      <div
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 opacity-70"
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -220,10 +306,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
         </span>
       </div>
       <div
-        class="flex justify-between items-center "
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 opacity-70"
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -240,10 +326,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
         </span>
       </div>
       <div
-        class="flex justify-between items-center "
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 opacity-70"
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -260,10 +346,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
         </span>
       </div>
       <div
-        class="flex justify-between items-center "
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 opacity-70"
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -280,10 +366,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
         </span>
       </div>
       <div
-        class="flex justify-between items-center "
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 opacity-70"
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -303,7 +389,7 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
         class="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-amber-600 dark:text-amber-400"
       >
         <span>
-          Valor Total dos Encargos do Atraso (Memória Informativa):
+          Total de Encargos Congelados no Fechamento (Análise Mensal):
         </span>
         <span
           class="font-mono"
@@ -313,15 +399,23 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
         </span>
       </div>
       <div
-        class="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1.5"
+        class="mt-2 p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1.5"
       >
         <span>
           ℹ️
         </span>
         <span>
-          Esta fatura fechada é informativa. Os encargos do atraso (R$ 
+          Fatura fechada travada — não recebe novos encargos. Os encargos VIVOS do atraso (
+          18
+           dias, R$ 
           478.48
-          ) e o saldo original são herdados e somados na FATURA ABERTA para a consolidação final no corte.
+          , acumulados após este corte) são herdados e exibidos na 
+          <strong>
+            Fatura Aberta (Fat 
+            3
+            )
+          </strong>
+          .
         </span>
       </div>
     </div>
@@ -402,9 +496,76 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
           📊 Copiar p/ Excel
         </span>
       </button>
+      <button
+        class="px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20"
+        title="Enviar dados da fatura em formato de tabela monospace diretamente para o tópico Telegram desta massa"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-send w-3.5 h-3.5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"
+          />
+          <path
+            d="m21.854 2.147-10.94 10.939"
+          />
+        </svg>
+        <span>
+          💬 Enviar p/ Telegram
+        </span>
+      </button>
+      <button
+        class="px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20"
+        title="Gerar relatório em PDF e enviar diretamente ao Telegram desta massa"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-file-text w-3.5 h-3.5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"
+          />
+          <path
+            d="M14 2v5a1 1 0 0 0 1 1h5"
+          />
+          <path
+            d="M10 9H8"
+          />
+          <path
+            d="M16 13H8"
+          />
+          <path
+            d="M16 17H8"
+          />
+        </svg>
+        <span>
+          📄 Enviar PDF p/ Telegram
+        </span>
+      </button>
     </div>
     <div
-      class="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs"
+      class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-4"
     >
       <div
         class="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 flex flex-col justify-between"
@@ -431,7 +592,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
           <p
             class="opacity-60 text-[10px] uppercase font-bold"
           >
-            Fat 1 · Mai/26
+            Fat 
+            1
+             · 
+            Mai/26
           </p>
           <span
             class="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full"
@@ -440,14 +604,14 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
           </span>
         </div>
         <p
-          class="font-black text-emerald-600 dark:text-emerald-400 text-sm mt-1"
+          class="font-black text-sm mt-1 text-emerald-600 dark:text-emerald-400"
         >
           R$ 
           1120.00
         </p>
       </button>
       <button
-        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-rose-500/15 border-rose-500 shadow-sm ring-2 ring-rose-500/40"
+        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-emerald-500/15 border-emerald-500 shadow-sm ring-2 ring-emerald-500/40"
         type="button"
       >
         <div
@@ -456,16 +620,19 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
           <p
             class="opacity-60 text-[10px] uppercase font-bold"
           >
-            Fat 2 · Fechada (Jun)
+            Fat 
+            2
+             · 
+            Jul/26
           </p>
           <span
-            class="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full"
+            class="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full"
           >
-            FECHADA
+            PAGA ✅
           </span>
         </div>
         <p
-          class="font-black text-rose-600 dark:text-rose-400 text-sm mt-1"
+          class="font-black text-sm mt-1 text-emerald-600 dark:text-emerald-400"
         >
           R$ 
           3870.86
@@ -481,7 +648,11 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
           <p
             class="opacity-60 text-[10px] uppercase font-bold"
           >
-            Fat 3 · Aberta (Jul)
+            Fat 
+            3
+             · Aberta (
+            Ago/26
+            )
           </p>
           <span
             class="text-[9px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full"
@@ -506,7 +677,9 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
         <span
           class="flex items-center gap-2"
         >
-          📄 Fatura Fechada Jun/26 (Valor Original no Fechamento):
+          📄 Fatura Fechada 
+          Jul/26
+           (Valor Original no Fechamento):
           <span
             class="px-1.5 py-0.5 rounded-full bg-emerald-600 text-white font-black text-[9px] uppercase shadow-sm"
           >
@@ -562,20 +735,20 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
         </span>
       </div>
       <div
-        class="pt-2 font-bold text-[10px] uppercase tracking-wider border-t border-black/5 dark:border-white/5 flex items-center justify-between text-zinc-400"
+        class="pt-2 font-bold text-[10px] uppercase tracking-wider border-t border-black/5 dark:border-white/5 flex items-center justify-between text-amber-500"
       >
         <span>
-          📄
-           Encargos do Atraso (
-          0 dias - Pago em dia
-          ):
+          📄 Encargos Congelados no Fechamento desta Fatura 🔒 (não cresce mais):
         </span>
       </div>
       <div
-        class="flex justify-between items-center opacity-40"
+        class="border-t border-black/10 dark:border-white/10 my-1.5"
+      />
+      <div
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -592,10 +765,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
         </span>
       </div>
       <div
-        class="flex justify-between items-center opacity-40"
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -612,10 +785,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
         </span>
       </div>
       <div
-        class="flex justify-between items-center opacity-40"
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -632,10 +805,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
         </span>
       </div>
       <div
-        class="flex justify-between items-center opacity-40"
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -652,10 +825,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
         </span>
       </div>
       <div
-        class="flex justify-between items-center opacity-40"
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -672,10 +845,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
         </span>
       </div>
       <div
-        class="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-zinc-400 opacity-60"
+        class="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-amber-600 dark:text-amber-400"
       >
         <span>
-          Valor Total dos Encargos do Atraso (Memória Informativa):
+          Total de Encargos Congelados no Fechamento (Análise Mensal):
         </span>
         <span
           class="font-mono"
@@ -693,7 +866,7 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
         <span>
           Fatura quitada em 
           2026-07-15
-          . Encargos zerados = não houve herança de fatura anterior.
+          . Encargos de atraso (se houver) foram herdados e consolidados na Fatura Aberta (Fat 3).
         </span>
       </div>
     </div>
@@ -774,9 +947,76 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
           📊 Copiar p/ Excel
         </span>
       </button>
+      <button
+        class="px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20"
+        title="Enviar dados da fatura em formato de tabela monospace diretamente para o tópico Telegram desta massa"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-send w-3.5 h-3.5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"
+          />
+          <path
+            d="m21.854 2.147-10.94 10.939"
+          />
+        </svg>
+        <span>
+          💬 Enviar p/ Telegram
+        </span>
+      </button>
+      <button
+        class="px-3 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20"
+        title="Gerar relatório em PDF e enviar diretamente ao Telegram desta massa"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-file-text w-3.5 h-3.5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"
+          />
+          <path
+            d="M14 2v5a1 1 0 0 0 1 1h5"
+          />
+          <path
+            d="M10 9H8"
+          />
+          <path
+            d="M16 13H8"
+          />
+          <path
+            d="M16 17H8"
+          />
+        </svg>
+        <span>
+          📄 Enviar PDF p/ Telegram
+        </span>
+      </button>
     </div>
     <div
-      class="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs"
+      class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-4"
     >
       <div
         class="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 flex flex-col justify-between"
@@ -803,7 +1043,10 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
           <p
             class="opacity-60 text-[10px] uppercase font-bold"
           >
-            Fat 1 · Mai/26
+            Fat 
+            1
+             · 
+            Mai/26
           </p>
           <span
             class="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full"
@@ -812,14 +1055,14 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
           </span>
         </div>
         <p
-          class="font-black text-emerald-600 dark:text-emerald-400 text-sm mt-1"
+          class="font-black text-sm mt-1 text-emerald-600 dark:text-emerald-400"
         >
           R$ 
           1120.00
         </p>
       </button>
       <button
-        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-rose-500/15 border-rose-500 shadow-sm ring-2 ring-rose-500/40"
+        class="p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden bg-emerald-500/15 border-emerald-500 shadow-sm ring-2 ring-emerald-500/40"
         type="button"
       >
         <div
@@ -828,19 +1071,29 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
           <p
             class="opacity-60 text-[10px] uppercase font-bold"
           >
-            Fat 2 · Fechada (Jun)
+            Fat 
+            2
+             · 
+            Jul/26
           </p>
           <span
-            class="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full"
+            class="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full"
           >
-            FECHADA
+            PAGA ✅
           </span>
         </div>
         <p
-          class="font-black text-rose-600 dark:text-rose-400 text-sm mt-1"
+          class="font-black text-sm mt-1 text-emerald-600 dark:text-emerald-400"
         >
           R$ 
           3870.86
+        </p>
+        <p
+          class="text-[9px] text-amber-600 dark:text-amber-400 font-bold mt-0.5"
+        >
+          🔒 + R$ 
+          478.48
+           encargos congelados no fechamento
         </p>
       </button>
       <button
@@ -853,7 +1106,11 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
           <p
             class="opacity-60 text-[10px] uppercase font-bold"
           >
-            Fat 3 · Aberta (Jul)
+            Fat 
+            3
+             · Aberta (
+            Ago/26
+            )
           </p>
           <span
             class="text-[9px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full"
@@ -878,7 +1135,9 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
         <span
           class="flex items-center gap-2"
         >
-          📄 Fatura Fechada Jun/26 (Valor Original no Fechamento):
+          📄 Fatura Fechada 
+          Jul/26
+           (Valor Original no Fechamento):
           <span
             class="px-1.5 py-0.5 rounded-full bg-emerald-600 text-white font-black text-[9px] uppercase shadow-sm"
           >
@@ -934,20 +1193,20 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
         </span>
       </div>
       <div
-        class="pt-2 font-bold text-[10px] uppercase tracking-wider border-t border-black/5 dark:border-white/5 flex items-center justify-between text-zinc-400"
+        class="pt-2 font-bold text-[10px] uppercase tracking-wider border-t border-black/5 dark:border-white/5 flex items-center justify-between text-amber-500"
       >
         <span>
-          📄
-           Encargos do Atraso (
-          0 dias - Pago em dia
-          ):
+          📄 Encargos Congelados no Fechamento desta Fatura 🔒 (não cresce mais):
         </span>
       </div>
       <div
-        class="flex justify-between items-center opacity-40"
+        class="border-t border-black/10 dark:border-white/10 my-1.5"
+      />
+      <div
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -960,14 +1219,14 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
           class="font-mono font-bold"
         >
           R$ 
-          0.00
+          77.42
         </span>
       </div>
       <div
-        class="flex justify-between items-center opacity-40"
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -980,14 +1239,14 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
           class="font-mono font-bold"
         >
           R$ 
-          0.00
+          23.20
         </span>
       </div>
       <div
-        class="flex justify-between items-center opacity-40"
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -1000,14 +1259,14 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
           class="font-mono font-bold"
         >
           R$ 
-          0.00
+          357.44
         </span>
       </div>
       <div
-        class="flex justify-between items-center opacity-40"
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -1020,14 +1279,14 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
           class="font-mono font-bold"
         >
           R$ 
-          0.00
+          14.71
         </span>
       </div>
       <div
-        class="flex justify-between items-center opacity-40"
+        class="flex justify-between items-center text-amber-600 dark:text-amber-400"
       >
         <span
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1"
         >
           <span
             class="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold"
@@ -1040,20 +1299,20 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
           class="font-mono font-bold"
         >
           R$ 
-          0.00
+          5.71
         </span>
       </div>
       <div
-        class="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-zinc-400 opacity-60"
+        class="flex justify-between pt-2 border-t border-black/10 dark:border-white/10 font-bold text-amber-600 dark:text-amber-400"
       >
         <span>
-          Valor Total dos Encargos do Atraso (Memória Informativa):
+          Total de Encargos Congelados no Fechamento (Análise Mensal):
         </span>
         <span
           class="font-mono"
         >
           R$ 
-          0.00
+          478.48
         </span>
       </div>
       <div
@@ -1065,7 +1324,7 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
         <span>
           Fatura quitada em 
           2026-07-27
-          . Os encargos do atraso foram HERDADOS e consolidados na fatura aberta (Fat 3) — consulte a aba "Fatura Aberta" para detalhes.
+          . Encargos de atraso (se houver) foram herdados e consolidados na Fatura Aberta (Fat 3).
         </span>
       </div>
     </div>
