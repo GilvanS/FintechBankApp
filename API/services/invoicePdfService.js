@@ -253,6 +253,8 @@ function drawSimpleHeader(doc, data, titulo) {
  * PÁGINA 2 — Movimentações (Data | Estabelecimento | Parcela | Valor R$).
  * Compras parceladas exibem a coluna PARCELA (02/04) e, quando há juros do
  * financiamento (art. 52 CDC), uma linha destacada com o total financiado.
+ * Pagamentos (fatura aberta, plano 1.2) aparecem em verde com sinal − e
+ * subtotal próprio, em seção separada abaixo das compras.
  */
 function drawMovimentacoes(doc, data) {
     doc.addPage();
@@ -282,15 +284,16 @@ function drawMovimentacoes(doc, data) {
 
     doc.font('Helvetica').fontSize(9).fillColor(C.preto);
     const movs = data.movimentacoes || [];
-    let subtotal = 0;
-    for (const m of movs) {
+    const compras = movs.filter(m => m.tipo !== 'pagamento');
+    const pagamentos = movs.filter(m => m.tipo === 'pagamento');
+
+    // Linha da tabela — compra em preto; pagamento em VERDE com sinal −
+    const drawLinha = (m, isPagamento) => {
         const val = Number(m.valor || 0);
-        subtotal += val;
-        const temParcela = Boolean(m.parcela);
+        const temParcela = !isPagamento && Boolean(m.parcela);
         const jurosTotal = Number(m.jurosTotal || 0);
         const totalParcelado = Number(m.totalParcelado || 0);
-        const comJuros = jurosTotal > 0 && totalParcelado > 0;
-        // Descrição em coluna mais estreita (110..345) + eventual linha de juros
+        const comJuros = !isPagamento && jurosTotal > 0 && totalParcelado > 0;
         const descLines = Math.max(1, Math.ceil((String(m.descricao || '').length) / 42));
         const jurosExtraH = comJuros ? 11 : 0;
         const rowH = descLines * 12 + jurosExtraH + 10;
@@ -309,8 +312,15 @@ function drawMovimentacoes(doc, data) {
         // Coluna PARCELA — centralizada; vazia (—) quando à vista
         doc.font(temParcela ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).fillColor(C.preto);
         doc.text(temParcela ? m.parcela : '—', 350, y + 4, { width: 55, align: 'center' });
-        doc.font('Helvetica').fontSize(9).fillColor(C.preto);
-        doc.text(fmt2(val), 500, y + 3, { align: 'right', width: 55 });
+        // Valor — pagamento em verde com sinal −; compra em preto
+        if (isPagamento) {
+            doc.font('Helvetica-Bold').fontSize(9).fillColor(C.verde);
+            // Sinal de menos ASCII (fonte padrão Helvetica/WinAnsi não tem U+2212)
+            doc.text(`-${fmt2(Math.abs(val))}`, 500, y + 3, { align: 'right', width: 55 });
+        } else {
+            doc.font('Helvetica').fontSize(9).fillColor(C.preto);
+            doc.text(fmt2(val), 500, y + 3, { align: 'right', width: 55 });
+        }
         // Linha destacada do total financiado (art. 52 CDC) quando houver juros
         if (comJuros) {
             const taxa = m.taxaEfetivaMensal != null ? ` · ${fmt2(m.taxaEfetivaMensal)}% a.m.` : '';
@@ -322,17 +332,51 @@ function drawMovimentacoes(doc, data) {
         y += rowH;
         doc.strokeColor('#eee').lineWidth(0.6).moveTo(40, y).lineTo(555, y).stroke();
         y += 2;
-    }
+    };
 
-    // Subtotal
+    // Bloco 1 — Compras (subtotal próprio)
+    let subtotalCompras = 0;
+    for (const m of compras) {
+        subtotalCompras += Number(m.valor || 0);
+        drawLinha(m, false);
+    }
     y += 6;
     doc.strokeColor('#000').lineWidth(1).moveTo(40, y).lineTo(555, y).stroke();
     y += 12;
     doc.font('Helvetica-Bold').fontSize(10).fillColor(C.preto);
     doc.text(`Lançamentos no cartão (final ${data.cartaoFinal || ''})`, 40, y);
-    doc.text(brl(subtotal), 420, y, { width: 115, align: 'right' });
+    doc.text(brl(subtotalCompras), 420, y, { width: 115, align: 'right' });
     y += 18;
     doc.strokeColor('#000').lineWidth(1.5).moveTo(40, y).lineTo(555, y).stroke();
+
+    // Bloco 2 — Pagamentos (fatura aberta, plano 1.2): sub-header + subtotal verde
+    if (pagamentos.length) {
+        y += 16;
+        // Sub-header "Pagamentos"
+        doc.fillColor('#e8f5e9').rect(40, y, 515, 18).fill();
+        doc.font('Helvetica-Bold').fontSize(8).fillColor(C.preto);
+        doc.text('DATA', 44, y + 5);
+        doc.text('PAGAMENTOS', 110, y + 5);
+        doc.text('VALOR R$', 500, y + 5, { align: 'right', width: 55 });
+        y += 18;
+        doc.strokeColor(C.borda).lineWidth(1).moveTo(40, y).lineTo(555, y).stroke();
+        y += 4;
+
+        let subtotalPagamentos = 0;
+        for (const m of pagamentos) {
+            subtotalPagamentos += Math.abs(Number(m.valor || 0));
+            drawLinha(m, true);
+        }
+        y += 6;
+        doc.strokeColor('#000').lineWidth(1).moveTo(40, y).lineTo(555, y).stroke();
+        y += 12;
+        doc.font('Helvetica-Bold').fontSize(10).fillColor(C.verde);
+        doc.text('Total de pagamentos', 40, y);
+        doc.text(`-${brl(subtotalPagamentos)}`, 420, y, { width: 115, align: 'right' });
+        y += 18;
+        doc.strokeColor('#000').lineWidth(1.5).moveTo(40, y).lineTo(555, y).stroke();
+        doc.font('Helvetica').fontSize(9).fillColor(C.preto);
+    }
 
     // Nota informativa
     y += 14;

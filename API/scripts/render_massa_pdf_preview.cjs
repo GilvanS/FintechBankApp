@@ -184,6 +184,8 @@ function buildPdfData({ cpf, cc, user, type, plans, cartaoFinal }) {
 
     // PÁGINA 2 — movimentações reais (mesma regra da rota send-pdf)
     const purchaseTypes = ['CREDIT', 'SHOP_CREDIT', 'INVOICE_INSTALLMENT', 'SUBSCRIPTION'];
+    // Plano 1.2: na fatura ABERTA, incluir pagamentos (PAYMENT) com valor NEGATIVO (verde).
+    const paymentTypes = ['PAYMENT', 'INVOICE_PAYMENT', 'INVOICE_ANTICIPATION'];
     const source = type === 'closed'
         ? ((cc.closedTransactions && cc.closedTransactions.length > 0) ? cc.closedTransactions : (cc.transactions || []))
         : (cc.transactions || []);
@@ -199,19 +201,23 @@ function buildPdfData({ cpf, cc, user, type, plans, cartaoFinal }) {
         return `${String(cur).padStart(2, '0')}/${String(total).padStart(2, '0')}`;
     };
     const movimentacoes = source
-        .filter(tx => purchaseTypes.includes(tx.type))
-        .map(tx => ({
-            data: tx.date ? toDateBR(tx.date) : '',
-            descricao: tx.merchant || tx.description || 'Lançamento',
-            valor: Math.abs(parseFloat(tx.amount) || 0),
-            // Parcela (02/04) — do enrich/snapshot; vazio quando à vista.
-            parcela: formatParcela(tx),
-            // Juros do financiamento (art. 52 CDC) — attachPlanJurosInfo no enrich.
-            jurosTotal: Number(tx.jurosTotal) > 0 ? Math.round(Number(tx.jurosTotal) * 100) / 100 : 0,
-            originalAmount: tx.originalAmount != null ? Math.round(Number(tx.originalAmount) * 100) / 100 : null,
-            totalParcelado: tx.totalParcelado != null ? Math.round(Number(tx.totalParcelado) * 100) / 100 : null,
-            taxaEfetivaMensal: tx.taxaEfetivaMensal != null ? (Number(tx.taxaEfetivaMensal) * 100) : null,
-        }))
+        .filter(tx => purchaseTypes.includes(tx.type) || (type === 'open' && paymentTypes.includes(tx.type)))
+        .map(tx => {
+            const isPagamento = paymentTypes.includes(tx.type);
+            return {
+                data: tx.date ? toDateBR(tx.date) : '',
+                descricao: tx.merchant || tx.description || 'Lançamento',
+                valor: isPagamento ? -(Math.abs(parseFloat(tx.amount) || 0)) : Math.abs(parseFloat(tx.amount) || 0),
+                tipo: isPagamento ? 'pagamento' : 'compra',
+                // Parcela (02/04) — do enrich/snapshot; vazio quando à vista.
+                parcela: formatParcela(tx),
+                // Juros do financiamento (art. 52 CDC) — attachPlanJurosInfo no enrich.
+                jurosTotal: Number(tx.jurosTotal) > 0 ? Math.round(Number(tx.jurosTotal) * 100) / 100 : 0,
+                originalAmount: tx.originalAmount != null ? Math.round(Number(tx.originalAmount) * 100) / 100 : null,
+                totalParcelado: tx.totalParcelado != null ? Math.round(Number(tx.totalParcelado) * 100) / 100 : null,
+                taxaEfetivaMensal: tx.taxaEfetivaMensal != null ? (Number(tx.taxaEfetivaMensal) * 100) : null,
+            };
+        })
         .slice(0, 60);
 
     // Enriquecer juros da FECHADA (snapshot não persiste juros) — casa com plano

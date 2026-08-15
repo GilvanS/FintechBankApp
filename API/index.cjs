@@ -3206,25 +3206,35 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
     let movimentacoes = [];
     try {
         const purchaseTypes = ['CREDIT', 'SHOP_CREDIT', 'INVOICE_INSTALLMENT', 'SUBSCRIPTION'];
+        // PÃ¡gina 2 — plano 1.2: na fatura ABERTA, incluir pagamentos
+        // (PAYMENT/INVOICE_PAYMENT) com valor NEGATIVO (verde). A fechada Ã©
+        // imutÃ¡vel (snapshot itemized_transactions nÃ£o tem PAYMENT) e nunca os
+        // exibe — pagamento vive em openTransactions/paymentHistory.
+        const paymentTypes = ['PAYMENT', 'INVOICE_PAYMENT', 'INVOICE_ANTICIPATION'];
         const source = type === 'closed'
             ? ((card.closedTransactions && card.closedTransactions.length > 0)
                 ? card.closedTransactions
                 : (card.transactions || []))
             : (card.transactions || []);
         movimentacoes = source
-            .filter(tx => purchaseTypes.includes(tx.type))
-            .map(tx => ({
-                data: tx.date ? toDateBR(tx.date) : '',
-                descricao: tx.merchant || tx.description || 'LanÃ§amento',
-                valor: Math.abs(parseFloat(tx.amount) || 0),
-                // Parcela (02/04) â€” do enrich/snapshot; vazio quando Ã  vista.
-                parcela: formatParcelaPdf(tx),
-                // Juros do financiamento (art. 52 CDC) â€” attachPlanJurosInfo no enrich.
-                jurosTotal: Number(tx.jurosTotal) > 0 ? round2(Number(tx.jurosTotal)) : 0,
-                originalAmount: tx.originalAmount != null ? round2(Number(tx.originalAmount)) : null,
-                totalParcelado: tx.totalParcelado != null ? round2(Number(tx.totalParcelado)) : null,
-                taxaEfetivaMensal: tx.taxaEfetivaMensal != null ? (Number(tx.taxaEfetivaMensal) * 100) : null,
-            }))
+            .filter(tx => purchaseTypes.includes(tx.type) || (type === 'open' && paymentTypes.includes(tx.type)))
+            .map(tx => {
+                const isPagamento = paymentTypes.includes(tx.type);
+                return {
+                    data: tx.date ? toDateBR(tx.date) : '',
+                    descricao: tx.merchant || tx.description || 'LanÃ§amento',
+                    // Compras: positivo; pagamentos: NEGATIVO (verde na PÃ¡gina 2).
+                    valor: isPagamento ? -(Math.abs(parseFloat(tx.amount) || 0)) : Math.abs(parseFloat(tx.amount) || 0),
+                    tipo: isPagamento ? 'pagamento' : 'compra',
+                    // Parcela (02/04) â€” do enrich/snapshot; vazio quando Ã  vista.
+                    parcela: formatParcelaPdf(tx),
+                    // Juros do financiamento (art. 52 CDC) â€” attachPlanJurosInfo no enrich.
+                    jurosTotal: Number(tx.jurosTotal) > 0 ? round2(Number(tx.jurosTotal)) : 0,
+                    originalAmount: tx.originalAmount != null ? round2(Number(tx.originalAmount)) : null,
+                    totalParcelado: tx.totalParcelado != null ? round2(Number(tx.totalParcelado)) : null,
+                    taxaEfetivaMensal: tx.taxaEfetivaMensal != null ? (Number(tx.taxaEfetivaMensal) * 100) : null,
+                };
+            })
             .slice(0, 60);
     } catch (movErr) {
         console.warn('[send-pdf] Erro ao montar movimentaÃ§Ãµes:', movErr.message);
