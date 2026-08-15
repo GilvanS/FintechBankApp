@@ -174,6 +174,9 @@ const cookieParser = require('cookie-parser');
 const createInvoiceController = require('./src/controllers/invoiceController');
 const registerInvoiceRoutes = require('./src/routes/invoice.routes');
 const registerRecurringBillsRoutes = require('./src/routes/recurringBills.routes');
+const createMiscController = require('./src/controllers/miscController');
+const registerMiscRoutes = require('./src/routes/misc.routes');
+const createTransactionService = require('./src/services/transactionService');
 const createUsersController = require('./src/controllers/usersController');
 const registerUsersRoutes = require('./src/routes/users.routes');
 const createAdminUsersController = require('./src/controllers/adminUsersController');
@@ -186,7 +189,8 @@ const JWT_SECRET = process.env.JWT_SECRET; // auth.js lanÃ§a erro no startup s
 // --- ServiÃ§o de Banco de Dados ---
 // Inicializado via Factory. Apenas PostgresProvider (pgdb).
 const dbService = DatabaseFactory.createDatabaseService();
-
+const transactionService = createTransactionService({ dbService, transactionsRepo, transactionReversal, usersRepo, vouchersRepo });
+const applyTransactionCancellation = transactionService.applyTransactionCancellation;
 // Conectar ao banco serÃ¡ feito no bootstrap()
 // dbService.connect(); // Removido - conexÃ£o Ã© feita no bootstrap()
 
@@ -1416,242 +1420,13 @@ const resetPasswordValidationRules = [
     body('newPassword').isString().isLength({ min: 6, max: 12 }).withMessage('A senha deve ter entre 6 e 12 caracteres.')
 ];
 
-// --- Endpoints de DiagnÃ³stico ---
-apiRouter.get('/health', asyncHandler(async (req, res) => {
-    console.log('ðŸ” Health check solicitado');
-    
-    const health = {
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        database: {
-            connected: dbService.session !== null,
-            mockMode: dbService.mockMode || false
-        },
-        endpoints: {
-            total: 0,
-            working: 0,
-            failing: 0
-        }
-    };
-    
-    res.json({ success: true, data: health });
-}));
-
-apiRouter.get('/debug/tables', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
-    console.log('ðŸ” VerificaÃ§Ã£o de tabelas solicitada');
-    
-    try {
-        const tables = {};
-        
-        // Verificar tabela users
-        const usersQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('users')}`;
-        const usersResult = await dbService.executeQuery(usersQuery);
-        tables.users = { exists: true, count: usersResult[0]?.count || 0 };
-        
-        // Verificar tabela pix_contacts
-        const contactsQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('pix_contacts')}`;
-        const contactsResult = await dbService.executeQuery(contactsQuery);
-        tables.pix_contacts = { exists: true, count: contactsResult[0]?.count || 0 };
-        
-        // Verificar tabela transactions
-        const transactionsQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('transactions')}`;
-        const transactionsResult = await dbService.executeQuery(transactionsQuery);
-        tables.transactions = { exists: true, count: transactionsResult[0]?.count || 0 };
-        
-        console.log('âœ… VerificaÃ§Ã£o de tabelas concluÃ­da:', tables);
-        res.json({ success: true, data: tables });
-        
-    } catch (error) {
-        console.error('âŒ Erro ao verificar tabelas:', error.message);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Erro ao verificar tabelas',
-            error: error.message 
-        });
-    }
-}));
-
-apiRouter.get('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
-    const { cpf } = req.params;
-    console.log(`ðŸ” Debug do usuÃ¡rio ${cpf} solicitado`);
-    
-    try {
-        const query = `SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`;
-        const result = await dbService.executeQuery(query);
-        
-        if (result.length === 0) {
-            return res.json({ success: true, data: { exists: false, user: null } });
-        }
-        
-        const user = normalizeUser(result[0]);
-        // Remover senha do resultado
-        delete user.password;
-        
-        console.log(`âœ… UsuÃ¡rio ${cpf} encontrado`);
-        res.json({ success: true, data: { exists: true, user } });
-        
-    } catch (error) {
-        console.error(`âŒ Erro ao buscar usuÃ¡rio ${cpf}:`, error.message);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Erro ao buscar usuÃ¡rio',
-            error: error.message 
-        });
-    }
-}));
-
-// Endpoint para deletar usuÃ¡rio - Valida dÃ­vidas e saldo antes de excluir
-apiRouter.delete('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
-    const { cpf } = req.params;
-    console.log(`ðŸ—‘ï¸  Verificando condiÃ§Ãµes para deletar usuÃ¡rio ${cpf}...`);
-    
-    try {
-        // Verificar se usuÃ¡rio existe
-        const userQuery = `SELECT cpf, balance, credit_card_total_limit, credit_card_available_limit FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`;
-        const userRows = await dbService.executeQuery(userQuery);
-        
-        if (userRows.length === 0) {
-            return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado' });
-        }
-        
-        const user = userRows[0];
-        const balance = parseFloat(user.balance || 0);
-        const totalLimit = parseFloat(user.credit_card_total_limit || 0);
-        const availableLimit = parseFloat(user.credit_card_available_limit || 0);
-        
-        // ValidaÃ§Ã£o 1: Saldo deve ser zero
-        if (balance !== 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: `NÃ£o Ã© possÃ­vel excluir usuÃ¡rio com saldo diferente de zero. Saldo atual: R$ ${balance.toFixed(2)}` 
-            });
-        }
-        
-        // ValidaÃ§Ã£o 2: Limite de crÃ©dito deve estar totalmente disponÃ­vel
-        const usedLimit = totalLimit - availableLimit;
-        if (usedLimit > 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: `NÃ£o Ã© possÃ­vel excluir usuÃ¡rio com limite de crÃ©dito utilizado. Limite usado: R$ ${usedLimit.toFixed(2)} de R$ ${totalLimit.toFixed(2)}` 
-            });
-        }
-        
-        // ValidaÃ§Ã£o 3: Verificar se hÃ¡ parcelas pendentes (INVOICE_INSTALLMENT)
-        const pendingInstallmentsQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('transactions')} WHERE cpf = '${cpf}' AND type = 'INVOICE_INSTALLMENT'`;
-        const installmentsResult = await dbService.executeQuery(pendingInstallmentsQuery);
-        const pendingInstallmentsCount = parseInt(installmentsResult[0]?.count || 0);
-        
-        if (pendingInstallmentsCount > 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: `NÃ£o Ã© possÃ­vel excluir usuÃ¡rio com parcelas pendentes. Total de parcelas: ${pendingInstallmentsCount}` 
-            });
-        }
-        
-        // ValidaÃ§Ã£o 4: Verificar se hÃ¡ faturas abertas ou vencidas
-        const openInvoicesQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('invoices')} WHERE cpf = '${cpf}' AND status IN ('ABERTA', 'VENCIDA')`;
-        const invoicesResult = await dbService.executeQuery(openInvoicesQuery);
-        const openInvoicesCount = parseInt(invoicesResult[0]?.count || 0);
-        
-        if (openInvoicesCount > 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: `NÃ£o Ã© possÃ­vel excluir usuÃ¡rio com faturas abertas ou vencidas. Total de faturas: ${openInvoicesCount}` 
-            });
-        }
-        
-        // Todas as validaÃ§Ãµes passaram - deletar usuÃ¡rio e dados relacionados
-        console.log(`âœ… ValidaÃ§Ãµes passadas. Deletando usuÃ¡rio ${cpf} e dados relacionados...`);
-        
-        // Deletar dados relacionados primeiro (cascata manual)
-        await dbService.executeQuery(`DELETE FROM ${dbService.fq('transactions')} WHERE cpf = '${cpf}'`);
-        await dbService.executeQuery(`DELETE FROM ${dbService.fq('pix_contacts')} WHERE pix_account_id = '${cpf}'`);
-        await dbService.executeQuery(`DELETE FROM ${dbService.fq('pix_keys')} WHERE cpf = '${cpf}'`);
-        await dbService.executeQuery(`DELETE FROM ${dbService.fq('notifications')} WHERE cpf = '${cpf}'`);
-        await dbService.executeQuery(`DELETE FROM ${dbService.fq('limit_increase_requests')} WHERE cpf = '${cpf}'`);
-        await dbService.executeQuery(`DELETE FROM ${dbService.fq('purchased_items')} WHERE cpf = '${cpf}'`);
-        await dbService.executeQuery(`DELETE FROM ${dbService.fq('installment_plans')} WHERE cpf = '${cpf}'`);
-        await dbService.executeQuery(`DELETE FROM ${dbService.fq('invoices')} WHERE cpf = '${cpf}'`);
-        
-        // TÃ³pico do Telegram: falha aqui nÃ£o pode impedir a exclusÃ£o da massa
-        try {
-            await telegramService.deleteTopic(cpf);
-        } catch (tgErr) {
-            console.warn(`âš ï¸ Falha ao apagar tÃ³pico Telegram de ${cpf}:`, tgErr.message);
-        }
-
-        // Deletar usuÃ¡rio
-        await dbService.executeQuery(`DELETE FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
-
-        console.log(`âœ… UsuÃ¡rio ${cpf} e todos os dados relacionados deletados com sucesso`);
-        res.json({ success: true, message: `UsuÃ¡rio ${cpf} deletado com sucesso` });
-        
-    } catch (error) {
-        console.error(`âŒ Erro ao deletar usuÃ¡rio ${cpf}:`, error.message);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Erro ao deletar usuÃ¡rio',
-            error: error.message 
-        });
-    }
-}));
-
-// --- Reset de ambiente de teste (apenas fora de producao) â€” Issue #23 ---
-// Valores canonicos dos usuarios de teste (espelham scripts/seed-test-users.js)
-const TEST_RESET_USERS = {
-    '11111111111': { balance: 10000,   creditCardBlocked: false },
-    '22222222222': { balance: 2580.50, creditCardBlocked: false },
-    '33333333333': { balance: 1500.00, creditCardBlocked: false },
-    '44444444444': { balance: 800.75,  creditCardBlocked: true  }, // permanece bloqueado (cenario)
-};
-
-apiRouter.post('/test/reset', asyncHandler(async (req, res) => {
-    if (process.env.NODE_ENV === 'production') {
-        return res.status(403).json({ success: false, message: 'NÃ£o disponÃ­vel em produÃ§Ã£o' });
-    }
-
-    const requestedCpf = req.body && typeof req.body.cpf === 'string' ? req.body.cpf.replace(/\D/g, '') : null;
-
-    let targets;
-    if (requestedCpf) {
-        if (!TEST_RESET_USERS[requestedCpf]) {
-            return res.status(404).json({ success: false, message: 'CPF nÃ£o Ã© um usuÃ¡rio de teste conhecido.' });
-        }
-        targets = [requestedCpf];
-    } else {
-        targets = Object.keys(TEST_RESET_USERS);
-    }
-
-    try {
-        const reset = [];
-        for (const cpf of targets) {
-            const { balance, creditCardBlocked } = TEST_RESET_USERS[cpf];
-
-            await dbService.executeQuery(`
-                UPDATE ${dbService.fq('users')}
-                SET balance = ${balance},
-                    is_blocked = false,
-                    login_attempts = 0,
-                    pix_daily_limit = 2000.00,
-                    password_reset_requested = false,
-                    credit_card_available_limit = 5000.00,
-                    credit_card_total_limit = 5000.00,
-                    credit_card_is_blocked = ${creditCardBlocked},
-                    updated_at = current_timestamp()
-                WHERE cpf = '${cpf}'
-            `);
-
-            await dbService.executeQuery(`DELETE FROM ${dbService.fq('transactions')} WHERE cpf = '${cpf}'`);
-
-            reset.push(cpf);
-        }
-
-        return res.json({ success: true, reset });
-    } catch (error) {
-        console.error('âŒ [TEST RESET] Erro ao resetar usuÃ¡rios de teste:', error.message);
-        return res.status(500).json({ success: false, message: 'Erro interno ao resetar ambiente de teste.' });
-    }
-}));
+// --- Rotas MISC (health, debug, test/reset, stories, proxy/news, financial-health,
+// statement/export, transactions/cancel, vouchers) — extraídas p/ src/routes/misc.routes.js (Fase 8)
+const miscController = createMiscController({
+    dbService, repoContext, transactionsRepo, transactionReversal, usersRepo, vouchersRepo,
+    telegramService, normalizeUser, auditLog, applyTransactionCancellation, escapeSQL,
+});
+registerMiscRoutes({ apiRouter, bearerAuth, authenticateAdmin, pinGuard, body, handleValidationErrors, h: miscController });
 
 // --- Rotas de AutenticaÃ§Ã£o ---
 apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
@@ -5343,35 +5118,6 @@ async function fetchUnpaidClosedInvoices(cpf) {
 // OpÃ§Ãµes de parcelamento (2x-12x) para a fatura FECHADA nÃ£o paga, com encargos reais do motor de cobranÃ§a
 
 
-apiRouter.get('/stories', bearerAuth(), asyncHandler(async (req, res) => {
-    const rows = await dbService.executeQuery(`
-        SELECT id, cpf, image_url, caption, created_at
-        FROM ${dbService.fq('stories')}
-        ORDER BY created_at DESC
-    `);
-    res.json(rows);
-}));
-
-// --- Swagger, InicializaÃ§Ã£o e Tratamento de Erro Global ---
-
-// Proxy de noticias com cache simples em memoria
-let newsCache = { data: null, expiresAt: 0 };
-
-apiRouter.get('/proxy/news', bearerAuth(), asyncHandler(async (req, res) => {
-    const now = Date.now();
-    if (newsCache.data && newsCache.expiresAt > now) {
-        auditLog(req, 'proxy_news_cache_hit');
-        return res.json({ success: true, news: newsCache.data, cached: true });
-    }
-    // Conteudo mockado; em producao, faria fetch externo com timeout
-    const data = [
-        { id: 'n1', title: 'Mercado aquecido', summary: 'Acoes sobem no dia...' },
-        { id: 'n2', title: 'Selic mantida', summary: 'Copom decide manter taxa...' }
-    ];
-    newsCache = { data, expiresAt: now + (5 * 60 * 1000) }; // 5 minutos
-    auditLog(req, 'proxy_news_cache_fill');
-    res.json({ success: true, news: data, cached: false });
-}));
 
 // â”€â”€â”€ MigraÃ§Ã£o New Base â€” Novos Endpoints (#58) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -5427,93 +5173,11 @@ apiRouter.post('/pix/categorize', bearerAuth(), asyncHandler(async (req, res) =>
     res.json({ success: true, category: 'outros', confidence: 30, reason: 'Sem correspondÃªncia encontrada' });
 }));
 
-apiRouter.get('/financial-health/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
-    const cpf = req.params.cpf;
-    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
-        return res.status(403).json({ success: false, message: 'Acesso negado.' });
-    }
-
-    const userRows = await dbService.executeQuery(
-        `SELECT balance, credit_card_available_limit, credit_card_total_limit FROM ${dbService.fq('users')} WHERE cpf='${escapeSQL(cpf)}'`
-    );
-    if (!userRows || !userRows.length) {
-        return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado.' });
-    }
-    const user = userRows[0];
-
-    let txRows = [];
-    try {
-        txRows = await dbService.executeQuery(`
-            SELECT amount, type, date
-            FROM ${dbService.fq('transactions')}
-            WHERE from_user='${escapeSQL(cpf)}'
-            ORDER BY date DESC LIMIT 90
-        `);
-    } catch (_) {}
-
-    const totalLimit = parseFloat(user.credit_card_total_limit) || 0;
-    const availLimit = parseFloat(user.credit_card_available_limit) || totalLimit;
-    const usedLimit  = totalLimit - availLimit;
-    const utilization = totalLimit > 0 ? (usedLimit / totalLimit) * 100 : 0;
-    const balance = parseFloat(user.balance) || 0;
-
-    // Score simples (0-100): saldo positivo + baixa utilizaÃ§Ã£o do crÃ©dito
-    let score = 50;
-    if (balance > 1000) score += 15;
-    if (balance > 5000) score += 10;
-    if (utilization < 30) score += 15;
-    else if (utilization > 70) score -= 15;
-    if (txRows.length > 0) {
-        const totalSpent = txRows.reduce((acc, tx) => acc + parseFloat(tx.amount || 0), 0);
-        const avgMonthly = totalSpent / 3;
-        if (avgMonthly < balance) score += 10;
-    }
-    score = Math.max(0, Math.min(100, Math.round(score)));
-
-    const suggestions = [];
-    if (utilization > 70) suggestions.push({ type: 'warning', text: 'UtilizaÃ§Ã£o do crÃ©dito acima de 70% â€” tente reduzir.' });
-    if (balance < 500)    suggestions.push({ type: 'warning', text: 'Saldo baixo â€” considere criar uma reserva de emergÃªncia.' });
-    if (score >= 80)      suggestions.push({ type: 'success', text: 'SaÃºde financeira excelente! Continue assim.' });
-
-    res.json({ success: true, score, creditUtilization: Math.round(utilization), suggestions, balance });
-}));
 
 // Contas Recorrentes CRUD — extraído para src/routes/recurringBills.routes.js (Fase D)
 registerRecurringBillsRoutes({ apiRouter, bearerAuth, asyncHandler, body, dbService, escapeSQL, 
     handleValidationErrors, nowDb, recurringBillsRepo, toISO, auditLog });
 
-apiRouter.post('/statement/export', bearerAuth(), [
-    body('format').isIn(['pdf', 'csv']).withMessage('Formato deve ser pdf ou csv.'),
-    body('filter').isIn(['all', 'filtered']).withMessage('Filtro deve ser all ou filtered.'),
-    body('transactions').isArray().withMessage('transactions deve ser um array.'),
-], handleValidationErrors, asyncHandler(async (req, res) => {
-    const { format, transactions } = req.body;
-
-    if (format === 'csv') {
-        const lines = ['Data,Tipo,DescriÃ§Ã£o,Valor'];
-        for (const tx of transactions) {
-            const date = tx.date ? new Date(tx.date).toLocaleDateString('pt-BR') : '';
-            const desc = String(tx.description || '').replace(/,/g, ';');
-            const amount = parseFloat(tx.amount || 0).toFixed(2);
-            lines.push(`${date},${tx.type || ''},${desc},${amount}`);
-        }
-        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-        res.setHeader('Content-Disposition', 'attachment; filename="extrato.csv"');
-        return res.send('ï»¿' + lines.join('\n'));
-    }
-
-    // PDF: retorna JSON estruturado (frontend renderiza com jsPDF ou similar)
-    res.json({
-        success: true,
-        format: 'pdf',
-        data: {
-            generatedAt: new Date().toISOString(),
-            userCpf: req.user.cpf,
-            totalTransactions: transactions.length,
-            transactions,
-        }
-    });
-}));
 
 // â”€â”€â”€ Fim dos novos endpoints #58 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -7617,89 +7281,8 @@ apiRouter.get('/admin/badge/rules-coverage', asyncHandler(async (req, res) => {
     }
 }));
 
-// â”€â”€â”€ Cancelamento/estorno de transaÃ§Ãµes (dÃ©bito e crÃ©dito) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Regra: crÃ©dito cuja fatura de origem jÃ¡ estÃ¡ FECHADA gera credit voucher
-// (nÃ£o altera a fatura fechada); crÃ©dito ainda na fatura ABERTA e dÃ©bito sÃ£o
-// estornados diretamente (fatura/limite ou saldo). Sem janela de tempo â€” o
-// cancelamento Ã© sempre permitido, mas nunca duas vezes na mesma transaÃ§Ã£o.
-// Compartilhada pela rota abaixo e pelo cancelamento de assinatura (que
-// tambÃ©m estorna a Ãºltima cobranÃ§a jÃ¡ feita).
-async function applyTransactionCancellation({ cpf, transaction }) {
-    const closedInvoices = await transactionsRepo.findClosedInvoicesForCpf(cpf);
-    const plan = transactionReversal.computeReversalPlan({ transaction, closedInvoices });
-    if (!plan.ok) return { applied: false, reason: plan.reason };
-
-    await transactionsRepo.markCancelled(transaction.id);
-
-    const reversalId = dbService.generateUUID();
-    const nowIso = new Date().toISOString();
-    let voucher = null;
-
-    if (plan.kind === 'debit_refund') {
-        const user = await usersRepo.findByCpf(cpf);
-        const newBalance = parseFloat(user.balance || 0) + plan.amount;
-        await usersRepo.updateBalance(cpf, newBalance.toFixed(2));
-        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_DEBITO', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: transaction.id });
-    } else if (plan.kind === 'invoice_credit') {
-        await usersRepo.restoreAvailableLimit(cpf, plan.amount);
-        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_FATURA', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: transaction.id });
-    } else {
-        // voucher
-        await transactionsRepo.insertReversalTransaction({ id: reversalId, cpf, type: 'ESTORNO_VOUCHER', amount: plan.amount, description: plan.description, date: nowIso, reversalOf: transaction.id });
-        voucher = await vouchersRepo.create({ cpf, amount: plan.amount, sourceTransactionId: transaction.id, sourceInvoiceId: plan.closedInvoiceId, description: plan.description });
-    }
-
-    return { applied: true, reversal: { id: reversalId, kind: plan.kind, amount: plan.amount, description: plan.description }, voucher };
-}
-
-apiRouter.post('/transactions/:cpf/:id/cancel', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
-    const { cpf, id } = req.params;
-    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
-        return res.status(403).json({ success: false, message: 'Acesso negado.' });
-    }
-
-    const { esc } = repoContext;
-    const transaction = await transactionsRepo.findById(id);
-    if (!transaction || transaction.cpf !== cpf) {
-        return res.status(404).json({ success: false, message: 'TransaÃ§Ã£o nÃ£o encontrada.' });
-    }
-
-    // Compras parceladas tÃªm plano prÃ³prio (installment_plans); cancelar a
-    // transaÃ§Ã£o principal aqui deixaria o parcelamento cobrando um valor que
-    // jÃ¡ nÃ£o existe mais â€” bloqueado nesta rota.
-    const activePlan = await dbService.executeQuery(`
-        SELECT id FROM ${dbService.fq('installment_plans')}
-        WHERE purchase_tx_id = ${esc(id)} AND status = 'ACTIVE'
-        LIMIT 1
-    `);
-    if (activePlan.length > 0) {
-        return res.status(400).json({ success: false, message: 'Compra parcelada nÃ£o pode ser cancelada por esta rota. Cancele o parcelamento separadamente.' });
-    }
-
-    const result = await applyTransactionCancellation({ cpf, transaction });
-    if (!result.applied) {
-        const statusByReason = { 'ja-cancelada': 409, 'tipo-nao-reversivel': 400 };
-        return res.status(statusByReason[result.reason] || 400).json({ success: false, message: `Cancelamento nÃ£o permitido: ${result.reason}.` });
-    }
-
-    auditLog(req, 'transaction_cancel', 'warn', { cpf, id, kind: result.reversal.kind, amount: result.reversal.amount });
-    res.json({
-        success: true,
-        message: 'TransaÃ§Ã£o cancelada com sucesso.',
-        reversal: result.reversal,
-        voucher: result.voucher || undefined,
-    });
-}));
 
 // Listar credit vouchers do usuÃ¡rio (ownership check â€” dono do recurso ou admin).
-apiRouter.get('/vouchers/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
-    const { cpf } = req.params;
-    if (req.user.cpf !== cpf && req.user.role !== 'admin') {
-        return res.status(403).json({ success: false, message: 'Acesso negado.' });
-    }
-    const vouchers = await vouchersRepo.listByCpf(cpf);
-    res.json({ success: true, vouchers });
-}));
 
 app.use('/api', apiRouter);
 app.use('/api/v1', apiRouter);
