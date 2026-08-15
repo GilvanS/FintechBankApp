@@ -140,10 +140,15 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
         ? Math.ceil(Math.abs(new Date().getTime() - new Date(closedOrOpenDueDate).getTime()) / (1000 * 60 * 60 * 24))
         : 0;
     const explicitDays = (searchedUser as any).daysOverdue ?? (searchedUser.creditCard as any)?.daysOverdue ?? 0;
-    // overdueDays usa originalClosedAmount (não closedAmount=0): fatura paga
-    // ainda teve dias de atraso antes do pagamento.
-    const overdueDays = explicitDays > 0 ? explicitDays : (originalClosedAmount > 0 ? Math.max(7, diffDays) : 0);
-    const isOverdue = originalClosedAmount > 0 && overdueDays > 0;
+    // Fatura paga: a conta foi regularizada (daysOverdue=0) e o atraso HISTÓRICO (dias até a
+    // quitação) vem do backend (_closedInvoiceAtrasoDias). Nunca usar o diff ao vivo (diffDays)
+    // para fatura paga — cresceria para sempre com o passar dos dias.
+    const atrasoHistorico = Number((searchedUser.creditCard as any)?._closedInvoiceAtrasoDias ?? 0);
+    const overdueDays = explicitDays > 0 ? explicitDays
+        : (isPaid ? atrasoHistorico
+        : (originalClosedAmount > 0 ? Math.max(7, diffDays) : 0));
+    // Em atraso HOJE: só quando ainda existe fatura fechada NÃO paga.
+    const isOverdue = !isPaid && originalClosedAmount > 0 && overdueDays > 0;
 
     // Encargos vindos do backend (fonte única) ou calculados como fallback
     const charges = (searchedUser.creditCard as any)?.closedInvoiceCharges || {};
@@ -505,6 +510,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider border-t border-black/5 dark:border-white/5 flex items-center justify-between text-amber-500">
                         <span>📄 Encargos Congelados no Fechamento desta Fatura 🔒 (não cresce mais):</span>
                     </div>
+                    <div className="border-t border-black/10 dark:border-white/10 my-1.5" />
                     <div className="flex justify-between items-center text-amber-600 dark:text-amber-400">
                         <span className="flex items-center gap-1">
                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 3000</span>
@@ -594,12 +600,13 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     {/* Encargos Herdados em detalhe — VIVOS, continuam acumulando até o
                         fechamento da fatura aberta (Fat 3 pega do Fat 2 e segue). */}
                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-rose-500 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
-                        <span>Herança de Atraso da Fatura Anterior ({closedMonthLabel}) — continua acumulando:</span>
+                        <span>Herança de Atraso da Fatura Anterior ({closedMonthLabel}) — {isPaid ? 'congelada na quitação (não acumula mais):' : 'continua acumulando:'}</span>
                     </div>
                     <div className="flex justify-between items-center text-rose-500 font-bold">
                         <span>Fatura Fechada Anterior em Atraso (Valor Invariável):</span>
                         <span className="font-mono">R$ {originalClosedAmount.toFixed(2)}</span>
                     </div>
+                    <div className="border-t border-black/10 dark:border-white/10 my-1.5" />
                     <div className="flex justify-between items-center text-amber-500">
                         <span className="opacity-90 flex items-center gap-1">
                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 3000</span>
@@ -636,7 +643,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                         <span className="font-mono font-bold">R$ {iofDiario.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-amber-500 pt-1">
-                        <span>Total de Encargos Herdados do Atraso ({overdueDays} dias):</span>
+                        <span>Total de Encargos Herdados do Atraso {isPaid ? `(congelados — ${overdueDays} dias até a quitação)` : `(${overdueDays} dias)`}:</span>
                         <span className="font-mono">R$ {totalEncargos.toFixed(2)}</span>
                     </div>
 
@@ -663,6 +670,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-zinc-400 border-t border-black/5 dark:border-white/5">
                         Encargos do Atraso (0 dias - Sem encargos):
                     </div>
+                    <div className="border-t border-black/10 dark:border-white/10 my-1.5" />
                     <div className="flex justify-between items-center opacity-60">
                         <span className="flex items-center gap-1">
                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cod 3000</span> Taxa de Multa por Atraso (2.0%):
@@ -712,6 +720,7 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     <div className="pt-2 font-bold text-[10px] uppercase tracking-wider text-zinc-400 border-t border-black/5 dark:border-white/5">
                         Encargos do Atraso (0 dias - Pago em dia):
                     </div>
+                    <div className="border-t border-black/10 dark:border-white/10 my-1.5" />
                     <div className="flex justify-between items-center opacity-60">
                         <span className="flex items-center gap-1">
                             <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-bold">Cód 3000</span> Taxa de Multa por Atraso (2.0%):

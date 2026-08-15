@@ -109,38 +109,34 @@ export default function InvoiceView({ user, onPayInvoice, onParcel, onBack, them
         if (savedBillsStr) {
           const savedBills: any[] = JSON.parse(savedBillsStr);
           savedBills.forEach(b => {
+            // Recorrência de DÉBITO em conta NÃO pertence à fatura do cartão de
+            // crédito — é lançamento do extrato da CONTA (transactions do usuário).
+            // Exibir "Quitado/Agendado no Débito" aqui com R$ 0,00 era vazamento de
+            // canal: recorrência de débito aparecendo nos lançamentos do cartão.
+            // Só recorrências de CRÉDITO (faturadas no cartão) entram na fatura aberta.
             const isDebit = b.paymentMethod === 'ACCOUNT_DEBIT' || b.paymentMethod === 'ACCOUNT' || b.paymentMethod === 'DEBIT';
+            if (isDebit) return;
+
             const exists = txs.some(t => t.merchant && t.merchant.toLowerCase().includes(b.title.toLowerCase()));
 
             if (!exists) {
               if (b.status === 'paid') {
-                if (isDebit) {
-                  txs.unshift({
-                    id: `debit-rec-${b.id}`,
-                    date: b.paidAtDate ? b.paidAtDate.split('/').reverse().join('-') : new Date().toISOString().split('T')[0],
-                    merchant: `Recorrência: ${b.title}`,
-                    amount: 0,
-                    type: 'CREDIT',
-                    installments: 'Quitado no Débito'
-                  });
-                } else {
-                  txs.unshift({
-                    id: `credit-rec-paid-${b.id}`,
-                    date: b.paidAtDate ? b.paidAtDate.split('/').reverse().join('-') : new Date().toISOString().split('T')[0],
-                    merchant: `Recorrência: ${b.title}`,
-                    amount: Math.abs(b.amount),
-                    type: 'CREDIT',
-                    installments: 'Faturado no Crédito'
-                  });
-                }
+                txs.unshift({
+                  id: `credit-rec-paid-${b.id}`,
+                  date: b.paidAtDate ? b.paidAtDate.split('/').reverse().join('-') : new Date().toISOString().split('T')[0],
+                  merchant: `Recorrência: ${b.title}`,
+                  amount: Math.abs(b.amount),
+                  type: 'CREDIT',
+                  installments: 'Faturado no Crédito'
+                });
               } else if (b.status === 'pending') {
                 txs.unshift({
                   id: `credit-rec-pend-${b.id}`,
                   date: new Date().toISOString().split('T')[0],
                   merchant: `Recorrência: ${b.title}`,
-                  amount: isDebit ? 0 : Math.abs(b.amount),
+                  amount: Math.abs(b.amount),
                   type: 'CREDIT',
-                  installments: isDebit ? 'Agendado no Débito' : 'Previsto no Cartão'
+                  installments: 'Previsto no Cartão'
                 });
               }
             }

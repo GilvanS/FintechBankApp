@@ -115,17 +115,55 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         }
     };
 
-    const tabs = [
-        { id: 'mass-creator', label: '⚡ Gerador de Massa 2.0', icon: Sparkles },
-        { id: 'users', label: 'Usuários', icon: Users },
-        { id: 'cards', label: 'Cartões & Massa', icon: CreditCard },
-        { id: 'billing', label: 'Faturamento', icon: Receipt },
-        { id: 'recurring', label: 'Contas Recorrentes', icon: Repeat },
-        { id: 'requests', label: 'Solicitações', icon: FileText },
-        { id: 'telegram', label: 'Telegram (Toggles)', icon: Send },
-        { id: 'audit', label: 'Auditoria', icon: ShieldCheck },
-        { id: 'legacy', label: 'Legado', icon: Shield },
+        // Categoriza��o de abas em 5 �reas principais para um layout compacto e resumido
+    const tabGroups = [
+        {
+            id: 'gestao',
+            label: 'Usuários & Solicit.',
+            icon: Users,
+            tabs: [
+                { id: 'users', label: 'Usuários', icon: Users },
+                { id: 'requests', label: 'Solicitações', icon: FileText }
+            ]
+        },
+        {
+            id: 'financeiro',
+            label: 'Financeiro',
+            icon: Receipt,
+            tabs: [
+                { id: 'billing', label: 'Faturamento', icon: Receipt },
+                { id: 'recurring', label: 'Contas Recorrentes', icon: Repeat },
+                { id: 'cards', label: 'Cartões & Massa', icon: CreditCard }
+            ]
+        },
+        {
+            id: 'massa',
+            label: 'Gerador 2.0',
+            icon: Sparkles,
+            tabs: [
+                { id: 'mass-creator', label: '⚡ Gerador de Massa 2.0', icon: Sparkles }
+            ]
+        },
+        {
+            id: 'sistema',
+            label: 'Auditoria & Sistema',
+            icon: ShieldCheck,
+            tabs: [
+                { id: 'audit', label: 'Auditoria', icon: ShieldCheck },
+                { id: 'telegram', label: 'Telegram', icon: Send }
+            ]
+        },
+        {
+            id: 'legado',
+            label: 'Legado',
+            icon: Shield,
+            tabs: [
+                { id: 'legacy', label: 'Painel Legado', icon: Shield }
+            ]
+        }
     ] as const;
+
+    const activeGroup = tabGroups.find(group => group.tabs.some(t => t.id === activeTab)) || tabGroups[0];
 
     const renderContent = () => {
         switch (activeTab) {
@@ -249,29 +287,62 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                     </button>
                 </div>
 
-                <div className="flex items-center gap-2 overflow-x-auto pb-2 max-w-full scrollbar-touch cursor-grab active:cursor-grabbing">
-                    {tabs.map((tab) => {
-                        const Icon = tab.icon;
-                        const isActive = activeTab === tab.id;
-                        return (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id as AdminTab)}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs md:text-sm whitespace-nowrap transition-all cursor-pointer ${
-                                    isActive
-                                        ? isMidnight
-                                            ? 'bg-volt-green text-black shadow-lg shadow-volt-green/20'
-                                            : 'bg-black text-white shadow-[3px_3px_0px_0px_rgba(162,255,0,1)]'
-                                        : isMidnight
-                                            ? 'bg-white/5 hover:bg-white/10 text-white/70'
-                                            : 'bg-white border-2 border-black/20 hover:border-black text-black/70'
-                                }`}
-                            >
-                                <Icon size={16} />
-                                {tab.label}
-                            </button>
-                        );
-                    })}
+                {/* Grupos Principais de Abas (Reduzido e Organizado) */}
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full scrollbar-none">
+                        {tabGroups.map((group) => {
+                            const GroupIcon = group.icon;
+                            const isGroupActive = activeGroup.id === group.id;
+                            return (
+                                <button
+                                    key={group.id}
+                                    onClick={() => setActiveTab(group.tabs[0].id as AdminTab)}
+                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-black text-xs md:text-sm whitespace-nowrap transition-all cursor-pointer ${
+                                        isGroupActive
+                                            ? isMidnight
+                                                ? 'bg-volt-green text-black shadow-lg shadow-volt-green/20 scale-[1.02]'
+                                                : 'bg-black text-white shadow-[3px_3px_0px_0px_rgba(162,255,0,1)] scale-[1.02]'
+                                            : isMidnight
+                                                ? 'bg-white/5 hover:bg-white/10 text-white/70'
+                                                : 'bg-white border-2 border-black/20 hover:border-black text-black/70'
+                                    }`}
+                                >
+                                    <GroupIcon size={16} />
+                                    {group.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Sub-abas do grupo ativo (se o grupo tiver mais de 1 aba) */}
+                    {activeGroup.tabs.length > 1 && (
+                        <div className={`flex items-center gap-2 p-1.5 rounded-2xl border transition-all ${
+                            isMidnight ? 'bg-white/5 border-white/10' : 'bg-gray-100 border-black/10'
+                        }`}>
+                            {activeGroup.tabs.map((subTab) => {
+                                const SubIcon = subTab.icon;
+                                const isSubActive = activeTab === subTab.id;
+                                return (
+                                    <button
+                                        key={subTab.id}
+                                        onClick={() => setActiveTab(subTab.id as AdminTab)}
+                                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl font-bold text-xs md:text-sm transition-all cursor-pointer ${
+                                            isSubActive
+                                                ? isMidnight
+                                                    ? 'bg-white/20 text-white shadow'
+                                                    : 'bg-white border-2 border-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-black'
+                                                : isMidnight
+                                                    ? 'text-white/60 hover:text-white hover:bg-white/5'
+                                                    : 'text-black/60 hover:text-black hover:bg-white/50'
+                                        }`}
+                                    >
+                                        <SubIcon size={14} />
+                                        {subTab.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
 
                 <main>{renderContent()}</main>

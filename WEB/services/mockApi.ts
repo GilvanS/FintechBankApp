@@ -1661,7 +1661,8 @@ export const adminCreateMassUser = async (payload: any): Promise<{ success: bool
     await delay(400);
     try {
         const cleanCpf = payload.cpf.replace(/\D/g, '');
-        const existing = mockUsers.find((u) => u.cpf === cleanCpf);
+        const store = _getStore();
+        const existing = store.users.find((u) => u.cpf === cleanCpf);
         if (existing) {
             return { success: false, message: `CPF ${cleanCpf} já está cadastrado.` };
         }
@@ -1718,7 +1719,8 @@ export const adminCreateMassUser = async (payload: any): Promise<{ success: bool
             ]
         };
 
-        mockUsers.push(newUser);
+        store.users.push(newUser);
+        _saveStore(store);
         return { success: true, message: 'Massa de teste criada com sucesso!', user: newUser };
     } catch (err: any) {
         return { success: false, message: err.message || 'Erro ao criar massa.' };

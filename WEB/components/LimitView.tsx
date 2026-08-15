@@ -1345,6 +1345,29 @@ export default function LimitView({
               })()}
             </section>
 
+            {/* 4.5. EVOLUÇÃO DO SALDO */}
+            <section
+              onClick={() => setActiveModal('evolution')}
+              className={`relative rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-4 mt-4 cursor-pointer hover:translate-y-[-2px] transition-all ${
+                isMidnight ? 'bg-volt-surface text-white' : 'bg-white text-black'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs">
+                  📈
+                </div>
+                <div>
+                  <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>EVOLUÇÃO DO SALDO</h3>
+                  <p className={`text-[10px] font-bold ${isMidnight ? 'text-gray-400' : 'text-gray-700'}`}>Entradas, saídas e acúmulo em 6 meses</p>
+                </div>
+              </div>
+              <span className={`text-[9px] font-black uppercase tracking-wider text-black border-2 border-black px-2.5 py-1 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
+                isMidnight ? 'bg-volt-green' : 'bg-[#FFED86]'
+              }`}>
+                VER
+              </span>
+            </section>
+
             {/* 5. TENDÊNCIAS DE GASTOS (Visual Card - Screenshot 5) */}
             <div className="mt-4">
               <SpendingTrendsSection transactions={transactions} theme={theme} />

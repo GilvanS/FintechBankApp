@@ -1445,7 +1445,10 @@ export const adminUpdateCreditLimit = async (cpf: string, creditLimit: number): 
     try {
         const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cpf}/credit-limit`, {
             method: 'PUT',
-            body: JSON.stringify({ creditLimit }),
+            // Contrato do backend (/admin/users/:cpf/credit-limit): totalLimit e/ou
+            // availableLimit. Um único valor informado pelo admin define AMBOS — mesmo
+            // comportamento do mockApi (creditLimit => totalLimit E availableLimit).
+            body: JSON.stringify({ totalLimit: creditLimit, availableLimit: creditLimit }),
         });
         return { success: true, message: result.message };
     } catch (error: any) {
@@ -1503,9 +1506,7 @@ export const adminCreateMassUser = async (payload: any): Promise<{ success: bool
         });
         return result;
     } catch (error: any) {
-        // Fallback para mockApi se o servidor backend nÃƒÂ£o estiver ativo
-        const { adminCreateMassUser: mockCreate } = await import('./mockApi');
-        return mockCreate(payload);
+        return { success: false, message: error.message || 'Erro ao criar massa.' };
     }
 };
 

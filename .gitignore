@@ -62,9 +62,9 @@ WEB/new-base-fintechbank/
 # Segredos locais e credenciais de teste (nunca versionar)
 API/.env.test
 
-# Scripts locais de operação da máquina (fora do projeto)
-.freebuff/*.ps1
-.freebuff/*.cjs
+# Artefatos locais de operação da máquina (fora do projeto)
+# Logs, DBs do app desktop, scripts e state do ambiente local — nunca versionar.
+.freebuff/
 
 # Skills locais de agentes
 WEB/.agents/

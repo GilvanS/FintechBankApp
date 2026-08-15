@@ -1,3 +1,4 @@
+import { useModalAnimation } from '../../hooks/useGsapMotion';
 import React from 'react';
 import { formatCPF } from '../../utils/formatters';
 
@@ -31,10 +32,12 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
     btnTypographyClass, primaryOutlineBtnClass, neutralBtnClass,
     onClose, onConfirm, onDenyReasonChange, onDepositAmountChange,
 }) => {
+    const { overlayRef, contentRef } = useModalAnimation(isOpen);
     if (!isOpen) return null;
 
     return (
         <div
+            ref={overlayRef}
             className={modalOverlayClass}
             id="admin-modal-overlay"
             data-testid="admin-modal-overlay"
@@ -44,6 +47,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
             aria-modal="true"
         >
             <div
+                ref={contentRef}
                 className={`p-8 rounded-3xl w-full max-w-2xl test-admin-modal ${modalCardClass}`}
                 id="admin-modal"
                 data-testid="admin-modal"

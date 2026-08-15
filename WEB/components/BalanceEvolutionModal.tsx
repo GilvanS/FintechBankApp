@@ -97,15 +97,21 @@ export default function BalanceEvolutionModal({ isOpen, onClose, theme }: Balanc
                   <div key={idx} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
                     <div className="w-full flex items-end justify-center gap-1 h-32">
                       {/* Income Bar */}
-                      <div 
-                        className="w-1/2 bg-emerald-500 rounded-t-lg transition-all border border-black shadow-sm" 
-                        style={{ height: `${(item.income / maxVal) * 100}%` }} 
+                      <motion.div
+                        className="w-1/2 bg-emerald-500 rounded-t-lg border border-black shadow-sm origin-bottom"
+                        style={{ height: `${(item.income / maxVal) * 100}%` }}
+                        initial={{ scaleY: 0 }}
+                        animate={{ scaleY: 1 }}
+                        transition={{ duration: 0.3, delay: idx * 0.05, ease: [0.2, 0, 0, 1] }}
                         title={`Entradas: R$ ${item.income}`}
                       />
                       {/* Expense Bar */}
-                      <div 
-                        className="w-1/2 bg-rose-500 rounded-t-lg transition-all border border-black shadow-sm" 
-                        style={{ height: `${(item.expense / maxVal) * 100}%` }} 
+                      <motion.div
+                        className="w-1/2 bg-rose-500 rounded-t-lg border border-black shadow-sm origin-bottom"
+                        style={{ height: `${(item.expense / maxVal) * 100}%` }}
+                        initial={{ scaleY: 0 }}
+                        animate={{ scaleY: 1 }}
+                        transition={{ duration: 0.3, delay: idx * 0.05 + 0.03, ease: [0.2, 0, 0, 1] }}
                         title={`Saídas: R$ ${item.expense}`}
                       />
                     </div>

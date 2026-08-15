@@ -77,7 +77,9 @@ describe('LimitView - Render & Functionality', () => {
     );
 
     expect(screen.getByText(/Visão Geral de Orçamentos/i)).toBeInTheDocument();
-    expect(screen.getByText(/EVOLUÇÃO DO SALDO/i)).toBeInTheDocument();
+    // Existem duas seções com esse título: a 1 (sparkline 30d) e a 4.5 (card que
+    // abre o modal de evolução 6m). Verifica que pelo menos uma renderizou.
+    expect(screen.getAllByText(/EVOLUÇÃO DO SALDO/i).length).toBeGreaterThan(0);
   }, 15000);
 
   it('abre e fecha o formulario de edicao de limites sem lancar ReferenceError', () => {

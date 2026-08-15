@@ -4,7 +4,7 @@ import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileTe
 import InvoiceSummarySheet from './InvoiceSummarySheet';
 import PaymentTimelineChart from './PaymentTimelineChart';
 
-import type { User, Story, RecurringBill, Transaction } from '../types';
+import type { User, Story, Transaction, CardTransaction } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
 import { useAuth, AuthContext } from '../context/AuthContext';
 import { useAppState } from '../contexts/AppStateContext';
@@ -734,17 +734,12 @@ const HomeView: React.FC<HomeViewProps> = ({
     const methodLabel = isAccountDebit ? 'Débito em Conta' : 'Faturado no Cartão de Crédito';
 
     if (isAccountDebit) {
-      // Débito em Conta: Deduz do saldo em conta. Registra a transação zerada na fatura do cartão para atestar a quitação antecipada.
+      // Débito em Conta: deduz do saldo em conta e registra no extrato da CONTA
+      // (user.transactions, o newTx abaixo). NÃO lança nada na fatura do cartão de
+      // crédito — débito em conta é lançamento do extrato da conta, não do cartão.
+      // A linha "Quitado no Débito" com R$ 0,00 que aparecia nos lançamentos do
+      // cartão era vazamento de canal (recorrência de débito exibida como crédito).
       newBalance = user.balance - absoluteAmount;
-      const zeroCardTx: CardTransaction = {
-        id: `card-rec-debit-${Date.now()}`,
-        date: now.toISOString().split('T')[0],
-        merchant: `Recorrência: ${bill.title}`,
-        amount: 0,
-        type: 'CREDIT',
-        installments: 'Quitado no Débito'
-      };
-      updatedCreditCard.transactions = [zeroCardTx, ...(updatedCreditCard.transactions || [])];
     } else {
       // Adiantar no Crédito: Lança na fatura atual do cartão e consome limite. Saldo em conta permanece intacto.
       updatedCreditCard.availableLimit = Math.max(0, (updatedCreditCard.availableLimit || 0) - absoluteAmount);
