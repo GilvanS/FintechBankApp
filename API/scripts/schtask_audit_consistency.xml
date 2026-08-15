@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>FintechBank</Author>
+    <Description>Executa a auditoria de consistência (users.days_overdue x invoices.dias_atraso x real-time, todas as invoices fechadas não pagas) diariamente às 01:30 — logo após o BillingValidateDaily das 01:00.
+Detecta qualquer drift reintroduzido pelo motor (runBillingValidation) sem esperar o relatório semanal do domingo.
+Gera relatório HTML e CSV em API/scripts/audit_report_*.html|csv e log em API/scripts/logs/audit_consistency_*.log.</Description>
+    <URI>\FintechBank\AuditConsistencyDaily</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2026-01-01T01:30:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Settings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <!-- Sem RestartOnFailure de propósito: a auditoria retorna exit 2 quando
+         encontra drift (--fail-on-discrepancies). Um restart automático
+         re-rodaria a auditoria 3x em dias com discrepância — ruído inútil
+         (a auditoria é read-only e o drift não se resolve re-executando).
+         O drift deve aparecer UMA vez, visível no histórico da tarefa. -->
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>F:\GITHUB\FintechBankApp\API\scripts\schtask_audit_consistency.bat</Command>
+      <WorkingDirectory>F:\GITHUB\FintechBankApp\API</WorkingDirectory>
+    </Exec>
+  </Actions>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+</Task>
