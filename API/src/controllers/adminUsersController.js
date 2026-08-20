@@ -44,26 +44,33 @@ module.exports = function createAdminUsersController(deps) {
         SELECT cpf, valor_total, due_date, valor_iof, valor_multa, valor_juros_remuneratorios, valor_juros_mora, saldo_anterior,
                COALESCE(valor_pago, 0) AS valor_pago
         FROM ${dbService.fq('invoices')}
-        WHERE status = 'FECHADA' AND data_pagamento IS NULL
+        WHERE status = 'FECHADA' AND data_pagamento IS NULL AND cpf NOT IN (SELECT DISTINCT cpf FROM "fintech"."transactions" WHERE type = 'INVOICE_PAYMENT')
     `).catch(() => []);
 
-    // â”€â”€ Massas regularizadas (pagaram fatura hÃ¡ < 24h) â”€â”€
-    // Estas massas saÃ­ram da inadimplÃªncia mas ainda aparecem no painel
+    // —— Massas regularizadas (pagaram fatura há < 24h) ——
+    // Estas massas saíram da inadimplência mas ainda aparecem no painel
     // por 24 horas para o admin poder validar os dados.
-    const vinteQuatroHorasAtras = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+    const quarentaEOitoHorasAtras = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const vinteQuatroHorasAtras = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const recentlyPaidInvoices = await dbService.executeQuery(`
         SELECT cpf, valor_total, valor_pago, due_date, data_pagamento,
                valor_iof, valor_multa, valor_juros_remuneratorios, valor_juros_mora, saldo_anterior
-        FROM ${dbService.fq('invoices')}
-        WHERE status = 'FECHADA' AND data_pagamento IS NOT NULL
-          AND data_pagamento >= '${vinteQuatroHorasAtras}'
+        FROM (
+            SELECT cpf, valor_total, valor_pago, due_date, data_pagamento,
+                   valor_iof, valor_multa, valor_juros_remuneratorios, valor_juros_mora, saldo_anterior,
+                   ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY due_date DESC) AS rn
+            FROM ${dbService.fq('invoices')}
+            WHERE (data_pagamento IS NOT NULL OR cpf IN (SELECT DISTINCT cpf FROM "fintech"."transactions" WHERE type = 'INVOICE_PAYMENT'))
+              AND data_pagamento >= '${vinteQuatroHorasAtras}'
+        ) sub
+        WHERE sub.rn = 1
     `).catch(() => []);
 
-    // â”€â”€ Encargos persistidos (fonte canÃ´nica) â”€â”€
-    // runBillingValidation grava o incremento diÃ¡rio em billing_charges com status
+    // —— Encargos persistidos (fonte canônica) ——
+    // runBillingValidation grava o incremento diário em billing_charges com status
     // 'pending'; o invoiceEngine marca 'paid' quando consolida na fatura fechada.
-    // Logo 'pending' = encargos ativos ainda nÃ£o consolidados. Recalcular aqui com
-    // calcAllCharges divergiria do que foi efetivamente cobrado Ã  massa.
+    // Logo 'pending' = encargos ativos ainda não consolidados. Recalcular aqui com
+    // calcAllCharges divergiria do que foi efetivamente cobrado à massa.
     const chargeRows = await dbService.executeQuery(`
         SELECT cpf, charge_type, COALESCE(SUM(amount), 0) AS total
         FROM ${dbService.fq('billing_charges')}
@@ -83,8 +90,8 @@ module.exports = function createAdminUsersController(deps) {
         chargesByCpf.set(r.cpf, acc);
     });
 
-    // Encargos sÃ£o agregados por CPF, nÃ£o por fatura. Numa massa com vÃ¡rias faturas
-    // em aberto eles sÃ³ podem entrar uma vez â€” este Set marca quem jÃ¡ consumiu.
+    // Encargos são agregados por CPF, não por fatura. Numa massa com várias faturas
+    // em aberto eles só podem entrar uma vez — este Set marca quem já consumiu.
     const chargesConsumed = new Set();
 
     const usersMap = new Map();
@@ -98,7 +105,7 @@ module.exports = function createAdminUsersController(deps) {
     const overdueByCpf = new Map();
 
     (overdueInvoices || []).forEach(inv => {
-        const u = usersMap.get(inv.cpf) || { full_name: 'UsuÃ¡rio DB', account_status: 'inadimplente' };
+        const u = usersMap.get(inv.cpf) || { full_name: 'Usuário DB', account_status: 'inadimplente' };
         const closedVal = parseFloat(inv.valor_total || 0);
         
         let dueDate = null;
@@ -111,19 +118,19 @@ module.exports = function createAdminUsersController(deps) {
             daysOverdue = diffMs > 0 ? Math.floor(diffMs / 86400000) : 0;
         }
 
-        // Se ainda nÃ£o estiver vencido (diffMs <= 0), daysOverdue Ã© 0. O dashboard de inadimplentes pode querer exibir 
+        // Se ainda não estiver vencido (diffMs <= 0), daysOverdue é 0. O dashboard de inadimplentes pode querer exibir 
         // ou ignorar. Vamos manter apenas se daysOverdue >= 1 para ser estritamente "em atraso".
         if (daysOverdue < 1) return; 
 
-        // â”€â”€ Residual: o que a massa ainda deve desta fatura â”€â”€
-        // closedVal Ã© o valor_total ORIGINAL (imutÃ¡vel, exibido como "Fatura Fechada").
-        // O que entra na quitaÃ§Ã£o Ã© o residual â€” pagamento parcial jÃ¡ abatido.
+        // —— Residual: o que a massa ainda deve desta fatura ——
+        // closedVal é o valor_total ORIGINAL (imutável, exibido como "Fatura Fechada").
+        // O que entra na quitação é o residual — pagamento parcial já abatido.
         const valorPagoInv = parseFloat(inv.valor_pago || 0);
         const residual = Math.max(0, Math.round((closedVal - valorPagoInv) * 100) / 100);
 
-        // â”€â”€ Encargos: billing_charges persistido, uma vez por CPF â”€â”€
-        // Fallback para calcAllCharges(residual) sÃ³ quando o motor nunca rodou para
-        // esta massa â€” sinalizado por chargesSource p/ o admin nÃ£o confundir valor
+        // —— Encargos: billing_charges persistido, uma vez por CPF ——
+        // Fallback para calcAllCharges(residual) só quando o motor nunca rodou para
+        // esta massa — sinalizado por chargesSource p/ o admin não confundir valor
         // cobrado com valor estimado.
         const persisted = chargesConsumed.has(inv.cpf) ? null : chargesByCpf.get(inv.cpf);
         chargesConsumed.add(inv.cpf);
@@ -137,7 +144,7 @@ module.exports = function createAdminUsersController(deps) {
             totalEncargos = Math.round(persisted.total * 100) / 100;
             chargesSource = 'billing_charges';
         } else if (persisted === null) {
-            // 2Âª+ fatura da mesma massa: encargos jÃ¡ contabilizados na primeira
+            // 2Âª+ fatura da mesma massa: encargos já contabilizados na primeira
             multa = jurosMora = jurosRem = iof = totalEncargos = 0;
             chargesSource = 'already_counted';
         } else {
@@ -148,12 +155,12 @@ module.exports = function createAdminUsersController(deps) {
             iof = ch.iof;
             totalEncargos = ch.total;
             chargesSource = 'estimated';
-            console.warn(`[overdue-dashboard] CPF ${inv.cpf}: sem billing_charges pending â€” encargos ESTIMADOS via calcAllCharges. Motor de billing pode estar parado.`);
+            console.warn(`[overdue-dashboard] CPF ${inv.cpf}: sem billing_charges pending — encargos ESTIMADOS via calcAllCharges. Motor de billing pode estar parado.`);
         }
 
-        // saldo_anterior NÃƒO entra aqui: invoiceEngine.js:154 o preenche com o
-        // valor_total da fatura anterior nÃ£o paga, e essa fatura continua na query
-        // de :2872 como linha prÃ³pria â€” somÃ¡-lo contaria o mesmo dÃ©bito duas vezes.
+        // saldo_anterior NÃO entra aqui: invoiceEngine.js:154 o preenche com o
+        // valor_total da fatura anterior não paga, e essa fatura continua na query
+        // de :2872 como linha própria — somá-lo contaria o mesmo débito duas vezes.
         const totalQuitacao = Math.round((residual + totalEncargos) * 100) / 100;
 
         const dueDateStr = inv.due_date ? toDateOnly(inv.due_date) : null;
@@ -170,10 +177,11 @@ module.exports = function createAdminUsersController(deps) {
                 cpf: inv.cpf,
                 fullName: u.full_name,
                 accountStatus: 'inadimplente',
+                severity: daysOverdue >= 30 ? 'CRITICA' : (daysOverdue >= 15 ? 'ALERTA' : 'NORMAL'),
                 faturaFechada: closedVal,
                 daysOverdue,
                 invoiceCount: 1,
-                // MantÃ©m a data de vencimento mais antiga (fatura mais atrasada)
+                // Mantém a data de vencimento mais antiga (fatura mais atrasada)
                 dueDate: dueDateStr,
                 encargos: { multa, jurosMora, jurosRemuneratorios: jurosRem, iof, totalEncargos },
                 // 'billing_charges' = valor real cobrado | 'estimated' = motor nunca rodou
@@ -188,7 +196,8 @@ module.exports = function createAdminUsersController(deps) {
         } else {
             const __valorPago = parseFloat(inv.valor_pago || 0);
             existing.faturaFechada = Math.round((existing.faturaFechada + closedVal) * 100) / 100;
-            existing.daysOverdue += daysOverdue; // soma os dias de atraso das faturas da massa
+            existing.daysOverdue = Math.max(existing.daysOverdue, daysOverdue);
+                existing.severity = existing.daysOverdue >= 30 ? 'CRITICA' : (existing.daysOverdue >= 15 ? 'ALERTA' : 'NORMAL'); // soma os dias de atraso das faturas da massa
             existing.invoiceCount += 1;
             existing.encargos.multa = Math.round((existing.encargos.multa + multa) * 100) / 100;
             existing.encargos.jurosMora = Math.round((existing.encargos.jurosMora + jurosMora) * 100) / 100;
@@ -201,9 +210,9 @@ module.exports = function createAdminUsersController(deps) {
             if (existing.paymentSummary) {
                 existing.paymentSummary.totalPago = Math.round((existing.paymentSummary.totalPago + __valorPago) * 100) / 100;
                 existing.paymentSummary.saldoRestante = Math.round((existing.paymentSummary.saldoRestante + Math.max(0, closedVal - __valorPago)) * 100) / 100;
-                // Status mÃ­nimo: prioridade ABAIXO > SEM_PAG > ACIMA.
-                // Se QUALQUER fatura tiver pagamento abaixo de 10%, o status Ã© ABAIXO.
-                // Se nenhuma tiver pagamento, SEM_PAG. SÃ³ ACIMA se todas â‰¥ 10%.
+                // Status mínimo: prioridade ABAIXO > SEM_PAG > ACIMA.
+                // Se QUALQUER fatura tiver pagamento abaixo de 10%, o status é ABAIXO.
+                // Se nenhuma tiver pagamento, SEM_PAG. Só ACIMA se todas ≥ 10%.
                 const _invMin = Math.round(closedVal * 0.10 * 100) / 100;
                 if (__valorPago > 0 && __valorPago < _invMin) {
                     existing.paymentSummary.statusMinimo = 'ABAIXO';
@@ -216,13 +225,13 @@ module.exports = function createAdminUsersController(deps) {
         }
     });
 
-    // â”€â”€ Incluir massas regularizadas recentemente (< 24h) â”€â”€
+    // —— Incluir massas regularizadas recentemente (< 24h) ——
     // Cada uma aparece com accountStatus = 'regularizada' e regularizedAt
-    // para o frontend exibir badge verde "Regularizada hÃ¡ N horas".
-    // NÃ£o repete massas que jÃ¡ estÃ£o na lista de inadimplentes.
+    // para o frontend exibir badge verde "Regularizada há N horas".
+    // Não repete massas que já estão na lista de inadimplentes.
     (recentlyPaidInvoices || []).forEach(inv => {
-        if (overdueByCpf.has(inv.cpf)) return; // jÃ¡ estÃ¡ como inadimplente (outra fatura nÃ£o paga)
-        const u = usersMap.get(inv.cpf) || { full_name: 'UsuÃ¡rio DB' };
+        if (overdueByCpf.has(inv.cpf)) return; // já está como inadimplente (outra fatura não paga)
+        const u = usersMap.get(inv.cpf) || { full_name: 'Usuário DB' };
         const closedVal = parseFloat(inv.valor_total || 0);
         const paidAt = inv.data_pagamento;
         const paidTime = paidAt ? new Date(paidAt).getTime() : 0;
@@ -233,7 +242,7 @@ module.exports = function createAdminUsersController(deps) {
         let daysOverdue = 0;
         if (inv.due_date) {
             const d = new Date(inv.due_date); d.setHours(0, 0, 0, 0);
-            daysOverdue = Math.max(0, Math.floor((todayMidnight - d) / 86400000));
+            const refDate = inv.data_pagamento ? new Date(inv.data_pagamento) : todayMidnight; refDate.setHours(0, 0, 0, 0); daysOverdue = Math.max(0, Math.floor((refDate - d) / 86400000));
         }
 
         const _valPago = parseFloat(inv.valor_pago || 0);
@@ -261,11 +270,11 @@ module.exports = function createAdminUsersController(deps) {
         });
     });
 
-    // â”€â”€ Buscar histÃ³rico de pagamentos (INVOICE_PAYMENT) para cada CPF â”€â”€
+    // —— Buscar histórico de pagamentos (INVOICE_PAYMENT) para cada CPF ——
     try {
         const allCpfs = Array.from(overdueByCpf.keys());
         if (allCpfs.length > 0) {
-            // Buscar TODAS as transaÃ§Ãµes INVOICE_PAYMENT destes CPFs de uma vez
+            // Buscar TODAS as transações INVOICE_PAYMENT destes CPFs de uma vez
             const cpfList = allCpfs.map(c => `'${c}'`).join(',');
             const paymentTxRows = await dbService.executeQuery(`
                 SELECT cpf, id, amount, description, date
@@ -283,7 +292,7 @@ module.exports = function createAdminUsersController(deps) {
                 const desc = (tx.description || '').toLowerCase();
                 let paymentType = 'TOTAL';
                 if (desc.includes('parcial')) paymentType = 'PARCIAL';
-                else if (desc.includes('minimo') || desc.includes('mÃ­nimo')) paymentType = 'MINIMO';
+                else if (desc.includes('minimo') || desc.includes('mínimo')) paymentType = 'MINIMO';
                 paymentsByCpf.get(tx.cpf).push({
                     id: tx.id,
                     date: tx.date,
@@ -310,10 +319,10 @@ module.exports = function createAdminUsersController(deps) {
     const totalOverdueAmount = Math.round(overdueList.reduce((sum, item) => sum + item.totalQuitacao, 0) * 100) / 100;
     const avgDaysOverdue = overdueCount > 0 ? Math.round(overdueList.filter(m => m.accountStatus === 'inadimplente').reduce((sum, item) => sum + item.daysOverdue, 0) / overdueCount) : 0;
 
-    // â”€â”€ RelatÃ³rio detalhado das massas regularizadas â”€â”€
-    // Inclui valor pago, tipo de pagamento, tempo atÃ© regularizaÃ§Ã£o.
+    // —— Relatório detalhado das massas regularizadas ——
+    // Inclui valor pago, tipo de pagamento, tempo até regularização.
     const regularizedReport = (recentlyPaidInvoices || []).map(inv => {
-        const u = usersMap.get(inv.cpf) || { full_name: 'UsuÃ¡rio DB' };
+        const u = usersMap.get(inv.cpf) || { full_name: 'Usuário DB' };
         const closedVal = parseFloat(inv.valor_total || 0);
         const valorPago = parseFloat(inv.valor_pago || 0);
         const paidAt = inv.data_pagamento;
@@ -321,7 +330,7 @@ module.exports = function createAdminUsersController(deps) {
         const nowTime = Date.now();
         const hoursAgo = paidTime > 0 ? Math.round((nowTime - paidTime) / (60 * 60 * 1000)) : 0;
 
-        // Deduzir tipo de pagamento: TOTAL (>= 99% do total), MÃNIMO (>= 10%), PARCIAL (< 10%)
+        // Deduzir tipo de pagamento: TOTAL (>= 99% do total), MÍNIMO (>= 10%), PARCIAL (< 10%)
         let paymentType = 'PARCIAL';
         if (valorPago >= closedVal * 0.99) {
             paymentType = 'TOTAL';
@@ -385,7 +394,7 @@ module.exports = function createAdminUsersController(deps) {
     await deposit(cpf, amount);
     auditLog(req, 'admin_deposit', 'info', { cpf, amount });
     
-    // Buscar usuÃ¡rio atualizado para retornar
+    // Buscar usuário atualizado para retornar
     const updatedUser = await usersRepo.findByCpf(cpf);
     if (!updatedUser) {
         return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
@@ -393,7 +402,7 @@ module.exports = function createAdminUsersController(deps) {
     
     res.json({ 
         success: true, 
-        message: 'DepÃ³sito realizado com sucesso.',
+        message: 'Depósito realizado com sucesso.',
         user: normalizeUser(updatedUser)
     });
 
@@ -403,7 +412,7 @@ module.exports = function createAdminUsersController(deps) {
     const { cpf } = req.params;
     await setBlocked(cpf, true);
     const updatedUser = await usersRepo.findByCpf(cpf);
-    res.json({ success: true, message: 'UsuÃ¡rio bloqueado com sucesso.', user: normalizeUser(updatedUser) });
+    res.json({ success: true, message: 'Usuário bloqueado com sucesso.', user: normalizeUser(updatedUser) });
 
     };
 
@@ -411,7 +420,7 @@ module.exports = function createAdminUsersController(deps) {
     const { cpf } = req.params;
     await setBlocked(cpf, false);
     
-    // Buscar usuÃ¡rio atualizado para retornar
+    // Buscar usuário atualizado para retornar
     const updatedUser = await usersRepo.findByCpf(cpf);
     if (!updatedUser) {
         return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
@@ -419,7 +428,7 @@ module.exports = function createAdminUsersController(deps) {
     
     res.json({ 
         success: true, 
-        message: 'UsuÃ¡rio desbloqueado com sucesso.',
+        message: 'Usuário desbloqueado com sucesso.',
         user: normalizeUser(updatedUser)
     });
 
@@ -454,7 +463,7 @@ module.exports = function createAdminUsersController(deps) {
         return res.status(400).json({ success: false, message: 'availableLimit invalido.' });
     }
     
-    // Verificar se o usuÃ¡rio existe
+    // Verificar se o usuário existe
     const user = await usersRepo.findByCpf(cpf);
     if (!user) {
         return res.status(404).json({ success: false, message: 'Usuario nao encontrado.' });
@@ -465,8 +474,8 @@ module.exports = function createAdminUsersController(deps) {
     // Se totalLimit foi informado, atualizar
     if (totalLimit != null) {
         sets.push(`credit_card_total_limit = ${Number(totalLimit).toFixed(2)}`);
-        // Se availableLimit nÃ£o foi informado e o limite total estÃ¡ sendo reduzido,
-        // ajustar o availableLimit para nÃ£o ficar maior que o totalLimit
+        // Se availableLimit não foi informado e o limite total está sendo reduzido,
+        // ajustar o availableLimit para não ficar maior que o totalLimit
         if (availableLimit == null) {
             const currentAvailable = parseFloat(user.credit_card_available_limit || 0);
             const newAvailable = Math.min(currentAvailable, totalLimit);
@@ -477,7 +486,7 @@ module.exports = function createAdminUsersController(deps) {
     // Se availableLimit foi informado, atualizar
     if (availableLimit != null) {
         const finalTotalLimit = totalLimit != null ? totalLimit : parseFloat(user.credit_card_total_limit || 0);
-        // Garantir que availableLimit nÃ£o seja maior que totalLimit
+        // Garantir que availableLimit não seja maior que totalLimit
         const finalAvailableLimit = Math.min(availableLimit, finalTotalLimit);
         sets.push(`credit_card_available_limit = ${finalAvailableLimit.toFixed(2)}`);
     }
@@ -486,7 +495,7 @@ module.exports = function createAdminUsersController(deps) {
         return res.status(400).json({ success: false, message: 'Nenhum limite para atualizar.' });
     }
     
-    const { esc } = require('./repositories/context');
+    const { esc } = require('../../repositories/context');
     const now = new Date().toISOString();
     
     await dbService.executeQuery(`
@@ -497,7 +506,7 @@ module.exports = function createAdminUsersController(deps) {
     
     auditLog(req, 'admin_credit_limit_update', 'info', { cpf, totalLimit, availableLimit });
     
-    // Buscar usuÃ¡rio atualizado
+    // Buscar usuário atualizado
     const updatedUser = await usersRepo.findByCpf(cpf);
     res.json({ 
         success: true, 
@@ -509,7 +518,7 @@ module.exports = function createAdminUsersController(deps) {
 
     const adminResetPassword = async (req, res) => {
     await setPasswordResetRequested(req.params.cpf, true);
-    res.json({ success: true, message: 'SolicitaÃ§Ã£o de reset registrada' });
+    res.json({ success: true, message: 'Solicitação de reset registrada' });
 
     };
 
@@ -518,7 +527,7 @@ module.exports = function createAdminUsersController(deps) {
     const { password } = req.body || {};
     const newPassword = password || 'admin999';
 
-    // Verificar se usuÃ¡rio existe
+    // Verificar se usuário existe
     const user = await findByCpf(cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
 
@@ -551,22 +560,22 @@ module.exports = function createAdminUsersController(deps) {
     const adminGenerateTempPassword = async (req, res) => {
     const { cpf } = req.params;
 
-    // Verificar se usuÃ¡rio existe
+    // Verificar se usuário existe
     const user = await findByCpf(cpf);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
 
-    // Gerar senha temporÃ¡ria fixa conforme regra atual
+    // Gerar senha temporária fixa conforme regra atual
     const tempPassword = 'temp1234';
 
-    // Persistir via repositÃ³rio (responsÃ¡vel por hash e atualizaÃ§Ã£o)
+    // Persistir via repositório (responsável por hash e atualização)
     await setTempPassword(cpf, tempPassword);
 
-    // Buscar usuÃ¡rio atualizado
+    // Buscar usuário atualizado
     const updatedUser = await findByCpf(cpf);
 
     res.json({
         success: true,
-        message: 'Senha temporÃ¡ria gerada com sucesso',
+        message: 'Senha temporária gerada com sucesso',
         tempPassword,
         user: normalizeUser(updatedUser)
     });
@@ -638,7 +647,7 @@ module.exports = function createAdminUsersController(deps) {
     
     const [dbUser] = await dbService.executeQuery(`SELECT card_is_activated FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
     if (!dbUser || !dbUser.card_is_activated) {
-        return res.status(403).json({ success: false, message: 'CartÃ£o fÃ­sico nÃ£o estÃ¡ ativado.' });
+        return res.status(403).json({ success: false, message: 'Cartão físico não está ativado.' });
     }
 
     const qty = Number.isInteger(installments) ? installments : 1;
@@ -706,7 +715,7 @@ module.exports = function createAdminUsersController(deps) {
     
     const [dbUser] = await dbService.executeQuery(`SELECT card_is_activated FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
     if (!dbUser || !dbUser.card_is_activated) {
-        return res.status(403).json({ success: false, message: 'CartÃ£o fÃ­sico nÃ£o estÃ¡ ativado.' });
+        return res.status(403).json({ success: false, message: 'Cartão físico não está ativado.' });
     }
 
     const qty = Number.isInteger(installments) ? installments : 1;

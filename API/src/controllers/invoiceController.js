@@ -744,6 +744,18 @@ module.exports = function createInvoiceController(deps) {
                     ? 'Pagamento abaixo do mínimo. Segue inadimplente, dias de atraso continuam contando e encargos continuam incidindo sobre o saldo devedor restante.'
                     : 'Pagamento mínimo registrado. Dias de atraso zerados, mas os encargos continuam acumulando sobre o saldo residual até o pagamento total.'
             });
+            // SSE: notificar frontend em tempo real
+            try {
+                const sse = require('../../services/sseService');
+                sse.sendToClient(cpf, 'payment.completed', {
+                    cpf,
+                    amount: payAmount,
+                    totalDue,
+                    remainingBalance: remaining,
+                    type: 'partial',
+                    timestamp: new Date().toISOString(),
+                });
+            } catch (_sseErr) { /* SSE é fire-and-forget */ }
             return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining });
         }
     
@@ -840,6 +852,16 @@ module.exports = function createInvoiceController(deps) {
             vencimento: cutoffIso,
             nota: 'Limite de crédito reestabelecido e conta regularizada com sucesso.'
         });
+        // SSE: notificar frontend em tempo real
+        try {
+            const sse = require('../../services/sseService');
+            sse.sendToClient(cpf, 'payment.completed', {
+                cpf,
+                amount: payAmount,
+                type: 'full',
+                timestamp: new Date().toISOString(),
+            });
+        } catch (_sseErr) { /* SSE é fire-and-forget */ }
         res.json({ success: true, message: 'Fatura paga com sucesso.' });
     };
     

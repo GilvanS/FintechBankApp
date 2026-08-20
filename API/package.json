@@ -29,13 +29,15 @@
     "audit:all": "node scripts/run_audit_all.js",
     "validate:rules": "node scripts/validate_skill_rules.js",
     "badge:svg": "node scripts/generate_badge_svg.js",
-    "badge:json": "node scripts/getBadgeStats.js"
+    "badge:json": "node scripts/getBadgeStats.js",
+    "worker:billing": "node workers/billingWorker.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "bullmq": "^6.1.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
@@ -43,18 +45,23 @@
     "express-rate-limit": "^8.5.2",
     "express-validator": "^7.3.0",
     "helmet": "^8.2.0",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.2",
+    "kafkajs": "^2.2.4",
     "knex": "^3.2.10",
     "mysql2": "^3.9.7",
     "newman-reporter-html": "^1.0.5",
     "node-cron": "^4.6.0",
     "pdfkit": "^0.19.1",
     "pg": "^8.16.3",
+    "rate-limit-redis": "^6.0.1",
     "swagger-autogen": "^2.23.7",
     "swagger-ui-express": "^5.0.1",
+    "uuid": "^14.0.1",
     "yamljs": "^0.3.0"
   },
   "devDependencies": {
+    "@babel/preset-env": "^8.0.2",
     "jest": "^29.7.0",
     "newman": "^6.1.2",
     "supertest": "^6.3.3"

@@ -11,11 +11,23 @@ module.exports = {
             displayName: 'unit',
             testEnvironment: 'node',
             testMatch: ['**/tests/unit/**/*.test.js'],
+            transformIgnorePatterns: [
+                '/node_modules/(?!uuid)'
+            ],
+            transform: {
+                '^.+\.js$': ['babel-jest', { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] }]
+            },
         },
         {
             displayName: 'integration',
             testEnvironment: 'node',
             testMatch: ['**/tests/integration/**/*.test.js'],
+            transformIgnorePatterns: [
+                '/node_modules/(?!uuid)'
+            ],
+            transform: {
+                '^.+\.js$': ['babel-jest', { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] }]
+            },
         },
     ],
     collectCoverageFrom: [

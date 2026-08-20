@@ -93,6 +93,28 @@ async function runDailyAudit(dbService, auditLog) {
             }
         }
 
+        // Anomalia 6: Faturas duplicadas (mesmo cpf + due_date)
+        const duplicatas = await db.executeQuery(`
+            SELECT i.cpf, i.due_date, u.full_name,
+                   COUNT(*) as total,
+                   array_agg(i.id) as ids,
+                   array_agg(i.valor_total ORDER BY i.created_at) as valores
+            FROM ${db.fq('invoices')} i
+            JOIN ${db.fq('users')} u ON u.cpf = i.cpf
+            WHERE i.status = 'FECHADA'
+            GROUP BY i.cpf, i.due_date, u.full_name
+            HAVING COUNT(*) > 1
+        `);
+
+        for (const dup of duplicatas) {
+            errors.push({
+                cpf: dup.cpf,
+                name: dup.full_name || '(duplicata)',
+                type: 'FATURA_DUPLICADA',
+                details: `${dup.total} faturas FECHADA com vencimento ${toDateOnly(dup.due_date)}. IDs: ${dup.ids.join(', ')}. Valores: ${dup.valores.join(', ')}. Risco de cobrança duplicada e distorção no painel admin.`
+            });
+        }
+
         // Anomalia 5: Transações de cartão órfãs
         // Transações de INVOICE_INSTALLMENT sem plano correspondente ativo ou completo
         const orphanTxs = await db.executeQuery(`

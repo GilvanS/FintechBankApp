@@ -21,6 +21,9 @@ describe('dailyAudit service unit tests', () => {
     test('deve identificar anomalia 1: pagamento parcial após vencimento sem novos encargos', async () => {
         // Mock das faturas vencidas não pagas
         mockDb.executeQuery.mockImplementation(async (query) => {
+            if (query.includes('array_agg') || (query.includes('COUNT(*)') && query.includes('HAVING'))) {
+                return []; // FATURA_DUPLICADA query — sem duplicatas
+            }
             if (query.includes('FROM "invoices"')) {
                 return [{
                     cpf: '12345678901',

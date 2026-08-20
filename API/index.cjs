@@ -1,18 +1,20 @@
-﻿// PRIMEIRA LINHA â€” antes de qualquer require. Node lÃª process.env.TZ na primeira operaÃ§Ã£o de data.
+const { RedisStore } = require('rate-limit-redis');
+const redisClient = require('./services/redisClient');
+﻿// PRIMEIRA LINHA — antes de qualquer require. Node lê process.env.TZ na primeira operação de data.
 process.env.TZ = process.env.TZ || 'America/Sao_Paulo';
 
 const dotenv = require('dotenv');
 const path = require('path');
 
-// Carregar variÃ¡veis de ambiente com caminho absoluto para evitar erros de CWD
+// Carregar variáveis de ambiente com caminho absoluto para evitar erros de CWD
 dotenv.config({ path: path.join(__dirname, '.env') });
 
-// Ambiente de teste (jest): desliga os efeitos colaterais do LOAD do mÃ³dulo
+// Ambiente de teste (jest): desliga os efeitos colaterais do LOAD do módulo
 // (crons, catch-up do motor real, reconciliation scheduler e app.listen). O
-// bootstrap continua conectando o banco e rodando o seed — necessÃ¡rio para os
-// testes de integraÃ§Ã£o que importam este mÃ³dulo — mas nada Ã© agendado nem
-// disparado contra o banco real durante a suÃ­te. Sem este guard, o require de
-// index.cjs disparava o motor de encargos (escrevendo no banco de produÃ§Ã£o)
+// bootstrap continua conectando o banco e rodando o seed — necessário para os
+// testes de integração que importam este módulo — mas nada é agendado nem
+// disparado contra o banco real durante a suíte. Sem este guard, o require de
+// index.cjs disparava o motor de encargos (escrevendo no banco de produção)
 // e mantinha timers vivos que logavam depois do fim dos testes ("Cannot log
 // after tests are done").
 const IS_TEST = process.env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
@@ -34,7 +36,7 @@ const telegramService = require('./services/telegramService');
 const telegramSettingsRepo = require('./repositories/telegramSettingsRepo');
 const telegramMessageLogRepo = require('./repositories/telegramMessageLogRepo');
 
-// --- RepositÃ³rios / Contexto ---
+// --- Repositórios / Contexto ---
 const repoContext = require('./repositories/context');
 const recurringBillsRepo = require('./repositories/recurringBillsRepo');
 const notificationsRepo = require('./repositories/notificationsRepo');
@@ -48,9 +50,9 @@ const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallme
 const cardEngine = require('./utils/cardEngine');
 const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates, classifyDoubleCount } = require('./utils/invoiceMath');
 
-// art. 52 CDC â€” payload Ãºnico de encargos de juros exposto nas rotas de compra
-// (shop/checkout e acquirer-simulate) e nas transaÃ§Ãµes enriquecidas do cartÃ£o.
-// Fonte Ãºnica: evita duplicar a matemÃ¡tica entre as rotas.
+// art. 52 CDC — payload único de encargos de juros exposto nas rotas de compra
+// (shop/checkout e acquirer-simulate) e nas transações enriquecidas do cartão.
+// Fonte única: evita duplicar a matemática entre as rotas.
 const buildJurosPayload = ({ original, totalWithInterest, installments, interestRate }) => {
     const rate = Number(interestRate) || 0;
     const qty = Number(installments) || 1;
@@ -127,10 +129,10 @@ function buildPurchaseTelegramMessage({ tipo, estabelecimento, original, totalPa
     return linhas.join('\n');
 }
 
-// Gera o COMPROVANTE DE COMPRA em PDF (art. 52 CDC) e envia ao tÃ³pico Telegram
-// da massa. Reusa a categoria 'payment_receipt' (toggle do painel admin que jÃ¡
-// governa os comprovantes) com filename prÃ³prio. Fire-and-forget: nunca falha a
-// compra por causa do Telegram â€” erros sÃ£o apenas logados.
+// Gera o COMPROVANTE DE COMPRA em PDF (art. 52 CDC) e envia ao tópico Telegram
+// da massa. Reusa a categoria 'payment_receipt' (toggle do painel admin que já
+// governa os comprovantes) com filename próprio. Fire-and-forget: nunca falha a
+// compra por causa do Telegram — erros são apenas logados.
 async function generateAndSendPurchaseReceipt({ cpf, nome, cartaoFinal, data }) {
     try {
         const { generatePurchaseReceiptPDF } = require('./services/invoicePdfService');
@@ -143,13 +145,13 @@ async function generateAndSendPurchaseReceipt({ cpf, nome, cartaoFinal, data }) 
                 if (!cardFinal && u && (u.card_number || u.cardNumber)) {
                     cardFinal = String(u.card_number || u.cardNumber).replace(/\D/g, '').slice(-4);
                 }
-            } catch (_e) { /* nÃ£o bloqueia o envio */ }
+            } catch (_e) { /* não bloqueia o envio */ }
         }
         const pdfData = {
             nome: userName || '',
             cpf,
             cpfFormatado: typeof telegramService.formatCpf === 'function' ? telegramService.formatCpf(cpf) : cpf,
-            cartaoFinal: cardFinal || 'â€”',
+            cartaoFinal: cardFinal || '—',
             ...data,
         };
         const buffer = await generatePurchaseReceiptPDF(pdfData);
@@ -181,27 +183,33 @@ const createUsersController = require('./src/controllers/usersController');
 const registerUsersRoutes = require('./src/routes/users.routes');
 const createAdminUsersController = require('./src/controllers/adminUsersController');
 const registerAdminUsersRoutes = require('./src/routes/admin/users.routes');
+const createAdminNotificationsController = require('./src/controllers/adminNotificationsController');
+const registerAdminNotificationsRoutes = require('./src/routes/admin/notifications.routes');
 
-// --- ConfiguraÃ§Ãµes ---
+// --- Configurações ---
 const PORT = process.env.PORT || 3001;
-const JWT_SECRET = process.env.JWT_SECRET; // auth.js lanÃ§a erro no startup se nÃ£o definido
+const JWT_SECRET = process.env.JWT_SECRET; // auth.js lança erro no startup se não definido
 
-// --- ServiÃ§o de Banco de Dados ---
+// --- Serviço de Banco de Dados ---
 // Inicializado via Factory. Apenas PostgresProvider (pgdb).
 const dbService = DatabaseFactory.createDatabaseService();
 const transactionService = createTransactionService({ dbService, transactionsRepo, transactionReversal, usersRepo, vouchersRepo });
 const applyTransactionCancellation = transactionService.applyTransactionCancellation;
-// Conectar ao banco serÃ¡ feito no bootstrap()
-// dbService.connect(); // Removido - conexÃ£o Ã© feita no bootstrap()
+// Conectar ao banco será feito no bootstrap()
+// dbService.connect(); // Removido - conexão é feita no bootstrap()
 
 // --- Motor de Faturas ---
 const cron = require('node-cron');
 
-// Registra um cron apenas fora do ambiente de teste: durante a suÃ­te do jest,
-// os timers de agendamento ficariam vivos apÃ³s o fim (open handle + logs
-// assÃ­ncronos) e poderiam disparar o motor real no meio dos testes.
+// Registra um cron apenas fora do ambiente de teste: durante a suíte do jest,
+// os timers de agendamento ficariam vivos após o fim (open handle + logs
+// assíncronos) e poderiam disparar o motor real no meio dos testes.
 const scheduleCron = (expr, fn) => {
     if (IS_TEST) return;
+    if (process.env.RUN_INTERNAL_WORKER === 'false') {
+        console.log('[Cron] Ignorando agendamento interno (RUN_INTERNAL_WORKER=false): ' + expr);
+        return;
+    }
     cron.schedule(expr, fn);
 };
 const { runEngine } = require('./services/invoiceEngine');
@@ -209,7 +217,7 @@ const { runDailyAudit } = require('./services/dailyAudit');
 const { runInvoiceImmutabilityHealth, resolveOrphanCutoff } = require('./services/invoiceImmutabilityHealth');
 const { assertTimezone } = require('./utils/timezone');
 
-// Agendar verificaÃ§Ã£o diariamente Ã  meia-noite (horÃ¡rio de BrasÃ­lia)
+// Agendar verificação diariamente à meia-noite (horário de Brasília)
 const MAX_CPFS_NO_ALERTA = 20;
 // Reporta o resultado de um motor no Telegram identificando QUAIS massas falharam.
 // Sem os CPFs a mensagem era inacionavel: dizia que houve erro, mas nao onde olhar.
@@ -233,7 +241,7 @@ function reportarResultadoMotor(nomeMotor, result) {
 }
 
 scheduleCron('0 0 * * *', async () => {
-    telegramService.alertGroup('âš™ï¸ Motor diÃ¡rio iniciando: fechamento de faturas, billing, recorrÃªncias e sincronizaÃ§Ã£o...', 'system_start');
+    telegramService.alertGroup('⚠️ Motor diário iniciando: fechamento de faturas, billing, recorrências e sincronização...', 'system_start');
     console.log('[Cron] Executando Invoice Engine...');
     try {
         await assertTimezone(dbService);
@@ -241,42 +249,42 @@ scheduleCron('0 0 * * *', async () => {
         reportarResultadoMotor('Invoice Engine', result);
     } catch (e) {
         console.error('[Cron] Erro no Invoice Engine:', e);
-        telegramService.alertGroup(`ðŸš¨ ERRO no Invoice Engine: ${e.message}`, 'system_error');
+        telegramService.alertGroup(`🚨 ERRO no Invoice Engine: ${e.message}`, 'system_error');
     }
 
-    // Roda logo apÃ³s o Invoice Engine: marca contas inadimplentes e recalcula
-    // multa/IOF/juros diariamente para faturas fechadas vencidas e nÃ£o pagas.
-    // Sem este passo, days_overdue e billing_charges nunca sÃ£o atualizados sozinhos.
-    console.log('[Cron] Executando validaÃ§Ã£o de faturamento (inadimplÃªncia/encargos)...');
+    // Roda logo após o Invoice Engine: marca contas inadimplentes e recalcula
+    // multa/IOF/juros diariamente para faturas fechadas vencidas e não pagas.
+    // Sem este passo, days_overdue e billing_charges nunca são atualizados sozinhos.
+    console.log('[Cron] Executando validação de faturamento (inadimplência/encargos)...');
     try {
         const result = await runBillingValidation();
-        console.log('[Cron] ValidaÃ§Ã£o de faturamento concluÃ­da:', result && result.message);
+        console.log('[Cron] Validação de faturamento concluída:', result && result.message);
         reportarResultadoMotor('Validacao de faturamento', result);
     } catch (e) {
-        console.error('[Cron] Erro na validaÃ§Ã£o de faturamento:', e);
-        telegramService.alertGroup(`ðŸš¨ ERRO na validaÃ§Ã£o de faturamento: ${e.message}`, 'system_error');
+        console.error('[Cron] Erro na validação de faturamento:', e);
+        telegramService.alertGroup(`🚨 ERRO na validação de faturamento: ${e.message}`, 'system_error');
     }
 
-    // CobranÃ§a recorrente de assinaturas vencidas (dÃ©bito/crÃ©dito) via Motor de RecorrÃªncia.
-    console.log('[Cron] Executando cobranÃ§a de assinaturas via Motor de RecorrÃªncia...');
+    // Cobrança recorrente de assinaturas vencidas (débito/crédito) via Motor de Recorrência.
+    console.log('[Cron] Executando cobrança de assinaturas via Motor de Recorrência...');
     try {
         const recurringEngine = require('./services/recurringEngine');
         const result = await recurringEngine.runEngine();
-        console.log('[Cron] CobranÃ§a de assinaturas realizada:', result && result.processedCount, 'processadas');
+        console.log('[Cron] Cobrança de assinaturas realizada:', result && result.processedCount, 'processadas');
     } catch (e) {
-        console.error('[Cron] Erro na cobranÃ§a de assinaturas:', e);
-        telegramService.alertGroup(`ðŸš¨ ERRO na cobranÃ§a de assinaturas: ${e.message}`, 'system_error');
+        console.error('[Cron] Erro na cobrança de assinaturas:', e);
+        telegramService.alertGroup(`🚨 ERRO na cobrança de assinaturas: ${e.message}`, 'system_error');
     }
 
-    // Sincronizar dias_atraso nas invoices fechadas nÃ£o pagas (garantia extra
+    // Sincronizar dias_atraso nas invoices fechadas não pagas (garantia extra
     // mesmo se o runBillingValidation acima falhar ou pular a sync condicional).
     console.log('[Cron] Sincronizando dias_atraso nas invoices...');
     try {
         const syncResult = await syncInvoiceDiasAtraso();
         if (syncResult.success) {
-            console.log(`[Cron] SincronizaÃ§Ã£o concluÃ­da: ${syncResult.updated} invoice(s) atualizada(s), ${syncResult.corretas}/${syncResult.total} consistentes`);
+            console.log(`[Cron] Sincronização concluída: ${syncResult.updated} invoice(s) atualizada(s), ${syncResult.corretas}/${syncResult.total} consistentes`);
         } else {
-            console.warn('[Cron] Falha na sincronizaÃ§Ã£o de dias_atraso:', syncResult.error);
+            console.warn('[Cron] Falha na sincronização de dias_atraso:', syncResult.error);
         }
     } catch (e) {
         console.error('[Cron] Erro ao sincronizar dias_atraso:', e);
@@ -290,62 +298,62 @@ scheduleCron('0 0 * * *', async () => {
     } catch (updErr) {
         console.warn('[Cron] Nao foi possivel registrar last_engine_run_at:', updErr.message);
     }
-    telegramService.alertGroup('âœ… Motor diÃ¡rio concluÃ­do: faturas, billing, assinaturas e sincronizaÃ§Ã£o processados.', 'system_done');
+    telegramService.alertGroup('✅ Motor diário concluído: faturas, billing, assinaturas e sincronização processados.', 'system_done');
 });
 
-// Cron de auditoria diÃ¡ria de anomalias (executa Ã s 02:00 BRT)
+// Cron de auditoria diária de anomalias (executa às 02:00 BRT)
 scheduleCron('0 2 * * *', async () => {
-    telegramService.alertGroup('âš™ï¸ Job de auditoria diÃ¡ria iniciando: varredura de anomalias...', 'system_start');
+    telegramService.alertGroup('⚠️ Job de auditoria diária iniciando: varredura de anomalias...', 'system_start');
     try {
         await assertTimezone(dbService);
         const result = await runDailyAudit(dbService, auditLog);
-        telegramService.alertGroup(`âœ… Job de auditoria concluÃ­do: ${result.count} anomalias detectadas.`, 'system_done');
+        telegramService.alertGroup(`✅ Job de auditoria concluído: ${result.count} anomalias detectadas.`, 'system_done');
     } catch (e) {
         console.error('[Cron-Audit] Erro na auditoria:', e);
-        telegramService.alertGroup(`ðŸš¨ ERRO no job de auditoria: ${e.message}`, 'system_error');
+        telegramService.alertGroup(`🚨 ERRO no job de auditoria: ${e.message}`, 'system_error');
     }
 });
 
-// Health check diÃ¡rio da imutabilidade de fatura FECHADA.
-// Roda em paralelo ao audit (4h BrasÃ­lia) â€” se a trigger for burlada, este job
+// Health check diário da imutabilidade de fatura FECHADA.
+// Roda em paralelo ao audit (4h Brasília) — se a trigger for burlada, este job
 // detecta e alerta via Telegram na categoria 'daily_anomaly'.
 scheduleCron('0 4 * * *', async () => {
-    telegramService.alertGroup('âš™ï¸ Health check de imutabilidade iniciando...', 'system_start');
-    console.log('[Cron-Immutability] Verificando violaÃ§Ãµes de imutabilidade...');
+    telegramService.alertGroup('⚠️ Health check de imutabilidade iniciando...', 'system_start');
+    console.log('[Cron-Immutability] Verificando violações de imutabilidade...');
     try {
         await assertTimezone(dbService);
         const r = await runInvoiceImmutabilityHealth(dbService, auditLog);
-        console.log(`[Cron-Immutability] ConcluÃ­do: ${r.count} achados.`);
-        telegramService.alertGroup(`âœ… Health check de imutabilidade concluÃ­do: ${r.count} achado(s).`, 'system_done');
+        console.log(`[Cron-Immutability] Concluído: ${r.count} achados.`);
+        telegramService.alertGroup(`✅ Health check de imutabilidade concluído: ${r.count} achado(s).`, 'system_done');
     } catch (e) {
         console.error('[Cron-Immutability] Erro:', e);
-        telegramService.alertGroup(`ðŸš¨ ERRO no health check de imutabilidade: ${e.message}`, 'system_error');
+        telegramService.alertGroup(`🚨 ERRO no health check de imutabilidade: ${e.message}`, 'system_error');
     }
 });
 
-// Cron semanal: corrige pagamentos Ã³rfÃ£os automaticamente (domingo 3h da manhÃ£, horÃ¡rio de BrasÃ­lia)
-// Reutiliza a mesma funÃ§Ã£o runOrphanPaymentFix() da rota POST /admin/fix-orphan-payments
+// Cron semanal: corrige pagamentos órfãos automaticamente (domingo 3h da manhã, horário de Brasília)
+// Reutiliza a mesma função runOrphanPaymentFix() da rota POST /admin/fix-orphan-payments
 scheduleCron('0 3 * * 0', async () => {
-    telegramService.alertGroup('âš™ï¸ Job semanal iniciando: correÃ§Ã£o de pagamentos Ã³rfÃ£os...', 'system_start');
-    console.log('[Cron-Semanal] Executando correÃ§Ã£o automÃ¡tica de pagamentos Ã³rfÃ£os...');
+    telegramService.alertGroup('⚠️ Job semanal iniciando: correção de pagamentos órfãos...', 'system_start');
+    console.log('[Cron-Semanal] Executando correção automática de pagamentos órfãos...');
     try {
         await assertTimezone(dbService);
         const result = await runOrphanPaymentFix();
         const s = result.summary;
-        console.log(`[Cron-Semanal] CorreÃ§Ã£o concluÃ­da: ${s.fixed} corrigido(s), ${s.errors} erro(s), ${s.usersScanned} usuÃ¡rio(s) escaneados`);
-        telegramService.alertGroup(`âœ… Job semanal concluÃ­do: ${s.fixed} corrigido(s), ${s.errors} erro(s), ${s.usersScanned} usuÃ¡rio(s) escaneados.`, 'system_done');
+        console.log(`[Cron-Semanal] Correção concluída: ${s.fixed} corrigido(s), ${s.errors} erro(s), ${s.usersScanned} usuário(s) escaneados`);
+        telegramService.alertGroup(`✅ Job semanal concluído: ${s.fixed} corrigido(s), ${s.errors} erro(s), ${s.usersScanned} usuário(s) escaneados.`, 'system_done');
         if (s.errors > 0 || s.fixed > 0) {
             console.log('[Cron-Semanal] Detalhes:', JSON.stringify(result.details.filter(d => d.action !== 'ok')));
         }
     } catch (e) {
-        console.error('[Cron-Semanal] Erro na correÃ§Ã£o de pagamentos Ã³rfÃ£os:', e);
-        telegramService.alertGroup(`ðŸš¨ ERRO no job semanal de pagamentos Ã³rfÃ£os: ${e.message}`, 'system_error');
+        console.error('[Cron-Semanal] Erro na correção de pagamentos órfãos:', e);
+        telegramService.alertGroup(`🚨 ERRO no job semanal de pagamentos órfãos: ${e.message}`, 'system_error');
     }
 });
 
-// Remessa horÃ¡ria: cria tÃ³pico Telegram para atÃ© 10 massas por vez.
-// Backfill das massas criadas antes da integraÃ§Ã£o existir, sem estourar o rate limit
-// do Telegram (~30 msg/s) nem despejar 146 tÃ³picos de uma vez no grupo.
+// Remessa horária: cria tópico Telegram para até 10 massas por vez.
+// Backfill das massas criadas antes da integração existir, sem estourar o rate limit
+// do Telegram (~30 msg/s) nem despejar 146 tópicos de uma vez no grupo.
 const TELEGRAM_BACKFILL_BATCH = 10;
 
 async function runTelegramTopicBackfill(limit = TELEGRAM_BACKFILL_BATCH) {
@@ -370,15 +378,15 @@ async function runTelegramTopicBackfill(limit = TELEGRAM_BACKFILL_BATCH) {
     return { processed: pending.length, remaining };
 }
 
-// Backfill de tÃ³picos NÃƒO tem cron. Rodava a cada hora no minuto 17 e poluÃ­a o
-// grupo com "ðŸ“¬ Remessa de tÃ³picos" sem ninguÃ©m pedir. Agora sÃ³ sob demanda:
+// Backfill de tópicos NÃO tem cron. Rodava a cada hora no minuto 17 e poluía o
+// grupo com "📬 Remessa de tópicos" sem ninguém pedir. Agora só sob demanda:
 // POST /admin/telegram/backfill (painel admin).
 
-// --- FunÃ§Ãµes de NormalizaÃ§Ã£o (snake_case do DB para camelCase do App) ---
+// --- Funções de Normalização (snake_case do DB para camelCase do App) ---
 const normalizeUser = (dbUser) => {
     if (!dbUser) return null;
     
-    // Calcular status dinÃ¢mico do cartÃ£o
+    // Calcular status dinâmico do cartão
     const getDeliveryStatus = () => {
         if (dbUser.card_is_activated) return 'unlocked';
         
@@ -397,7 +405,7 @@ const normalizeUser = (dbUser) => {
         
         const dbStatusValue = statusMap[dbUser.card_delivery_status] || 0;
         
-        // Pega o status mais avanÃ§ado entre o tempo e o que estÃ¡ salvo (para suportar botÃµes manuais)
+        // Pega o status mais avançado entre o tempo e o que está salvo (para suportar botões manuais)
         const finalStatusValue = Math.max(timeStatus, dbStatusValue);
         return revMap[finalStatusValue] || 'manufacturing';
     };
@@ -544,14 +552,14 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                         encargosFrozen: _frozen,
                     };
                 });
-            // Fatura fechada de referÃªncia p/ heranÃ§a na fatura aberta: a mais recente
-            // FECHADA em ATRASO (nÃ£o paga e com valor > 0). Ignora fechadas pagas e
-            // faturas zeradas â€” evita herdar encargos da fatura errada.
-            // â”€â”€ Fatura Fechada (prioridade: nÃ£o paga com saldo > 0) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            // closedInvoice residual = valor_total - valor_pago (para cÃ¡lculo de encargos)
-            // Para o Admin dashboard, tambÃ©m expomos valor_total e valor_pago originais
-            // para que a linha "Pagamento Realizado" apareÃ§a corretamente.
-            // Todas as fechadas ainda nÃ£o pagas â€” o dÃ©bito exibido tem que bater com o
+            // Fatura fechada de referência p/ herança na fatura aberta: a mais recente
+            // FECHADA em ATRASO (não paga e com valor > 0). Ignora fechadas pagas e
+            // faturas zeradas — evita herdar encargos da fatura errada.
+            // —— Fatura Fechada (prioridade: não paga com saldo > 0) ——————————
+            // closedInvoice residual = valor_total - valor_pago (para cálculo de encargos)
+            // Para o Admin dashboard, também expomos valor_total e valor_pago originais
+            // para que a linha "Pagamento Realizado" apareça corretamente.
+            // Todas as fechadas ainda não pagas — o débito exibido tem que bater com o
             // que /cards/invoice/pay cobra (getClosedInvoiceDebt), que soma todas elas.
             // Residual > 0 (nao apenas !data_pagamento): fatura coberta por pagamento
             // vinculado esta quitada mesmo com data_pagamento NULL, e nao pode continuar
@@ -568,11 +576,11 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             );
             const closedInvoice = unpaidClosed[0];
             if (closedInvoice) {
-                // Janela de transaÃ§Ãµes da fatura fechada continua ancorada na mais recente
+                // Janela de transações da fatura fechada continua ancorada na mais recente
                 normalized.creditCard.closedInvoiceDueDate = closedInvoice.due_date;
-                // daysOverdue REAL: ancorar na fatura fechada MAIS ANTIGA nÃ£o paga.
-                // Ex.: massa com 2 fechadas nÃ£o pagas (venc. jul/10 + ago/10) â€” a de jul
-                // tem 24 dias de atraso, a de ago ainda nÃ£o venceu. Usar a mais recente
+                // daysOverdue REAL: ancorar na fatura fechada MAIS ANTIGA não paga.
+                // Ex.: massa com 2 fechadas não pagas (venc. jul/10 + ago/10) — a de jul
+                // tem 24 dias de atraso, a de ago ainda não venceu. Usar a mais recente
                 // (unpaidClosed[0]) mostraria 0 dias de atraso no payload, divergindo do
                 // banco (users.days_overdue=24) e do painel admin.
                 const _oldestDueMs = unpaidClosed.reduce((minMs, inv) => {
@@ -580,24 +588,24 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                     return (!minMs || ms < minMs) ? ms : minMs;
                 }, null);
                 normalized.creditCard._closedInvoiceOldestDueDate = _oldestDueMs ? new Date(_oldestDueMs) : null;
-                // Saldo residual = valor_total (principal) - valor_pago, NÃƒO o gross (que jÃ¡
+                // Saldo residual = valor_total (principal) - valor_pago, NÃO o gross (que já
                 // inclui encargos congelados do seed). Usar gross faria os encargos ao vivo
-                // serem calculados DUAS VEZES â€” uma nos encargos congelados (dentro do gross)
+                // serem calculados DUAS VEZES — uma nos encargos congelados (dentro do gross)
                 // e outra nos encargos ao vivo (calculados abaixo sobre _closedVal).
-                // O total final (principal + encargos ao vivo) = gross, o que Ã© correto.
+                // O total final (principal + encargos ao vivo) = gross, o que é correto.
                 const _residualClosed = unpaidClosed.reduce((sum, inv) => sum + _residualDe(inv), 0);
-                // â”€â”€ closedInvoice = VALOR ORIGINAL (imutÃ¡vel), nÃ£o o residual â”€â”€
+                // —— closedInvoice = VALOR ORIGINAL (imutável), não o residual ——
                 // O residual (saldo ainda devido) vai para closedInvoiceResidual.
-                // Isso garante que a fatura fechada nunca altere seu valor apÃ³s
-                // pagamento parcial â€” o cliente vÃª sempre o valor original.
+                // Isso garante que a fatura fechada nunca altere seu valor após
+                // pagamento parcial — o cliente vê sempre o valor original.
                 const _originalTotal = Math.round(unpaidClosed.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0) * 100) / 100;
                 normalized.creditCard.closedInvoice = _originalTotal;
                 normalized.creditCard.closedInvoiceResidual = Math.round(_residualClosed * 100) / 100;
                 // EXPOR valores originais para o Admin dashboard ("Pagamento Realizado")
-                // _closedInvoiceValorTotal = PRINCIPAL (valor_total), nÃ£o o gross. O gross
+                // _closedInvoiceValorTotal = PRINCIPAL (valor_total), não o gross. O gross
                 // (computeInvoiceGross) inclui encargos congelados do seed, e mostrar o gross
-                // como "total original" confunde o cliente â€” a fatura fechada mostra um valor
-                // maior do que foi realmente pago. O principal Ã© o valor_total da invoice.
+                // como "total original" confunde o cliente — a fatura fechada mostra um valor
+                // maior do que foi realmente pago. O principal é o valor_total da invoice.
                 normalized.creditCard._closedInvoiceValorTotal = Math.round(unpaidClosed.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0) * 100) / 100;
                 normalized.creditCard._closedInvoiceValorPago = Math.round(unpaidClosed.reduce((sum, inv) => sum + _pagoEfetivo(inv), 0) * 100) / 100;
                 normalized.creditCard._closedInvoiceCount = unpaidClosed.length;
@@ -613,9 +621,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                     } catch (_e) { /* snapshot invalido, cai no fallback ao vivo */ }
                 }
             } else {
-                // â”€â”€ Quando NÃƒO hÃ¡ fatura fechada nÃ£o paga (todas quitadas ou zeradas) â”€â”€
+                // —— Quando NÃO há fatura fechada não paga (todas quitadas ou zeradas) ——
                 // Ainda assim expomos valor_total e valor_pago para o Admin dashboard
-                // e setamos closedInvoice = 0 para refletir que nÃ£o hÃ¡ dÃ­vida.
+                // e setamos closedInvoice = 0 para refletir que não há dívida.
                 // Quitadas pelo vinculo (data_pagamento NULL) entram aqui primeiro: sem
                 // isto, o fluxo pos-005 nunca setava closedInvoiceIsPaid e a UI ficava
                 // sem badge PAGA mesmo com a divida liquidada.
@@ -660,7 +668,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 if (latestFechada) {
                     normalized.creditCard.closedInvoiceDueDate = latestFechada.due_date;
 
-                    // Somar todas as faturas fechadas pagas na mesma data de pagamento (lote Ãºnico de quitaÃ§Ã£o)
+                    // Somar todas as faturas fechadas pagas na mesma data de pagamento (lote único de quitação)
                     const sameBatchInvoices = invRows.filter(i =>
                         i.status === 'FECHADA' &&
                         i.data_pagamento &&
@@ -670,11 +678,11 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                     const totalVal = sameBatchInvoices.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0);
                     const totalPaid = sameBatchInvoices.reduce((sum, inv) => sum + parseFloat(inv.valor_pago || 0), 0);
 
-                    // _closedInvoiceValorTotal = PRINCIPAL (valor_total), nÃ£o o gross
+                    // _closedInvoiceValorTotal = PRINCIPAL (valor_total), não o gross
                     normalized.creditCard._closedInvoiceValorTotal = Math.round(totalVal * 100) / 100;
                     normalized.creditCard._closedInvoiceValorPago = Math.round(totalPaid * 100) / 100;
                     normalized.creditCard._closedInvoiceDataPagamento = latestFechada.data_pagamento;
-                    // Fatura quitada â€” saldo devedor Ã© zero
+                    // Fatura quitada — saldo devedor é zero
                     normalized.creditCard.closedInvoice = 0;
                     normalized.creditCard.closedInvoiceResidual = 0;
                     // Sinaliza para a UI se closedInvoice=0 representa pagamento total
@@ -682,10 +690,10 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                     normalized.creditCard.closedInvoiceIsPaid = paidInfo.isPaid;
                     normalized.creditCard.closedInvoicePaidAt = paidInfo.paidAt;
 
-                    // â”€â”€ Encargos herdados: se a fechada foi paga em atraso, os encargos
+                    // —— Encargos herdados: se a fechada foi paga em atraso, os encargos
                     // que incidiram entre o vencimento e o pagamento continuam devidos
-                    // na fatura aberta (nÃ£o somem com a quitaÃ§Ã£o do principal).
-                    // CÃ¡lculo usa valor_total original e perÃ­odo dueâ†’paid, nÃ£o _closedVal (= 0).
+                    // na fatura aberta (não somem com a quitação do principal).
+                    // Cálculo usa valor_total original e período due→paid, não _closedVal (= 0).
                     if (latestFechada.data_pagamento) {
                         const _due = new Date(latestFechada.due_date); _due.setHours(0,0,0,0);
                         const _paid = new Date(latestFechada.data_pagamento); _paid.setHours(0,0,0,0);
@@ -778,7 +786,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         console.warn('Erro ao buscar installment_plans:', err.message);
     }
 
-    // 3. Buscar transaÃ§Ãµes de cartÃ£o do usuÃ¡rio
+    // 3. Buscar transações de cartão do usuário
     const cardRows = await dbService.executeQuery(`
         SELECT id, type, amount, description, date
         FROM ${dbService.fq('transactions')}
@@ -789,7 +797,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         LIMIT 100
     `);
 
-    // 4. Injetar parcelas pendentes projetadas se nÃ£o estiverem fisicamente no banco
+    // 4. Injetar parcelas pendentes projetadas se não estiverem fisicamente no banco
     const pendingInstallments = [];
     for (const plan of planRows) {
         if (!plan.remaining_installments || plan.remaining_installments <= 0) continue;
@@ -819,7 +827,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
 
     const allTransactions = [...cardRows, ...pendingInstallments];
 
-    // â”€â”€ Anexa informaÃ§Ãµes de JUROS do parcelamento a uma transaÃ§Ã£o (art. 52 CDC) â”€â”€
+    // —— Anexa informações de JUROS do parcelamento a uma transação (art. 52 CDC) ——
     // originalAmount = valor original da compra (sem juros); jurosTotal = juros em R$;
     // taxa efetiva mensal/anual = derivada da taxa total one-shot (calcEffectiveRates).
     const attachPlanJurosInfo = (tx, plan) => {
@@ -834,10 +842,10 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     };
     // Acha o plano de uma parcela INVOICE_INSTALLMENT por (qtd parcelas + valor da parcela).
     // Prefere plano com juros (rate > 0) para expor os encargos corretos no comprovante.
-    // âš ï¸ HeurÃ­stica: se o usuÃ¡rio tiver 2 planos ativos com a MESMA qtd e MESMO valor de
+    // ⚠️ Heurística: se o usuário tiver 2 planos ativos com a MESMA qtd e MESMO valor de
     // parcela (ex.: duas compras 12x do mesmo valor), o match pode anexar o plano errado
-    // (originalAmount/jurosTotal divergentes). As descriÃ§Ãµes do plano da loja sÃ£o genÃ©ricas
-    // ('Compra shop (credito)'), entÃ£o nÃ£o hÃ¡ chave mais confiÃ¡vel sem FK dedicada.
+    // (originalAmount/jurosTotal divergentes). As descrições do plano da loja são genéricas
+    // ('Compra shop (credito)'), então não há chave mais confiável sem FK dedicada.
     const findPlanForInstallment = (plans, qty, installmentAmount) => {
         const candidates = (plans || []).filter(p =>
             Number(p.installments) === Number(qty) &&
@@ -871,11 +879,11 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             return plan ? attachPlanJurosInfo(baseTx, plan) : baseTx;
         }
         if (r.type === 'INVOICE_PAYMENT' || r.type === 'INVOICE_ANTICIPATION') {
-            // Determina o tipo de pagamento a partir da descriÃ§Ã£o original da transaÃ§Ã£o.
+            // Determina o tipo de pagamento a partir da descrição original da transação.
             // O INSERT de pagamento total usa 'Pagamento fatura', enquanto pagamento parcial
-            // (incluindo mÃ­nimo) usa 'Pagamento parcial de fatura'. O merchant Ã© enriquecido
-            // com o sufixo (Total / Parcial) para exibiÃ§Ã£o clara no frontend.
-            // NOTA: 'desc' jÃ¡ estÃ¡ declarado no escopo externo (map callback, linha ~398).
+            // (incluindo mínimo) usa 'Pagamento parcial de fatura'. O merchant é enriquecido
+            // com o sufixo (Total / Parcial) para exibição clara no frontend.
+            // NOTA: 'desc' já está declarado no escopo externo (map callback, linha ~398).
             let merchant;
             if (r.type === 'INVOICE_ANTICIPATION') {
                 merchant = 'Antecipacao de parcelas';
@@ -883,8 +891,8 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 const lowerDesc = (desc || '').toLowerCase();
                 if (lowerDesc.includes('parcial')) {
                     merchant = 'Pagamento fatura (Parcial)';
-                } else if (lowerDesc.includes('minimo') || lowerDesc.includes('mÃ­nimo')) {
-                    merchant = 'Pagamento fatura (MÃ­nimo)';
+                } else if (lowerDesc.includes('minimo') || lowerDesc.includes('mínimo')) {
+                    merchant = 'Pagamento fatura (Mínimo)';
                 } else {
                     merchant = 'Pagamento fatura (Total)';
                 }
@@ -907,19 +915,19 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         return false;
     });
 
-    // INVOICE_PAYMENT e INVOICE_ANTICIPATION aparecem na lista (visÃ­vel para o cliente)
-    // mas NÃƒO inflam currentInvoice.
+    // INVOICE_PAYMENT e INVOICE_ANTICIPATION aparecem na lista (visível para o cliente)
+    // mas NÃO inflam currentInvoice.
     normalized.creditCard.transactions = openTransactions;
     normalized.creditCard.currentInvoice = openTransactions
         .filter(tx => tx.type !== 'PAYMENT' && tx.type !== 'INVOICE_PAYMENT' && tx.type !== 'INVOICE_ANTICIPATION')
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
 
-    // â”€â”€ paymentHistory (dedicado) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Filtra as transaÃ§Ãµes INVOICE_PAYMENT/INVOICE_ANTICIPATION das RAW rows
+    // —— paymentHistory (dedicado) ————————————————————————————————————————————
+    // Filtra as transações INVOICE_PAYMENT/INVOICE_ANTICIPATION das RAW rows
     // (cardRows, antes do mapeamento) e as converte para PaymentEntry.
-    // O paymentHistory aparece no frontend como histÃ³rico de pagamentos do cliente.
-    // A lÃ³gica de determinaÃ§Ã£o do paymentType (TOTAL/MINIMO/PARCIAL) Ã© IDÃŠNTICA
-    // Ã  do admin dashboard (linha ~2933) â€” mantÃ©m-se consistente entre as duas fontes.
+    // O paymentHistory aparece no frontend como histórico de pagamentos do cliente.
+    // A lógica de determinação do paymentType (TOTAL/MINIMO/PARCIAL) é IDÃŠNTICA
+    // à do admin dashboard (linha ~2933) — mantém-se consistente entre as duas fontes.
     // Vinculo tx -> invoice (migration 005). Sem isto o frontend nao consegue saber a
     // qual fatura cada pagamento pertence depois que o PAYMENT saiu de closedTransactions.
     const _invoiceIdByTx = new Map();
@@ -941,7 +949,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 let _paymentType = 'TOTAL';
                 if (r.type === 'INVOICE_ANTICIPATION') _paymentType = 'PARCIAL';
                 else if (_desc.includes('parcial')) _paymentType = 'PARCIAL';
-                else if (_desc.includes('minimo') || _desc.includes('mÃ­nimo')) _paymentType = 'MINIMO';
+                else if (_desc.includes('minimo') || _desc.includes('mínimo')) _paymentType = 'MINIMO';
                 return {
                     id: r.id,
                     date: r.date,
@@ -955,7 +963,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         _paymentEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
         normalized.creditCard.paymentHistory = _paymentEntries;
     } catch (_e) {
-        // Fallback silencioso se cardRows nÃ£o estiver disponÃ­vel
+        // Fallback silencioso se cardRows não estiver disponível
         normalized.creditCard.paymentHistory = [];
     }
 
@@ -970,10 +978,10 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 && !isNaN(txDate.getTime())
                 && txDate.getTime() <= cutoff.getTime();
         });
-        // NÃƒO zerar currentInvoice aqui. CartÃ£o bloqueado impede NOVAS compras,
-        // mas as compras jÃ¡ lanÃ§adas no ciclo aberto continuam devidas e tÃªm que
+        // NÃO zerar currentInvoice aqui. Cartão bloqueado impede NOVAS compras,
+        // mas as compras já lançadas no ciclo aberto continuam devidas e têm que
         // aparecer na fatura. Zerar fazia a fatura aberta sumir da tela assim que
-        // o cliente entrava em atraso â€” o valor calculado em :457 Ã© o correto.
+        // o cliente entrava em atraso — o valor calculado em :457 é o correto.
     } else {
         closedTransactions = cardTransactions.filter(tx => {
             const txDate = new Date(tx.date).getTime();
@@ -999,9 +1007,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         ? closedSnapshot.filter(tx => tx && tx.type !== 'PAYMENT' && tx.type !== 'INVOICE_PAYMENT' && tx.type !== 'INVOICE_ANTICIPATION')
         : closedTransactions;
     const rawInvoiceTotal = normalized.creditCard.closedTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-    // paidInCycle removido â€” closedInvoice jÃ¡ usa valor_pago (saldo residual do DB).
-    // A subtraÃ§Ã£o dupla (paidInCycle + valor_pago) causava double-counting.
-    // closedInvoice agora Ã© fonte Ãºnica: valor_total - valor_pago.
+    // paidInCycle removido — closedInvoice já usa valor_pago (saldo residual do DB).
+    // A subtração dupla (paidInCycle + valor_pago) causava double-counting.
+    // closedInvoice agora é fonte única: valor_total - valor_pago.
     // rawInvoiceTotal (fallback) ainda funciona sem double-counting.
     const dbClosedInvoice = normalized.creditCard.closedInvoice;
     const dbClosedResidual = normalized.creditCard.closedInvoiceResidual;
@@ -1013,13 +1021,13 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         : Math.max(0, rawInvoiceTotal);
     normalized.creditCard.closedInvoiceAmount = normalized.creditCard.closedInvoice;
 
-    // â”€â”€ CÃ¡lculo do CrÃ©dito Excedente (Saldo Credor) â”€â”€
+    // —— Cálculo do Crédito Excedente (Saldo Credor) ——
     let creditoExcedente = 0;
     let paymentsTotal = 0;
     let chargesTotal = 0;
     let principalTotal = 0;
     try {
-        // 1. Buscar faturas fechadas nÃ£o pagas ou pagas no ciclo aberto atual
+        // 1. Buscar faturas fechadas não pagas ou pagas no ciclo aberto atual
         const closedInvoicesCycle = await dbService.executeQuery(`
             SELECT valor_total FROM ${dbService.fq('invoices')}
             WHERE cpf = '${cpf}' AND status = 'FECHADA'
@@ -1046,9 +1054,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         `);
         paymentsTotal = parseFloat(paymentsCycle[0]?.total || 0);
 
-        // CrÃ©dito excedente = pagamento que passe de (principal + encargos) das faturas fechadas.
-        // Subtrai chargesTotal: encargos pendentes/pagos no ciclo tÃªm prioridade sobre crÃ©dito â€”
-        // sÃ³ o que sobrar DEPOIS de cobrir principal + encargos Ã© saldo credor (creditoExcedente).
+        // Crédito excedente = pagamento que passe de (principal + encargos) das faturas fechadas.
+        // Subtrai chargesTotal: encargos pendentes/pagos no ciclo têm prioridade sobre crédito —
+        // só o que sobrar DEPOIS de cobrir principal + encargos é saldo credor (creditoExcedente).
         creditoExcedente = Math.max(0, paymentsTotal - principalTotal - chargesTotal);
     } catch (err) {
         console.warn('Erro ao calcular creditoExcedente:', err.message);
@@ -1056,24 +1064,24 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
 
     normalized.creditCard.creditoExcedente = creditoExcedente;
     normalized.creditCard.paymentsTotal = paymentsTotal;
-    // â”€â”€ closedInvoiceResidual: FONTE ÃšNICA = DB (valor_total - valor_pago) â”€â”€
-    // NÃƒO usar paymentsTotal da janela do ciclo atual: pagamentos PARCIAIS feitos em
+    // —— closedInvoiceResidual: FONTE ÃšNICA = DB (valor_total - valor_pago) ——
+    // NÃO usar paymentsTotal da janela do ciclo atual: pagamentos PARCIAIS feitos em
     // ciclos anteriores (registrados no valor_pago do DB pela rota de pagamento) ficariam
-    // invisÃ­veis para a janela do ciclo, inflando o residual. Bug real observado na massa
+    // invisíveis para a janela do ciclo, inflando o residual. Bug real observado na massa
     // 12312312312: pagou R$ 1.900 em julho, mas o residual mostrava R$ 4.400,52 em vez de
-    // R$ 2.500,52 (= 3.870,86 - 1.900 + 529,66). O DB Ã© a fonte da verdade do valor pago.
-    // _closedInvoiceValorTotal/_ValorPago somam TODAS as fechadas nÃ£o pagas do DB.
+    // R$ 2.500,52 (= 3.870,86 - 1.900 + 529,66). O DB é a fonte da verdade do valor pago.
+    // _closedInvoiceValorTotal/_ValorPago somam TODAS as fechadas não pagas do DB.
     const _originalPrincipal = parseFloat(normalized.creditCard._closedInvoiceValorTotal || 0);
     const _dbValorPago = parseFloat(normalized.creditCard._closedInvoiceValorPago || 0);
-    // max(db, janela): se a rota de pagamento jÃ¡ atualizou o valor_pago no DB, usa ele;
-    // se por algum motivo o DB nÃ£o foi atualizado (pagamento Ã³rfÃ£o), usa a janela como
-    // rede de seguranÃ§a para o residual nÃ£o inflar.
+    // max(db, janela): se a rota de pagamento já atualizou o valor_pago no DB, usa ele;
+    // se por algum motivo o DB não foi atualizado (pagamento órfão), usa a janela como
+    // rede de segurança para o residual não inflar.
     const _residualPrincipal = _originalPrincipal - Math.max(_dbValorPago, paymentsTotal);
-    // Saldo credor (pagou alÃ©m do principal) = residual NEGATIVO (exibido como tal no admin)
+    // Saldo credor (pagou além do principal) = residual NEGATIVO (exibido como tal no admin)
     normalized.creditCard.closedInvoiceResidual = Math.round(_residualPrincipal * 100) / 100;
     // O valor pago exibido na fechada: total real pago (DB ou janela, o maior).
     // Nunca sobrescrever para MENOS: um pagamento parcial anterior (ex.: R$ 1.900 em
-    // julho) nÃ£o pode sumir quando a janela do ciclo atual nÃ£o o enxerga.
+    // julho) não pode sumir quando a janela do ciclo atual não o enxerga.
     if (paymentsTotal > 0) {
         normalized.creditCard._closedInvoiceValorPago = Math.max(
             parseFloat(normalized.creditCard._closedInvoiceValorPago || 0),
@@ -1082,22 +1090,22 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     }
 
     // FONTE ÃšNICA DE VERDADE dos encargos/total da fatura fechada.
-    // Calculado UMA vez aqui (backend) para que web e admin apenas LEIAM â€” antes cada
+    // Calculado UMA vez aqui (backend) para que web e admin apenas LEIAM — antes cada
     // tela recalculava com contagem de dias diferente (ex.: 967,53 vs 970,11).
     //
-    // closedInvoice = valor ORIGINAL (imutÃ¡vel, o que foi fechado no ciclo anterior)
+    // closedInvoice = valor ORIGINAL (imutável, o que foi fechado no ciclo anterior)
     // closedInvoiceResidual = saldo ainda devido (valor_total - valor_pago)
-    // Para cÃ¡lculos financeiros (encargos, total, mÃ­nimo), usa-se o RESIDUAL.
-    // Para exibiÃ§Ã£o (fatura fechada), usa-se o ORIGINAL.
+    // Para cálculos financeiros (encargos, total, mínimo), usa-se o RESIDUAL.
+    // Para exibição (fatura fechada), usa-se o ORIGINAL.
     {
         const _closedVal = normalized.creditCard.closedInvoiceResidual || 0;
         const _isPaid = Boolean(normalized.creditCard.closedInvoiceIsPaid);
 
         // FONTE ÃšNICA de encargos: ler ACUMULADO REAL do billing_charges (inserido
-        // pelo runBillingValidation com incremento DIÃRIO). NÃƒO recalcular
-        // calcAllCharges(residual, daysOverdue) porque apÃ³s pagamento parcial o residual
-        // Ã© menor â†’ calcAllCharges dÃ¡ target < existing â†’ encargos congelam.
-        // billing_charges preserva o histÃ³rico real independente do residual.
+        // pelo runBillingValidation com incremento DIÁRIO). NÃO recalcular
+        // calcAllCharges(residual, daysOverdue) porque após pagamento parcial o residual
+        // é menor → calcAllCharges dá target < existing → encargos congelam.
+        // billing_charges preserva o histórico real independente do residual.
         let _dailyCharges = null;
         try {
             const _chargeRows = await dbService.executeQuery(`
@@ -1125,9 +1133,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             }
         } catch (_) { /* billing_charges table not available, fall through */ }
 
-        // daysOverdue em tempo real: se paga, calcula atÃ© a data de pagamento (atraso estopado)
+        // daysOverdue em tempo real: se paga, calcula até a data de pagamento (atraso estopado)
         let _daysOverdue = 0;
-        // Prefere a fatura MAIS ANTIGA nÃ£o paga (atraso real); fallback para a mais recente.
+        // Prefere a fatura MAIS ANTIGA não paga (atraso real); fallback para a mais recente.
         const _dueRef = normalized.creditCard._closedInvoiceOldestDueDate || normalized.creditCard.closedInvoiceDueDate;
         if (_dueRef) {
             const _d = new Date(_dueRef);
@@ -1144,9 +1152,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         normalized.creditCard._closedInvoiceAtrasoDias = _daysOverdue;
         if (_isPaid) _daysOverdue = 0;
 
-        // Se hÃ¡ billing_charges: usar encargos REAIS.
-        // A quitaÃ§Ã£o do principal estopa novos juros (days_overdue=0 no users e data_pagamento definida),
-        // mas os encargos acumulados continuam devidos atÃ© o fechamento/pagamento da aberta.
+        // Se há billing_charges: usar encargos REAIS.
+        // A quitação do principal estopa novos juros (days_overdue=0 no users e data_pagamento definida),
+        // mas os encargos acumulados continuam devidos até o fechamento/pagamento da aberta.
         const _summary = (_dailyCharges)
             ? { ..._dailyCharges, daysOverdue: _daysOverdue }
             : buildClosedInvoiceSummary({
@@ -1164,40 +1172,40 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             totalEncargos: _summary.totalEncargos,
         };
         // closedInvoiceTotal = APENAS o principal ORIGINAL (sem encargos e sem abater
-        // pagamento). A fatura fechada exibe o valor ORIGINAL (closedInvoice) que Ã©
-        // imutÃ¡vel â€” o residual (closedInvoiceResidual) vai para a aberta.
-        // Os encargos de atraso da fechada sÃ£o HERDADOS pela fatura aberta
-        // (currentInvoiceTotal), nÃ£o somem com a quitaÃ§Ã£o do principal.
+        // pagamento). A fatura fechada exibe o valor ORIGINAL (closedInvoice) que é
+        // imutável — o residual (closedInvoiceResidual) vai para a aberta.
+        // Os encargos de atraso da fechada são HERDADOS pela fatura aberta
+        // (currentInvoiceTotal), não somem com a quitação do principal.
         normalized.creditCard.closedInvoiceTotal = round2(normalized.creditCard.closedInvoice || 0);
 
         // FONTE ÃšNICA DE VERDADE do total da fatura ABERTA (compras do ciclo + fechada
         // vencida + encargos herdados). Web, resumo e admin apenas LEEM daqui.
         //
         // Regra: encargos de atraso (multa, juros, IOF) da fatura fechada NUNCA aparecem
-        // no total da fechada â€” eles sÃ£o transferidos para a aberta como heranÃ§a.
+        // no total da fechada — eles são transferidos para a aberta como herança.
         // Se o cliente pagar a fatura fechada em atraso, os encargos continuam devidos
-        // na fatura aberta (nÃ£o somem com a quitaÃ§Ã£o do principal).
+        // na fatura aberta (não somem com a quitação do principal).
         //
-        // Base de compras = currentInvoice, a soma das transaÃ§Ãµes do ciclo jÃ¡ filtradas
-        // acima (janela _prevCloseMs..vencimento, sem PAYMENT). NÃƒO usar a soma que o
-        // front monta: ele injeta linhas "RecorrÃªncia: X" vindas do localStorage
-        // (volt_recurring_bills) que sÃ£o previsÃ£o de exibiÃ§Ã£o, nÃ£o compra lanÃ§ada no
-        // cartÃ£o â€” somÃ¡-las cobrava do cliente valores que nÃ£o existem no banco.
+        // Base de compras = currentInvoice, a soma das transações do ciclo já filtradas
+        // acima (janela _prevCloseMs..vencimento, sem PAYMENT). NÃO usar a soma que o
+        // front monta: ele injeta linhas "Recorrência: X" vindas do localStorage
+        // (volt_recurring_bills) que são previsão de exibição, não compra lançada no
+        // cartão — somá-las cobrava do cliente valores que não existem no banco.
         const _openPurchases = normalized.creditCard.currentInvoice || 0;
         // closedInvoiceResidual = APENAS o principal ainda devido (valor_total - valor_pago).
-        // Zera quando a fechada Ã© quitada. NÃƒO inclui encargos.
+        // Zera quando a fechada é quitada. NÃO inclui encargos.
         const _closedPrincipalResidual = normalized.creditCard.closedInvoiceResidual || 0;
-        // Encargos herdados da fechada (multa + juros mora + juros remuneratÃ³rios + IOF).
-        // Continuam devidos na ABERTA mesmo apÃ³s a quitaÃ§Ã£o do principal â€” pagar a fechada
-        // estanca novos encargos, mas os jÃ¡ acumulados sÃ£o herdados pela aberta.
+        // Encargos herdados da fechada (multa + juros mora + juros remuneratórios + IOF).
+        // Continuam devidos na ABERTA mesmo após a quitação do principal — pagar a fechada
+        // estanca novos encargos, mas os já acumulados são herdados pela aberta.
         const _encargosHerdados = _summary.totalEncargos || 0;
         // Total da aberta = compras do ciclo + principal residual da fechada + encargos herdados.
         normalized.creditCard.currentInvoiceTotal = round2(Math.max(0, _openPurchases + _closedPrincipalResidual + _encargosHerdados));
-        // MÃ­nimo consolidado: 10% das compras + 100% do residual + 100% dos encargos
+        // Mínimo consolidado: 10% das compras + 100% do residual + 100% dos encargos
         normalized.creditCard.currentInvoiceMinimo = round2(Math.max(0, _openPurchases * 0.10 + _closedPrincipalResidual + _encargosHerdados));
     }
 
-    // Limpar campo interno de cÃ¡lculo (nÃ£o expor ao frontend)
+    // Limpar campo interno de cálculo (não expor ao frontend)
     delete normalized.creditCard._paidLateCharges;
     delete normalized.creditCard._closedInvoiceOldestDueDate;
 
@@ -1231,7 +1239,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         normalized.creditCard.futureInstallments = _futMap;
         normalized.creditCard.futureInstallmentsDetail = _futDetail;
     } catch (_e) {
-        console.error('âŒ futureInstallments error:', _e);
+        console.error('❌ futureInstallments error:', _e);
         normalized.creditCard.futureInstallments = {};
         normalized.creditCard.futureInstallmentsDetail = {};
     }
@@ -1255,7 +1263,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             purchaseDate: r.purchase_date
         }));
     } catch (error) {
-        console.warn('âš ï¸ Erro ao buscar purchased_items:', error.message);
+        console.warn('⚠️ Erro ao buscar purchased_items:', error.message);
         normalized.purchasedItems = [];
     }
 };
@@ -1268,7 +1276,7 @@ const toLocalSqlTimestamp = (date = new Date()) => {
 };
 
 // Banco retorna timestamps como string sem 'Z' ou como objeto Date.
-// Esta funÃ§Ã£o garante que o frontend sempre receba ISO 8601 com fuso explÃ­cito.
+// Esta função garante que o frontend sempre receba ISO 8601 com fuso explícito.
 const toISO = (s) => {
     if (!s) return s;
     if (s instanceof Date) return s.toISOString();
@@ -1301,7 +1309,7 @@ const normalizeContact = (dbContact) => {
     }
 }
 
-// Wrapper para rotas assÃ­ncronas para capturar erros
+// Wrapper para rotas assíncronas para capturar erros
 const asyncHandler = fn => (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
 };
@@ -1312,7 +1320,7 @@ const escapeSQL = (str) => {
     return str.replace(/'/g, "''").trim();
 };
 
-// Store em memÃ³ria para OTP de reset de senha (TTL 15 min, one-time use)
+// Store em memória para OTP de reset de senha (TTL 15 min, one-time use)
 const crypto = require('crypto');
 const resetTokenStore = new Map();
 
@@ -1355,7 +1363,7 @@ const apiRouter = express.Router();
 const handleValidationErrors = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        console.log('âŒ [VALIDATION] Erros de validaÃ§Ã£o detectados:');
+        console.log('❌ [VALIDATION] Erros de validação detectados:');
         console.log('   Body recebido:', JSON.stringify(req.body));
         console.log('   Erros:', JSON.stringify(errors.array(), null, 2));
         
@@ -1376,47 +1384,60 @@ const authenticateAdmin = asyncHandler(async (req, res, next) => {
     next();
 });
 
+let loginStore = undefined;
+if (redisClient.getClient()) {
+    try {
+        loginStore = new RedisStore({
+            sendCommand: (...args) => redisClient.getClient().call(...args),
+            prefix: 'rl:login:'
+        });
+    } catch (e) {
+        console.warn('[RateLimit] RedisStore fall-back para memory store:', e.message);
+    }
+}
+
 const loginLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 10,
     standardHeaders: true,
     legacyHeaders: false,
+    store: loginStore,
     message: { success: false, message: 'Muitas tentativas de login. Tente novamente em 1 minuto.' },
     skip: () => process.env.NODE_ENV === 'test',
 });
 
-// --- Regras de ValidaÃ§Ã£o ---
+// --- Regras de Validação ---
 const signupValidationRules = [
-    body('fullName').isString().notEmpty().withMessage('Nome completo Ã© obrigatÃ³rio.'),
-    body('cpf').isString().isLength({ min: 11, max: 11 }).withMessage('CPF deve ter 11 dÃ­gitos.').isNumeric().withMessage('CPF deve conter apenas nÃºmeros.'),
-    body('email').isEmail().withMessage('Formato de e-mail invÃ¡lido.'),
+    body('fullName').isString().notEmpty().withMessage('Nome completo é obrigatório.'),
+    body('cpf').isString().isLength({ min: 11, max: 11 }).withMessage('CPF deve ter 11 dígitos.').isNumeric().withMessage('CPF deve conter apenas números.'),
+    body('email').isEmail().withMessage('Formato de e-mail inválido.'),
     body('password').isString().isLength({ min: 6, max: 12 }).withMessage('A senha deve ter entre 6 e 12 caracteres.')
 ];
 
 const loginValidationRules = [
     body('cpf')
         .custom((value) => {
-            // Aceitar CPF formatado ou nÃ£o formatado
+            // Aceitar CPF formatado ou não formatado
             const rawCpf = String(value).replace(/\D/g, '');
             if (rawCpf.length !== 11) {
-                throw new Error('CPF deve ter 11 dÃ­gitos.');
+                throw new Error('CPF deve ter 11 dígitos.');
             }
-            // Verificar se contÃ©m apenas nÃºmeros apÃ³s remover formataÃ§Ã£o
+            // Verificar se contém apenas números após remover formatação
             if (!/^\d{11}$/.test(rawCpf)) {
-                throw new Error('CPF deve conter apenas nÃºmeros.');
+                throw new Error('CPF deve conter apenas números.');
             }
             return true;
         })
         .customSanitizer((value) => {
-            // Normalizar CPF removendo formataÃ§Ã£o antes de processar
+            // Normalizar CPF removendo formatação antes de processar
             return String(value).replace(/\D/g, '');
         }),
     body('password').isString().isLength({ min: 6, max: 12 }).withMessage('A senha deve ter entre 6 e 12 caracteres.')
 ];
 
 const resetPasswordValidationRules = [
-    body('cpf').isString().isLength({ min: 11, max: 11 }).withMessage('CPF deve ter 11 dÃ­gitos.').isNumeric().withMessage('CPF deve conter apenas nÃºmeros.'),
-    body('token').isString().isLength({ min: 4, max: 4 }).withMessage('Token deve ter 4 dÃ­gitos.').isNumeric().withMessage('Token deve conter apenas nÃºmeros.'),
+    body('cpf').isString().isLength({ min: 11, max: 11 }).withMessage('CPF deve ter 11 dígitos.').isNumeric().withMessage('CPF deve conter apenas números.'),
+    body('token').isString().isLength({ min: 4, max: 4 }).withMessage('Token deve ter 4 dígitos.').isNumeric().withMessage('Token deve conter apenas números.'),
     body('newPassword').isString().isLength({ min: 6, max: 12 }).withMessage('A senha deve ter entre 6 e 12 caracteres.')
 ];
 
@@ -1428,14 +1449,14 @@ const miscController = createMiscController({
 });
 registerMiscRoutes({ apiRouter, bearerAuth, authenticateAdmin, pinGuard, body, handleValidationErrors, h: miscController });
 
-// --- Rotas de AutenticaÃ§Ã£o ---
+// --- Rotas de Autenticação ---
 apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
-    console.log('ðŸ”µ [SIGNUP] Endpoint chamado');
-    console.log('ðŸ”µ [SIGNUP] Body recebido:', JSON.stringify(req.body));
+    console.log('🔵 [SIGNUP] Endpoint chamado');
+    console.log('🔵 [SIGNUP] Body recebido:', JSON.stringify(req.body));
     
     const { fullName, cpf, email, password } = req.body;
     
-    console.log('ðŸ”µ [SIGNUP] Dados extraÃ­dos:', { fullName, cpf, email, passwordLength: password?.length });
+    console.log('🔵 [SIGNUP] Dados extraídos:', { fullName, cpf, email, passwordLength: password?.length });
     
     // Escapar strings para evitar SQL injection e problemas com aspas
     const escapeSQL = (str) => {
@@ -1443,30 +1464,30 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
         return str.replace(/'/g, "''").trim();
     };
     
-    console.log('ðŸ”µ [SIGNUP] Verificando se usuÃ¡rio jÃ¡ existe...');
+    console.log('🔵 [SIGNUP] Verificando se usuário já existe...');
     const existingUser = await dbService.executeQuery(`SELECT cpf FROM ${dbService.fq('users')} WHERE cpf = '${escapeSQL(cpf)}' OR email = '${escapeSQL(email)}'`);
-    console.log('ðŸ”µ [SIGNUP] Resultado da verificaÃ§Ã£o:', existingUser.length > 0 ? 'UsuÃ¡rio jÃ¡ existe' : 'UsuÃ¡rio nÃ£o existe');
+    console.log('🔵 [SIGNUP] Resultado da verificação:', existingUser.length > 0 ? 'Usuário já existe' : 'Usuário não existe');
     
     if (existingUser.length > 0) {
-        console.log('âŒ [SIGNUP] UsuÃ¡rio jÃ¡ cadastrado:', existingUser);
+        console.log('❌ [SIGNUP] Usuário já cadastrado:', existingUser);
         return res.status(400).json({ success: false, message: 'CPF ou email ja cadastrado.' });
     }
-    console.log(`âœ… [SIGNUP] UsuÃ¡rio nÃ£o existe. Criando conta para ${cpf}...`);
-        console.log('ðŸ”µ [SIGNUP] Gerando hash da senha...');
+    console.log(`✅ [SIGNUP] Usuário não existe. Criando conta para ${cpf}...`);
+        console.log('🔵 [SIGNUP] Gerando hash da senha...');
         const hashedPassword = await bcrypt.hash(password, 10);
-        console.log('ðŸ”µ [SIGNUP] Hash gerado, tamanho:', hashedPassword.length);
-        console.log('ðŸ”µ [SIGNUP] Hash gerado (primeiros 30 chars):', hashedPassword.substring(0, 30) + '...');
+        console.log('🔵 [SIGNUP] Hash gerado, tamanho:', hashedPassword.length);
+        console.log('🔵 [SIGNUP] Hash gerado (primeiros 30 chars):', hashedPassword.substring(0, 30) + '...');
     
-    // Valores padrÃ£o definidos no cÃ³digo (Postgres nÃ£o usa DEFAULT aqui)
+    // Valores padrão definidos no código (Postgres não usa DEFAULT aqui)
     const now = new Date().toISOString();
     const defaultBalance = 2000.00; // Saldo inicial: R$ 2.000,00
     const defaultRole = 'customer';
     const defaultIsBlocked = false;
     const defaultLoginAttempts = 0;
-    const defaultPixDailyLimit = 2000.00; // Limite diÃ¡rio de PIX: R$ 2.000,00
+    const defaultPixDailyLimit = 2000.00; // Limite diário de PIX: R$ 2.000,00
     const defaultPasswordResetRequested = false;
-    const defaultCreditCardTotalLimit = 5000.00; // Limite total do cartÃ£o: R$ 5.000,00
-    const defaultCreditCardAvailableLimit = 5000.00; // Limite disponÃ­vel do cartÃ£o: R$ 5.000,00
+    const defaultCreditCardTotalLimit = 5000.00; // Limite total do cartão: R$ 5.000,00
+    const defaultCreditCardAvailableLimit = 5000.00; // Limite disponível do cartão: R$ 5.000,00
     const defaultCreditCardIsBlocked = false;
     const defaultCreditCardPointsBalance = 0;
     const defaultCreditCardDueDay = 10; // alinhado ao billing_config.due_day
@@ -1482,19 +1503,19 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
     const formatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' });
     const formattedCreation = formatter.format(creationDate);
     
-    const profileMessage = `CartÃ£o em produÃ§Ã£o. Criado em ${formattedCreation} UTC. Validade: ${expiry}, CVV: ${cvv}`;
+    const profileMessage = `Cartão em produção. Criado em ${formattedCreation} UTC. Validade: ${expiry}, CVV: ${cvv}`;
     const cardDeliveryStatus = 'manufacturing';
     const cardIsActivated = false;
     
     try {
-        // Escapar hash da senha tambÃ©m (pode conter caracteres especiais)
+        // Escapar hash da senha também (pode conter caracteres especiais)
         // IMPORTANTE: O hash do bcrypt pode conter $, /, ., etc. Precisamos escapar apenas aspas simples
         const escapedHash = hashedPassword.replace(/'/g, "''");
         const escapedCpf = escapeSQL(cpf);
         const escapedFullName = escapeSQL(fullName);
         const escapedEmail = escapeSQL(email);
         
-        console.log('ðŸ”µ [SIGNUP] Valores escapados:', { 
+        console.log('🔵 [SIGNUP] Valores escapados:', { 
             cpf: escapedCpf, 
             fullName: escapedFullName.substring(0, 30) + '...', 
             email: escapedEmail,
@@ -1503,9 +1524,9 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
             hashEscapedCorrectly: escapedHash.length === hashedPassword.length || (escapedHash.length === hashedPassword.length + hashedPassword.split("'").length - 1)
         });
         
-        // Verificar se o hash tem formato vÃ¡lido antes de inserir
+        // Verificar se o hash tem formato válido antes de inserir
         if (!hashedPassword.startsWith('$2')) {
-            console.error('âŒ [SIGNUP] Hash nÃ£o tem formato bcrypt vÃ¡lido!');
+            console.error('❌ [SIGNUP] Hash não tem formato bcrypt válido!');
             return res.status(500).json({ success: false, message: 'Erro ao gerar hash da senha. Tente novamente.' });
         }
         
@@ -1515,29 +1536,29 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
             VALUES ('${userId}', '${escapedCpf}', '${escapedFullName}', '${escapedEmail}', '${escapedHash}', ${defaultBalance}, '${defaultRole}', ${defaultIsBlocked}, ${defaultLoginAttempts}, ${defaultPixDailyLimit}, ${defaultPasswordResetRequested}, ${defaultCreditCardTotalLimit}, ${defaultCreditCardAvailableLimit}, ${defaultCreditCardIsBlocked}, ${defaultCreditCardPointsBalance}, ${defaultCreditCardDueDay}, '${defaultInvoiceDueDate}', '${now}', '${now}', '${cvv}', '${expiry}', '${cardDeliveryStatus}', ${cardIsActivated}, '${escapeSQL(profileMessage)}')
         `;
         
-        console.log('ðŸ”µ [SIGNUP] Query INSERT (hash truncado para log):', insertQuery.replace(/'(\$2[^']{50})[^']+'/, "'$1...'"));
+        console.log('🔵 [SIGNUP] Query INSERT (hash truncado para log):', insertQuery.replace(/'(\$2[^']{50})[^']+'/, "'$1...'"));
         
-        console.log('ðŸ”µ [SIGNUP] Executando INSERT...');
-        console.log('ðŸ”µ [SIGNUP] Valores sendo inseridos:', {
+        console.log('🔵 [SIGNUP] Executando INSERT...');
+        console.log('🔵 [SIGNUP] Valores sendo inseridos:', {
             balance: defaultBalance,
             pixDailyLimit: defaultPixDailyLimit,
             creditCardTotalLimit: defaultCreditCardTotalLimit,
             creditCardAvailableLimit: defaultCreditCardAvailableLimit
         });
         await dbService.executeQuery(insertQuery);
-        console.log('ðŸ”µ [SIGNUP] INSERT executado com sucesso');
+        console.log('🔵 [SIGNUP] INSERT executado com sucesso');
         
-        // Verificar se o usuÃ¡rio foi criado com sucesso e verificar os valores inseridos
-        console.log('ðŸ”µ [SIGNUP] Verificando se usuÃ¡rio foi criado...');
+        // Verificar se o usuário foi criado com sucesso e verificar os valores inseridos
+        console.log('🔵 [SIGNUP] Verificando se usuário foi criado...');
         const verifyUser = await dbService.executeQuery(`
             SELECT cpf, balance, pix_daily_limit, credit_card_total_limit, credit_card_available_limit, password_hash
             FROM ${dbService.fq('users')} 
             WHERE cpf = '${escapedCpf}'
         `);
-        console.log('ðŸ”µ [SIGNUP] Resultado da verificaÃ§Ã£o pÃ³s-INSERT:', verifyUser.length > 0 ? 'UsuÃ¡rio encontrado' : 'UsuÃ¡rio NÃƒO encontrado');
+        console.log('🔵 [SIGNUP] Resultado da verificação pós-INSERT:', verifyUser.length > 0 ? 'Usuário encontrado' : 'Usuário NÃO encontrado');
         if (verifyUser.length > 0) {
             const storedHash = verifyUser[0].password_hash || '';
-            console.log('ðŸ”µ [SIGNUP] Valores inseridos no banco:', {
+            console.log('🔵 [SIGNUP] Valores inseridos no banco:', {
                 cpf: verifyUser[0].cpf,
                 balance: verifyUser[0].balance,
                 pix_daily_limit: verifyUser[0].pix_daily_limit,
@@ -1549,105 +1570,105 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
             
             // Verificar se o hash foi armazenado corretamente
             if (storedHash.length !== hashedPassword.length) {
-                console.log(`âš ï¸ [SIGNUP] ATENÃ‡ÃƒO: Hash armazenado tem tamanho diferente! Original: ${hashedPassword.length}, Armazenado: ${storedHash.length}`);
+                console.log(`⚠️ [SIGNUP] ATENÇÃO: Hash armazenado tem tamanho diferente! Original: ${hashedPassword.length}, Armazenado: ${storedHash.length}`);
             }
             if (storedHash !== hashedPassword) {
-                console.log(`âš ï¸ [SIGNUP] ATENÃ‡ÃƒO: Hash armazenado Ã© diferente do hash gerado!`);
+                console.log(`⚠️ [SIGNUP] ATENÇÃO: Hash armazenado é diferente do hash gerado!`);
                 console.log(`   Hash original (primeiros 50): ${hashedPassword.substring(0, 50)}`);
                 console.log(`   Hash armazenado (primeiros 50): ${storedHash.substring(0, 50)}`);
             } else {
-                console.log(`âœ… [SIGNUP] Hash armazenado corretamente!`);
+                console.log(`✅ [SIGNUP] Hash armazenado corretamente!`);
             }
         }
         
         if (verifyUser.length === 0) {
-            console.error('âŒ [SIGNUP] Erro: UsuÃ¡rio nÃ£o foi criado apÃ³s INSERT');
+            console.error('❌ [SIGNUP] Erro: Usuário não foi criado após INSERT');
             return res.status(500).json({ success: false, message: 'Erro ao criar conta. Tente novamente.' });
         }
         
-        console.log(`âœ… [SIGNUP] UsuÃ¡rio ${cpf} criado com sucesso!`);
+        console.log(`✅ [SIGNUP] Usuário ${cpf} criado com sucesso!`);
         telegramService.ensureTopic(cpf, fullName);
         const response = { success: true, message: 'Conta criada com sucesso!' };
-        console.log('ðŸ”µ [SIGNUP] Enviando resposta:', response);
+        console.log('🔵 [SIGNUP] Enviando resposta:', response);
         res.status(200).json(response);
-        console.log('ðŸ”µ [SIGNUP] Resposta enviada com sucesso');
+        console.log('🔵 [SIGNUP] Resposta enviada com sucesso');
     } catch (error) {
-        console.error('âŒ [SIGNUP] Erro ao criar usuÃ¡rio:', error.message);
-        console.error('âŒ [SIGNUP] Stack:', error.stack);
-        console.error('âŒ [SIGNUP] Error completo:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        console.error('❌ [SIGNUP] Erro ao criar usuário:', error.message);
+        console.error('❌ [SIGNUP] Stack:', error.stack);
+        console.error('❌ [SIGNUP] Error completo:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
         return res.status(500).json({ success: false, message: 'Erro ao criar conta. Tente novamente.' });
     }
 }));
 
 apiRouter.post('/auth/login', loginLimiter, loginValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
-    console.log('ðŸš€ [LOGIN] Endpoint /auth/login chamado!');
-    console.log('ðŸš€ [LOGIN] Body recebido:', JSON.stringify(req.body));
-    console.log('ðŸš€ [LOGIN] Body tipo:', typeof req.body);
-    console.log('ðŸš€ [LOGIN] Body keys:', Object.keys(req.body || {}));
-    console.log('ðŸš€ [LOGIN] Content-Type:', req.get('Content-Type'));
+    console.log('🚀 [LOGIN] Endpoint /auth/login chamado!');
+    console.log('🚀 [LOGIN] Body recebido:', JSON.stringify(req.body));
+    console.log('🚀 [LOGIN] Body tipo:', typeof req.body);
+    console.log('🚀 [LOGIN] Body keys:', Object.keys(req.body || {}));
+    console.log('🚀 [LOGIN] Content-Type:', req.get('Content-Type'));
     
     let { cpf, password } = req.body;
     
-    // Normalizar CPF (remover formataÃ§Ã£o se houver) - jÃ¡ deve estar normalizado pelo sanitizer
+    // Normalizar CPF (remover formatação se houver) - já deve estar normalizado pelo sanitizer
     if (cpf) {
         cpf = String(cpf).replace(/\D/g, '');
     }
     
-    console.log(`ðŸ” Tentativa de login - CPF: ${cpf} (normalizado), Password: ${password ? '***' : 'NÃƒO FORNECIDO'}`);
-    console.log(`ðŸ” CPF tipo: ${typeof cpf}, length: ${cpf ? cpf.length : 0}`);
-    console.log(`ðŸ” Password tipo: ${typeof password}, length: ${password ? password.length : 0}`);
+    console.log(`🔍 Tentativa de login - CPF: ${cpf} (normalizado), Password: ${password ? '***' : 'NÃO FORNECIDO'}`);
+    console.log(`🔍 CPF tipo: ${typeof cpf}, length: ${cpf ? cpf.length : 0}`);
+    console.log(`🔍 Password tipo: ${typeof password}, length: ${password ? password.length : 0}`);
     
     try {
         // Escapar CPF para evitar SQL injection
         const escapedCpf = cpf.replace(/'/g, "''");
         const query = `SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${escapedCpf}'`;
-        console.log(`ðŸ” Executando query: ${query}`);
+        console.log(`🔍 Executando query: ${query}`);
         const users = await dbService.executeQuery(query);
-        console.log(`ðŸ” Query retornou ${users ? users.length : 0} resultado(s)`);
-        console.log(`ðŸ” Tipo de retorno: ${Array.isArray(users) ? 'Array' : typeof users}`);
+        console.log(`🔍 Query retornou ${users ? users.length : 0} resultado(s)`);
+        console.log(`🔍 Tipo de retorno: ${Array.isArray(users) ? 'Array' : typeof users}`);
         if (users && users.length > 0) {
-            console.log(`ðŸ” Primeiro resultado:`, JSON.stringify(users[0], null, 2));
+            console.log(`🔍 Primeiro resultado:`, JSON.stringify(users[0], null, 2));
         }
         const user = users && users.length > 0 ? users[0] : null;
         
-        console.log(`ðŸ‘¤ Usuario encontrado:`, user ? `CPF: ${user.cpf}, Role: ${user.role}, Email: ${user.email}` : 'Nenhum usuario encontrado');
+        console.log(`👤 Usuario encontrado:`, user ? `CPF: ${user.cpf}, Role: ${user.role}, Email: ${user.email}` : 'Nenhum usuario encontrado');
 
         if (!user) {
-            console.log(`âŒ Usuario nao encontrado para CPF: ${cpf}`);
+            console.log(`❌ Usuario nao encontrado para CPF: ${cpf}`);
             return res.status(401).json({ success: false, code: 'AUTH_USER_NOT_FOUND', message: 'CPF ou senha invalida.' });
         }
         
         if (user.is_blocked) {
-            console.log(`ðŸš« Usuario ${user.cpf} esta bloqueado`);
+            console.log(`🚫 Usuario ${user.cpf} esta bloqueado`);
             return res.status(401).json({ success: false, code: 'AUTH_BLOCKED', message: 'Conta bloqueada. Solicite nova senha.' });
         }
 
         // Verificar se password_hash existe
         if (!user.password_hash || user.password_hash.trim() === '') {
-            console.log(`âš ï¸ Usuario ${user.cpf} nao possui senha definida (password_hash esta NULL ou vazio)`);
+            console.log(`⚠️ Usuario ${user.cpf} nao possui senha definida (password_hash esta NULL ou vazio)`);
             return res.status(401).json({ success: false, code: 'AUTH_NO_PASSWORD', message: 'Conta sem senha definida. Solicite redefinicao de senha.' });
         }
 
-        console.log(`ðŸ” Verificando senha para usuario ${user.cpf}...`);
-        console.log(`ðŸ” Password recebido (length): ${password ? password.length : 0}`);
-        console.log(`ðŸ” Password hash no banco (length): ${user.password_hash ? user.password_hash.length : 0}`);
-        console.log(`ðŸ” Password hash no banco (primeiros 30 chars): ${user.password_hash ? user.password_hash.substring(0, 30) : 'NULL'}...`);
+        console.log(`🔎 Verificando senha para usuario ${user.cpf}...`);
+        console.log(`🔎 Password recebido (length): ${password ? password.length : 0}`);
+        console.log(`🔎 Password hash no banco (length): ${user.password_hash ? user.password_hash.length : 0}`);
+        console.log(`🔎 Password hash no banco (primeiros 30 chars): ${user.password_hash ? user.password_hash.substring(0, 30) : 'NULL'}...`);
         const isMatch = await bcrypt.compare(password, user.password_hash);
-        console.log(`ðŸ” Senha ${isMatch ? 'CORRETA' : 'INCORRETA'} para usuario ${user.cpf}`);
+        console.log(`🔎 Senha ${isMatch ? 'CORRETA' : 'INCORRETA'} para usuario ${user.cpf}`);
         
         // Se a senha estiver incorreta, vamos tentar verificar se o hash foi corrompido
         if (!isMatch) {
-            console.log(`ðŸ” [DEBUG] Verificando se o hash foi corrompido...`);
-            // Tentar verificar se o hash tem o formato correto do bcrypt (deve comeÃ§ar com $2b$ ou $2a$)
+            console.log(`🔍 [DEBUG] Verificando se o hash foi corrompido...`);
+            // Tentar verificar se o hash tem o formato correto do bcrypt (deve começar com $2b$ ou $2a$)
             const hashStartsWith = user.password_hash ? user.password_hash.substring(0, 4) : 'NULL';
-            console.log(`ðŸ” [DEBUG] Hash comeÃ§a com: ${hashStartsWith}`);
+            console.log(`🔍 [DEBUG] Hash começa com: ${hashStartsWith}`);
             if (!hashStartsWith.startsWith('$2')) {
-                console.log(`âš ï¸ [DEBUG] ATENÃ‡ÃƒO: Hash nÃ£o tem formato bcrypt vÃ¡lido! Pode ter sido corrompido durante o INSERT.`);
+                console.log(`⚠️ [DEBUG] ATENÇÃO: Hash não tem formato bcrypt válido! Pode ter sido corrompido durante o INSERT.`);
             }
         }
         
         if (!isMatch) {
-            console.log(`âŒ Senha incorreta para usuario ${user.cpf}`);
+            console.log(`❌ Senha incorreta para usuario ${user.cpf}`);
             const escapedCpfForUpdate = cpf.replace(/'/g, "''");
             await dbService.executeQuery(`
                 UPDATE ${dbService.fq('users')}
@@ -1665,7 +1686,7 @@ apiRouter.post('/auth/login', loginLimiter, loginValidationRules, handleValidati
         `);
 
         const token = jwt.sign({ cpf: user.cpf, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '8h' });
-        console.log(`âœ… Login bem-sucedido para ${user.cpf} (${user.role})`);
+        console.log(`✅ Login bem-sucedido para ${user.cpf} (${user.role})`);
         res.cookie('token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
@@ -1674,8 +1695,8 @@ apiRouter.post('/auth/login', loginLimiter, loginValidationRules, handleValidati
         });
         res.json({ success: true, user: normalizeUser(user), token, message: 'Login realizado com sucesso.' });
     } catch (error) {
-        console.error(`âŒ Erro no login para CPF ${cpf}:`, error.message);
-        console.error(`âŒ Stack:`, error.stack);
+        console.error(`❌ Erro no login para CPF ${cpf}:`, error.message);
+        console.error(`❌ Stack:`, error.stack);
         return res.status(500).json({ success: false, message: 'Erro interno ao processar login. Tente novamente.' });
     }
 }));
@@ -1695,7 +1716,7 @@ apiRouter.post('/auth/request-password-reset', asyncHandler(async (req, res) => 
         await dbService.executeQuery(`UPDATE ${dbService.fq('users')} SET password_reset_requested = true, updated_at = current_timestamp() WHERE cpf = '${safeCpf}'`);
         res.json({
             success: true,
-            message: 'InstruÃ§Ãµes para nova senha enviadas ao seu e-mail.',
+            message: 'Instruções para nova senha enviadas ao seu e-mail.',
             devToken: process.env.NODE_ENV !== 'production' ? otp : undefined,
         });
     } else {
@@ -1732,8 +1753,8 @@ apiRouter.post('/auth/reset-password', resetPasswordValidationRules, handleValid
     res.json({ success: true, message: 'Senha redefinida com sucesso.' });
 }));
 
-// --- Rotas de UsuÃ¡rio ---
-// Rotas de USUÃRIO â€” extraÃ­do para src/routes/users.routes.js (Fase 6 USERS)
+// --- Rotas de Usuário ---
+// Rotas de USUÃRIO — extraído para src/routes/users.routes.js (Fase 6 USERS)
 const usersController = createUsersController({
     dbService,
     repoContext,
@@ -1749,142 +1770,10 @@ const usersController = createUsersController({
 });
 registerUsersRoutes({ apiRouter, bearerAuth, asyncHandler, controller: usersController });
 
-// â”€â”€â”€ Admin: notificaÃ§Ãµes de pagamento mÃ­nimo (Ãºltimas 24h) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-apiRouter.get('/admin/notifications/minimo', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
-    const { esc } = repoContext;
-    const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
-
-    const rows = await dbService.executeQuery(`
-        SELECT n.id, n.cpf, n.title, n.message, n.created_at, n.is_read,
-               u.full_name
-        FROM ${dbService.fq('notifications')} n
-        LEFT JOIN ${dbService.fq('users')} u ON n.cpf = u.cpf
-        WHERE (n.title LIKE '%mÃ­nimo%' OR n.title LIKE '%minimo%')
-          AND n.created_at >= ${esc(cutoff)}
-        ORDER BY n.created_at DESC
-    `);
-
-    const list = (rows || []).map(r => ({
-        id: r.id,
-        cpf: r.cpf,
-        fullName: r.full_name || 'Desconhecido',
-        title: r.title,
-        message: r.message,
-        createdAt: r.created_at,
-        isRead: !!r.is_read,
-    }));
-
-    res.json({
-        success: true,
-        total: list.length,
-        periodo: {
-            inicio: cutoff,
-            fim: new Date().toISOString(),
-        },
-        notifications: list,
-    });
-}));
-
-// â”€â”€ Rota Admin: Listar notificaÃ§Ãµes ABAIXO do mÃ­nimo (Ãºltimas 24h) â”€â”€
-apiRouter.get('/admin/notifications/abaixo', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
-    const { esc } = repoContext;
-    const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
-
-    const rows = await dbService.executeQuery(`
-        SELECT n.id, n.cpf, n.title, n.message, n.created_at, n.is_read,
-               u.full_name,
-               i.valor_total, COALESCE(i.valor_pago, 0) AS valor_pago,
-               i.dias_atraso, u.account_status, u.days_overdue
-        FROM ${dbService.fq('notifications')} n
-        LEFT JOIN ${dbService.fq('users')} u ON n.cpf = u.cpf
-        LEFT JOIN ${dbService.fq('invoices')} i ON n.cpf = i.cpf
-          AND i.status = 'FECHADA' AND i.data_pagamento IS NULL
-        WHERE (n.title LIKE '%Abaixo%' OR n.title LIKE '%abaixo%' OR n.title LIKE '%crÃ­tico%' OR n.title LIKE '%critico%')
-          AND n.created_at >= ${esc(cutoff)}
-        ORDER BY n.created_at DESC
-    `);
-
-    // Agrupar por CPF (evitar duplicatas de JOIN com invoices)
-    const seenCpfs = new Set();
-    const list = (rows || []).filter(r => {
-        if (seenCpfs.has(r.cpf)) return false;
-        seenCpfs.add(r.cpf);
-        return true;
-    }).map(r => ({
-        id: r.id,
-        cpf: r.cpf,
-        fullName: r.full_name || 'Desconhecido',
-        title: r.title,
-        message: r.message,
-        createdAt: r.created_at,
-        isRead: !!r.is_read,
-        valorTotal: r.valor_total ? parseFloat(r.valor_total) : null,
-        valorPago: r.valor_pago ? parseFloat(r.valor_pago) : null,
-        diasAtraso: r.dias_atraso || r.days_overdue || 0,
-        accountStatus: r.account_status || 'desconhecido',
-    }));
-
-    res.json({
-        success: true,
-        total: list.length,
-        periodo: {
-            inicio: cutoff,
-            fim: new Date().toISOString(),
-        },
-        abaixo: list,
-    });
-}));
-
-// â”€â”€ Timeline de regularizaÃ§Ãµes (Ãºltimos 7 dias) â”€â”€
-apiRouter.get('/admin/regularized-timeline', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
-    // Janela: Ãºltimos 7 dias.
-    const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-
-    const rows = await dbService.executeQuery(`
-        SELECT data_pagamento, valor_total, valor_pago
-        FROM ${dbService.fq('invoices')}
-        WHERE status = 'FECHADA'
-          AND data_pagamento IS NOT NULL
-          AND data_pagamento >= '${seteDiasAtras}'
-          AND COALESCE(valor_pago, 0) > 0
-        ORDER BY data_pagamento ASC
-    `).catch(() => []);
-
-    // Agrupar por dia (UTC). O driver Postgres pode devolver Date OU string ISO,
-    // por isso normalizamos com `new Date(...)` antes de extrair a chave.
-    const dayMap = new Map();
-    const { dayKey } = require('./utils/timezone');
-    for (const r of (rows || [])) {
-        if (!r.data_pagamento) continue;
-        const d = r.data_pagamento instanceof Date ? r.data_pagamento : new Date(r.data_pagamento);
-        if (isNaN(d.getTime())) continue;
-        const day = dayKey(d); // YYYY-MM-DD no calendÃ¡rio de BrasÃ­lia
-        if (!dayMap.has(day)) dayMap.set(day, { count: 0, totalAmount: 0 });
-        const entry = dayMap.get(day);
-        entry.count++;
-        entry.totalAmount += parseFloat(r.valor_pago || r.valor_total || 0);
-    }
-
-    // Preencher dias sem pagamentos com 0 â€” Ãºltimos 7 dias
-    const timeline = [];
-    for (let i = 6; i >= 0; i--) {
-        const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-        const k = dayKey(d);
-        const entry = dayMap.get(k);
-        timeline.push({
-            date: k,
-            label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-            count: entry ? entry.count : 0,
-            totalAmount: entry ? Math.round(entry.totalAmount * 100) / 100 : 0,
-        });
-    }
-
-    res.json({
-        success: true,
-        timeline,
-        total: rows ? rows.length : 0,
-    });
-}));
+// --- Rotas ADMIN de notificações (minimo/abaixo/regularized-timeline) —
+// extraídas p/ src/routes/admin/notifications.routes.js (Fase 7)
+const adminNotificationsController = createAdminNotificationsController({ dbService, repoContext });
+registerAdminNotificationsRoutes({ apiRouter, bearerAuth, authenticateAdmin, h: adminNotificationsController });
 
 // --- Rotas de Loja ---
 apiRouter.get('/shop/products', asyncHandler(async (req, res) => {
@@ -1893,9 +1782,9 @@ apiRouter.get('/shop/products', asyncHandler(async (req, res) => {
 }));
 
 apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => {
-    console.log('ðŸ›’ [SHOP CHECKOUT] Iniciando checkout...');
-    console.log('ðŸ›’ [SHOP CHECKOUT] Body recebido:', JSON.stringify(req.body));
-    console.log('ðŸ›’ [SHOP CHECKOUT] User CPF:', req.user?.cpf);
+    console.log('🛒 [SHOP CHECKOUT] Iniciando checkout...');
+    console.log('🛒 [SHOP CHECKOUT] Body recebido:', JSON.stringify(req.body));
+    console.log('🛒 [SHOP CHECKOUT] User CPF:', req.user?.cpf);
     
     const { items, paymentMethod, cashbackUsed = 0, installments = 1, pin, interestRate } = req.body || {};
     
@@ -1906,13 +1795,13 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
     if (['card_debit', 'credit'].includes(paymentMethod)) {
         const [card] = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('cards')} WHERE user_cpf = '${req.user.cpf}' AND card_type = 'physical'`);
         if (!card) {
-            return res.status(403).json({ success: false, message: 'CartÃ£o fÃ­sico nÃ£o encontrado.' });
+            return res.status(403).json({ success: false, message: 'Cartão físico não encontrado.' });
         }
         if (!card.is_activated) {
-            return res.status(403).json({ success: false, message: 'CartÃ£o fÃ­sico nÃ£o estÃ¡ ativado.' });
+            return res.status(403).json({ success: false, message: 'Cartão físico não está ativado.' });
         }
         if (card.is_blocked) {
-            return res.status(403).json({ success: false, message: 'CartÃ£o fÃ­sico estÃ¡ bloqueado.' });
+            return res.status(403).json({ success: false, message: 'Cartão físico está bloqueado.' });
         }
         if (card.pin !== String(pin).trim()) {
             return res.status(401).json({ success: false, message: 'PIN incorreto.' });
@@ -1920,15 +1809,15 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
     }
     
     const catalog = await shopRepo.listProducts();
-    console.log('ðŸ“¦ [SHOP CHECKOUT] CatÃ¡logo carregado:', catalog.length, 'produtos');
-    console.log('ðŸ“¦ [SHOP CHECKOUT] IDs disponÃ­veis:', catalog.map(p => p.id));
+    console.log('📦 [SHOP CHECKOUT] Catálogo carregado:', catalog.length, 'produtos');
+    console.log('📦 [SHOP CHECKOUT] IDs disponíveis:', catalog.map(p => p.id));
     
     const prices = new Map(catalog.map(p => [p.id, p.price]));
     const productById = new Map(catalog.map(p => [p.id, p]));
     
     let total = 0;
     for (const it of items) {
-        console.log('ðŸ” [SHOP CHECKOUT] Validando item:', {
+        console.log('🔍 [SHOP CHECKOUT] Validando item:', {
             productId: it.productId,
             productIdType: typeof it.productId,
             quantity: it.quantity,
@@ -1939,26 +1828,26 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         });
         
         if (!prices.has(it.productId)) {
-            console.log('âŒ [SHOP CHECKOUT] Produto nÃ£o encontrado no catÃ¡logo:', it.productId);
-            console.log('âŒ [SHOP CHECKOUT] IDs disponÃ­veis:', Array.from(prices.keys()));
+            console.log('❌ [SHOP CHECKOUT] Produto não encontrado no catálogo:', it.productId);
+            console.log('❌ [SHOP CHECKOUT] IDs disponíveis:', Array.from(prices.keys()));
             return res.status(400).json({ 
                 success: false, 
-                message: `Item invalido: produto "${it.productId}" nÃ£o encontrado no catÃ¡logo.` 
+                message: `Item invalido: produto "${it.productId}" não encontrado no catálogo.` 
             });
         }
         
-        // Converter quantity para nÃºmero se necessÃ¡rio
+        // Converter quantity para número se necessário
         const quantity = typeof it.quantity === 'string' ? parseInt(it.quantity, 10) : Number(it.quantity);
         
         if (!Number.isInteger(quantity) || quantity < 1 || isNaN(quantity)) {
-            console.log('âŒ [SHOP CHECKOUT] Quantidade invÃ¡lida:', {
+            console.log('❌ [SHOP CHECKOUT] Quantidade inválida:', {
                 original: it.quantity,
                 converted: quantity,
                 type: typeof it.quantity
             });
             return res.status(400).json({ 
                 success: false, 
-                message: `Item invalido: quantidade "${it.quantity}" invÃ¡lida. Deve ser um nÃºmero inteiro maior que zero.` 
+                message: `Item invalido: quantidade "${it.quantity}" inválida. Deve ser um número inteiro maior que zero.` 
             });
         }
         
@@ -1967,7 +1856,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         total += prices.get(it.productId) * quantity;
     }
     
-    console.log('âœ… [SHOP CHECKOUT] Todos os itens validados. Total:', total);
+    console.log('✅ [SHOP CHECKOUT] Todos os itens validados. Total:', total);
 
     // Taxa de pontos por metodo: debit=1%, credit=2%
     const pointsRate = paymentMethod === 'credit' ? 0.02 : 0.01;
@@ -1977,7 +1866,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
     const cashback = paymentMethod === 'debit' ? Math.min(Math.max(cashbackUsed, 0), total * 0.05) : 0; // max 5%
     const netDebit = total - cashback;
 
-    // VariÃ¡vel para armazenar transactionId (usado no crÃ©dito)
+    // Variável para armazenar transactionId (usado no crédito)
     let creditTransactionId = undefined;
 
     if (paymentMethod === 'debit') {
@@ -1987,7 +1876,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         if (balance < netDebit) return res.status(400).json({ success: false, message: 'Saldo insuficiente' });
         await usersRepo.updateBalance(req.user.cpf, (balance - netDebit).toFixed(2));
         
-        // Criar descriÃ§Ã£o amigÃ¡vel com nome do produto (similar ao crÃ©dito)
+        // Criar descrição amigável com nome do produto (similar ao crédito)
         let productDesc;
         if (Array.isArray(items) && items.length === 1) {
             const p0 = productById.get(items[0].productId);
@@ -2002,7 +1891,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         
         const txId = dbService.generateUUID();
         const now = new Date().toISOString();
-        // Valor NEGATIVO pois Ã© um dÃ©bito (saÃ­da de dinheiro)
+        // Valor NEGATIVO pois é um débito (saída de dinheiro)
         await dbService.executeQuery(`
             INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
             VALUES (${esc(txId)}, ${esc(req.user.cpf)}, ${esc('SHOP_DEBIT')}, ${-netDebit.toFixed(2)}, ${esc(productDesc)}, ${esc(now)})
@@ -2016,13 +1905,13 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             interestRate: 0,
             dataCompra: now,
         }) }).catch(() => {});
-        // Comprovante de compra (art. 52 CDC) no tÃ³pico da massa â€” fire-and-forget
+        // Comprovante de compra (art. 52 CDC) no tópico da massa — fire-and-forget
         generateAndSendPurchaseReceipt({
             cpf: req.user.cpf,
             data: {
                 estabelecimento: productDesc,
-                formaPagamento: 'CartÃ£o de dÃ©bito',
-                tipoPagamento: 'Ã€ vista (dÃ©bito)',
+                formaPagamento: 'Cartão de débito',
+                tipoPagamento: 'Ã€ vista (débito)',
                 totalParcelas: 1,
                 originalAmount: round2(netDebit),
                 jurosTotal: 0,
@@ -2043,10 +1932,10 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
                 INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
                 VALUES (${esc(cashbackTxId)}, ${esc(req.user.cpf)}, ${esc('CASHBACK_CREDIT')}, ${cashback.toFixed(2)}, ${esc('Cashback shop')}, ${esc(now)})
             `);
-            telegramService.send('purchase', { cpf: req.user.cpf, text: `ðŸ’° Cashback: R$ ${cashback.toFixed(2)}` }).catch(() => {});
+            telegramService.send('purchase', { cpf: req.user.cpf, text: `💰 Cashback: R$ ${cashback.toFixed(2)}` }).catch(() => {});
         }
         
-        // Persistir itens comprados e pontos por item (para dÃ©bito)
+        // Persistir itens comprados e pontos por item (para débito)
         for (const it of items) {
             const p = productById.get(it.productId);
             const itemTotal = Number(p.price) * it.quantity;
@@ -2076,7 +1965,20 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             };
         });
 
-        // Retornar sucesso com a transaÃ§Ã£o criada e detalhes dos produtos
+        // Retornar sucesso com a transação criada e detalhes dos produtos
+        // SSE: notificar frontend em tempo real
+        try {
+            const sse = require('./services/sseService');
+            sse.sendToClient(req.user.cpf, 'purchase.completed', {
+                cpf: req.user.cpf,
+                amount: netDebit,
+                method: 'debit',
+                installments: 1,
+                description: productDesc,
+                timestamp: new Date().toISOString(),
+            });
+        } catch (_sseErr) { /* SSE é fire-and-forget */ }
+
         res.status(201).json({ 
             success: true, 
             message: 'Compra realizada com sucesso',
@@ -2115,21 +2017,21 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
         if (user.credit_card_is_blocked) return res.status(403).json({ success: false, message: 'Cartao bloqueado.' });
 
-        // Validar que o limite do cartÃ£o existe e estÃ¡ configurado
+        // Validar que o limite do cartão existe e está configurado
         const totalLimit = parseFloat(user.credit_card_total_limit || 0);
         
-        // Se o limite nÃ£o estiver configurado, retornar erro especÃ­fico
+        // Se o limite não estiver configurado, retornar erro específico
         if (!Number.isFinite(totalLimit) || totalLimit <= 0) {
             return res.status(400).json({ success: false, message: 'Limite do cartao de credito nao configurado. Entre em contato com o suporte.' });
         }
         
-        // Buscar limite disponÃ­vel - se for NULL ou nÃ£o definido, usar o limite total
+        // Buscar limite disponível - se for NULL ou não definido, usar o limite total
         let availableLimit = parseFloat(user.credit_card_available_limit);
         
-        // Se o limite disponÃ­vel nÃ£o estiver definido, for invÃ¡lido, ou for maior que o limite total, corrigir
-        // IMPORTANTE: Se o limite disponÃ­vel for maior que o total, algo estÃ¡ errado e precisa ser corrigido
+        // Se o limite disponível não estiver definido, for inválido, ou for maior que o limite total, corrigir
+        // IMPORTANTE: Se o limite disponível for maior que o total, algo está errado e precisa ser corrigido
         if (!Number.isFinite(availableLimit) || availableLimit < 0 || availableLimit > totalLimit) {
-            // Se o limite disponÃ­vel nÃ£o estiver definido ou for invÃ¡lido, inicializar com o limite total
+            // Se o limite disponível não estiver definido ou for inválido, inicializar com o limite total
             availableLimit = totalLimit;
             const { esc } = require('./repositories/context');
             await dbService.executeQuery(`
@@ -2137,11 +2039,11 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
                 SET credit_card_available_limit = ${totalLimit.toFixed(2)}
                 WHERE cpf = ${esc(req.user.cpf)}
             `);
-            // Atualizar o objeto user para refletir a correÃ§Ã£o
+            // Atualizar o objeto user para refletir a correção
             user.credit_card_available_limit = totalLimit;
         }
         
-        // Garantir que o limite disponÃ­vel nÃ£o seja maior que o limite total (correÃ§Ã£o de seguranÃ§a)
+        // Garantir que o limite disponível não seja maior que o limite total (correção de segurança)
         if (availableLimit > totalLimit) {
             availableLimit = totalLimit;
             const { esc } = require('./repositories/context');
@@ -2167,7 +2069,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         // Log para debug (pode remover depois)
         console.log(`[CHECKOUT CREDIT] CPF: ${req.user.cpf}, Total: R$ ${total.toFixed(2)}, Parcelas: ${qty}, Taxa: ${rate}, TotalParcelado: R$ ${totalParcelado.toFixed(2)}, ConsumoLimite: R$ ${consumoLimite.toFixed(2)}, LimiteDisponivel: R$ ${finalAvailableLimit.toFixed(2)}`);
 
-        // Validar limite disponÃ­vel - IMPORTANTE: usar limite do cartÃ£o, NÃƒO o saldo da conta
+        // Validar limite disponível - IMPORTANTE: usar limite do cartão, NÃO o saldo da conta
         if (!Number.isFinite(finalAvailableLimit) || finalAvailableLimit < consumoLimite) {
             return res.status(400).json({ 
                 success: false, 
@@ -2175,8 +2077,8 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             });
         }
 
-        // Debitar limite disponÃ­vel do CARTÃƒO DE CRÃ‰DITO (nÃ£o do saldo da conta)
-        // IMPORTANTE: NUNCA debitar do balance (saldo da conta) para compras no crÃ©dito
+        // Debitar limite disponível do CARTÃƒO DE CRÃ‰DITO (não do saldo da conta)
+        // IMPORTANTE: NUNCA debitar do balance (saldo da conta) para compras no crédito
         const newAvailableLimit = finalAvailableLimit - consumoLimite;
         const { esc } = require('./repositories/context');
         await dbService.executeQuery(`
@@ -2186,8 +2088,8 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         `);
 
         const nowIso = toLocalSqlTimestamp();
-        // Registrar compra visÃ­vel na fatura aberta
-        // DescriÃ§Ã£o amigÃ¡vel da compra: nome do primeiro produto ou "<Primeiro produto> + N itens"
+        // Registrar compra visível na fatura aberta
+        // Descrição amigável da compra: nome do primeiro produto ou "<Primeiro produto> + N itens"
         let productDesc;
         if (Array.isArray(items) && items.length === 1) {
             const p0 = productById.get(items[0].productId);
@@ -2208,8 +2110,8 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             (id, cpf, type, amount, description, from_user, to_user, to_key, date)
             VALUES ('${txId}', '${req.user.cpf}', 'SHOP_CREDIT', -${creditAmount.toFixed(2)}, '${safeProductDesc}', NULL, NULL, NULL, '${nowIso}')
         `);
-        // TransparÃªncia de encargos (CDC art. 52 Â· Res. BCB 96/2021 e 365/2023): quando a compra
-        // tiver juros, a mensagem expÃµe juros R$, taxa efetiva e total com/sem financiamento.
+        // Transparência de encargos (CDC art. 52 Â· Res. BCB 96/2021 e 365/2023): quando a compra
+        // tiver juros, a mensagem expõe juros R$, taxa efetiva e total com/sem financiamento.
         // Vencimentos das parcelas (mesma regra do bloco abaixo: corte = vencimento - 7 dias;
         // parcela i = corte + (i-1) mês) — p/ listar PARC 1..N na tabela da mensagem.
         const parcelasVenc = [];
@@ -2240,14 +2142,14 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         if (qty >= 2) {
             const now = new Date();
 
-            // Buscar vencimento da fatura aberta atual do usuÃ¡rio
+            // Buscar vencimento da fatura aberta atual do usuário
             const userRows = await dbService.executeQuery(
                 `SELECT credit_card_invoice_due_date FROM ${dbService.fq('users')} WHERE cpf = '${req.user.cpf}'`
             );
             const user = userRows[0] || {};
             const userDueDate = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
 
-            // O corte da fatura (data da primeira parcela) Ã© 7 dias antes do vencimento
+            // O corte da fatura (data da primeira parcela) é 7 dias antes do vencimento
             const firstDue = new Date(userDueDate);
             firstDue.setDate(firstDue.getDate() - 7);
             firstDue.setUTCHours(23, 59, 59, 999);
@@ -2285,48 +2187,48 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
                     AND column_name IN ('original_amount', 'total_with_interest')
                 `);
                 const existingColumns = columnCheck.map(c => c.column_name);
-                console.log('ðŸ” [SHOP CHECKOUT] Colunas encontradas em installment_plans:', existingColumns);
+                console.log('🔍 [SHOP CHECKOUT] Colunas encontradas em installment_plans:', existingColumns);
                 
                 if (!existingColumns.includes('original_amount') || !existingColumns.includes('total_with_interest')) {
-                    console.log('âš ï¸ [SHOP CHECKOUT] Colunas faltando. Tentando adicionar...');
-                    // Tentar adicionar as colunas se nÃ£o existirem
+                    console.log('⚠️ [SHOP CHECKOUT] Colunas faltando. Tentando adicionar...');
+                    // Tentar adicionar as colunas se não existirem
                     if (!existingColumns.includes('original_amount')) {
                         await dbService.executeQuery(`
                             ALTER TABLE ${dbService.fq('installment_plans')}
                             ADD COLUMN original_amount DECIMAL(15,2) DEFAULT 0.00
                         `);
-                        console.log('âœ… [SHOP CHECKOUT] Coluna original_amount adicionada.');
+                        console.log('✅ [SHOP CHECKOUT] Coluna original_amount adicionada.');
                     }
                     if (!existingColumns.includes('total_with_interest')) {
                         await dbService.executeQuery(`
                             ALTER TABLE ${dbService.fq('installment_plans')}
                             ADD COLUMN total_with_interest DECIMAL(15,2) DEFAULT 0.00
                         `);
-                        console.log('âœ… [SHOP CHECKOUT] Coluna total_with_interest adicionada.');
+                        console.log('✅ [SHOP CHECKOUT] Coluna total_with_interest adicionada.');
                     }
                 }
             } catch (checkError) {
-                console.warn('âš ï¸ [SHOP CHECKOUT] Erro ao verificar colunas (continuando mesmo assim):', checkError.message);
+                console.warn('⚠️ [SHOP CHECKOUT] Erro ao verificar colunas (continuando mesmo assim):', checkError.message);
             }
             
             // Inserir plano de parcelamento - sempre incluir total_with_interest (mesmo valor que total_amount)
-            console.log('ðŸ’¾ [SHOP CHECKOUT] Inserindo plano de parcelamento...');
+            console.log('💾 [SHOP CHECKOUT] Inserindo plano de parcelamento...');
             await dbService.executeQuery(`
                 INSERT INTO ${dbService.fq('installment_plans')}
                 (id, cpf, purchase_tx_id, description, original_amount, total_amount, total_with_interest, installments, installment_amount, interest_rate, remaining_balance, remaining_installments, next_due_date, status, created_at, updated_at)
                 VALUES (${esc(planId)}, ${esc(req.user.cpf)}, ${esc(txId)}, ${esc('Compra shop (credito)')}, ${originalAmount.toFixed(2)}, ${totalParcelado.toFixed(2)}, ${totalWithInterest.toFixed(2)}, ${qty}, ${parcela.toFixed(2)}, ${typeof rate === 'number' ? rate.toFixed(4) : '0.0000'}, ${remainingBalance}, ${qty - 1}, ${esc(toLocalSqlTimestamp(nextDueDate))}, ${esc('ACTIVE')}, ${esc(planNow)}, ${esc(planNow)})
             `);
-            console.log('âœ… [SHOP CHECKOUT] Plano de parcelamento inserido com sucesso.');
+            console.log('✅ [SHOP CHECKOUT] Plano de parcelamento inserido com sucesso.');
         }
 
-        // Comprovante de compra (art. 52 CDC) no tÃ³pico da massa â€” fire-and-forget
+        // Comprovante de compra (art. 52 CDC) no tópico da massa — fire-and-forget
         {
             const _jp = buildJurosPayload({ original: total, totalWithInterest: qty >= 2 ? totalParcelado : creditAmount, installments: qty, interestRate: rate });
             generateAndSendPurchaseReceipt({
                 cpf: req.user.cpf,
                 data: {
                     estabelecimento: productDesc,
-                    formaPagamento: 'CartÃ£o de crÃ©dito',
+                    formaPagamento: 'Cartão de crédito',
                     tipoPagamento: qty === 1 ? 'Ã€ vista' : (rate > 0 ? 'Parcelado com juros' : 'Parcelado sem juros'),
                     totalParcelas: qty,
                     parcelaAtual: 1,
@@ -2370,7 +2272,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         };
     });
 
-    // Criar descriÃ§Ã£o resumida dos produtos
+    // Criar descrição resumida dos produtos
     let productsDescription;
     if (purchasedProducts.length === 1) {
         productsDescription = purchasedProducts[0].name;
@@ -2378,17 +2280,17 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         productsDescription = `${purchasedProducts[0].name} + ${purchasedProducts.length - 1} outro(s) item(ns)`;
     }
 
-    // Calcular valores finais - para crÃ©dito, usar variÃ¡veis do escopo correto
+    // Calcular valores finais - para crédito, usar variáveis do escopo correto
     let finalAmountLabel;
     let purchaseJuros = null;
     if (paymentMethod === 'credit') {
-        // Para crÃ©dito, o valor final depende se Ã© parcelado ou nÃ£o
+        // Para crédito, o valor final depende se é parcelado ou não
         const qty = installments;
         const rate = qty >= 13 ? (interestRate || 0) : 0;
         const totalParcelado = qty >= 2 ? (qty >= 13 ? total * (1 + rate) : total) : 0;
         const creditAmount = qty === 1 ? (total * 0.90) : total;
         finalAmountLabel = qty === 1 ? creditAmount : totalParcelado;
-        // art. 52 CDC â€” expor encargos de juros no payload da compra
+        // art. 52 CDC — expor encargos de juros no payload da compra
         // originalAmount = valor original; jurosTotal = juros em R$; taxa efetiva
         // mensal/anual derivada da taxa total one-shot (calcEffectiveRates).
         purchaseJuros = buildJurosPayload({
@@ -2400,6 +2302,19 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
     } else {
         finalAmountLabel = netDebit;
     }
+
+    // SSE: notificar frontend em tempo real
+    try {
+        const sse = require('./services/sseService');
+        sse.sendToClient(req.user.cpf, 'purchase.completed', {
+            cpf: req.user.cpf,
+            amount: finalAmountLabel,
+            method: paymentMethod,
+            installments: paymentMethod === 'credit' ? installments : 1,
+            description: productsDescription,
+            timestamp: new Date().toISOString(),
+        });
+    } catch (_sseErr) { /* SSE é fire-and-forget */ }
 
     res.status(201).json({ 
         success: true, 
@@ -2454,41 +2369,41 @@ apiRouter.delete('/pix/contacts/:cpf/:contactKey', bearerAuth(), asyncHandler(as
 // --- PIX Recipient Info ---
 apiRouter.get('/pix/recipient-info', bearerAuth(), asyncHandler(async (req, res) => {
     const { key, senderCpf } = req.query;
-    console.log('ðŸ”µ [PIX RECIPIENT INFO] RequisiÃ§Ã£o recebida:', { key, senderCpf });
+    console.log('🔵 [PIX RECIPIENT INFO] Requisição recebida:', { key, senderCpf });
     
     if (!key) return res.status(400).json({ success: false, message: 'Chave PIX nao fornecida.' });
     
     // Determine key type (CPF, EMAIL, etc.)
     const keyType = key.includes('@') ? 'EMAIL' : 'CPF';
     
-    // Normalizar CPF se necessÃ¡rio (remover formataÃ§Ã£o)
+    // Normalizar CPF se necessário (remover formatação)
     let normalizedKey = key;
     if (keyType === 'CPF') {
-        normalizedKey = key.replace(/\D/g, ''); // Remove tudo que nÃ£o Ã© dÃ­gito
-        console.log('ðŸ”µ [PIX RECIPIENT INFO] CPF normalizado:', { original: key, normalized: normalizedKey });
+        normalizedKey = key.replace(/\D/g, ''); // Remove tudo que não é dígito
+        console.log('🔵 [PIX RECIPIENT INFO] CPF normalizado:', { original: key, normalized: normalizedKey });
     }
     
-    console.log('ðŸ”µ [PIX RECIPIENT INFO] Buscando destinatÃ¡rio:', { keyType, normalizedKey });
+    console.log('🔵 [PIX RECIPIENT INFO] Buscando destinatário:', { keyType, normalizedKey });
     const recipient = await pixRepo.findRecipientByKey(keyType, normalizedKey);
     
     if (!recipient) {
-        console.log('âŒ [PIX RECIPIENT INFO] DestinatÃ¡rio nÃ£o encontrado para:', normalizedKey);
+        console.log('❌ [PIX RECIPIENT INFO] Destinatário não encontrado para:', normalizedKey);
         return res.json({ success: false, message: 'Chave PIX nao encontrada.' });
     }
     
-    console.log('âœ… [PIX RECIPIENT INFO] DestinatÃ¡rio encontrado:', { cpf: recipient.cpf, name: recipient.name });
+    console.log('✅ [PIX RECIPIENT INFO] Destinatário encontrado:', { cpf: recipient.cpf, name: recipient.name });
     
-    // Normalizar senderCpf para comparaÃ§Ã£o
+    // Normalizar senderCpf para comparação
     const normalizedSenderCpf = senderCpf ? senderCpf.replace(/\D/g, '') : null;
     if (normalizedSenderCpf && recipient.cpf === normalizedSenderCpf) {
-        console.log('âŒ [PIX RECIPIENT INFO] Tentativa de enviar para si mesmo');
+        console.log('❌ [PIX RECIPIENT INFO] Tentativa de enviar para si mesmo');
         return res.json({ success: false, message: 'Nao e possivel enviar PIX para si mesmo.' });
     }
     
     res.json({ success: true, name: recipient.name, cpf: recipient.cpf });
 }));
 
-// --- PIX Keys (novos endpoints via repositÃ³rio) ---
+// --- PIX Keys (novos endpoints via repositório) ---
 apiRouter.get('/pix/keys', bearerAuth(), asyncHandler(async (req, res) => {
     const keys = await pixRepo.listKeys(req.user.cpf);
     res.json({ success: true, keys });
@@ -2498,11 +2413,11 @@ apiRouter.post('/pix/keys', bearerAuth(), asyncHandler(async (req, res) => {
     const { type, key } = req.body || {};
     if (!type || !key) return res.status(400).json({ success: false, message: 'Payload invalido.' });
     
-    console.log(`ðŸ”µ [PIX KEY] Cadastro solicitado - Tipo: ${type}, Chave: ${key}, CPF: ${req.user.cpf}`);
+    console.log(`🔵 [PIX KEY] Cadastro solicitado - Tipo: ${type}, Chave: ${key}, CPF: ${req.user.cpf}`);
     
-    // Validar se o tipo Ã© vÃ¡lido
+    // Validar se o tipo é válido
     if (type !== 'CPF' && type !== 'EMAIL') {
-        return res.status(400).json({ success: false, message: 'Tipo de chave invÃ¡lido. Use CPF ou EMAIL.' });
+        return res.status(400).json({ success: false, message: 'Tipo de chave inválido. Use CPF ou EMAIL.' });
     }
     
     // Normalizar a chave
@@ -2510,57 +2425,57 @@ apiRouter.post('/pix/keys', bearerAuth(), asyncHandler(async (req, res) => {
     if (type === 'CPF') {
         normalizedKey = normalizedKey.replace(/\D/g, '');
         if (normalizedKey.length !== 11) {
-            return res.status(400).json({ success: false, message: 'CPF deve ter 11 dÃ­gitos.' });
+            return res.status(400).json({ success: false, message: 'CPF deve ter 11 dígitos.' });
         }
     } else if (type === 'EMAIL') {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedKey)) {
-            return res.status(400).json({ success: false, message: 'Email invÃ¡lido.' });
+            return res.status(400).json({ success: false, message: 'Email inválido.' });
         }
         normalizedKey = normalizedKey.toLowerCase();
     }
     
-    // --- NOVA VALIDAÃ‡ÃƒO DE SEGURANÃ‡A (OWNERSHIP) ---
-    // O usuÃ¡rio sÃ³ pode cadastrar chaves que pertencem a ele
+    // --- NOVA VALIDAÇÃO DE SEGURANÃ‡A (OWNERSHIP) ---
+    // O usuário só pode cadastrar chaves que pertencem a ele
     if (type === 'CPF') {
-        // req.user.cpf jÃ¡ vem do token/middleware
+        // req.user.cpf já vem do token/middleware
         if (normalizedKey !== req.user.cpf) {
-            console.log(`âŒ [PIX KEY] Bloqueio de SeguranÃ§a: Tentativa de cadastrar CPF de terceiro. User: ${req.user.cpf}, Key: ${normalizedKey}`);
-            return res.status(400).json({ success: false, message: 'Chave invÃ¡lida. O CPF deve ser igual ao do cadastro.' });
+            console.log(`❌ [PIX KEY] Bloqueio de Segurança: Tentativa de cadastrar CPF de terceiro. User: ${req.user.cpf}, Key: ${normalizedKey}`);
+            return res.status(400).json({ success: false, message: 'Chave inválida. O CPF deve ser igual ao do cadastro.' });
         }
     } else if (type === 'EMAIL') {
         // req.user.email vem do token (adicionado no login)
-        // Se o token for antigo (sem email), vai falhar (undefined !== key). ForÃ§arÃ¡ re-login.
+        // Se o token for antigo (sem email), vai falhar (undefined !== key). Forçará re-login.
         const userEmail = (req.user.email || '').trim().toLowerCase();
         if (normalizedKey !== userEmail) {
-            console.log(`âŒ [PIX KEY] Bloqueio de SeguranÃ§a: Tentativa de cadastrar Email de terceiro. User: ${userEmail}, Key: ${normalizedKey}`);
-            return res.status(400).json({ success: false, message: 'Chave invÃ¡lida. O email deve ser igual ao do cadastro.' });
+            console.log(`❌ [PIX KEY] Bloqueio de Segurança: Tentativa de cadastrar Email de terceiro. User: ${userEmail}, Key: ${normalizedKey}`);
+            return res.status(400).json({ success: false, message: 'Chave inválida. O email deve ser igual ao do cadastro.' });
         }
     }
     // ------------------------------------------------
     
-    // Verificar se a chave jÃ¡ existe para este usuÃ¡rio
+    // Verificar se a chave já existe para este usuário
     const existingKeys = await pixRepo.listKeys(req.user.cpf);
     if (existingKeys.some(k => k.key === normalizedKey || k.key.toLowerCase() === normalizedKey.toLowerCase())) {
-        console.log('âŒ [PIX KEY] Chave jÃ¡ cadastrada para este usuÃ¡rio');
-        return res.status(400).json({ success: false, message: 'Chave jÃ¡ cadastrada para este usuÃ¡rio.' });
+        console.log('❌ [PIX KEY] Chave já cadastrada para este usuário');
+        return res.status(400).json({ success: false, message: 'Chave já cadastrada para este usuário.' });
     }
     
-    // Verificar se a chave jÃ¡ estÃ¡ cadastrada para outro usuÃ¡rio
+    // Verificar se a chave já está cadastrada para outro usuário
     const allKeys = await dbService.executeQuery(`
         SELECT cpf, key FROM ${dbService.fq('pix_keys')} WHERE LOWER(key) = LOWER('${normalizedKey.replace(/'/g, "''")}')
     `);
     if (allKeys.length > 0) {
         const otherUserCpf = allKeys[0].cpf;
         if (otherUserCpf !== req.user.cpf) {
-            console.log('âŒ [PIX KEY] Chave jÃ¡ cadastrada para outro usuÃ¡rio:', otherUserCpf);
-            return res.status(400).json({ success: false, message: 'Chave jÃ¡ cadastrada em outra conta.' });
+            console.log('❌ [PIX KEY] Chave já cadastrada para outro usuário:', otherUserCpf);
+            return res.status(400).json({ success: false, message: 'Chave já cadastrada em outra conta.' });
         }
     }
     
     // Cadastrar a chave
-    console.log(`âœ… [PIX KEY] Cadastrando chave para usuÃ¡rio ${req.user.cpf}`);
+    console.log(`✅ [PIX KEY] Cadastrando chave para usuário ${req.user.cpf}`);
     await pixRepo.addKey({ cpf: req.user.cpf, type, key: normalizedKey });
-    console.log(`âœ… [PIX KEY] Chave cadastrada com sucesso`);
+    console.log(`✅ [PIX KEY] Chave cadastrada com sucesso`);
     res.status(201).json({ success: true, message: 'Chave cadastrada com sucesso.' });
 }));
 
@@ -2581,16 +2496,16 @@ apiRouter.post('/pix/recipient-info', bearerAuth(), asyncHandler(async (req, res
 
 // --- PIX Transfer ---
 apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
-    console.log('ðŸ”µ [PIX TRANSFER] RequisiÃ§Ã£o recebida:', JSON.stringify(req.body, null, 2));
+    console.log('🔵 [PIX TRANSFER] Requisição recebida:', JSON.stringify(req.body, null, 2));
     const { key, amount, description } = req.body || {};
     const numericAmount = parseFloat(amount);
 
     if (!key) {
-        console.log('âŒ [PIX TRANSFER] Chave nÃ£o fornecida');
-        return res.status(400).json({ success: false, message: 'Chave PIX nÃ£o fornecida.' });
+        console.log('❌ [PIX TRANSFER] Chave não fornecida');
+        return res.status(400).json({ success: false, message: 'Chave PIX não fornecida.' });
     }
     if (isNaN(numericAmount) || numericAmount <= 0) {
-        return res.status(400).json({ success: false, message: 'Valor invÃ¡lido.' });
+        return res.status(400).json({ success: false, message: 'Valor inválido.' });
     }
     if (!req.user || !req.user.cpf) {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
@@ -2604,18 +2519,18 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
     // Find recipient
     const recipient = await pixRepo.findRecipientByKey(keyType, key);
     if (!recipient) {
-        return res.status(404).json({ success: false, message: 'DestinatÃ¡rio nÃ£o encontrado.' });
+        return res.status(404).json({ success: false, message: 'Destinatário não encontrado.' });
     }
     
     const toCpf = recipient.cpf;
     if (senderCpf === toCpf) {
-        return res.status(400).json({ success: false, message: 'NÃ£o Ã© possÃ­vel transferir para si mesmo.' });
+        return res.status(400).json({ success: false, message: 'Não é possível transferir para si mesmo.' });
     }
     
     // Get sender info
     const fromUserRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE cpf='${senderCpf}'`);
     if (!fromUserRows || fromUserRows.length === 0) {
-        return res.status(404).json({ success: false, message: 'UsuÃ¡rio remetente nÃ£o encontrado.' });
+        return res.status(404).json({ success: false, message: 'Usuário remetente não encontrado.' });
     }
     const fromUser = fromUserRows[0];
     const balance = parseFloat(fromUser.balance || 0);
@@ -2634,7 +2549,7 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
     const pixDailyLimit = parseFloat(fromUser.pix_daily_limit || 2000.00);
     
     if (dailyUsage + numericAmount > pixDailyLimit) {
-        return res.status(400).json({ success: false, message: `Limite diÃ¡rio de PIX excedido. Usado: R$ ${dailyUsage.toFixed(2)}, Tentando: R$ ${numericAmount.toFixed(2)}, Limite: R$ ${pixDailyLimit.toFixed(2)}` });
+        return res.status(400).json({ success: false, message: `Limite diário de PIX excedido. Usado: R$ ${dailyUsage.toFixed(2)}, Tentando: R$ ${numericAmount.toFixed(2)}, Limite: R$ ${pixDailyLimit.toFixed(2)}` });
     }
     
     // Execute transfer
@@ -2651,7 +2566,7 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
     const { esc } = require('./repositories/context');
     const txId = dbService.generateUUID();
     const now = new Date().toISOString();
-    const txDescription = description || 'TransferÃªncia PIX';
+    const txDescription = description || 'Transferência PIX';
     
     await dbService.executeQuery(`
         INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date, to_user, to_key)
@@ -2664,17 +2579,17 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
         VALUES (${esc(txId2)}, ${esc(toCpf)}, ${esc('PIX_RECEIVED')}, ${numericAmount}, ${esc(txDescription)}, ${esc(now)}, ${esc(senderCpf)})
     `);
     
-    console.log(`âœ… TransaÃ§Ãµes PIX registradas: PIX_SENT (${txId}) e PIX_RECEIVED (${txId2})`);
-    telegramService.send('payment', { cpf: senderCpf, text: `ðŸ“¤ PIX enviado: R$ ${numericAmount.toFixed(2)} â€” ${txDescription}` }).catch(() => {});
-    telegramService.send('payment', { cpf: toCpf, text: `ðŸ“¥ PIX recebido: R$ ${numericAmount.toFixed(2)} â€” ${txDescription}` }).catch(() => {});
+    console.log(`✅ Transações PIX registradas: PIX_SENT (${txId}) e PIX_RECEIVED (${txId2})`);
+    telegramService.send('payment', { cpf: senderCpf, text: `📤 PIX enviado: R$ ${numericAmount.toFixed(2)} — ${txDescription}` }).catch(() => {});
+    telegramService.send('payment', { cpf: toCpf, text: `📥 PIX recebido: R$ ${numericAmount.toFixed(2)} — ${txDescription}` }).catch(() => {});
     
     auditLog(req, 'pix_transfer', 'info', { from: senderCpf, to: toCpf, amount: numericAmount });
-    res.json({ success: true, message: 'TransferÃªncia realizada com sucesso!' });
+    res.json({ success: true, message: 'Transferência realizada com sucesso!' });
 }));
 
 
 apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
-    console.log('ðŸ”µ [PIX TRANSFER CREDIT] RequisiÃ§Ã£o recebida:', JSON.stringify(req.body, null, 2));
+    console.log('🔵 [PIX TRANSFER CREDIT] Requisição recebida:', JSON.stringify(req.body, null, 2));
     const { toKey, key, amount, description, installments, interestRate } = req.body || {};
     const numericAmount = parseFloat(amount);
     const nInstallments = Number.isInteger(installments) ? installments : 12;
@@ -2683,12 +2598,12 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
     // Usar key ou toKey (compatibilidade)
     const recipientKey = key || toKey;
 
-    // Validar campos obrigatÃ³rios
+    // Validar campos obrigatórios
     if (!recipientKey) {
-        return res.status(400).json({ success: false, message: 'Chave PIX de destino nÃ£o fornecida.' });
+        return res.status(400).json({ success: false, message: 'Chave PIX de destino não fornecida.' });
     }
     if (isNaN(numericAmount) || numericAmount <= 0) {
-        return res.status(400).json({ success: false, message: 'Valor invÃ¡lido.' });
+        return res.status(400).json({ success: false, message: 'Valor inválido.' });
     }
     if (!req.user || !req.user.cpf) {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
@@ -2698,30 +2613,30 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
     
     // Validar parcelas
     if (nInstallments < 2 || nInstallments > 24) {
-        return res.status(400).json({ success: false, message: 'NÃºmero de parcelas deve estar entre 2 e 24.' });
+        return res.status(400).json({ success: false, message: 'Número de parcelas deve estar entre 2 e 24.' });
     }
 
-    // Buscar usuÃ¡rio remetente
+    // Buscar usuário remetente
     const fromUsers = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${senderCpf}'`);
     if (!fromUsers || fromUsers.length === 0) {
-        return res.status(404).json({ success: false, message: 'UsuÃ¡rio remetente nÃ£o encontrado.' });
+        return res.status(404).json({ success: false, message: 'Usuário remetente não encontrado.' });
     }
     const fromUser = fromUsers[0];
     
-    // Buscar destinatÃ¡rio usando a mesma lÃ³gica do /pix/transfer
+    // Buscar destinatário usando a mesma lógica do /pix/transfer
     const keyType = recipientKey.includes('@') ? 'EMAIL' : 'CPF';
     const normalizedKey = keyType === 'CPF' ? recipientKey.replace(/\D/g, '') : recipientKey;
     const recipient = await pixRepo.findRecipientByKey(keyType, normalizedKey);
     
     if (!recipient) {
-        return res.status(404).json({ success: false, message: 'Chave PIX de destino nÃ£o encontrada.' });
+        return res.status(404).json({ success: false, message: 'Chave PIX de destino não encontrada.' });
     }
     
     const toUsers = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${recipient.cpf}'`);
     const toUser = toUsers[0];
 
-    if (!toUser) return res.status(400).json({ success: false, message: 'Chave PIX de destino nÃ£o encontrada.' });
-    if (fromUser.cpf === toUser.cpf) return res.status(400).json({ success: false, message: 'NÃ£o Ã© permitido transferir para si mesmo.' });
+    if (!toUser) return res.status(400).json({ success: false, message: 'Chave PIX de destino não encontrada.' });
+    if (fromUser.cpf === toUser.cpf) return res.status(400).json({ success: false, message: 'Não é permitido transferir para si mesmo.' });
 
     // Juros simples sobre o valor transferido
     const totalWithInterest = numericAmount * (1 + rate * nInstallments);
@@ -2729,19 +2644,19 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
     const now = new Date().toISOString();
     const txId = dbService.generateUUID();
 
-    // TransferÃªncia imediata para o destinatÃ¡rio
+    // Transferência imediata para o destinatário
     const newFromBalance = fromUser.balance - numericAmount;
     const newToBalance = toUser.balance + numericAmount;
 
     if (newFromBalance < 0) {
-        return res.status(400).json({ success: false, message: 'Saldo insuficiente para realizar a transferÃªncia no modo crÃ©dito.' });
+        return res.status(400).json({ success: false, message: 'Saldo insuficiente para realizar a transferência no modo crédito.' });
     }
 
     const { esc } = require('./repositories/context');
     await dbService.executeQuery(`UPDATE ${dbService.fq('users')} SET balance = ${newFromBalance}, updated_at = CURRENT_TIMESTAMP WHERE cpf = '${senderCpf}'`);
     await dbService.executeQuery(`UPDATE ${dbService.fq('users')} SET balance = ${newToBalance}, updated_at = CURRENT_TIMESTAMP WHERE cpf = '${toUser.cpf}'`);
 
-    const txDescription = description || 'TransferÃªncia PIX CrÃ©dito';
+    const txDescription = description || 'Transferência PIX Crédito';
     await dbService.executeQuery(`
         INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date, to_user, to_key)
         VALUES (${esc(txId + '_credit_sent')}, ${esc(senderCpf)}, 'PIX_CREDIT_SENT', ${-numericAmount}, ${esc(txDescription)}, ${esc(now)}, ${esc(toUser.cpf)}, ${esc(recipientKey)})
@@ -2752,12 +2667,12 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
     `);
 
     auditLog(req, 'pix_transfer_credit', 'info', { toKey: recipientKey, amount: numericAmount, installments: nInstallments });
-    telegramService.send('payment', { cpf: senderCpf, text: `ðŸ“¤ PIX no crÃ©dito enviado: R$ ${numericAmount.toFixed(2)} em ${nInstallments}x â€” ${txDescription}` }).catch(() => {});
-    telegramService.send('payment', { cpf: toUser.cpf, text: `ðŸ“¥ PIX recebido: R$ ${numericAmount.toFixed(2)} â€” ${txDescription}` }).catch(() => {});
+    telegramService.send('payment', { cpf: senderCpf, text: `📤 PIX no crédito enviado: R$ ${numericAmount.toFixed(2)} em ${nInstallments}x — ${txDescription}` }).catch(() => {});
+    telegramService.send('payment', { cpf: toUser.cpf, text: `📥 PIX recebido: R$ ${numericAmount.toFixed(2)} — ${txDescription}` }).catch(() => {});
 
     res.json({
         success: true,
-        message: 'PIX crÃ©dito enviado com sucesso!',
+        message: 'PIX crédito enviado com sucesso!',
         creditPlan: {
             installments: nInstallments,
             rate,
@@ -2768,7 +2683,7 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
 }));
 
 // --- Rotas de Admin ---
-// --- Rotas de Admin: usuÃ¡rios (extraÃ­do p/ src/routes/admin/users.routes.js — Fase 7 ADMIN) ---
+// --- Rotas de Admin: usuários (extraído p/ src/routes/admin/users.routes.js — Fase 7 ADMIN) ---
 const adminUsersController = createAdminUsersController({
     dbService,
     repoContext,
@@ -2789,7 +2704,7 @@ const adminUsersController = createAdminUsersController({
 });
 registerAdminUsersRoutes({ apiRouter, bearerAuth, authenticateAdmin, asyncHandler, controller: adminUsersController });
 
-// --- Telegram: gestÃ£o dos tÃ³picos por massa ---
+// --- Telegram: gestão dos tópicos por massa ---
 apiRouter.get('/admin/telegram/status', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     const status = await telegramService.getStatus();
     res.json({ success: true, ...status });
@@ -2814,9 +2729,9 @@ apiRouter.get('/admin/telegram/topics', bearerAuth(), authenticateAdmin, asyncHa
 apiRouter.post('/admin/telegram/topics/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     const { cpf } = req.params;
     const user = await usersRepo.findByCpf(cpf);
-    if (!user) return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado' });
+    if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
     telegramService.ensureTopic(cpf, user.full_name);
-    res.json({ success: true, message: `TÃ³pico solicitado para ${cpf}.` });
+    res.json({ success: true, message: `Tópico solicitado para ${cpf}.` });
 }));
 
 apiRouter.delete('/admin/telegram/topics/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
@@ -2888,11 +2803,11 @@ apiRouter.post('/admin/telegram/settings/:category/test', bearerAuth(), authenti
 apiRouter.post('/admin/telegram/test', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     const { category, cpf, payload } = req.body || {};
     if (!category) {
-        // Legado: teste genÃ©rico de integraÃ§Ã£o (botÃ£o "Enviar teste" do painel)
+        // Legado: teste genérico de integração (botão "Enviar teste" do painel)
         if (!telegramService._enabled) {
-            return res.status(400).json({ success: false, message: 'IntegraÃ§Ã£o Telegram desabilitada (falta TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID).' });
+            return res.status(400).json({ success: false, message: 'Integração Telegram desabilitada (falta TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID).' });
         }
-        telegramService.alertGroup('ðŸ§ª Teste de integraÃ§Ã£o enviado pelo painel admin.');
+        telegramService.alertGroup('🧪 Teste de integração enviado pelo painel admin.');
         return res.json({ success: true, message: 'Mensagem de teste enviada ao grupo.' });
     }
     const setting = await telegramSettingsRepo.getSetting(category);
@@ -2907,19 +2822,19 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-table', bearerAuth(), authentic
     const { cpf } = req.params;
     const { title, headers, rows } = req.body || {};
     if (!title || !headers || !rows) {
-        return res.status(400).json({ success: false, message: 'Dados incompletos (title, headers, rows sÃ£o obrigatÃ³rios).' });
+        return res.status(400).json({ success: false, message: 'Dados incompletos (title, headers, rows são obrigatórios).' });
     }
     telegramService.sendTable(cpf, title, headers, rows);
-    res.json({ success: true, message: 'Tabela enviada ao tÃ³pico.' });
+    res.json({ success: true, message: 'Tabela enviada ao tópico.' });
 }));
 
 apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     const { cpf } = req.params;
     const { type } = req.body || {};
-    if (!type) return res.status(400).json({ success: false, message: 'Tipo de fatura (type) Ã© obrigatÃ³rio.' });
+    if (!type) return res.status(400).json({ success: false, message: 'Tipo de fatura (type) é obrigatório.' });
 
     const userRow = await usersRepo.findByCpf(cpf);
-    if (!userRow) return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado.' });
+    if (!userRow) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
 
     const tempUser = normalizeUser(userRow);
     await enrichUserCreditCardData(tempUser, cpf);
@@ -2961,7 +2876,7 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
         const _meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
         return `${_meses[refDue.getMonth()]}/${String(refDue.getFullYear()).slice(2)}`;
     })();
-    // PrevisÃ£o do prÃ³ximo fechamento = vencimento âˆ’ 7 dias (regra do corte do invoiceEngine).
+    // Previsão do próximo fechamento = vencimento − 7 dias (regra do corte do invoiceEngine).
     let previsaoFechamento = null;
     if (refDue && !isNaN(refDue.getTime())) {
         const p = new Date(refDue);
@@ -2969,20 +2884,20 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
         previsaoFechamento = p.toISOString();
     }
 
-    // â”€â”€ FATURA UNIVERSAL (4 pÃ¡ginas â€” Fintech Bank 598) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Novo layout: PÃ¡g.1 resumo + box total + limites + encargos; PÃ¡g.2
-    // movimentaÃ§Ãµes (compras); PÃ¡g.3 parcelas futuras + opÃ§Ãµes de pagamento
-    // + PIX/boleto. Mesmo serviÃ§o usado pelos scripts de preview.
+    // —— FATURA UNIVERSAL (4 páginas — Fintech Bank 598) —————————————————————
+    // Novo layout: Pág.1 resumo + box total + limites + encargos; Pág.2
+    // movimentações (compras); Pág.3 parcelas futuras + opções de pagamento
+    // + PIX/boleto. Mesmo serviço usado pelos scripts de preview.
     const { generateUniversalInvoicePDF } = require('./services/invoicePdfService');
 
-    // â”€â”€ MovimentaÃ§Ãµes da fatura (PÃGINA 2 â€” compras e saques) â”€â”€
-    // Fechada: usa card.closedTransactions â€” que jÃ¡ embute o snapshot imutÃ¡vel
-    //   itemized_transactions (sobrevive ao pagamento). PAYMENT Ã© filtrado abaixo.
+    // —— Movimentações da fatura (PÃGINA 2 — compras e saques) ——
+    // Fechada: usa card.closedTransactions — que já embute o snapshot imutável
+    //   itemized_transactions (sobrevive ao pagamento). PAYMENT é filtrado abaixo.
     // Aberta: usa card.transactions (= openTransactions do enrich, ciclo corrente).
-    // ATENÃ‡ÃƒO: card.openTransactions e card._closedInvoiceSnapshot NÃƒO existem no
-    //   payload do enrich â€” o snapshot Ã© movido para closedTransactions e APAGADO
-    //   (index.cjs:640-641). Usar esses nomes fazia a PÃ¡gina 2 sair SEMPRE vazia
-    //   em PDFs gerados com dados reais (sÃ³ o preview com mockados mostrava compras).
+    // ATENÇÃO: card.openTransactions e card._closedInvoiceSnapshot NÃO existem no
+    //   payload do enrich — o snapshot é movido para closedTransactions e APAGADO
+    //   (index.cjs:640-641). Usar esses nomes fazia a Página 2 sair SEMPRE vazia
+    //   em PDFs gerados com dados reais (só o preview com mockados mostrava compras).
     // Formata a parcela da linha como "02/04" (zero-padded). Aceita o formato
     // "2/4" do enrich (INVOICE_INSTALLMENT) ou do snapshot itemized_transactions.
     const formatParcelaPdf = (tx) => {
@@ -2999,9 +2914,9 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
     let movimentacoes = [];
     try {
         const purchaseTypes = ['CREDIT', 'SHOP_CREDIT', 'INVOICE_INSTALLMENT', 'SUBSCRIPTION'];
-        // PÃ¡gina 2 — plano 1.2: na fatura ABERTA, incluir pagamentos
-        // (PAYMENT/INVOICE_PAYMENT) com valor NEGATIVO (verde). A fechada Ã©
-        // imutÃ¡vel (snapshot itemized_transactions nÃ£o tem PAYMENT) e nunca os
+        // Página 2 — plano 1.2: na fatura ABERTA, incluir pagamentos
+        // (PAYMENT/INVOICE_PAYMENT) com valor NEGATIVO (verde). A fechada é
+        // imutável (snapshot itemized_transactions não tem PAYMENT) e nunca os
         // exibe — pagamento vive em openTransactions/paymentHistory.
         const paymentTypes = ['PAYMENT', 'INVOICE_PAYMENT', 'INVOICE_ANTICIPATION'];
         const source = type === 'closed'
@@ -3015,13 +2930,13 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
                 const isPagamento = paymentTypes.includes(tx.type);
                 return {
                     data: tx.date ? toDateBR(tx.date) : '',
-                    descricao: tx.merchant || tx.description || 'LanÃ§amento',
-                    // Compras: positivo; pagamentos: NEGATIVO (verde na PÃ¡gina 2).
+                    descricao: tx.merchant || tx.description || 'Lançamento',
+                    // Compras: positivo; pagamentos: NEGATIVO (verde na Página 2).
                     valor: isPagamento ? -(Math.abs(parseFloat(tx.amount) || 0)) : Math.abs(parseFloat(tx.amount) || 0),
                     tipo: isPagamento ? 'pagamento' : 'compra',
-                    // Parcela (02/04) â€” do enrich/snapshot; vazio quando Ã  vista.
+                    // Parcela (02/04) — do enrich/snapshot; vazio quando à vista.
                     parcela: formatParcelaPdf(tx),
-                    // Juros do financiamento (art. 52 CDC) â€” attachPlanJurosInfo no enrich.
+                    // Juros do financiamento (art. 52 CDC) — attachPlanJurosInfo no enrich.
                     jurosTotal: Number(tx.jurosTotal) > 0 ? round2(Number(tx.jurosTotal)) : 0,
                     originalAmount: tx.originalAmount != null ? round2(Number(tx.originalAmount)) : null,
                     totalParcelado: tx.totalParcelado != null ? round2(Number(tx.totalParcelado)) : null,
@@ -3030,10 +2945,10 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
             })
             .slice(0, 60);
     } catch (movErr) {
-        console.warn('[send-pdf] Erro ao montar movimentaÃ§Ãµes:', movErr.message);
+        console.warn('[send-pdf] Erro ao montar movimentações:', movErr.message);
     }
 
-    // â”€â”€ Parcelas futuras (installment_plans ativos) â”€â”€
+    // —— Parcelas futuras (installment_plans ativos) ——
     let parcelasFuturas = [];
     let totalProximas = 0;
     let proximaFatura = 0;
@@ -3069,12 +2984,12 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
         console.warn('[send-pdf] Erro ao buscar parcelas futuras:', plansErr.message);
     }
 
-    // â”€â”€ Enriquecer juros das movimentaÃ§Ãµes da FECHADA (art. 52 CDC) â”€â”€
-    // O snapshot itemized_transactions NÃƒO persiste jurosTotal/originalAmount/
-    // totalParcelado (sÃ³ parcelas). Para a fatura fechada, casa cada linha com o
+    // —— Enriquecer juros das movimentações da FECHADA (art. 52 CDC) ——
+    // O snapshot itemized_transactions NÃO persiste jurosTotal/originalAmount/
+    // totalParcelado (só parcelas). Para a fatura fechada, casa cada linha com o
     // plano ativo correspondente (mesma qtd de parcelas + mesmo valor de parcela,
-    // preferindo plano com juros) â€” mesma heurÃ­stica do enrich (findPlanForInstallment)
-    // e anexa os encargos do financiamento para a linha vermelha da PÃ¡gina 2.
+    // preferindo plano com juros) — mesma heurística do enrich (findPlanForInstallment)
+    // e anexa os encargos do financiamento para a linha vermelha da Página 2.
     try {
         const _jurosFromPlan = (tx, plan) => {
             if (!plan) return tx;
@@ -3092,9 +3007,9 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
             };
         };
         movimentacoes = (movimentacoes || []).map(tx => {
-            // JÃ¡ veio enriquecido (aberta via attachPlanJurosInfo)? NÃ£o re-casar.
+            // Já veio enriquecido (aberta via attachPlanJurosInfo)? Não re-casar.
             if (Number(tx.jurosTotal || 0) > 0 || (tx.totalParcelado != null && Number(tx.totalParcelado) > 0)) return tx;
-            if (!tx.parcela) return tx; // Ã  vista â€” sem plano
+            if (!tx.parcela) return tx; // à vista — sem plano
             const _mm = tx.parcela.match(/^(\d+)\/(\d+)$/);
             if (!_mm) return tx;
             const _qty = parseInt(_mm[2], 10);
@@ -3107,10 +3022,10 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
             return _plan ? _jurosFromPlan(tx, _plan) : tx;
         });
     } catch (jurosErr) {
-        console.warn('[send-pdf] Erro ao enriquecer juros das movimentaÃ§Ãµes:', jurosErr.message);
+        console.warn('[send-pdf] Erro ao enriquecer juros das movimentações:', jurosErr.message);
     }
 
-    // â”€â”€ CÃ³digos de pagamento (PIX + boleto) â”€â”€
+    // —— Códigos de pagamento (PIX + boleto) ——
     let pixCopiaECola = '';
     let boletoLinhaDigitavel = '';
     try {
@@ -3121,11 +3036,11 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
         pixCopiaECola = codes?.pix?.payload || '';
         boletoLinhaDigitavel = codes?.boleto?.linhaDigitavel || '';
     } catch (codesErr) {
-        console.warn('[send-pdf] Erro ao gerar cÃ³digos de pagamento:', codesErr.message);
+        console.warn('[send-pdf] Erro ao gerar códigos de pagamento:', codesErr.message);
     }
 
-    // â”€â”€ Montar payload da fatura universal â”€â”€
-    // Ãšltimos 4 dÃ­gitos do cartÃ£o fÃ­sico/virtual real do usuÃ¡rio (tabela cards).
+    // —— Montar payload da fatura universal ——
+    // Ãšltimos 4 dígitos do cartão físico/virtual real do usuário (tabela cards).
     let cartaoFinal = '****';
     try {
         const cards = await dbService.executeQuery(`
@@ -3135,7 +3050,7 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
         const raw = (cards && cards[0]?.card_number_raw) || '';
         if (raw) cartaoFinal = String(raw).slice(-4);
     } catch (cardErr) {
-        console.warn('[send-pdf] Erro ao buscar cartÃ£o:', cardErr.message);
+        console.warn('[send-pdf] Erro ao buscar cartão:', cardErr.message);
     }
 
     const pdfData = {
@@ -3174,9 +3089,9 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
             ? [
                 { nome: 'Taxa de Multa por Atraso (Herdada)', taxa: '2,00%', valor: multa },
                 { nome: 'Juros de Mora (Herdado)', taxa: '0,0333%/dia', valor: jurosMora },
-                { nome: 'Juros RemuneratÃ³rios (Herdado)', taxa: '0,513%/dia', valor: jurosRemun },
+                { nome: 'Juros Remuneratórios (Herdado)', taxa: '0,513%/dia', valor: jurosRemun },
                 { nome: 'IOF Adicional Fixo (Herdado)', taxa: '0,38%', valor: iofFixo },
-                { nome: 'IOF DiÃ¡rio (Herdado)', taxa: '0,0082%/dia', valor: iofDiario },
+                { nome: 'IOF Diário (Herdado)', taxa: '0,0082%/dia', valor: iofDiario },
             ]
             : [
                 { nome: 'Juros do rotativo', taxa: '15,39% a.m.', valor: 0 },
@@ -3195,8 +3110,8 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
             encargos: totalEncargos,
             iof: iofTotal,
             total: minClosedWithCharges,
-            jurosLabel: '15,39% a.m. â€” 453,46% a.a.',
-            cetLabel: '15,73% a.m. â€” 491,21% a.a.',
+            jurosLabel: '15,39% a.m. — 453,46% a.a.',
+            cetLabel: '15,73% a.m. — 491,21% a.a.',
         },
         parcelasFixas: {
             valor: totalProximas > 0 ? Math.round((totalProximas / 12) * 100) / 100 : 0,
@@ -3205,15 +3120,15 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
             solicitado: Math.round(totalProximas * 100) / 100,
             iof: 0,
             total: Math.round(totalProximas * 100) / 100,
-            jurosLabel: '5,99% a.m. â€” 102,95% a.a.',
-            cetLabel: '6,32% a.m. â€” 110,71% a.a.',
+            jurosLabel: '5,99% a.m. — 102,95% a.a.',
+            cetLabel: '6,32% a.m. — 110,71% a.a.',
         },
         pixCopiaECola,
         boletoLinhaDigitavel,
-        // PÃGINA 4 â€” Boleto bancÃ¡rio completo (Fintech Bank 598: Recibo do Pagador
-        // + Ficha de CompensaÃ§Ã£o + cÃ³digo de barras). Linha digitÃ¡vel vem do
-        // generatePaymentCodesFallback; o serviÃ§o calcula o cÃ³digo de barras e
-        // os DVs (mÃ³dulo 10/11) com a regra Febraban.
+        // PÃGINA 4 — Boleto bancário completo (Fintech Bank 598: Recibo do Pagador
+        // + Ficha de Compensação + código de barras). Linha digitável vem do
+        // generatePaymentCodesFallback; o serviço calcula o código de barras e
+        // os DVs (módulo 10/11) com a regra Febraban.
         boleto: {
             banco: '598',
             bancoDv: 9,
@@ -3232,48 +3147,48 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
             sacado: tempUser.fullName || '',
             sacadoCpf: telegramService.formatCpf(cpf),
             instrucoes: [
-                'Cobrar multa de 2% apÃ³s o vencimento.',
-                'Juros de mora de 0,0333% ao dia apÃ³s o vencimento.',
+                'Cobrar multa de 2% após o vencimento.',
+                'Juros de mora de 0,0333% ao dia após o vencimento.',
                 'Este boleto liquida a ' + (type === 'open' ? 'fatura aberta consolidada' : 'fatura fechada') + ' ' + (periodoLabel || '') + '.',
             ],
         },
         nota: type === 'open'
             ? (isPaid
-                ? `Fatura Aberta â€” Total consolidado no corte: R$ ${totalOpenConsolidated.toFixed(2)} (compras + heranÃ§a + encargos herdados). Fatura fechada anterior PAGA em ${toDateOnly(card.closedInvoicePaidAt || '')}.`
-                : `Fatura Aberta â€” Total consolidado no corte: R$ ${totalOpenConsolidated.toFixed(2)} (compras + heranÃ§a + encargos herdados).`)
+                ? `Fatura Aberta — Total consolidado no corte: R$ ${totalOpenConsolidated.toFixed(2)} (compras + herança + encargos herdados). Fatura fechada anterior PAGA em ${toDateOnly(card.closedInvoicePaidAt || '')}.`
+                : `Fatura Aberta — Total consolidado no corte: R$ ${totalOpenConsolidated.toFixed(2)} (compras + herança + encargos herdados).`)
             : (isPaid
                 ? `Fatura QUITADA em ${toDateOnly(card.closedInvoicePaidAt || '')}. Encargos de atraso herdados e consolidados na Fatura Aberta.`
-                : `Fatura EM ABERTO â€” ${overdueDays} dias de atraso. Encargos do atraso sÃ£o herdados e consolidados na Fatura Aberta.`),
+                : `Fatura EM ABERTO — ${overdueDays} dias de atraso. Encargos do atraso são herdados e consolidados na Fatura Aberta.`),
     };
 
     const pdfDataBuffer = await generateUniversalInvoicePDF(pdfData);
 
     const filename = `fatura_${type}_${cpf}.pdf`;
     await telegramService.sendDocument(cpf, pdfDataBuffer, filename);
-    res.json({ success: true, message: 'Fatura universal (4 pÃ¡ginas, com boleto bancÃ¡rio) gerada e enviada ao Telegram da massa com sucesso!' });
+    res.json({ success: true, message: 'Fatura universal (4 páginas, com boleto bancário) gerada e enviada ao Telegram da massa com sucesso!' });
 }));
 
 apiRouter.post('/admin/telegram/topics/:cpf/message', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     const { cpf } = req.params;
     const { text } = req.body || {};
     if (!text || !text.trim()) {
-        return res.status(400).json({ success: false, message: 'Texto Ã© obrigatÃ³rio.' });
+        return res.status(400).json({ success: false, message: 'Texto é obrigatório.' });
     }
     telegramService.alertUser(cpf, text);
-    res.json({ success: true, message: 'Mensagem enviada ao tÃ³pico.' });
+    res.json({ success: true, message: 'Mensagem enviada ao tópico.' });
 }));
 
-// Dispara uma remessa manualmente (mesma funÃ§Ã£o do cron horÃ¡rio)
+// Dispara uma remessa manualmente (mesma função do cron horário)
 apiRouter.post('/admin/telegram/backfill', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     if (!telegramService._enabled) {
-        return res.status(400).json({ success: false, message: 'IntegraÃ§Ã£o Telegram desabilitada.' });
+        return res.status(400).json({ success: false, message: 'Integração Telegram desabilitada.' });
     }
     const limit = Math.min(Number(req.body?.limit) || TELEGRAM_BACKFILL_BATCH, 50);
     const { processed, remaining } = await runTelegramTopicBackfill(limit);
-    res.json({ success: true, processed, remaining, message: `${processed} tÃ³pico(s) solicitado(s). ${remaining} na fila.` });
+    res.json({ success: true, processed, remaining, message: `${processed} tópico(s) solicitado(s). ${remaining} na fila.` });
 }));
 
-// Endpoint para estatÃ­sticas do dashboard admin
+// Endpoint para estatísticas do dashboard admin
 apiRouter.get('/admin/stats', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     try {
         // Total de Clientes (excluindo admin)
@@ -3284,7 +3199,7 @@ apiRouter.get('/admin/stats', bearerAuth(), authenticateAdmin, asyncHandler(asyn
         `);
         const totalClients = parseInt(usersCountResult[0]?.total || 0, 10);
 
-        // TransaÃ§Ãµes Hoje (do dia atual)
+        // Transações Hoje (do dia atual)
         const today = new Date();
         const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         const todayEnd = new Date(todayStart);
@@ -3298,7 +3213,7 @@ apiRouter.get('/admin/stats', bearerAuth(), authenticateAdmin, asyncHandler(asyn
         `);
         const transactionsToday = parseInt(transactionsTodayResult[0]?.total || 0, 10);
 
-        // SolicitaÃ§Ãµes de Senha Pendentes
+        // Solicitações de Senha Pendentes
         const passwordRequestsResult = await dbService.executeQuery(`
             SELECT COUNT(*) as total
             FROM ${dbService.fq('users')}
@@ -3306,7 +3221,7 @@ apiRouter.get('/admin/stats', bearerAuth(), authenticateAdmin, asyncHandler(asyn
         `);
         const passwordRequests = parseInt(passwordRequestsResult[0]?.total || 0, 10);
 
-        // SolicitaÃ§Ãµes de Limite Pendentes
+        // Solicitações de Limite Pendentes
         const limitRequestsResult = await dbService.executeQuery(`
             SELECT COUNT(*) as total
             FROM ${dbService.fq('limit_increase_requests')}
@@ -3324,16 +3239,16 @@ apiRouter.get('/admin/stats', bearerAuth(), authenticateAdmin, asyncHandler(asyn
             }
         });
     } catch (error) {
-        console.error('âŒ Erro ao buscar estatÃ­sticas do admin:', error);
+        console.error('❌ Erro ao buscar estatísticas do admin:', error);
         res.status(500).json({
             success: false,
-            message: 'Erro ao buscar estatÃ­sticas',
+            message: 'Erro ao buscar estatísticas',
             error: error.message
         });
     }
 }));
 
-// â”€â”€â”€ [PILOTO] Rotas de fatura/pagamento extraÃ­das para src/routes/invoice.routes.js â”€â”€â”€
+// ——— [PILOTO] Rotas de fatura/pagamento extraídas para src/routes/invoice.routes.js ———
 const invoiceController = createInvoiceController({
     dbService,
     repoContext,
@@ -3350,16 +3265,16 @@ const invoiceController = createInvoiceController({
 registerInvoiceRoutes({ apiRouter, bearerAuth, asyncHandler, controller: invoiceController });
 
 // --- Dashboard de Massas em Atraso para Admin ---
-// --- Dashboard de Massas em Atraso (extraÃ­do para adminUsersController — Fase 7 ADMIN) ---
+// --- Dashboard de Massas em Atraso (extraído para adminUsersController — Fase 7 ADMIN) ---
 
-// â”€â”€ Polling de novas regularizaÃ§Ãµes â”€â”€
+// —— Polling de novas regularizações ——
 // O admin usa este endpoint para verificar periodicamente se novas massas
-// regularizaram desde o Ãºltimo check. Retorna apenas o delta.
+// regularizaram desde o último check. Retorna apenas o delta.
 apiRouter.get('/admin/regularized/check', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const sinceParam = req.query.since;
-    const since = sinceParam ? new Date(String(sinceParam)) : new Date(Date.now() - 30 * 60 * 1000); // default: Ãºltimos 30 min
+    const since = sinceParam ? new Date(String(sinceParam)) : new Date(Date.now() - 30 * 60 * 1000); // default: últimos 30 min
     if (isNaN(since.getTime())) {
-        return res.status(400).json({ success: false, message: 'ParÃ¢metro since invÃ¡lido. Use formato ISO 8601.' });
+        return res.status(400).json({ success: false, message: 'Parâmetro since inválido. Use formato ISO 8601.' });
     }
 
     const sinceISO = since.toISOString();
@@ -3376,7 +3291,7 @@ apiRouter.get('/admin/regularized/check', bearerAuth(), authenticateAdmin, async
     const totalPaid = (newPaidInvoices || []).reduce((sum, inv) => sum + parseFloat(inv.valor_pago || 0), 0);
     const count = (newPaidInvoices || []).length;
 
-    console.log(`[RegularizedCheck] ${count} nova(s) regularizaÃ§Ã£o(Ãµes) desde ${sinceISO}`);
+    console.log(`[RegularizedCheck] ${count} nova(s) regularização(ões) desde ${sinceISO}`);
 
     res.json({
         success: true,
@@ -3384,7 +3299,7 @@ apiRouter.get('/admin/regularized/check', bearerAuth(), authenticateAdmin, async
         totalPaid: Math.round(totalPaid * 100) / 100,
         items: (newPaidInvoices || []).map(inv => ({
             cpf: inv.cpf,
-            fullName: inv.full_name || 'UsuÃ¡rio DB',
+            fullName: inv.full_name || 'Usuário DB',
             valorTotal: parseFloat(inv.valor_total || 0),
             valorPago: parseFloat(inv.valor_pago || 0),
             paidAt: inv.data_pagamento,
@@ -3394,33 +3309,33 @@ apiRouter.get('/admin/regularized/check', bearerAuth(), authenticateAdmin, async
     });
 }));
 
-// --- Rotas /admin/users/:cpf* (extraÃ­das para adminUsersController — Fase 7 ADMIN) ---
+// --- Rotas /admin/users/:cpf* (extraídas para adminUsersController — Fase 7 ADMIN) ---
 
-// Ativar cartÃ£o fÃ­sico
-// â”€â”€â”€ UtilitÃ¡rio: geraÃ§Ã£o de nÃºmero de cartÃ£o (delega ao motor cardEngine) â”€â”€â”€â”€
+// Ativar cartão físico
+// ——— Utilitário: geração de número de cartão (delega ao motor cardEngine) ————
 // Sorteia bandeira (Master/Visa/Elo) e um dos 12 BINs reais da whitelist.
-// `brand` Ã© opcional; o BIN nunca Ã© aceito cru do cliente.
+// `brand` é opcional; o BIN nunca é aceito cru do cliente.
 const generateCardNumber = (brand) => cardEngine.generateCardNumber(brand);
 
 const formatExpiry = (expiryShort) => {
-    // Converte MM/YY â†’ MM/AAAA   ex: 07/31 â†’ 07/2031
+    // Converte MM/YY → MM/AAAA   ex: 07/31 → 07/2031
     if (!expiryShort) return expiryShort;
     const [mm, yy] = expiryShort.split('/');
     return `${mm}/20${yy}`;
 };
 
-// â”€â”€â”€ POST /cards/physical/activate â€” ativa o cartÃ£o e gera o nÃºmero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— POST /cards/physical/activate — ativa o cartão e gera o número ——————————
 apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req, res) => {
     const { cvv, expiry } = req.body || {};
     const cpf = req.user.cpf;
 
     if (!cvv || !expiry) {
-        return res.status(400).json({ success: false, message: 'CVV e Validade sÃ£o obrigatÃ³rios.' });
+        return res.status(400).json({ success: false, message: 'CVV e Validade são obrigatórios.' });
     }
 
     const [dbUser] = await dbService.executeQuery(`SELECT card_cvv, card_expiry, card_is_activated FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
-    if (!dbUser) return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado.' });
-    if (dbUser.card_is_activated) return res.status(400).json({ success: false, message: 'CartÃ£o jÃ¡ estÃ¡ ativado.' });
+    if (!dbUser) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    if (dbUser.card_is_activated) return res.status(400).json({ success: false, message: 'Cartão já está ativado.' });
 
     let normalizedExpiry = expiry;
     if (normalizedExpiry && normalizedExpiry.length === 4 && !normalizedExpiry.includes('/')) {
@@ -3431,7 +3346,7 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
         return res.status(401).json({ success: false, message: 'CVV ou Validade incorretos.' });
     }
 
-    // Gerar nÃºmero de cartÃ£o fÃ­sico com bandeira/BIN reais sorteados (Master/Visa/Elo)
+    // Gerar número de cartão físico com bandeira/BIN reais sorteados (Master/Visa/Elo)
     let cardRaw, cardFormatted, cardBrand, cardBin;
     let attempts = 0;
     while (attempts < 10) {
@@ -3443,19 +3358,19 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
         if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; cardBrand = gen.brand; cardBin = gen.bin; break; }
         attempts++;
     }
-    if (!cardRaw) return res.status(500).json({ success: false, message: 'Erro ao gerar nÃºmero do cartÃ£o. Tente novamente.' });
+    if (!cardRaw) return res.status(500).json({ success: false, message: 'Erro ao gerar número do cartão. Tente novamente.' });
 
     const expiryFull = formatExpiry(dbUser.card_expiry);
     const pin = '9898';
     const { esc } = repoContext;
 
-    // Salvar cartÃ£o na tabela fintech.cards
+    // Salvar cartão na tabela fintech.cards
     await dbService.executeQuery(`
         INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated)
         VALUES (${esc(cpf)}, ${esc(cardFormatted)}, ${esc(cardRaw)}, 'physical', ${esc(cardBrand)}, ${esc(cardBin)}, ${esc(expiryFull)}, ${esc(dbUser.card_expiry)}, ${esc(cvv)}, ${esc(pin)}, true)
     `);
 
-    // Atualizar status do usuÃ¡rio
+    // Atualizar status do usuário
     await dbService.executeQuery(`
         UPDATE ${dbService.fq('users')}
         SET card_is_activated = true, card_delivery_status = 'unlocked', updated_at = CURRENT_TIMESTAMP
@@ -3464,7 +3379,7 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
 
     res.json({
         success: true,
-        message: 'CartÃ£o ativado com sucesso!',
+        message: 'Cartão ativado com sucesso!',
         card: {
             number: cardFormatted,
             expiry: expiryFull,
@@ -3477,7 +3392,7 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
     });
 }));
 
-// â”€â”€â”€ GET /cards/my-cards â€” lista todos os cartÃµes do usuÃ¡rio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— GET /cards/my-cards — lista todos os cartões do usuário —————————————————
 apiRouter.get('/cards/my-cards', bearerAuth(), asyncHandler(async (req, res) => {
     const cpf = req.user.cpf;
 
@@ -3509,12 +3424,12 @@ apiRouter.get('/cards/my-cards', bearerAuth(), asyncHandler(async (req, res) => 
     });
 }));
 
-// â”€â”€â”€ GET /admin/acquirer-simulate/card/:cardNumber/cpf â€” Busca CPF pelo cartÃ£o â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— GET /admin/acquirer-simulate/card/:cardNumber/cpf — Busca CPF pelo cartão ————————
 apiRouter.get('/admin/acquirer-simulate/card/:cardNumber/cpf', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cardNumber } = req.params;
     const cleanNumber = cardNumber.replace(/\D/g, '');
     
-    // 1. Busca na tabela de cartÃµes usando o card_number_raw ou card_number
+    // 1. Busca na tabela de cartões usando o card_number_raw ou card_number
     const [card] = await dbService.executeQuery(
         `SELECT user_cpf, card_type FROM ${dbService.fq('cards')} WHERE card_number_raw = '${cleanNumber}' OR REPLACE(card_number, ' ', '') = '${cleanNumber}'`
     );
@@ -3524,7 +3439,7 @@ apiRouter.get('/admin/acquirer-simulate/card/:cardNumber/cpf', bearerAuth(), aut
         return res.json({ success: true, cpf: card.user_cpf, isVirtual, cardType: card.card_type });
     }
 
-    // 2. Fallback inteligente: se for um cartÃ£o de teste novo, retorna um CPF de usuÃ¡rio ativo do banco
+    // 2. Fallback inteligente: se for um cartão de teste novo, retorna um CPF de usuário ativo do banco
     const [user] = await dbService.executeQuery(
         `SELECT cpf FROM ${dbService.fq('users')} WHERE status = 'ACTIVE' AND cpf IS NOT NULL LIMIT 1`
     );
@@ -3533,21 +3448,21 @@ apiRouter.get('/admin/acquirer-simulate/card/:cardNumber/cpf', bearerAuth(), aut
         return res.json({ success: true, cpf: user.cpf, isVirtual: false, cardType: 'physical', isFallback: true });
     }
 
-    return res.status(404).json({ success: false, message: 'CartÃ£o nÃ£o encontrado.' });
+    return res.status(404).json({ success: false, message: 'Cartão não encontrado.' });
 }));
 
-// â”€â”€â”€ POST /admin/acquirer-simulate â€” Simulador de Adquirente (Maquininha) â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— POST /admin/acquirer-simulate — Simulador de Adquirente (Maquininha) ————————
 apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cardNumber, cvv, expiry, pin, amount, type, installments = 1, description = 'Compra via Simulador', hasInterest, frequency = 'MONTHLY', paymentMethod = 'CREDIT_CARD', channel = 'POS' } = req.body;
     
     if (!cardNumber || !cvv || !expiry || !amount || !type) {
-        return res.status(400).json({ success: false, message: 'Dados do cartÃ£o e da transaÃ§Ã£o sÃ£o obrigatÃ³rios.' });
+        return res.status(400).json({ success: false, message: 'Dados do cartão e da transação são obrigatórios.' });
     }
     
     const cleanCardNumber = cardNumber.replace(/\D/g, '');
     const cleanExpiry = expiry.includes('/') ? (expiry.split('/')[0].padStart(2, '0') + '/' + expiry.split('/')[1].slice(-2)) : expiry;
 
-    // 1. Validar CartÃ£o (Suporta com/sem espaÃ§os e validade MM/AA ou MM/AAAA)
+    // 1. Validar Cartão (Suporta com/sem espaços e validade MM/AA ou MM/AAAA)
     let [card] = await dbService.executeQuery(
         `SELECT * FROM ${dbService.fq('cards')} WHERE (card_number_raw = '${cleanCardNumber}' OR REPLACE(card_number, ' ', '') = '${cleanCardNumber}') AND cvv = '${cvv}' AND (expiry_short = '${cleanExpiry}' OR expiry = '${expiry}' OR expiry_short = '${expiry}')`
     );
@@ -3556,12 +3471,12 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
     const cleanCpf = req.body.cpf ? req.body.cpf.replace(/\D/g, '') : null;
 
     if (card) {
-        if (!card.is_activated) return res.status(400).json({ success: false, message: 'CartÃ£o nÃ£o estÃ¡ ativado.' });
-        if (card.is_blocked) return res.status(400).json({ success: false, message: 'CartÃ£o estÃ¡ bloqueado.' });
+        if (!card.is_activated) return res.status(400).json({ success: false, message: 'Cartão não está ativado.' });
+        if (card.is_blocked) return res.status(400).json({ success: false, message: 'Cartão está bloqueado.' });
         if (pin && card.pin !== String(pin).trim()) return res.status(401).json({ success: false, message: 'PIN incorreto.' });
-        if (type === 'DEBIT' && !pin) return res.status(400).json({ success: false, message: 'PIN Ã© obrigatÃ³rio para compras no dÃ©bito.' });
+        if (type === 'DEBIT' && !pin) return res.status(400).json({ success: false, message: 'PIN é obrigatório para compras no débito.' });
 
-        // 2. Buscar UsuÃ¡rio associado ao cartÃ£o
+        // 2. Buscar Usuário associado ao cartão
         const users = await dbService.executeQuery(
             `SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${card.user_cpf}'`
         );
@@ -3581,22 +3496,22 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             user = firstUsers[0];
         }
         if (!user) {
-             return res.status(404).json({ success: false, message: 'CartÃ£o nÃ£o encontrado ou dados invÃ¡lidos (CVV/Validade).' });
+             return res.status(404).json({ success: false, message: 'Cartão não encontrado ou dados inválidos (CVV/Validade).' });
         }
     }
 
-    if (!user) return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado.' });
-    if (user.is_blocked) return res.status(400).json({ success: false, message: 'Conta do usuÃ¡rio estÃ¡ bloqueada.' });
+    if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    if (user.is_blocked) return res.status(400).json({ success: false, message: 'Conta do usuário está bloqueada.' });
 
     const numAmount = Number(amount);
-    if (isNaN(numAmount) || numAmount <= 0) return res.status(400).json({ success: false, message: 'Valor invÃ¡lido.' });
+    if (isNaN(numAmount) || numAmount <= 0) return res.status(400).json({ success: false, message: 'Valor inválido.' });
 
     let now = new Date();
     const txId = dbService.generateUUID();
-    // art. 52 CDC â€” payload de juros exposto na resposta quando o fluxo for crÃ©dito
+    // art. 52 CDC — payload de juros exposto na resposta quando o fluxo for crédito
     let jurosPayload = null;
 
-    // 3. Processar TransaÃ§Ã£o
+    // 3. Processar Transação
     if (type === 'DEBIT') {
         const balance = Number(user.balance);
         if (balance < numAmount) return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
@@ -3608,7 +3523,7 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
             VALUES ('${txId}', '${user.cpf}', 'SHOP_DEBIT', -${numAmount}, '${description}', '${nowDb()}')
         `);
-        // Mensagem da compra no tÃ³pico Telegram da massa (padrÃ£o da Loja /shop)
+        // Mensagem da compra no tópico Telegram da massa (padrão da Loja /shop)
         telegramService.send('purchase', { cpf: user.cpf, text: buildPurchaseTelegramMessage({
             tipo: 'DEBIT',
             estabelecimento: description,
@@ -3618,13 +3533,13 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             interestRate: 0,
             dataCompra: nowDb(),
         }) }).catch(() => {});
-        // Comprovante de compra (art. 52 CDC) no tÃ³pico da massa â€” fire-and-forget
+        // Comprovante de compra (art. 52 CDC) no tópico da massa — fire-and-forget
         generateAndSendPurchaseReceipt({
             cpf: user.cpf,
             data: {
                 estabelecimento: description,
-                formaPagamento: 'CartÃ£o de dÃ©bito',
-                tipoPagamento: 'Ã€ vista (dÃ©bito)',
+                formaPagamento: 'Cartão de débito',
+                tipoPagamento: 'Ã€ vista (débito)',
                 totalParcelas: 1,
                 originalAmount: round2(numAmount),
                 jurosTotal: 0,
@@ -3639,14 +3554,14 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             },
         }).catch(() => {});
     } else if (type === 'SUBSCRIPTION' && paymentMethod === 'ACCOUNT_DEBIT') {
-        // DÃ©bito AutomÃ¡tico em Conta â€” NÃƒO afeta fatura do cartÃ£o nem limite de crÃ©dito
+        // Débito Automático em Conta — NÃO afeta fatura do cartão nem limite de crédito
         const billId = dbService.generateUUID();
         await dbService.executeQuery(`
             INSERT INTO ${dbService.fq('recurring_bills')} 
             (id, cpf, name, amount, due_day, category, status, frequency, payment_method, created_at, updated_at)
             VALUES ('${billId}', '${user.cpf}', '${description}', ${numAmount}, ${now.getDate()}, 'outros', 'active', '${frequency}', 'ACCOUNT_DEBIT', '${nowDb()}', '${nowDb()}')
         `);
-        return res.json({ success: true, message: 'Assinatura em DÃ©bito AutomÃ¡tico (Saldo em Conta) cadastrada com sucesso.' });
+        return res.json({ success: true, message: 'Assinatura em Débito Automático (Saldo em Conta) cadastrada com sucesso.' });
     } else if (type === 'CREDIT' || type === 'SUBSCRIPTION') {
         const available = Number(user.credit_card_available_limit || 0);
         
@@ -3654,7 +3569,7 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
         const interestRate = hasInterest ? 0.05 : 0; // Fixed 5% for simulation if 'Com Juros' is selected
         const totalWithInterest = numAmount * (1 + interestRate);
 
-        if (available < totalWithInterest) return res.status(400).json({ success: false, message: 'Limite de crÃ©dito insuficiente.' });
+        if (available < totalWithInterest) return res.status(400).json({ success: false, message: 'Limite de crédito insuficiente.' });
 
         // Regra de negocio: Limite Online = 40% do limite total (min R$500), aplicado quando canal for ONLINE
         if (channel === 'ONLINE') {
@@ -3664,7 +3579,7 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             if (numAmount > onlineAvailable) {
                 return res.status(400).json({
                     success: false,
-                    message: `Limite online insuficiente. Limite online disponÃ­vel: R$ ${onlineAvailable.toFixed(2).replace('.', ',')}. Para compras de maior valor, utilize a funÃ§Ã£o de ajuste de limite online no app.`
+                    message: `Limite online insuficiente. Limite online disponível: R$ ${onlineAvailable.toFixed(2).replace('.', ',')}. Para compras de maior valor, utilize a função de ajuste de limite online no app.`
                 });
             }
         }
@@ -3679,9 +3594,9 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
             VALUES ('${txId}', '${user.cpf}', '${txType}', -${totalWithInterest}, '${description}', '${nowDb()}')
         `);
-        // Mensagem da compra no tÃ³pico Telegram da massa (padrÃ£o da Loja /shop).
-        // TransparÃªncia de encargos (CDC art. 52 Â· Res. BCB 96/2021 e 365/2023): juros R$, taxa
-        // efetiva e total com juros sÃ£o expostos quando a compra parcelada tiver encargos.
+        // Mensagem da compra no tópico Telegram da massa (padrão da Loja /shop).
+        // Transparência de encargos (CDC art. 52 Â· Res. BCB 96/2021 e 365/2023): juros R$, taxa
+        // efetiva e total com juros são expostos quando a compra parcelada tiver encargos.
         // Vencimentos das parcelas (mesma regra do plano abaixo: nextDue = data da compra;
         // parcela i = nextDue + (i-1) mês) — p/ listar PARC 1..N na tabela da mensagem.
         const parcelasSim = [];
@@ -3705,7 +3620,7 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             parcelas: parcelasSim,
         }) }).catch(() => {});
 
-        // art. 52 CDC â€” expor encargos de juros no payload da resposta
+        // art. 52 CDC — expor encargos de juros no payload da resposta
         jurosPayload = {
             ...buildJurosPayload({ original: numAmount, totalWithInterest, installments, interestRate }),
             installments,
@@ -3735,14 +3650,14 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             `);
         }
 
-        // Comprovante de compra (art. 52 CDC) no tÃ³pico da massa â€” fire-and-forget
+        // Comprovante de compra (art. 52 CDC) no tópico da massa — fire-and-forget
         {
             const _jp = buildJurosPayload({ original: numAmount, totalWithInterest, installments, interestRate });
             generateAndSendPurchaseReceipt({
                 cpf: user.cpf,
                 data: {
                     estabelecimento: description,
-                    formaPagamento: 'CartÃ£o de crÃ©dito',
+                    formaPagamento: 'Cartão de crédito',
                     tipoPagamento: installments > 1 ? (interestRate > 0 ? 'Parcelado com juros' : 'Parcelado sem juros') : 'Ã€ vista',
                     totalParcelas: installments,
                     parcelaAtual: 1,
@@ -3755,43 +3670,56 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
         }
     }
 
+    // SSE: notificar frontend em tempo real (compra via acquirer-simulate)
+    try {
+        const sse = require('./services/sseService');
+        sse.sendToClient(user.cpf, 'purchase.completed', {
+            cpf: user.cpf,
+            amount: numAmount,
+            method: type === 'DEBIT' ? 'debit' : 'credit',
+            installments: type === 'CREDIT' ? (Number(installments) || 1) : 1,
+            description,
+            timestamp: new Date().toISOString(),
+        });
+    } catch (_sseErr) { /* SSE é fire-and-forget */ }
+
     res.json({
         success: true,
-        message: 'TransaÃ§Ã£o processada com sucesso via Adquirente.',
+        message: 'Transação processada com sucesso via Adquirente.',
         transactionId: txId,
         ...(jurosPayload ? { purchase: jurosPayload } : {}),
     });
 }));
 
-// â”€â”€â”€ GET /admin/transactions/:id â€” Detalhes da transaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— GET /admin/transactions/:id — Detalhes da transação ——————————————
 apiRouter.get('/admin/transactions/:id', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { id } = req.params;
     const [transaction] = await dbService.executeQuery(
         `SELECT * FROM ${dbService.fq('transactions')} WHERE id = '${id}'`
     );
     
-    if (!transaction) return res.status(404).json({ success: false, message: 'TransaÃ§Ã£o nÃ£o encontrada.' });
+    if (!transaction) return res.status(404).json({ success: false, message: 'Transação não encontrada.' });
     
     res.json({ success: true, transaction });
 }));
 
-// â”€â”€â”€ POST /admin/transactions/:cpf/:id/cancel â€” Estorno â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— POST /admin/transactions/:cpf/:id/cancel — Estorno ——————————————
 apiRouter.post('/admin/transactions/:cpf/:id/cancel', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf, id } = req.params;
     
     const [transaction] = await dbService.executeQuery(
         `SELECT * FROM ${dbService.fq('transactions')} WHERE id = '${id}' AND cpf = '${cpf}'`
     );
-    if (!transaction) return res.status(404).json({ success: false, message: 'TransaÃ§Ã£o nÃ£o encontrada.' });
+    if (!transaction) return res.status(404).json({ success: false, message: 'Transação não encontrada.' });
     
-    // Verifica se jÃ¡ foi estornada buscando uma transaÃ§Ã£o de REFUND com esse ID na descriÃ§Ã£o
-    const descRefund = `Estorno da transaÃ§Ã£o ${id}`;
+    // Verifica se já foi estornada buscando uma transação de REFUND com esse ID na descrição
+    const descRefund = `Estorno da transação ${id}`;
     const [alreadyRefunded] = await dbService.executeQuery(
         `SELECT * FROM ${dbService.fq('transactions')} WHERE cpf = '${cpf}' AND type = 'REFUND' AND description LIKE '%${id}%'`
     );
-    if (alreadyRefunded) return res.status(400).json({ success: false, message: 'TransaÃ§Ã£o jÃ¡ foi estornada.' });
+    if (alreadyRefunded) return res.status(400).json({ success: false, message: 'Transação já foi estornada.' });
     
-    // Buscar faturas fechadas para identificar se Ã© estorno direto ou voucher
+    // Buscar faturas fechadas para identificar se é estorno direto ou voucher
     const closedInvoices = await dbService.executeQuery(
         `SELECT * FROM ${dbService.fq('invoices')} WHERE user_cpf = '${cpf}' AND status = 'FECHADA'`
     );
@@ -3830,22 +3758,22 @@ apiRouter.post('/admin/transactions/:cpf/:id/cancel', bearerAuth(), authenticate
     res.json({ success: true, message: 'Estorno realizado com sucesso.', plan });
 }));
 
-// â”€â”€â”€ POST /admin/simulate-purchases â€” Simula compras e faturas para teste de corte â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— POST /admin/simulate-purchases — Simula compras e faturas para teste de corte ——————————————
 apiRouter.post('/admin/simulate-purchases', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { targetCpf, scenario } = req.body;
-    if (!targetCpf) return res.status(400).json({ success: false, message: 'targetCpf Ã© obrigatorio.' });
+    if (!targetCpf) return res.status(400).json({ success: false, message: 'targetCpf é obrigatorio.' });
 
     const [dbUser] = await dbService.executeQuery(
         `SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${targetCpf}'`
     );
-    if (!dbUser) return res.status(404).json({ success: false, message: 'Usuario nÃ£o encontrado.' });
+    if (!dbUser) return res.status(404).json({ success: false, message: 'Usuario não encontrado.' });
 
     let now = new Date();
     // Compra 1x
     const txId1 = dbService.generateUUID();
     await dbService.executeQuery(`
         INSERT INTO ${dbService.fq('transactions')} (id, cpf, type, amount, description, date)
-        VALUES ('${txId1}', '${targetCpf}', 'SHOP_CREDIT', -50.00, 'Compra Ã  vista simulada', '${nowDb()}')
+        VALUES ('${txId1}', '${targetCpf}', 'SHOP_CREDIT', -50.00, 'Compra à vista simulada', '${nowDb()}')
     `);
 
     // Compra Parcelada em 3x
@@ -3885,16 +3813,16 @@ apiRouter.post('/admin/simulate-purchases', bearerAuth(), authenticateAdmin, asy
         category: 'entertainment'
     });
 
-    let healthMessage = 'SimulaÃ§Ã£o (CenÃ¡rio Bom) concluÃ­da. Contas pagas em dia.';
+    let healthMessage = 'Simulação (Cenário Bom) concluída. Contas pagas em dia.';
 
     if (scenario === 'bad') {
-        // CenÃ¡rio Inadimplente: Atualiza dias de atraso e status da conta
+        // Cenário Inadimplente: Atualiza dias de atraso e status da conta
         await dbService.executeQuery(`
             UPDATE ${dbService.fq('users')} 
             SET account_status = 'OVERDUE', days_overdue = 15, overdue_status = 'EM_ATRASO_15D' 
             WHERE cpf = '${targetCpf}'
         `);
-        healthMessage = 'SimulaÃ§Ã£o (CenÃ¡rio Ruim) concluÃ­da. Conta classificada como inadimplente com 15 dias de atraso.';
+        healthMessage = 'Simulação (Cenário Ruim) concluída. Conta classificada como inadimplente com 15 dias de atraso.';
     } else {
         await dbService.executeQuery(`
             UPDATE ${dbService.fq('users')} 
@@ -3913,7 +3841,7 @@ apiRouter.post('/admin/simulate-purchases', bearerAuth(), authenticateAdmin, asy
     res.json({ success: true, message: healthMessage });
 }));
 
-// â”€â”€â”€ PUT /cards/billing-cycle â€” altera o dia de vencimento do cartao â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— PUT /cards/billing-cycle — altera o dia de vencimento do cartao ——————————————
 apiRouter.put('/cards/billing-cycle', bearerAuth(), [
     body('dueDay').isInt({ min: 1, max: 28 }).withMessage('Dia de vencimento deve ser entre 1 e 28.')
 ], handleValidationErrors, asyncHandler(async (req, res) => {
@@ -3962,21 +3890,21 @@ apiRouter.put('/cards/billing-cycle', bearerAuth(), [
     res.json({ success: true, message: 'Dia de vencimento alterado com sucesso.', nextInvoiceDate: nextInvoiceDate.toISOString(), dueDay, closingDay: closingDate.getDate() });
 }));
 
-// â”€â”€â”€ POST /cards/virtual/generate â€” gera um novo cartÃ£o virtual â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— POST /cards/virtual/generate — gera um novo cartão virtual ——————————————
 apiRouter.post('/cards/virtual/generate', bearerAuth(), asyncHandler(async (req, res) => {
     const cpf = req.user.cpf;
     const { nickname } = req.body || {};
 
-    // Verificar se usuÃ¡rio tem cartÃ£o fÃ­sico ativado
+    // Verificar se usuário tem cartão físico ativado
     const [dbUser] = await dbService.executeQuery(
         `SELECT card_is_activated, card_expiry FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`
     );
-    if (!dbUser) return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado.' });
+    if (!dbUser) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
     if (!dbUser.card_is_activated) {
-        return res.status(403).json({ success: false, message: 'Ative o cartÃ£o fÃ­sico antes de gerar cartÃµes virtuais.' });
+        return res.status(403).json({ success: false, message: 'Ative o cartão físico antes de gerar cartões virtuais.' });
     }
 
-    // Gerar nÃºmero virtual com bandeira/BIN reais sorteados (Master/Visa/Elo)
+    // Gerar número virtual com bandeira/BIN reais sorteados (Master/Visa/Elo)
     let cardRaw, cardFormatted, cardBrand, cardBin;
     let attempts = 0;
     while (attempts < 10) {
@@ -3987,13 +3915,13 @@ apiRouter.post('/cards/virtual/generate', bearerAuth(), asyncHandler(async (req,
         if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; cardBrand = gen.brand; cardBin = gen.bin; break; }
         attempts++;
     }
-    if (!cardRaw) return res.status(500).json({ success: false, message: 'Erro ao gerar cartÃ£o virtual.' });
+    if (!cardRaw) return res.status(500).json({ success: false, message: 'Erro ao gerar cartão virtual.' });
 
-    // CVV virtual aleatÃ³rio de 3 dÃ­gitos
+    // CVV virtual aleatório de 3 dígitos
     const virtualCvv = String(Math.floor(Math.random() * 900) + 100);
     const expiryFull = formatExpiry(dbUser.card_expiry);
     const pin = '9898';
-    const safeNickname = nickname ? String(nickname).substring(0, 100) : 'CartÃ£o Virtual';
+    const safeNickname = nickname ? String(nickname).substring(0, 100) : 'Cartão Virtual';
     const { esc } = repoContext;
 
     await dbService.executeQuery(`
@@ -4003,7 +3931,7 @@ apiRouter.post('/cards/virtual/generate', bearerAuth(), asyncHandler(async (req,
 
     res.json({
         success: true,
-        message: 'CartÃ£o virtual gerado com sucesso!',
+        message: 'Cartão virtual gerado com sucesso!',
         card: {
             number: cardFormatted,
             numberMasked: '**** **** **** ' + cardRaw.slice(-4),
@@ -4018,12 +3946,12 @@ apiRouter.post('/cards/virtual/generate', bearerAuth(), asyncHandler(async (req,
     });
 }));
 
-// â”€â”€â”€ PUT /cards/:id/toggle-block â€” bloqueia/desbloqueia cartÃ£o virtual â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— PUT /cards/:id/toggle-block — bloqueia/desbloqueia cartão virtual ————————
 apiRouter.put('/cards/:id/toggle-block', bearerAuth(), asyncHandler(async (req, res) => {
     const cpf = req.user.cpf;
     const cardId = parseInt(req.params.id, 10);
     if (!Number.isInteger(cardId)) {
-        return res.status(400).json({ success: false, message: 'Id de cartÃ£o invÃ¡lido.' });
+        return res.status(400).json({ success: false, message: 'Id de cartão inválido.' });
     }
 
     const [card] = await dbService.executeQuery(`
@@ -4031,7 +3959,7 @@ apiRouter.put('/cards/:id/toggle-block', bearerAuth(), asyncHandler(async (req, 
         WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
     `);
     if (!card) {
-        return res.status(404).json({ success: false, message: 'CartÃ£o virtual nÃ£o encontrado.' });
+        return res.status(404).json({ success: false, message: 'Cartão virtual não encontrado.' });
     }
 
     const newBlocked = !card.is_blocked;
@@ -4040,15 +3968,15 @@ apiRouter.put('/cards/:id/toggle-block', bearerAuth(), asyncHandler(async (req, 
         WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
     `);
 
-    res.json({ success: true, isBlocked: newBlocked, message: newBlocked ? 'CartÃ£o bloqueado.' : 'CartÃ£o desbloqueado.' });
+    res.json({ success: true, isBlocked: newBlocked, message: newBlocked ? 'Cartão bloqueado.' : 'Cartão desbloqueado.' });
 }));
 
-// â”€â”€â”€ DELETE /cards/:id â€” exclui (queima) cartÃ£o virtual â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— DELETE /cards/:id — exclui (queima) cartão virtual ——————————————————————
 apiRouter.delete('/cards/:id', bearerAuth(), asyncHandler(async (req, res) => {
     const cpf = req.user.cpf;
     const cardId = parseInt(req.params.id, 10);
     if (!Number.isInteger(cardId)) {
-        return res.status(400).json({ success: false, message: 'Id de cartÃ£o invÃ¡lido.' });
+        return res.status(400).json({ success: false, message: 'Id de cartão inválido.' });
     }
 
     const [card] = await dbService.executeQuery(`
@@ -4056,7 +3984,7 @@ apiRouter.delete('/cards/:id', bearerAuth(), asyncHandler(async (req, res) => {
         WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
     `);
     if (!card) {
-        return res.status(404).json({ success: false, message: 'CartÃ£o virtual nÃ£o encontrado (o cartÃ£o fÃ­sico nÃ£o pode ser excluÃ­do).' });
+        return res.status(404).json({ success: false, message: 'Cartão virtual não encontrado (o cartão físico não pode ser excluído).' });
     }
 
     await dbService.executeQuery(`
@@ -4064,7 +3992,7 @@ apiRouter.delete('/cards/:id', bearerAuth(), asyncHandler(async (req, res) => {
         WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
     `);
 
-    res.json({ success: true, message: 'CartÃ£o virtual excluÃ­do.' });
+    res.json({ success: true, message: 'Cartão virtual excluído.' });
 }));
 
 
@@ -4075,7 +4003,7 @@ apiRouter.put('/admin/cards/:cpf/delivery-status', bearerAuth(), authenticateAdm
     const { status } = req.body || {};
     
     if (!['manufacturing', 'shipping', 'tracking', 'delivered', 'unlocked'].includes(status)) {
-        return res.status(400).json({ success: false, message: 'Status invÃ¡lido.' });
+        return res.status(400).json({ success: false, message: 'Status inválido.' });
     }
     
     await dbService.executeQuery(`
@@ -4087,13 +4015,13 @@ apiRouter.put('/admin/cards/:cpf/delivery-status', bearerAuth(), authenticateAdm
     res.json({ success: true, message: 'Status de entrega atualizado!' });
 }));
 
-// Endpoint para testar avanÃ§o de entrega (apenas para ambiente de desenvolvimento)
+// Endpoint para testar avanço de entrega (apenas para ambiente de desenvolvimento)
 apiRouter.put('/cards/physical/test-delivery-status', bearerAuth(), asyncHandler(async (req, res) => {
     const cpf = req.user.cpf;
     const { status } = req.body || {};
     
     if (!['manufacturing', 'shipping', 'tracking', 'delivered', 'unlocked'].includes(status)) {
-        return res.status(400).json({ success: false, message: 'Status invÃ¡lido.' });
+        return res.status(400).json({ success: false, message: 'Status inválido.' });
     }
     
     await dbService.executeQuery(`
@@ -4102,11 +4030,11 @@ apiRouter.put('/cards/physical/test-delivery-status', bearerAuth(), asyncHandler
         WHERE cpf = '${cpf}'
     `);
     
-    res.json({ success: true, message: 'Status de entrega avanÃ§ado (Teste)!' });
+    res.json({ success: true, message: 'Status de entrega avançado (Teste)!' });
 }));
 
 // Inserir compra na fatura ABERTA (Admin)
-// --- Compras no cartÃ£o via admin (extraÃ­das para adminUsersController — Fase 7 ADMIN) ---
+// --- Compras no cartão via admin (extraídas para adminUsersController — Fase 7 ADMIN) ---
 
 // --- Endpoints de Faturas (Admin) ---
 apiRouter.post('/admin/invoices/:cpf/:invoiceId/status', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
@@ -4172,7 +4100,7 @@ apiRouter.post('/admin/subscriptions/engine/force-cycle', bearerAuth(), authenti
     res.json(result);
 }));
 
-// Rotas de Planos e Assinaturas (Sandbox / GestÃ£o)
+// Rotas de Planos e Assinaturas (Sandbox / Gestão)
 apiRouter.get('/subscriptions/plans', asyncHandler(async (req, res) => {
     const plansRepo = require('./repositories/plansRepo');
     const list = await plansRepo.list();
@@ -4181,7 +4109,7 @@ apiRouter.get('/subscriptions/plans', asyncHandler(async (req, res) => {
 
 apiRouter.post('/subscriptions/plans', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { name, amount, frequency, description } = req.body || {};
-    if (!name || !amount) return res.status(400).json({ success: false, message: 'Nome e valor sÃ£o obrigatÃ³rios.' });
+    if (!name || !amount) return res.status(400).json({ success: false, message: 'Nome e valor são obrigatórios.' });
     const plansRepo = require('./repositories/plansRepo');
     const plan = await plansRepo.create({ name, amount, frequency, description });
     res.json({ success: true, plan });
@@ -4192,7 +4120,7 @@ apiRouter.post('/subscriptions/:billId/cancel', bearerAuth(), asyncHandler(async
     const cpf = req.user.cpf;
     const recurringBillsRepo = require('./repositories/recurringBillsRepo');
     const ok = await recurringBillsRepo.cancel({ cpf, billId });
-    if (!ok) return res.status(404).json({ success: false, message: 'Assinatura nÃ£o encontrada' });
+    if (!ok) return res.status(404).json({ success: false, message: 'Assinatura não encontrada' });
     res.json({ success: true, message: 'Assinatura cancelada com sucesso.' });
 }));
 
@@ -4201,13 +4129,13 @@ apiRouter.put('/admin/invoices/:cpf/due-date', bearerAuth(), authenticateAdmin, 
     const { invoiceDueDate } = req.body || {};
     
     if (!cpf || !invoiceDueDate) {
-        return res.status(400).json({ success: false, message: 'Payload invalido. ForneÃ§a invoiceDueDate.' });
+        return res.status(400).json({ success: false, message: 'Payload invalido. Forneça invoiceDueDate.' });
     }
     
     const { esc } = repoContext;
     const dDate = new Date(invoiceDueDate);
     if (isNaN(dDate.getTime())) {
-        return res.status(400).json({ success: false, message: 'Data invÃ¡lida.' });
+        return res.status(400).json({ success: false, message: 'Data inválida.' });
     }
 
     await dbService.executeQuery(`
@@ -4219,7 +4147,7 @@ apiRouter.put('/admin/invoices/:cpf/due-date', bearerAuth(), authenticateAdmin, 
     res.json({ success: true, message: 'Vencimento da fatura atualizado com sucesso.', invoiceDueDate: dDate.toISOString() });
 }));
 
-// --- SolicitaÃ§Ãµes de aumento de limite PIX (via repositÃ³rio) ---
+// --- Solicitações de aumento de limite PIX (via repositório) ---
 apiRouter.post('/pix/limit/request', bearerAuth(), asyncHandler(async (req, res) => {
     const { cpf, amount } = req.body || {};
     if (!cpf || cpf.length !== 11 || typeof amount !== 'number' || amount <= 0) {
@@ -4230,7 +4158,7 @@ apiRouter.post('/pix/limit/request', bearerAuth(), asyncHandler(async (req, res)
     }
 
     const request = await limitRequestsRepo.create({ cpf, amount });
-    res.json({ success: true, message: 'SolicitaÃ§Ã£o criada', request });
+    res.json({ success: true, message: 'Solicitação criada', request });
 }));
 
 apiRouter.get('/admin/requests/limit', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
@@ -4243,8 +4171,8 @@ apiRouter.post('/admin/requests/limit/:cpf/approve', bearerAuth(), authenticateA
     if (!cpf || cpf.length !== 11) return res.status(400).json({ success: false, message: 'Payload invalido.' });
 
     const result = await limitRequestsRepo.approve({ cpf, adminCpf: req.user.cpf });
-    if (!result) return res.status(404).json({ success: false, message: 'SolicitaÃ§Ã£o nÃ£o encontrada' });
-    res.json({ success: true, message: 'SolicitaÃ§Ã£o aprovada' });
+    if (!result) return res.status(404).json({ success: false, message: 'Solicitação não encontrada' });
+    res.json({ success: true, message: 'Solicitação aprovada' });
 }));
 
 apiRouter.post('/admin/requests/limit/:cpf/deny', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
@@ -4253,7 +4181,7 @@ apiRouter.post('/admin/requests/limit/:cpf/deny', bearerAuth(), authenticateAdmi
     if (!cpf || cpf.length !== 11) return res.status(400).json({ success: false, message: 'Payload invalido.' });
 
     await limitRequestsRepo.deny({ cpf, adminCpf: req.user.cpf, reason });
-    res.json({ success: true, message: 'SolicitaÃ§Ã£o negada' });
+    res.json({ success: true, message: 'Solicitação negada' });
 }));
 
 apiRouter.get('/admin/requests/password', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
@@ -4273,11 +4201,11 @@ apiRouter.post('/admin/requests/password/:cpf/approve', bearerAuth(), authentica
     await setPasswordResetRequested(cpf, false);
     await notificationsRepo.addNotification({
         cpf,
-        title: 'Senha temporÃ¡ria',
-        message: 'Uma senha temporÃ¡ria foi gerada por um administrador.',
+        title: 'Senha temporária',
+        message: 'Uma senha temporária foi gerada por um administrador.',
         actionUrl: '/login'
     });
-    res.json({ success: true, message: 'Pedido aprovado e senha temporÃ¡ria gerada.' });
+    res.json({ success: true, message: 'Pedido aprovado e senha temporária gerada.' });
 }));
 
 apiRouter.post('/admin/requests/password/:cpf/deny', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
@@ -4301,31 +4229,31 @@ apiRouter.post('/admin/reset/users', bearerAuth(), authenticateAdmin, asyncHandl
     await dbService.executeQuery(`DELETE FROM ${dbService.fq('notifications')} WHERE cpf <> '${adminCpf}'`);
     await dbService.executeQuery(`DELETE FROM ${dbService.fq('limit_increase_requests')} WHERE cpf <> '${adminCpf}'`);
     await dbService.executeQuery(`DELETE FROM ${dbService.fq('users')} WHERE cpf <> '${adminCpf}'`);
-    // TÃ³picos Telegram das massas apagadas (mantÃ©m o do admin)
+    // Tópicos Telegram das massas apagadas (mantém o do admin)
     try {
         const topics = await telegramService.listTopics();
         for (const t of topics) {
             if (t.cpf !== adminCpf) await telegramService.deleteTopic(t.cpf);
         }
     } catch (tgErr) {
-        console.warn('âš ï¸ Falha ao limpar tÃ³picos Telegram no reset:', tgErr.message);
+        console.warn('⚠️ Falha ao limpar tópicos Telegram no reset:', tgErr.message);
     }
     await ensureAdminUser();
     res.json({ success: true, message: 'Base resetada. Apenas admin mantido.' });
 }));
 
-// â”€â”€â”€ Billing helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— Billing helpers ————————————————————————————————————————————————————————
 
-// â”€â”€â”€ Billing endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— Billing endpoints ———————————————————————————————————————————————————————
 
-// GET /admin/billing/config â€” retorna parÃ¢metros de faturamento
+// GET /admin/billing/config — retorna parâmetros de faturamento
 apiRouter.get('/admin/billing/config', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const rows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
-    if (!rows.length) return res.status(404).json({ success: false, message: 'ConfiguraÃ§Ã£o de faturamento nÃ£o encontrada.' });
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Configuração de faturamento não encontrada.' });
     res.json({ success: true, config: rows[0] });
 }));
 
-// PUT /admin/billing/config â€” atualiza parÃ¢metros de faturamento
+// PUT /admin/billing/config — atualiza parâmetros de faturamento
 apiRouter.put('/admin/billing/config', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { close_day, due_day, grace_period_days, is_active } = req.body || {};
     const errors = [];
@@ -4346,7 +4274,7 @@ apiRouter.put('/admin/billing/config', bearerAuth(), authenticateAdmin, asyncHan
 
     await dbService.executeQuery(`UPDATE ${dbService.fq('billing_config')} SET ${sets.join(', ')} WHERE id = 1`);
     const updated = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
-    res.json({ success: true, message: 'ConfiguraÃ§Ã£o de faturamento atualizada.', config: updated[0] });
+    res.json({ success: true, message: 'Configuração de faturamento atualizada.', config: updated[0] });
 }));
 
 // GET /admin/billing/accounts-status  (alias: /admin/billing/status)
@@ -4373,12 +4301,12 @@ apiRouter.get(['/admin/billing/accounts-status', '/admin/billing/status'], beare
 }));
 
 // POST /admin/billing/seed-test-scenarios
-// Aplica um cenÃ¡rio de billing a um CPF de teste (para automaÃ§Ã£o de testes).
+// Aplica um cenário de billing a um CPF de teste (para automação de testes).
 // Body: { cpf: "11111111111", scenario: "adimplente"|"vencida"|"inadimplente"|"reset", daysOverdue?, invoiceAmount? }
 // Se omitir cpf, aplica a todos os CPFs de teste (11111111111, 22222222222, 33333333333, 44444444444).
 apiRouter.post('/admin/billing/seed-test-scenarios', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf, scenario, daysOverdue, invoiceAmount } = req.body;
-    if (!scenario) return res.status(400).json({ success: false, message: 'Campo "scenario" obrigatÃ³rio.' });
+    if (!scenario) return res.status(400).json({ success: false, message: 'Campo "scenario" obrigatório.' });
 
     const testCpfs = ['11111111111', '22222222222', '33333333333', '44444444444'];
     const targets  = cpf ? [String(cpf)] : testCpfs;
@@ -4392,30 +4320,30 @@ apiRouter.post('/admin/billing/seed-test-scenarios', bearerAuth(), authenticateA
 }));
 
 // POST /admin/billing/save-as-mock
-// Persiste o estado de billing atual de um CPF como baseline â€” o reset restaura esse estado.
-// TambÃ©m converte transaÃ§Ãµes [TEST] desse CPF em [MOCK] (sobrevivem ao reset).
+// Persiste o estado de billing atual de um CPF como baseline — o reset restaura esse estado.
+// Também converte transações [TEST] desse CPF em [MOCK] (sobrevivem ao reset).
 // Body: { cpf: "11111111111" }
 apiRouter.post('/admin/billing/save-as-mock', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf } = req.body;
-    if (!cpf) return res.status(400).json({ success: false, message: 'Campo "cpf" obrigatÃ³rio.' });
+    if (!cpf) return res.status(400).json({ success: false, message: 'Campo "cpf" obrigatório.' });
     const result = await saveAsMockBaseline(dbService, String(cpf));
     res.json({ success: true, ...result });
 }));
 
 // POST /admin/billing/clear-mock-baseline
-// Remove o baseline salvo de um CPF, voltando ao cenÃ¡rio padrÃ£o hardcoded no prÃ³ximo reset.
+// Remove o baseline salvo de um CPF, voltando ao cenário padrão hardcoded no próximo reset.
 // Body: { cpf: "11111111111" }
 apiRouter.post('/admin/billing/clear-mock-baseline', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf } = req.body;
-    if (!cpf) return res.status(400).json({ success: false, message: 'Campo "cpf" obrigatÃ³rio.' });
+    if (!cpf) return res.status(400).json({ success: false, message: 'Campo "cpf" obrigatório.' });
     const result = await clearMockBaseline(dbService, String(cpf));
     res.json({ success: true, ...result });
 }));
 
-// LÃ³gica central de validaÃ§Ã£o de faturamento (marca inadimplÃªncia + gera encargos diÃ¡rios).
-// ExtraÃ­da para funÃ§Ã£o prÃ³pria para ser reaproveitada tanto pela rota HTTP quanto pelo
-// cron diÃ¡rio â€” sem isso, nada dispara essa validaÃ§Ã£o automaticamente e days_overdue/
-// billing_charges nunca sÃ£o atualizados dia a dia.
+// Lógica central de validação de faturamento (marca inadimplência + gera encargos diários).
+// Extraída para função própria para ser reaproveitada tanto pela rota HTTP quanto pelo
+// cron diário — sem isso, nada dispara essa validação automaticamente e days_overdue/
+// billing_charges nunca são atualizados dia a dia.
 // Guarda de concorrência do motor diário: o cron (00:00), o boot catch-up e a
 // rota POST /admin/billing/validate-all podem disparar runBillingValidation no
 // mesmo processo. Sem este lock em memória, duas execuções simultâneas inseriam
@@ -4445,9 +4373,9 @@ async function runBillingValidationInner(opts) {
     const scopeFilter = onlyCpf ? `WHERE cpf = '${onlyCpf}'` : '';
     const invoiceScopeFilter = onlyCpf ? `AND i.cpf = '${onlyCpf}'` : '';
     const configRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
-    if (!configRows.length) return { success: false, message: 'ConfiguraÃ§Ã£o de faturamento nÃ£o encontrada.' };
+    if (!configRows.length) return { success: false, message: 'Configuração de faturamento não encontrada.' };
     const cfg = configRows[0];
-    if (!cfg.is_active) return { success: true, message: 'Ciclo de faturamento inativo. Nenhuma validaÃ§Ã£o executada.' };
+    if (!cfg.is_active) return { success: true, message: 'Ciclo de faturamento inativo. Nenhuma validação executada.' };
 
     const cycle = computeCurrentCycle(cfg);
     const today = new Date();
@@ -4462,10 +4390,10 @@ async function runBillingValidationInner(opts) {
         ${scopeFilter}
     `);
 
-    // Vencimento real de cada fatura FECHADA ainda nÃ£o paga â€” nÃ£o usar
+    // Vencimento real de cada fatura FECHADA ainda não paga — não usar
     // user.credit_card_invoice_due_date aqui: o invoiceEngine rola esse campo para o
     // PRÃ“XIMO ciclo assim que o corte da fatura atual passa (7 dias antes do vencimento),
-    // entÃ£o no dia do vencimento (e durante todo o perÃ­odo de atraso) esse campo jÃ¡
+    // então no dia do vencimento (e durante todo o período de atraso) esse campo já
     // aponta para um ciclo futuro, fazendo daysOverdue ficar sempre 0.
     // ORDER BY ASC (nao DESC): precisamos da fatura NAO PAGA MAIS ANTIGA por CPF, nao a
     // mais recente. Com DESC + "primeira que chega ganha" no loop abaixo, uma massa com
@@ -4606,30 +4534,30 @@ async function runBillingValidationInner(opts) {
         console.log(`[DEBUG] CPF: ${u.cpf}, dueDate: ${dueDate}, today: ${todayMidnight}, diffMs: ${diffMs}, daysOverdue: ${daysOverdue}, displayDays: ${displayDays}, newStatus: ${newStatus}`);
 
         // Recalcular encargos diariamente enquanto em atraso (multa 2%, IOF 0,38% + 0,0082%/dia,
-        // juros remuneratÃ³rios 15,39% a.m., juros de mora 1% a.m.)
+        // juros remuneratórios 15,39% a.m., juros de mora 1% a.m.)
         // Acumula encargos enquanto houver residual em aberto E (fatura vencida OU pagamento
         // mínimo já feito). Com mínimo o contador de dias fica 0 mas os juros/IOF seguem
         // incrementando sobre o residual até o pagamento TOTAL.
         if (daysOverdue > 0 || closedInvoiceData.pagamentoMinimo) {
             // Usa o saldo RESIDUAL da fatura fechada (valor_total - valor_pago) para calcular os encargos.
             // Para massas com pagamento parcial, o encargo incide apenas sobre o que 
-            // efetivamente falta pagar â€” NÃƒO sobre o valor_total bruto.
-            // O residual Ã© definido em closedDueByCpf.set(..., { amount: residual, ... }) na linha 4060.
+            // efetivamente falta pagar — NÃO sobre o valor_total bruto.
+            // O residual é definido em closedDueByCpf.set(..., { amount: residual, ... }) na linha 4060.
             const invoiceAmount = Math.max(0, parseFloat(closedInvoiceData.amount || 0));
             if (invoiceAmount > 0) {
-                // â”€â”€ REGRA DE ACUMULAÃ‡ÃƒO DE ENCARGOS (INCREMENTO DIÃRIO) â”€â”€
-                // NÃƒO deletar encargos antigos! Cada execuÃ§Ã£o do billing ADICIONA
-                // o incremento de 1 dia sobre o saldo residual atual. ApÃ³s pagamento
-                // parcial o residual cai, e os incrementos diÃ¡rios passam a ser
-                // calculados sobre o novo residual menor â€” a penalidade jÃ¡ acumulada
-                // (encargos antigos) NÃƒO diminui, apenas os novos dias passam a
+                // —— REGRA DE ACUMULAÇÃO DE ENCARGOS (INCREMENTO DIÁRIO) ——
+                // NÃO deletar encargos antigos! Cada execução do billing ADICIONA
+                // o incremento de 1 dia sobre o saldo residual atual. Após pagamento
+                // parcial o residual cai, e os incrementos diários passam a ser
+                // calculados sobre o novo residual menor — a penalidade já acumulada
+                // (encargos antigos) NÃO diminui, apenas os novos dias passam a
                 // render menos.
                 //
-                // Encargos de multa (2%) e IOF adicional (0,38%) sÃ£o cobranÃ§as
-                // ÃšNICAS â€” inseridas apenas na primeira execuÃ§Ã£o, calculadas sobre
-                // o valor_total ORIGINAL (nÃ£o o residual). Juros de mora, juros
-                // remuneratÃ³rios e IOF diÃ¡rio sÃ£o incrementos DIÃRIOS sobre o
-                // residual â€” sempre inseridos a cada execuÃ§Ã£o.
+                // Encargos de multa (2%) e IOF adicional (0,38%) são cobranças
+                // ÃšNICAS — inseridas apenas na primeira execução, calculadas sobre
+                // o valor_total ORIGINAL (não o residual). Juros de mora, juros
+                // remuneratórios e IOF diário são incrementos DIÁRIOS sobre o
+                // residual — sempre inseridos a cada execução.
                 // REF ESTÁVEL (fix da análise mensal e da multa duplicada): a referência das
                 // charges NÃO pode ser o ciclo corrente. cycle.invoiceRef muda conforme a
                 // config de faturamento e, na massa 805.357.576-54, girou (2026-07 → 2026-08
@@ -4707,7 +4635,7 @@ async function runBillingValidationInner(opts) {
                 const originalValorTotal = parseFloat(closedInvoiceData.valorTotal || 0);
                 let totalLineCharges = 0;
 
-                // â”€â”€ MULTA (2%): Ãºnica vez sobre o valor_total ORIGINAL â”€â”€
+                // —— MULTA (2%): única vez sobre o valor_total ORIGINAL ——
                 if (getExisting('multa') < 0.005) {
                     const multa = calcMulta(originalValorTotal);
                     if (multa > 0.005) {
@@ -4721,10 +4649,10 @@ async function runBillingValidationInner(opts) {
                     totalLineCharges += getExisting('multa');
                 }
 
-                // â”€â”€ IOF: primeira vez = adicional(Ãºnica) + diÃ¡rio(acumulado);
-                //     subsequente = apenas IOF diÃ¡rio(1 dia) sobre o residual â”€â”€
+                // —— IOF: primeira vez = adicional(única) + diário(acumulado);
+                //     subsequente = apenas IOF diário(1 dia) sobre o residual ——
                 if (getExisting('iof') < 0.005) {
-                    // Primeira cobranÃ§a: IOF adicional (Ãºnica, sobre original) + IOF diÃ¡rio acumulado
+                    // Primeira cobrança: IOF adicional (única, sobre original) + IOF diário acumulado
                     const iof = calcIof(originalValorTotal, daysOverdue);
                     if (iof > 0.005) {
                         markDayInserted('iof');
@@ -4734,7 +4662,7 @@ async function runBillingValidationInner(opts) {
                         }
                     }
                 } else {
-                    // CobranÃ§as subsequentes: apenas IOF diÃ¡rio (1 dia) sobre o residual
+                    // Cobranças subsequentes: apenas IOF diário (1 dia) sobre o residual
                     const dailyIof = calcIofDiario(invoiceAmount, 1);
                     if (!dayAlreadyInserted('iof') && dailyIof > 0.005) {
                         markDayInserted('iof');
@@ -4747,7 +4675,7 @@ async function runBillingValidationInner(opts) {
                     }
                 }
 
-                // â”€â”€ JUROS DE MORA: incremento diÃ¡rio sobre o residual â”€â”€
+                // —— JUROS DE MORA: incremento diário sobre o residual ——
                 {
                     const dailyJurosMora = calcJurosMora(invoiceAmount, 1);
                     if (!dayAlreadyInserted('juros_mora') && dailyJurosMora > 0.005) {
@@ -4761,7 +4689,7 @@ async function runBillingValidationInner(opts) {
                     }
                 }
 
-                // â”€â”€ JUROS REMUNERATÃ“RIOS: incremento diÃ¡rio sobre o residual â”€â”€
+                // —— JUROS REMUNERATÃ“RIOS: incremento diário sobre o residual ——
                 {
                     const dailyJurosRem = calcJurosRemuneratorios(invoiceAmount, 1);
                     if (!dayAlreadyInserted('juros_remuneratorios') && dailyJurosRem > 0.005) {
@@ -4786,9 +4714,9 @@ async function runBillingValidationInner(opts) {
             }
         }
 
-        // â”€â”€ NotificaÃ§Ã£o de Pagamento MÃ­nimo Detectado â”€â”€
-        // Se o usuÃ¡rio fez pagamento mÃ­nimo (â‰¥10% do total) mas ainda tem residual,
-        // multa e juros de mora estÃ£o estacionados â€” o sistema notifica isso 1x/dia.
+        // —— Notificação de Pagamento Mínimo Detectado ——
+        // Se o usuário fez pagamento mínimo (≥10% do total) mas ainda tem residual,
+        // multa e juros de mora estão estacionados — o sistema notifica isso 1x/dia.
         if (closedInvoiceData.valorPago > 0 && closedInvoiceData.valorTotal > 0) {
             const pctPago = closedInvoiceData.valorPago / closedInvoiceData.valorTotal;
             const isMinimoDetectado = pctPago >= 0.10 && closedInvoiceData.amount > 0;
@@ -4798,28 +4726,28 @@ async function runBillingValidationInner(opts) {
                     const recentNotifs = await dbService.executeQuery(`
                         SELECT id FROM ${dbService.fq('notifications')}
                         WHERE cpf = '${u.cpf}'
-                          AND title = 'Pagamento mÃ­nimo de fatura âœ…'
+                          AND title = 'Pagamento mínimo de fatura ✅'
                           AND created_at > '${dayAgo}'
                         LIMIT 1
                     `);
                     if (recentNotifs.length === 0) {
                         await notificationsRepo.addNotification({
                             cpf: u.cpf,
-                            title: 'Pagamento mÃ­nimo de fatura âœ…',
-                            message: `R$ ${closedInvoiceData.valorPago.toFixed(2)} pagos (mÃ­nimo). Multa e juros de mora estacionados! Juros remuneratÃ³rios continuam sobre o saldo residual de R$ ${closedInvoiceData.amount.toFixed(2)}.`,
+                            title: 'Pagamento mínimo de fatura ✅',
+                            message: `R$ ${closedInvoiceData.valorPago.toFixed(2)} pagos (mínimo). Multa e juros de mora estacionados! Juros remuneratórios continuam sobre o saldo residual de R$ ${closedInvoiceData.amount.toFixed(2)}.`,
                             actionUrl: '/dashboard'
                         });
-                        console.log(`[Notif] Pagamento mÃ­nimo detectado para ${u.cpf} â€” notificaÃ§Ã£o enviada.`);
+                        console.log(`[Notif] Pagamento mínimo detectado para ${u.cpf} — notificação enviada.`);
                     }
                 } catch (notifErr) {
-                    console.warn(`âš ï¸ Erro ao enviar notificaÃ§Ã£o de pagamento mÃ­nimo para ${u.cpf}:`, notifErr.message);
+                    console.warn(`⚠️ Erro ao enviar notificação de pagamento mínimo para ${u.cpf}:`, notifErr.message);
                 }
             }
 
-            // â”€â”€ NotificaÃ§Ã£o de Pagamento ABAIXO do MÃ­nimo (âš ï¸ CrÃ­tico) â”€â”€
-            // Se o usuÃ¡rio pagou MAS o valor pago Ã© INSUFICIENTE (abaixo de 10% do total),
-            // o saldo residual continua gerando encargos e a massa estÃ¡ em situaÃ§Ã£o crÃ­tica.
-            // O admin precisa saber para priorizar aÃ§Ã£o de cobranÃ§a.
+            // —— Notificação de Pagamento ABAIXO do Mínimo (⚠️ Crítico) ——
+            // Se o usuário pagou MAS o valor pago é INSUFICIENTE (abaixo de 10% do total),
+            // o saldo residual continua gerando encargos e a massa está em situação crítica.
+            // O admin precisa saber para priorizar ação de cobrança.
             const isAbaixoCritico = pctPago > 0 && pctPago < 0.10 && closedInvoiceData.amount > 0;
             if (isAbaixoCritico) {
                 try {
@@ -4827,7 +4755,7 @@ async function runBillingValidationInner(opts) {
                     const recentAbaixoNotifs = await dbService.executeQuery(`
                         SELECT id FROM ${dbService.fq('notifications')}
                         WHERE cpf = '${u.cpf}'
-                          AND (title LIKE '%Abaixo%' OR title LIKE '%abaixo%' OR title LIKE '%crÃ­tico%' OR title LIKE '%critico%')
+                          AND (title LIKE '%Abaixo%' OR title LIKE '%abaixo%' OR title LIKE '%crítico%' OR title LIKE '%critico%')
                           AND created_at > '${dayAgo}'
                         LIMIT 1
                     `);
@@ -4835,14 +4763,14 @@ async function runBillingValidationInner(opts) {
                         const minimoNeeded = round2(closedInvoiceData.valorTotal * 0.10);
                         await notificationsRepo.addNotification({
                             cpf: u.cpf,
-                            title: 'âš ï¸ Pagamento abaixo do mÃ­nimo crÃ­tico',
-                            message: `Apenas R$ ${closedInvoiceData.valorPago.toFixed(2)} pagos (${(pctPago * 100).toFixed(0)}% do total). MÃ­nimo necessÃ¡rio: R$ ${minimoNeeded.toFixed(2)}. Saldo residual: R$ ${closedInvoiceData.amount.toFixed(2)}. Encargos totais continuam!`,
+                            title: '⚠️ Pagamento abaixo do mínimo crítico',
+                            message: `Apenas R$ ${closedInvoiceData.valorPago.toFixed(2)} pagos (${(pctPago * 100).toFixed(0)}% do total). Mínimo necessário: R$ ${minimoNeeded.toFixed(2)}. Saldo residual: R$ ${closedInvoiceData.amount.toFixed(2)}. Encargos totais continuam!`,
                             actionUrl: '/admin/requests'
                         });
-                        console.log(`[Notif] âš ï¸ ABAIXO crÃ­tico detectado para ${u.cpf} â€” pagou apenas ${(pctPago * 100).toFixed(0)}% do total.`);
+                        console.log(`[Notif] ⚠️ ABAIXO crítico detectado para ${u.cpf} — pagou apenas ${(pctPago * 100).toFixed(0)}% do total.`);
                     }
                 } catch (notifErr) {
-                    console.warn(`âš ï¸ Erro ao enviar notificaÃ§Ã£o de ABAIXO crÃ­tico para ${u.cpf}:`, notifErr.message);
+                    console.warn(`⚠️ Erro ao enviar notificação de ABAIXO crítico para ${u.cpf}:`, notifErr.message);
                 }
             }
         }
@@ -4909,7 +4837,7 @@ async function runBillingValidationInner(opts) {
               AND dias_atraso IS DISTINCT FROM GREATEST(0, (CURRENT_DATE - due_date::date))
         `);
     } catch (invoiceSyncErr) {
-        console.warn('âš ï¸ Erro ao sincronizar dias_atraso nas invoices:', invoiceSyncErr.message);
+        console.warn('⚠️ Erro ao sincronizar dias_atraso nas invoices:', invoiceSyncErr.message);
     }
 
     return {
@@ -4917,7 +4845,7 @@ async function runBillingValidationInner(opts) {
         processadas: users.length - errors.length,
         falhas: errors.length,
         errors,
-        message: `ValidaÃ§Ã£o concluÃ­da. ${markedInadimplente} inadimplentes, ${markedAdimplente} adimplentes, ${chargesGenerated} encargos gerados${errors.length ? `, ${errors.length} massa(s) com falha` : ''}.`,
+        message: `Validação concluída. ${markedInadimplente} inadimplentes, ${markedAdimplente} adimplentes, ${chargesGenerated} encargos gerados${errors.length ? `, ${errors.length} massa(s) com falha` : ''}.`,
         cycle: {
             ref: cycle.invoiceRef, status: cycle.cycleStatus,
             closeDate: cycle.closeDate, dueDate: cycle.dueDate,
@@ -4928,11 +4856,11 @@ async function runBillingValidationInner(opts) {
     };
 }
 
-// â”€â”€ SincronizaÃ§Ã£o autÃ´noma de dias_atraso nas invoices â”€â”€
-// FunÃ§Ã£o standalone que atualiza dias_atraso em TODAS as invoices FECHADAS nÃ£o pagas
+// —— Sincronização autônoma de dias_atraso nas invoices ——
+// Função standalone que atualiza dias_atraso em TODAS as invoices FECHADAS não pagas
 // com base na data atual. Pode ser chamada via cron ou manualmente.
-// Diferente do sync embutido no runBillingValidation, esta funÃ§Ã£o:
-// - Ã‰ independente (nÃ£o depende do status do usuÃ¡rio mudar)
+// Diferente do sync embutido no runBillingValidation, esta função:
+// - Ã‰ independente (não depende do status do usuário mudar)
 // - Retorna contagem de quantas invoices foram atualizadas
 // - Pode ser chamada a qualquer momento sem efeitos colaterais
 const syncInvoiceDiasAtraso = async () => {
@@ -5037,13 +4965,13 @@ apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], asyn
     res.json(result);
 }));
 
-// GET /admin/billing/account/:cpf/status â€” status detalhado de uma conta
+// GET /admin/billing/account/:cpf/status — status detalhado de uma conta
 apiRouter.get('/admin/billing/account/:cpf/status', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf } = req.params;
-    if (!cpf || cpf.length !== 11) return res.status(400).json({ success: false, message: 'CPF invÃ¡lido.' });
+    if (!cpf || cpf.length !== 11) return res.status(400).json({ success: false, message: 'CPF inválido.' });
 
     const configRows = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('billing_config')} WHERE id = 1`);
-    if (!configRows.length) return res.status(500).json({ success: false, message: 'ConfiguraÃ§Ã£o de faturamento nÃ£o encontrada.' });
+    if (!configRows.length) return res.status(500).json({ success: false, message: 'Configuração de faturamento não encontrada.' });
     const cfg = configRows[0];
 
     const userRows = await dbService.executeQuery(`
@@ -5053,7 +4981,7 @@ apiRouter.get('/admin/billing/account/:cpf/status', bearerAuth(), authenticateAd
                credit_card_invoice_due_date, credit_card_available_limit, credit_card_total_limit,
         FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'
     `);
-    if (!userRows.length) return res.status(404).json({ success: false, message: 'Conta nÃ£o encontrada.' });
+    if (!userRows.length) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
     const u = userRows[0];
 
     const cycle = computeCurrentCycle(cfg);
@@ -5092,11 +5020,11 @@ apiRouter.get('/admin/billing/account/:cpf/status', bearerAuth(), authenticateAd
 
 
 /**
- * Distribui um pagamento proporcionalmente entre TODAS as faturas fechadas nÃ£o pagas,
+ * Distribui um pagamento proporcionalmente entre TODAS as faturas fechadas não pagas,
  * da mais antiga (ASC due_date) para a mais recente.
  *
  * Em vez de adicionar o valor integral a cada fatura (multi-invoice bug), percorre
- * cada invoice e aplica o pagamento sobre o saldo remanescente atÃ© exaurir o valor.
+ * cada invoice e aplica o pagamento sobre o saldo remanescente até exaurir o valor.
  *
  * @param {string} cpf
  * @param {number} payAmount - valor total a distribuir
@@ -5104,7 +5032,7 @@ apiRouter.get('/admin/billing/account/:cpf/status', bearerAuth(), authenticateAd
  */
 async function fetchUnpaidClosedInvoices(cpf) {
     const { esc } = repoContext;
-    // Da mais antiga para a mais recente: o pagamento amortiza a dÃ­vida mais velha primeiro
+    // Da mais antiga para a mais recente: o pagamento amortiza a dívida mais velha primeiro
     return dbService.executeQuery(`
         SELECT id, due_date, valor_total, saldo_anterior, valor_iof, valor_multa,
                valor_juros_remuneratorios, valor_juros_mora, valor_pago, status
@@ -5115,13 +5043,13 @@ async function fetchUnpaidClosedInvoices(cpf) {
 }
 
 
-// OpÃ§Ãµes de parcelamento (2x-12x) para a fatura FECHADA nÃ£o paga, com encargos reais do motor de cobranÃ§a
+// Opções de parcelamento (2x-12x) para a fatura FECHADA não paga, com encargos reais do motor de cobrança
 
 
 
-// â”€â”€â”€ MigraÃ§Ã£o New Base â€” Novos Endpoints (#58) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— Migração New Base — Novos Endpoints (#58) ——————————————————————————————
 
-// DicionÃ¡rio de categorizaÃ§Ã£o PIX por keywords
+// Dicionário de categorização PIX por keywords
 const PIX_KEYWORD_MAP = [
     { category: 'refeicao',    keywords: ['ifood', 'rappi', 'uber eats', 'restaurante', 'lanche', 'pizza', 'burger', 'mcdonalds', 'subway'] },
     { category: 'mobilidade',  keywords: ['uber', '99', 'cabify', 'taxi', 'onibus', 'metro', 'combustivel', 'posto', 'shell', 'petrobras'] },
@@ -5135,7 +5063,7 @@ const PIX_KEYWORD_MAP = [
 apiRouter.post('/pix/categorize', bearerAuth(), asyncHandler(async (req, res) => {
     const { description } = req.body || {};
     if (!description || typeof description !== 'string') {
-        return res.status(400).json({ success: false, message: 'Campo description Ã© obrigatÃ³rio.' });
+        return res.status(400).json({ success: false, message: 'Campo description é obrigatório.' });
     }
     const lc = description.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -5148,7 +5076,7 @@ apiRouter.post('/pix/categorize', bearerAuth(), asyncHandler(async (req, res) =>
         }
     }
 
-    // 2. HistÃ³rico do usuÃ¡rio para aprendizado de padrÃ£o
+    // 2. Histórico do usuário para aprendizado de padrão
     const cpf = req.user.cpf;
     try {
         const history = await dbService.executeQuery(`
@@ -5163,14 +5091,14 @@ apiRouter.post('/pix/categorize', bearerAuth(), asyncHandler(async (req, res) =>
                 const txDesc = String(tx.description).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
                 const words = lc.split(/\s+/).filter(w => w.length > 3);
                 if (words.some(w => txDesc.includes(w))) {
-                    return res.json({ success: true, category: tx.category, confidence: 65, reason: 'PadrÃ£o do histÃ³rico do usuÃ¡rio' });
+                    return res.json({ success: true, category: tx.category, confidence: 65, reason: 'Padrão do histórico do usuário' });
                 }
             }
         }
-    } catch (_) { /* histÃ³rico indisponÃ­vel â€” usa fallback */ }
+    } catch (_) { /* histórico indisponível — usa fallback */ }
 
     // 3. Fallback
-    res.json({ success: true, category: 'outros', confidence: 30, reason: 'Sem correspondÃªncia encontrada' });
+    res.json({ success: true, category: 'outros', confidence: 30, reason: 'Sem correspondência encontrada' });
 }));
 
 
@@ -5179,13 +5107,13 @@ registerRecurringBillsRoutes({ apiRouter, bearerAuth, asyncHandler, body, dbServ
     handleValidationErrors, nowDb, recurringBillsRepo, toISO, auditLog });
 
 
-// â”€â”€â”€ Fim dos novos endpoints #58 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— Fim dos novos endpoints #58 ————————————————————————————————————————————
 
 const swaggerDocument = require('./swagger.json');
 
 app.use((err, req, res, next) => {
-    console.error('==================== ERRO NÃƒO TRATADO ====================');
-    console.error('âŒ Erro no servidor:', err.message);
+    console.error('==================== ERRO NÃO TRATADO ====================');
+    console.error('❌ Erro no servidor:', err.message);
     console.error('Stack trace:', err.stack);
     console.error('Request URL:', req.url);
     console.error('Request Method:', req.method);
@@ -5202,7 +5130,7 @@ async function initializeDatabase() {
     // Skip Postgres-specific initialization if needed
     const provider = process.env.DB_PROVIDER || process.env.DB_DIALECT;
     if (provider === 'postgres') {
-        console.log('â„¹ï¸  Usando PostgreSQL. Verificando estrutura das tabelas...');
+        console.log('🌐  Usando PostgreSQL. Verificando estrutura das tabelas...');
         
         // Verificar se as colunas category e cashback existem na tabela de produtos
         try {
@@ -5215,30 +5143,30 @@ async function initializeDatabase() {
             `);
             const existingProductCols = productColumns.map(c => c.column_name);
             if (!existingProductCols.includes('category')) {
-                console.log('ðŸ”§ Adicionando coluna category na tabela products...');
+                console.log('🔧 Adicionando coluna category na tabela products...');
                 await dbService.executeQuery(`
                     ALTER TABLE ${dbService.fq('products')}
                     ADD COLUMN category VARCHAR(255) DEFAULT 'Geral'
                 `);
             }
             if (!existingProductCols.includes('cashback')) {
-                console.log('ðŸ”§ Adicionando coluna cashback na tabela products...');
+                console.log('🔧 Adicionando coluna cashback na tabela products...');
                 await dbService.executeQuery(`
                     ALTER TABLE ${dbService.fq('products')}
                     ADD COLUMN cashback VARCHAR(255) DEFAULT '5%'
                 `);
             }
         } catch (err) {
-            console.warn('âš ï¸  Erro ao verificar/adicionar colunas de produtos:', err.message);
+            console.warn('⚠️  Erro ao verificar/adicionar colunas de produtos:', err.message);
         }
         
         // =====================================================
-        // Verificar e atualizar valores padrÃ£o de signup
+        // Verificar e atualizar valores padrão de signup
         // =====================================================
         try {
-            console.log('ðŸ” Verificando e atualizando valores padrÃ£o de signup...');
+            console.log('🔍 Verificando e atualizando valores padrão de signup...');
             
-            // Verificar se as colunas de cartÃ£o de crÃ©dito existem
+            // Verificar se as colunas de cartão de crédito existem
             const creditCardColumns = await dbService.executeQuery(`
                 SELECT column_name 
                 FROM information_schema.columns 
@@ -5249,66 +5177,66 @@ async function initializeDatabase() {
             
             const existingColumns = creditCardColumns.map(c => c.column_name);
             
-            // Adicionar colunas de cartÃ£o de crÃ©dito se nÃ£o existirem
+            // Adicionar colunas de cartão de crédito se não existirem
             if (!existingColumns.includes('credit_card_total_limit')) {
-                console.log('ðŸ”§ Adicionando coluna credit_card_total_limit...');
+                console.log('🔧 Adicionando coluna credit_card_total_limit...');
                 await dbService.executeQuery(`
                     ALTER TABLE ${dbService.fq('users')}
                     ADD COLUMN credit_card_total_limit DECIMAL(15,2) DEFAULT 5000.00
                 `);
-                console.log('âœ… Coluna credit_card_total_limit adicionada.');
+                console.log('✅ Coluna credit_card_total_limit adicionada.');
             }
             
             if (!existingColumns.includes('credit_card_available_limit')) {
-                console.log('ðŸ”§ Adicionando coluna credit_card_available_limit...');
+                console.log('🔧 Adicionando coluna credit_card_available_limit...');
                 await dbService.executeQuery(`
                     ALTER TABLE ${dbService.fq('users')}
                     ADD COLUMN credit_card_available_limit DECIMAL(15,2) DEFAULT 5000.00
                 `);
-                console.log('âœ… Coluna credit_card_available_limit adicionada.');
+                console.log('✅ Coluna credit_card_available_limit adicionada.');
             }
             
             if (!existingColumns.includes('credit_card_points_balance')) {
-                console.log('ðŸ”§ Adicionando coluna credit_card_points_balance...');
+                console.log('🔧 Adicionando coluna credit_card_points_balance...');
                 await dbService.executeQuery(`
                     ALTER TABLE ${dbService.fq('users')}
                     ADD COLUMN credit_card_points_balance INTEGER DEFAULT 0
                 `);
-                console.log('âœ… Coluna credit_card_points_balance adicionada.');
+                console.log('✅ Coluna credit_card_points_balance adicionada.');
             }
             
             if (!existingColumns.includes('credit_card_is_blocked')) {
-                console.log('ðŸ”§ Adicionando coluna credit_card_is_blocked...');
+                console.log('🔧 Adicionando coluna credit_card_is_blocked...');
                 await dbService.executeQuery(`
                     ALTER TABLE ${dbService.fq('users')}
                     ADD COLUMN credit_card_is_blocked BOOLEAN DEFAULT FALSE
                 `);
-                console.log('âœ… Coluna credit_card_is_blocked adicionada.');
+                console.log('✅ Coluna credit_card_is_blocked adicionada.');
             }
             
             // Atualizar DEFAULT de pix_daily_limit para 2000.00
-            console.log('ðŸ”§ Atualizando DEFAULT de pix_daily_limit para 2000.00...');
+            console.log('🔧 Atualizando DEFAULT de pix_daily_limit para 2000.00...');
             await dbService.executeQuery(`
                 ALTER TABLE ${dbService.fq('users')}
                 ALTER COLUMN pix_daily_limit SET DEFAULT 2000.00
             `);
             
             // Atualizar DEFAULT de credit_card_total_limit para 5000.00
-            console.log('ðŸ”§ Atualizando DEFAULT de credit_card_total_limit para 5000.00...');
+            console.log('🔧 Atualizando DEFAULT de credit_card_total_limit para 5000.00...');
             await dbService.executeQuery(`
                 ALTER TABLE ${dbService.fq('users')}
                 ALTER COLUMN credit_card_total_limit SET DEFAULT 5000.00
             `);
             
             // Atualizar DEFAULT de credit_card_available_limit para 5000.00
-            console.log('ðŸ”§ Atualizando DEFAULT de credit_card_available_limit para 5000.00...');
+            console.log('🔧 Atualizando DEFAULT de credit_card_available_limit para 5000.00...');
             await dbService.executeQuery(`
                 ALTER TABLE ${dbService.fq('users')}
                 ALTER COLUMN credit_card_available_limit SET DEFAULT 5000.00
             `);
             
-            // Atualizar usuÃ¡rios existentes que nÃ£o tÃªm limites de crÃ©dito definidos
-            console.log('ðŸ”§ Atualizando usuÃ¡rios existentes sem limites de crÃ©dito...');
+            // Atualizar usuários existentes que não têm limites de crédito definidos
+            console.log('🔧 Atualizando usuários existentes sem limites de crédito...');
             await dbService.executeQuery(`
                 UPDATE ${dbService.fq('users')}
                 SET 
@@ -5320,11 +5248,11 @@ async function initializeDatabase() {
                    OR credit_card_available_limit IS NULL
             `);
             
-            // Backfill: usuÃ¡rios sem data de vencimento de fatura nunca entram no motor
+            // Backfill: usuários sem data de vencimento de fatura nunca entram no motor
             // de faturas (invoiceEngine filtra por credit_card_invoice_due_date IS NOT NULL).
-            // Preenche com o prÃ³ximo ciclo (dia 10 do mÃªs seguinte, 12h) para que passem a
+            // Preenche com o próximo ciclo (dia 10 do mês seguinte, 12h) para que passem a
             // ser processados no fechamento normal.
-            console.log('ðŸ”§ Backfill de credit_card_invoice_due_date para usuÃ¡rios sem vencimento...');
+            console.log('🔧 Backfill de credit_card_invoice_due_date para usuários sem vencimento...');
             await dbService.executeQuery(`
                 UPDATE ${dbService.fq('users')}
                 SET
@@ -5333,13 +5261,13 @@ async function initializeDatabase() {
                 WHERE credit_card_invoice_due_date IS NULL
             `);
 
-            console.log('âœ… Valores padrÃ£o de signup atualizados com sucesso!');
+            console.log('✅ Valores padrão de signup atualizados com sucesso!');
         } catch (error) {
-            console.warn('âš ï¸  Erro ao atualizar valores padrÃ£o de signup:', error.message);
-            // NÃ£o bloquear a inicializaÃ§Ã£o se houver erro
+            console.warn('⚠️  Erro ao atualizar valores padrão de signup:', error.message);
+            // Não bloquear a inicialização se houver erro
         }
         
-        // Verificar e corrigir estrutura da tabela limit_increase_requests se necessÃ¡rio
+        // Verificar e corrigir estrutura da tabela limit_increase_requests se necessário
         try {
             const columnCheck = await dbService.executeQuery(`
                 SELECT column_name 
@@ -5350,16 +5278,16 @@ async function initializeDatabase() {
             `);
             
             if (!columnCheck || columnCheck.length === 0) {
-                console.log('âš ï¸  Coluna requested_at nÃ£o encontrada. Adicionando...');
+                console.log('⚠️  Coluna requested_at não encontrada. Adicionando...');
                 await dbService.executeQuery(`
                     ALTER TABLE ${dbService.fq('limit_increase_requests')}
                     ADD COLUMN requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 `);
-                console.log('âœ… Coluna requested_at adicionada com sucesso.');
+                console.log('✅ Coluna requested_at adicionada com sucesso.');
             }
         } catch (error) {
-            console.warn('âš ï¸  Erro ao verificar/corrigir tabela limit_increase_requests:', error.message);
-            // Tentar criar a tabela se nÃ£o existir
+            console.warn('⚠️  Erro ao verificar/corrigir tabela limit_increase_requests:', error.message);
+            // Tentar criar a tabela se não existir
             try {
                 await dbService.executeQuery(`
                     CREATE TABLE IF NOT EXISTS ${dbService.fq('limit_increase_requests')} (
@@ -5373,13 +5301,13 @@ async function initializeDatabase() {
                         PRIMARY KEY (id)
                     )
                 `);
-                console.log('âœ… Tabela limit_increase_requests criada com sucesso.');
+                console.log('✅ Tabela limit_increase_requests criada com sucesso.');
             } catch (createError) {
-                console.error('âŒ Erro ao criar tabela limit_increase_requests:', createError.message);
+                console.error('❌ Erro ao criar tabela limit_increase_requests:', createError.message);
             }
         }
         
-        // Verificar e corrigir estrutura da tabela installment_plans - adicionar colunas necessÃ¡rias
+        // Verificar e corrigir estrutura da tabela installment_plans - adicionar colunas necessárias
         const requiredColumns = ['original_amount', 'total_with_interest'];
         
         for (const columnName of requiredColumns) {
@@ -5393,7 +5321,7 @@ async function initializeDatabase() {
                 `);
                 
                 if (!columnCheck || columnCheck.length === 0) {
-                    console.log(`âš ï¸  Coluna ${columnName} nÃ£o encontrada. Adicionando...`);
+                    console.log(`⚠️  Coluna ${columnName} não encontrada. Adicionando...`);
                     try {
                         // Adicionar a coluna com DEFAULT primeiro
                         await dbService.executeQuery(`
@@ -5416,21 +5344,21 @@ async function initializeDatabase() {
                             `);
                         }
                         
-                        // Tornar NOT NULL apÃ³s atualizar valores
+                        // Tornar NOT NULL após atualizar valores
                         await dbService.executeQuery(`
                             ALTER TABLE ${dbService.fq('installment_plans')}
                             ALTER COLUMN ${columnName} SET NOT NULL
                         `);
-                        console.log(`âœ… Coluna ${columnName} adicionada com sucesso.`);
+                        console.log(`✅ Coluna ${columnName} adicionada com sucesso.`);
                     } catch (alterError) {
-                        console.error(`âŒ Erro ao adicionar coluna ${columnName}:`, alterError.message);
-                        console.log('ðŸ’¡ Execute o script fix_installment_plans.sql manualmente.');
+                        console.error(`❌ Erro ao adicionar coluna ${columnName}:`, alterError.message);
+                        console.log('💡 Execute o script fix_installment_plans.sql manualmente.');
                     }
                 } else {
-                    console.log(`âœ… Coluna ${columnName} jÃ¡ existe na tabela installment_plans.`);
+                    console.log(`✅ Coluna ${columnName} já existe na tabela installment_plans.`);
                 }
             } catch (error) {
-                console.warn(`âš ï¸  Erro ao verificar coluna ${columnName}:`, error.message);
+                console.warn(`⚠️  Erro ao verificar coluna ${columnName}:`, error.message);
             }
         }
         
@@ -5444,39 +5372,39 @@ async function initializeDatabase() {
             const hasInvCols = invoiceCols.map(c => c.column_name);
             if (!hasInvCols.includes('saldo_anterior')) {
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('invoices')} ADD COLUMN saldo_anterior DECIMAL(15,2) DEFAULT 0.00`);
-                console.log('âœ… Coluna saldo_anterior adicionada em invoices.');
+                console.log('✅ Coluna saldo_anterior adicionada em invoices.');
             }
             if (!hasInvCols.includes('valor_iof')) {
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('invoices')} ADD COLUMN valor_iof DECIMAL(15,2) DEFAULT 0.00`);
-                console.log('âœ… Coluna valor_iof adicionada em invoices.');
+                console.log('✅ Coluna valor_iof adicionada em invoices.');
             }
             if (!hasInvCols.includes('valor_juros_remuneratorios')) {
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('invoices')} ADD COLUMN valor_juros_remuneratorios DECIMAL(15,2) DEFAULT 0.00`);
-                console.log('âœ… Coluna valor_juros_remuneratorios adicionada em invoices.');
+                console.log('✅ Coluna valor_juros_remuneratorios adicionada em invoices.');
             }
             if (!hasInvCols.includes('valor_juros_mora')) {
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('invoices')} ADD COLUMN valor_juros_mora DECIMAL(15,2) DEFAULT 0.00`);
-                console.log('âœ… Coluna valor_juros_mora adicionada em invoices.');
+                console.log('✅ Coluna valor_juros_mora adicionada em invoices.');
             }
             if (!hasInvCols.includes('itemized_transactions')) {
                 // Snapshot JSON das compras/parcelas que compunham a fatura no momento do fechamento.
-                // NecessÃ¡rio porque pagar/antecipar parcelas APAGA as linhas de transactions
+                // Necessário porque pagar/antecipar parcelas APAGA as linhas de transactions
                 // (cardRepo.payDueInstallments/anticipateInstallments), o que faria a lista de
                 // compras da fatura fechada sumir mesmo com o valor_total preservado.
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('invoices')} ADD COLUMN itemized_transactions TEXT`);
-                console.log('âœ… Coluna itemized_transactions adicionada em invoices.');
+                console.log('✅ Coluna itemized_transactions adicionada em invoices.');
             }
         } catch (error) {
-            console.warn('âš ï¸  Erro ao verificar/adicionar colunas de encargos em invoices:', error.message);
+            console.warn('⚠️  Erro ao verificar/adicionar colunas de encargos em invoices:', error.message);
         }
 
-        console.log('ðŸ’¡ Certifique-se de ter executado schema_pg.sql no seu banco Postgres.');
+        console.log('💡 Certifique-se de ter executado schema_pg.sql no seu banco Postgres.');
         return;
     }
 
     try {
-        console.log('ðŸ”§ Inicializando estrutura do banco de dados (Postgres)...');
-        // console.log(`ðŸ“‹ Usando catÃ¡logo: ${databricksConfig.catalog}, schema: ${databricksConfig.schema}`); // Removed to fix error
+        console.log('🔧 Inicializando estrutura do banco de dados (Postgres)...');
+        // console.log(`📋 Usando catálogo: ${databricksConfig.catalog}, schema: ${databricksConfig.schema}`); // Removed to fix error
         
         // Verificar se a tabela users existe e tem a estrutura correta
         try {
@@ -5485,27 +5413,27 @@ async function initializeDatabase() {
             const hasUsername = tableInfo.some(col => col.col_name === 'username');
             
             if (!hasFullName || !hasUsername) {
-                console.log('âš ï¸  Tabela users existe mas nÃ£o tem a estrutura correta (faltam colunas). Recriando...');
+                console.log('⚠️  Tabela users existe mas não tem a estrutura correta (faltam colunas). Recriando...');
                 await dbService.executeQuery(`DROP TABLE IF EXISTS ${dbService.fq('users')}`);
                 await dbService.executeQuery(`DROP TABLE IF EXISTS ${dbService.fq('transactions')}`);
             }
         } catch (describeError) {
-            // Tabela nÃ£o existe ou erro ao descrever - isso Ã© normal na primeira execuÃ§Ã£o
+            // Tabela não existe ou erro ao descrever - isso é normal na primeira execução
             const errorMsg = describeError.message || String(describeError);
             if (errorMsg.includes('does not exist') || errorMsg.includes('not found') || errorMsg.includes('TABLE_OR_VIEW_NOT_FOUND')) {
-                console.log('â„¹ï¸  Tabela users nÃ£o existe ainda. SerÃ¡ criada agora...');
+                console.log('🌐  Tabela users não existe ainda. Será criada agora...');
             } else {
-                console.warn('âš ï¸  Erro ao verificar tabela users:', errorMsg);
-                // Continuar com a criaÃ§Ã£o das tabelas mesmo assim
+                console.warn('⚠️  Erro ao verificar tabela users:', errorMsg);
+                // Continuar com a criação das tabelas mesmo assim
             }
         }
         
-        // ForÃ§ar recriaÃ§Ã£o da tabela pix_contacts com estrutura correta (se necessÃ¡rio)
+        // Forçar recriação da tabela pix_contacts com estrutura correta (se necessário)
         try {
             await dbService.executeQuery(`DESCRIBE TABLE ${dbService.fq('pix_contacts')}`);
-            console.log('âœ… Tabela pix_contacts jÃ¡ existe com estrutura correta.');
+            console.log('✅ Tabela pix_contacts já existe com estrutura correta.');
         } catch (pixContactsError) {
-            console.log('ðŸ”„ Recriando tabela pix_contacts com estrutura correta...');
+            console.log('🔄 Recriando tabela pix_contacts com estrutura correta...');
             await dbService.executeQuery(`DROP TABLE IF EXISTS ${dbService.fq('pix_contacts')}`);
             await dbService.executeQuery(`
                 CREATE TABLE ${dbService.fq('pix_contacts')} (
@@ -5518,21 +5446,21 @@ async function initializeDatabase() {
             `);
         }
         
-        // Criar schema se necessÃ¡rio (schema jÃ¡ foi ajustado para 'default' se catalog e schema eram iguais)
+        // Criar schema se necessário (schema já foi ajustado para 'default' se catalog e schema eram iguais)
         try {
             const currentCatalog = dbService.catalog;
             const currentSchema = dbService.schema;
             const schemaQuery = `CREATE SCHEMA IF NOT EXISTS \`${currentCatalog}\`.\`${currentSchema}\``;
-            console.log(`ðŸ” Executando: ${schemaQuery}`);
+            console.log(`🔍 Executando: ${schemaQuery}`);
             await dbService.executeQuery(schemaQuery);
-            console.log(`âœ… Schema ${currentCatalog}.${currentSchema} verificado/criado com sucesso.`);
+            console.log(`✅ Schema ${currentCatalog}.${currentSchema} verificado/criado com sucesso.`);
         } catch (schemaError) {
-            console.error(`âŒ Erro ao criar schema ${dbService.catalog}.${dbService.schema}:`, schemaError.message);
-            // NÃ£o Ã© crÃ­tico - o schema pode jÃ¡ existir
-            console.log("â„¹ï¸  Continuando sem criar schema explicitamente...");
+            console.error(`❌ Erro ao criar schema ${dbService.catalog}.${dbService.schema}:`, schemaError.message);
+            // Não é crítico - o schema pode já existir
+            console.log("🌐  Continuando sem criar schema explicitamente...");
         }
 
-        // Criar tabela users se nÃ£o existir (sem DEFAULT values para compatibilidade com Postgres)
+        // Criar tabela users se não existir (sem DEFAULT values para compatibilidade com Postgres)
         await dbService.executeQuery(`
             CREATE TABLE IF NOT EXISTS ${dbService.fq('users')} (
                 cpf STRING NOT NULL,
@@ -5558,21 +5486,21 @@ async function initializeDatabase() {
                 updated_at TIMESTAMP
             ) USING DELTA
         `);
-        console.log('âœ… Tabela users verificada/criada com sucesso.');
+        console.log('✅ Tabela users verificada/criada com sucesso.');
 
         // Adicionar colunas extras se faltarem
         let currentCols = [];
         try {
             currentCols = await dbService.executeQuery(`DESCRIBE TABLE ${dbService.fq('users')}`);
         } catch (describeError) {
-            console.warn('âš ï¸  Erro ao descrever tabela users para verificar colunas:', describeError.message);
+            console.warn('⚠️  Erro ao descrever tabela users para verificar colunas:', describeError.message);
             // Continuar sem adicionar colunas extras - a tabela pode ter sido criada corretamente
             currentCols = [];
         }
         const colSet = new Set(currentCols.map(c => c.col_name));
         const addIfMissing = async (name, type) => {
             if (!colSet.has(name)) {
-                console.log(`ðŸ”§ Adicionando coluna users.${name}...`);
+                console.log(`🔧 Adicionando coluna users.${name}...`);
                 await dbService.executeQuery(`
                     ALTER TABLE ${dbService.fq('users')}
                     ADD COLUMNS (${name} ${type})
@@ -5589,7 +5517,7 @@ async function initializeDatabase() {
         await addIfMissing('credit_card_points_balance', 'INT');
         await addIfMissing('credit_card_is_blocked', 'BOOLEAN');
 
-        // Criar tabela transactions se nÃ£o existir (sem DEFAULT values para compatibilidade com Postgres)
+        // Criar tabela transactions se não existir (sem DEFAULT values para compatibilidade com Postgres)
         await dbService.executeQuery(`
             CREATE TABLE IF NOT EXISTS ${dbService.fq('transactions')} (
                 id STRING NOT NULL,
@@ -5603,7 +5531,7 @@ async function initializeDatabase() {
                 date TIMESTAMP NOT NULL
             ) USING DELTA
         `);
-        console.log('âœ… Tabela transactions verificada/criada com sucesso.');
+        console.log('✅ Tabela transactions verificada/criada com sucesso.');
 
         await dbService.executeQuery(`
             CREATE TABLE IF NOT EXISTS ${dbService.fq('installment_plans')} (
@@ -5624,7 +5552,7 @@ async function initializeDatabase() {
             ) USING DELTA
         `);
 
-        // Criar tabela invoices se nÃ£o existir
+        // Criar tabela invoices se não existir
         await dbService.executeQuery(`
             CREATE TABLE IF NOT EXISTS ${dbService.fq('invoices')} (
                 id STRING NOT NULL,
@@ -5636,9 +5564,9 @@ async function initializeDatabase() {
                 updated_at TIMESTAMP
             ) USING DELTA
         `);
-        console.log('âœ… Tabela invoices verificada/criada com sucesso.');
+        console.log('✅ Tabela invoices verificada/criada com sucesso.');
 
-        // Criar tabela pix_contacts se nÃ£o existir (estrutura corrigida)
+        // Criar tabela pix_contacts se não existir (estrutura corrigida)
         await dbService.executeQuery(`
             CREATE TABLE IF NOT EXISTS ${dbService.fq('pix_contacts')} (
                 id STRING NOT NULL,
@@ -5648,9 +5576,9 @@ async function initializeDatabase() {
                 created_at TIMESTAMP NOT NULL
             ) USING DELTA
         `);
-        console.log('âœ… Tabela pix_contacts verificada/criada com sucesso.');
+        console.log('✅ Tabela pix_contacts verificada/criada com sucesso.');
 
-        // Criar tabela notifications (AppNotification) se nÃ£o existir
+        // Criar tabela notifications (AppNotification) se não existir
         await dbService.executeQuery(`
             CREATE TABLE IF NOT EXISTS ${dbService.fq('notifications')} (
                 id STRING NOT NULL,
@@ -5662,9 +5590,9 @@ async function initializeDatabase() {
                 created_at TIMESTAMP NOT NULL
             ) USING DELTA
         `);
-        console.log('âœ… Tabela notifications verificada/criada com sucesso.');
+        console.log('✅ Tabela notifications verificada/criada com sucesso.');
 
-        // Criar tabela limit_increase_requests se nÃ£o existir
+        // Criar tabela limit_increase_requests se não existir
         await dbService.executeQuery(`
             CREATE TABLE IF NOT EXISTS ${dbService.fq('limit_increase_requests')} (
                 id STRING NOT NULL,
@@ -5676,7 +5604,7 @@ async function initializeDatabase() {
                 admin_cpf STRING
             ) USING DELTA
         `);
-        console.log('âœ… Tabela limit_increase_requests verificada/criada com sucesso.');
+        console.log('✅ Tabela limit_increase_requests verificada/criada com sucesso.');
 
         // Criar tabela products
         if (provider === 'postgres') {
@@ -5704,7 +5632,7 @@ async function initializeDatabase() {
                 ) USING DELTA
             `);
         }
-        console.log('âœ… Tabela products verificada/criada com sucesso.');
+        console.log('✅ Tabela products verificada/criada com sucesso.');
 
         // Criar tabela pix_keys
         await dbService.executeQuery(`
@@ -5716,7 +5644,7 @@ async function initializeDatabase() {
                 created_at TIMESTAMP NOT NULL
             ) USING DELTA
         `);
-        console.log('âœ… Tabela pix_keys verificada/criada com sucesso.');
+        console.log('✅ Tabela pix_keys verificada/criada com sucesso.');
 
         // Criar tabela purchased_items
         await dbService.executeQuery(`
@@ -5736,7 +5664,7 @@ async function initializeDatabase() {
                 installments INT
             ) USING DELTA
         `);
-        console.log('âœ… Tabela purchased_items verificada/criada com sucesso.');
+        console.log('✅ Tabela purchased_items verificada/criada com sucesso.');
 
         // Criar tabela stories
         await dbService.executeQuery(`
@@ -5748,10 +5676,10 @@ async function initializeDatabase() {
                 created_at TIMESTAMP NOT NULL
             ) USING DELTA
         `);
-        console.log('âœ… Tabela stories verificada/criada com sucesso.');
+        console.log('✅ Tabela stories verificada/criada com sucesso.');
 
         // =====================================================
-        // billing_config â€” parÃ¢metros globais de faturamento
+        // billing_config — parâmetros globais de faturamento
         // =====================================================
         if (provider === 'postgres') {
             await dbService.executeQuery(`
@@ -5770,9 +5698,9 @@ async function initializeDatabase() {
                 VALUES (1, 20, 10, 3, TRUE)
                 ON CONFLICT (id) DO NOTHING
             `);
-            console.log('âœ… Tabela billing_config verificada/criada com sucesso.');
+            console.log('✅ Tabela billing_config verificada/criada com sucesso.');
 
-            // Tabela de assinaturas (cobranÃ§a recorrente)
+            // Tabela de assinaturas (cobrança recorrente)
             await dbService.executeQuery(`
                 CREATE TABLE IF NOT EXISTS ${dbService.fq('subscriptions')} (
                     id VARCHAR(255) PRIMARY KEY,
@@ -5788,7 +5716,7 @@ async function initializeDatabase() {
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
-            console.log('âœ… Tabela subscriptions verificada/criada com sucesso.');
+            console.log('✅ Tabela subscriptions verificada/criada com sucesso.');
 
             // Colunas de cancelamento/estorno na tabela transactions
             const txCols = await dbService.executeQuery(`
@@ -5798,19 +5726,19 @@ async function initializeDatabase() {
             const hasTxCols = txCols.map(c => c.column_name);
             if (!hasTxCols.includes('status')) {
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('transactions')} ADD COLUMN status VARCHAR(20)`);
-                console.log('âœ… Coluna status adicionada em transactions.');
+                console.log('✅ Coluna status adicionada em transactions.');
             }
             if (!hasTxCols.includes('reversal_of')) {
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('transactions')} ADD COLUMN reversal_of VARCHAR(255)`);
-                console.log('âœ… Coluna reversal_of adicionada em transactions.');
+                console.log('✅ Coluna reversal_of adicionada em transactions.');
             }
             if (!hasTxCols.includes('subscription_id')) {
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('transactions')} ADD COLUMN subscription_id VARCHAR(255)`);
-                console.log('âœ… Coluna subscription_id adicionada em transactions.');
+                console.log('✅ Coluna subscription_id adicionada em transactions.');
             }
 
-            // Tabela de credit vouchers (estorno de compra a crÃ©dito cuja fatura de
-            // origem jÃ¡ estÃ¡ fechada â€” ver utils/transactionReversal.js)
+            // Tabela de credit vouchers (estorno de compra a crédito cuja fatura de
+            // origem já está fechada — ver utils/transactionReversal.js)
             await dbService.executeQuery(`
                 CREATE TABLE IF NOT EXISTS ${dbService.fq('credit_vouchers')} (
                     id VARCHAR(255) PRIMARY KEY,
@@ -5825,7 +5753,7 @@ async function initializeDatabase() {
                     used_in_transaction_id VARCHAR(255)
                 )
             `);
-            console.log('âœ… Tabela credit_vouchers verificada/criada com sucesso.');
+            console.log('✅ Tabela credit_vouchers verificada/criada com sucesso.');
 
             // Garantir colunas de status na tabela users
             const billingCols = await dbService.executeQuery(`
@@ -5836,22 +5764,22 @@ async function initializeDatabase() {
             const hasCols = billingCols.map(c => c.column_name);
             if (!hasCols.includes('account_status')) {
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('users')} ADD COLUMN account_status VARCHAR(20) DEFAULT 'adimplente'`);
-                console.log('âœ… Coluna account_status adicionada em users.');
+                console.log('✅ Coluna account_status adicionada em users.');
             }
             if (!hasCols.includes('days_overdue')) {
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('users')} ADD COLUMN days_overdue INTEGER DEFAULT 0`);
-                console.log('âœ… Coluna days_overdue adicionada em users.');
+                console.log('✅ Coluna days_overdue adicionada em users.');
             }
             if (!hasCols.includes('credit_card_due_day')) {
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('users')} ADD COLUMN credit_card_due_day INTEGER DEFAULT 15`);
-                console.log('âœ… Coluna credit_card_due_day adicionada em users.');
+                console.log('✅ Coluna credit_card_due_day adicionada em users.');
             }
             if (!hasCols.includes('invoice_last_closed_date')) {
                 await dbService.executeQuery(`ALTER TABLE ${dbService.fq('users')} ADD COLUMN invoice_last_closed_date TIMESTAMP`);
-                console.log('âœ… Coluna invoice_last_closed_date adicionada em users.');
+                console.log('✅ Coluna invoice_last_closed_date adicionada em users.');
             }
 
-            // billing_charges â€” encargos por inadimplÃªncia
+            // billing_charges — encargos por inadimplência
             await dbService.executeQuery(`
                 CREATE TABLE IF NOT EXISTS ${dbService.fq('billing_charges')} (
                     id VARCHAR(255) PRIMARY KEY,
@@ -5865,9 +5793,9 @@ async function initializeDatabase() {
                     status VARCHAR(20) NOT NULL DEFAULT 'pending'
                 )
             `);
-            console.log('âœ… Tabela billing_charges verificada/criada com sucesso.');
+            console.log('✅ Tabela billing_charges verificada/criada com sucesso.');
 
-            // telegram_user_topics â€” tÃ³pico do fÃ³rum Telegram por CPF
+            // telegram_user_topics — tópico do fórum Telegram por CPF
             await dbService.executeQuery(`
                 CREATE TABLE IF NOT EXISTS ${dbService.fq('telegram_user_topics')} (
                     cpf VARCHAR(11) PRIMARY KEY,
@@ -5875,9 +5803,9 @@ async function initializeDatabase() {
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
-            console.log('âœ… Tabela telegram_user_topics verificada/criada com sucesso.');
+            console.log('✅ Tabela telegram_user_topics verificada/criada com sucesso.');
 
-            // audit_log â€” persistÃªncia dos logs de auditoria
+            // audit_log — persistência dos logs de auditoria
             await dbService.executeQuery(`
                 CREATE TABLE IF NOT EXISTS ${dbService.fq('audit_log')} (
                     id BIGSERIAL PRIMARY KEY,
@@ -5889,7 +5817,7 @@ async function initializeDatabase() {
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
-            console.log('âœ… Tabela audit_log verificada/criada com sucesso.');
+            console.log('✅ Tabela audit_log verificada/criada com sucesso.');
         } else {
             // Delta / SQLite fallback
             await dbService.executeQuery(`
@@ -5905,9 +5833,9 @@ async function initializeDatabase() {
             `);
         }
 
-        console.log('ðŸŽ‰ Estrutura do banco de dados inicializada com sucesso!');
+        console.log('🎉 Estrutura do banco de dados inicializada com sucesso!');
     } catch (error) {
-        console.error('âŒ Erro ao inicializar estrutura do banco:', error.message);
+        console.error('❌ Erro ao inicializar estrutura do banco:', error.message);
         throw error;
     }
 }
@@ -5916,12 +5844,12 @@ async function ensureAdminUser() {
     const adminEmail = 'admin@fintechbank.com';
     const adminCpf = '99999999999';
     
-    console.log("ðŸ”„ Verificando/recriando usuÃ¡rio administrador...");
+    console.log("🔄 Verificando/recriando usuário administrador...");
     
     // Deletar admin existente se houver (mesmo email/CPF)
     await dbService.executeQuery(`DELETE FROM ${dbService.fq('users')} WHERE cpf = '${adminCpf}' OR email = '${adminEmail}'`);
     
-    console.log("Criando usuÃ¡rio administrador padrÃ£o...");
+    console.log("Criando usuário administrador padrão...");
     const adminPassword = 'admin999';
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
     const now = new Date().toISOString();
@@ -5931,10 +5859,10 @@ async function ensureAdminUser() {
         INSERT INTO ${dbService.fq('users')} (id, cpf, full_name, email, password_hash, balance, role, is_blocked, login_attempts, pix_daily_limit, password_reset_requested, created_at, updated_at)
         VALUES ('${adminId}', '${adminCpf}', 'Admin User', '${adminEmail}', '${hashedPassword}', 100000, 'admin', false, 0, 100000.00, false, '${now}', '${now}')
     `);
-    console.log(`âœ… UsuÃ¡rio Admin criado. CPF: ${adminCpf}, Senha: ${adminPassword}`);
+    console.log(`✅ Usuário Admin criado. CPF: ${adminCpf}, Senha: ${adminPassword}`);
     
     const createdAdmin = await dbService.executeQuery(`SELECT cpf, email, role FROM ${dbService.fq('users')} WHERE cpf = '${adminCpf}'`);
-    console.log(`ðŸ” Admin criado:`, createdAdmin[0]);
+    console.log(`🔍 Admin criado:`, createdAdmin[0]);
 }
 
 async function seedDatabase() {
@@ -6010,19 +5938,19 @@ async function seedDatabase() {
     }
 
     await shopRepo.ensureSeed();
-    console.log('âœ… Seeds aplicados com sucesso.');
+    console.log('✅ Seeds aplicados com sucesso.');
 }
 
 async function bootstrap() {
     try {
         console.log('');
-        console.log('ðŸ”„ [Bootstrap] Iniciando conexÃ£o com banco de dados...');
+        console.log('🔄 [Bootstrap] Iniciando conexão com banco de dados...');
         await dbService.connect();
-        console.log('âœ… [Bootstrap] ConexÃ£o com banco de dados estabelecida!');
+        console.log('✅ [Bootstrap] Conexão com banco de dados estabelecida!');
         console.log('');
         
         if (dbService.mockMode) {
-            console.log('ðŸ§ª Servidor iniciado em mockMode. Endpoints que dependem de DB retornarao erro controlado.');
+            console.log('🧪 Servidor iniciado em mockMode. Endpoints que dependem de DB retornarao erro controlado.');
         } else {
             await initializeDatabase();
             telegramService.init(dbService);
@@ -6033,13 +5961,13 @@ async function bootstrap() {
                 const { applyMassGeneratorMigrations } = require('./scripts/add-mass-generator-schema.cjs');
                 await applyMassGeneratorMigrations();
             } catch (migErr) {
-                console.warn('âš ï¸ [Migration] NÃ£o foi possÃ­vel executar migraÃ§Ã£o de colunas:', migErr.message);
+                console.warn('⚠️ [Migration] Não foi possível executar migração de colunas:', migErr.message);
             }
-            console.log("ðŸŽ¯ Servidor pronto para uso com Postgres!");
-            console.log("ðŸ“‹ Swagger disponÃ­vel em: http://localhost:3001/api-docs");
+            console.log("🎯 Servidor pronto para uso com Postgres!");
+            console.log("📋 Swagger disponível em: http://localhost:3001/api-docs");
         }
     } catch (error) {
-        console.error("âŒ Erro ao inicializar:", error.message);
+        console.error("❌ Erro ao inicializar:", error.message);
         if (!IS_TEST) process.exit(1); // em teste, deixa a suite reportar a falha
     }
 
@@ -6047,17 +5975,17 @@ async function bootstrap() {
     const { assertTimezone } = require('./utils/timezone');
     try {
         await assertTimezone(dbService);
-        console.log('âœ… [Timezone Guard] Fuso de processo e banco validados: America/Sao_Paulo');
+        console.log('✅ [Timezone Guard] Fuso de processo e banco validados: America/Sao_Paulo');
     } catch (err) {
-        console.error('âŒ [Timezone Guard] ' + err.message);
+        console.error('❌ [Timezone Guard] ' + err.message);
         if (!IS_TEST) process.exit(1); // em teste, nao derruba o worker do jest
     }
 }
 
-// â”€â”€â”€ Assinaturas (cobranÃ§a recorrente) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— Assinaturas (cobrança recorrente) ——————————————————————————————————————
 
-// Aplica uma cobranÃ§a Ãºnica de assinatura ao usuÃ¡rio (dÃ©bito no saldo ou crÃ©dito
-// no cartÃ£o). Retorna { ok, reason }. Respeita bloqueios/saldo/limite.
+// Aplica uma cobrança única de assinatura ao usuário (débito no saldo ou crédito
+// no cartão). Retorna { ok, reason }. Respeita bloqueios/saldo/limite.
 async function chargeSubscription(sub) {
     const { esc } = repoContext;
     const user = await usersRepo.findByCpf(sub.cpf);
@@ -6076,11 +6004,11 @@ async function chargeSubscription(sub) {
             VALUES (${esc(txId)}, ${esc(sub.cpf)}, 'PAYMENT', ${esc((-amount).toFixed(2))}, ${esc(`Assinatura: ${sub.name}`)}, NULL, NULL, NULL, ${esc(nowIso)}, ${esc(sub.id)})
         `);
         await usersRepo.updateBalance(sub.cpf, (balance - amount).toFixed(2));
-        telegramService.alertUser(sub.cpf, `ðŸ” Assinatura cobrada no dÃ©bito: ${sub.name} â€” R$ ${amount.toFixed(2)}`, null, 'notification');
+        telegramService.alertUser(sub.cpf, `🔍 Assinatura cobrada no débito: ${sub.name} — R$ ${amount.toFixed(2)}`, null, 'notification');
         return { ok: true };
     }
 
-    // crÃ©dito: respeita cartÃ£o bloqueado e limite disponÃ­vel
+    // crédito: respeita cartão bloqueado e limite disponível
     if (user.credit_card_is_blocked) return { ok: false, reason: 'cartao-bloqueado' };
     const available = parseFloat(user.credit_card_available_limit || 0);
     if (available < amount) return { ok: false, reason: 'limite-insuficiente' };
@@ -6094,7 +6022,7 @@ async function chargeSubscription(sub) {
         SET credit_card_available_limit = ${(available - amount).toFixed(2)}
         WHERE cpf = ${esc(sub.cpf)}
     `);
-    telegramService.alertUser(sub.cpf, `ðŸ” Assinatura na fatura do cartÃ£o: ${sub.name} â€” R$ ${amount.toFixed(2)}`, null, 'invoice_close');
+    telegramService.alertUser(sub.cpf, `🔍 Assinatura na fatura do cartão: ${sub.name} — R$ ${amount.toFixed(2)}`, null, 'invoice_close');
     return { ok: true };
 }
 
@@ -6121,7 +6049,7 @@ async function runSubscriptionBilling(now = new Date()) {
     return { message: `Assinaturas: ${charged} cobradas, ${skipped} ignoradas.`, charged, skipped };
 }
 
-// Listar assinaturas do usuÃ¡rio (posse obrigatÃ³ria).
+// Listar assinaturas do usuário (posse obrigatória).
 apiRouter.get('/subscriptions/:cpf', bearerAuth(), asyncHandler(async (req, res) => {
     const { cpf } = req.params;
     if (req.user.cpf !== cpf && req.user.role !== 'admin') {
@@ -6131,7 +6059,7 @@ apiRouter.get('/subscriptions/:cpf', bearerAuth(), asyncHandler(async (req, res)
     res.json({ success: true, subscriptions });
 }));
 
-// Criar assinatura (posse + PIN + validaÃ§Ã£o de payload).
+// Criar assinatura (posse + PIN + validação de payload).
 apiRouter.post('/subscriptions/:cpf', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
     const { cpf } = req.params;
     if (req.user.cpf !== cpf && req.user.role !== 'admin') {
@@ -6141,11 +6069,11 @@ apiRouter.post('/subscriptions/:cpf', bearerAuth(), pinGuard('pin'), asyncHandle
     const errors = subsUtil.validateSubscriptionPayload({ name, amount, frequency, payment_method });
     if (errors.length) return res.status(400).json({ success: false, message: errors.join(' ') });
 
-    // PrÃ©-condiÃ§Ã£o de negÃ³cio: crÃ©dito exige cartÃ£o desbloqueado e conta adimplente
+    // Pré-condição de negócio: crédito exige cartão desbloqueado e conta adimplente
     const user = await usersRepo.findByCpf(cpf);
-    if (!user) return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado.' });
+    if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
     if (payment_method === 'credit' && (user.credit_card_is_blocked || user.account_status === 'inadimplente')) {
-        return res.status(403).json({ success: false, message: 'CartÃ£o bloqueado ou conta inadimplente.' });
+        return res.status(403).json({ success: false, message: 'Cartão bloqueado ou conta inadimplente.' });
     }
 
     const subscription = await subscriptionsRepo.create({ cpf, name, amount, frequency, payment_method });
@@ -6153,10 +6081,10 @@ apiRouter.post('/subscriptions/:cpf', bearerAuth(), pinGuard('pin'), asyncHandle
     res.json({ success: true, message: 'Assinatura criada com sucesso.', subscription });
 }));
 
-// Cancelar assinatura (posse do recurso verificada no repo). AlÃ©m de parar as
-// cobranÃ§as futuras, estorna a Ãºltima cobranÃ§a jÃ¡ feita (dÃ©bito no saldo,
-// crÃ©dito na fatura aberta, ou credit voucher se a fatura jÃ¡ fechou) â€” usa a
-// mesma lÃ³gica de applyTransactionCancellation da rota de estorno avulso.
+// Cancelar assinatura (posse do recurso verificada no repo). Além de parar as
+// cobranças futuras, estorna a última cobrança já feita (débito no saldo,
+// crédito na fatura aberta, ou credit voucher se a fatura já fechou) — usa a
+// mesma lógica de applyTransactionCancellation da rota de estorno avulso.
 apiRouter.delete('/subscriptions/:cpf/:id', bearerAuth(), pinGuard('pin'), asyncHandler(async (req, res) => {
     const { cpf, id } = req.params;
     if (req.user.cpf !== cpf && req.user.role !== 'admin') {
@@ -6164,7 +6092,7 @@ apiRouter.delete('/subscriptions/:cpf/:id', bearerAuth(), pinGuard('pin'), async
     }
     const result = await subscriptionsRepo.cancel({ id, cpf });
     if (!result.cancelled) {
-        return res.status(result.notFound ? 404 : 403).json({ success: false, message: result.notFound ? 'Assinatura nÃ£o encontrada.' : 'Acesso negado.' });
+        return res.status(result.notFound ? 404 : 403).json({ success: false, message: result.notFound ? 'Assinatura não encontrada.' : 'Acesso negado.' });
     }
 
     let reversal, voucher;
@@ -6175,26 +6103,26 @@ apiRouter.delete('/subscriptions/:cpf/:id', bearerAuth(), pinGuard('pin'), async
             reversal = chargeResult.reversal;
             voucher = chargeResult.voucher;
         }
-        // Se nÃ£o aplicÃ¡vel (ex.: jÃ¡ estornada por outra via), o cancelamento da
-        // assinatura ainda Ã© concluÃ­do normalmente â€” sÃ³ nÃ£o hÃ¡ estorno extra.
+        // Se não aplicável (ex.: já estornada por outra via), o cancelamento da
+        // assinatura ainda é concluído normalmente — só não há estorno extra.
     }
 
     auditLog(req, 'subscription_cancel', 'warn', { cpf, id, reversedCharge: !!reversal });
     res.json({ success: true, message: 'Assinatura cancelada.', reversal, voucher });
 }));
 
-// â”€â”€â”€ Admin: simulaÃ§Ã£o de transaÃ§Ãµes em massa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— Admin: simulação de transações em massa ————————————————————————————————
 const SIMULATE_MASS_CAP = 200;
 apiRouter.post('/admin/transactions/simulate-mass', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { esc } = repoContext;
     const { targetCpf, count } = req.body || {};
     if (!targetCpf || String(targetCpf).length !== 11) {
-        return res.status(400).json({ success: false, message: 'targetCpf (11 dÃ­gitos) Ã© obrigatÃ³rio.' });
+        return res.status(400).json({ success: false, message: 'targetCpf (11 dígitos) é obrigatório.' });
     }
     const n = Math.min(Math.max(parseInt(count || 5, 10) || 5, 1), SIMULATE_MASS_CAP);
 
     const user = await usersRepo.findByCpf(targetCpf);
-    if (!user) return res.status(404).json({ success: false, message: 'UsuÃ¡rio alvo nÃ£o encontrado.' });
+    if (!user) return res.status(404).json({ success: false, message: 'Usuário alvo não encontrado.' });
 
     const merchants = ['Volt Market', 'Gamer Store', 'Pet Volt', 'Streaming Plus', 'App Store'];
     const created = [];
@@ -6210,23 +6138,23 @@ apiRouter.post('/admin/transactions/simulate-mass', bearerAuth(), authenticateAd
         created.push({ id, amount, description: desc });
     }
     auditLog(req, 'admin.simulate-mass', 'warn', { targetCpf, count: created.length });
-    res.json({ success: true, message: `${created.length} transaÃ§Ãµes simuladas para ${targetCpf}.`, transactions: created });
+    res.json({ success: true, message: `${created.length} transações simuladas para ${targetCpf}.`, transactions: created });
 }));
 
-// â”€â”€â”€ Admin: CorreÃ§Ã£o automÃ¡tica de pagamentos Ã³rfÃ£os â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Detecta e corrige discrepÃ¢ncias entre INVOICE_PAYMENT (transactions) e
+// ——— Admin: Correção automática de pagamentos órfãos —————————————————————
+// Detecta e corrige discrepâncias entre INVOICE_PAYMENT (transactions) e
 // valor_pago (invoices). Ãštil quando pagamentos foram feitos antes da coluna
 // valor_pago existir ou quando houve erro de sincronia.
 //
-// GET  /admin/audit-orphan-payments  â€” apenas auditoria (read-only)
-// POST /admin/fix-orphan-payments    â€” detecta e corrige automaticamente
+// GET  /admin/audit-orphan-payments  — apenas auditoria (read-only)
+// POST /admin/fix-orphan-payments    — detecta e corrige automaticamente
 
 /**
- * FunÃ§Ã£o reutilizÃ¡vel de correÃ§Ã£o de pagamentos Ã³rfÃ£os.
+ * Função reutilizável de correção de pagamentos órfãos.
  * Usada tanto pela rota POST /admin/fix-orphan-payments quanto pelo cron semanal.
  * @param {Object} opts
- * @param {string|null} opts.cpfFilter  â€” filtra por CPF especÃ­fico
- * @param {function|null} opts.onComplete â€” callback(opts) chamado ao final com { cpfFilter, fixed, errors, usersScanned }
+ * @param {string|null} opts.cpfFilter  — filtra por CPF específico
+ * @param {function|null} opts.onComplete — callback(opts) chamado ao final com { cpfFilter, fixed, errors, usersScanned }
  */
 async function runOrphanPaymentFix({ cpfFilter = null, onComplete = null } = {}) {
     const { esc } = repoContext;
@@ -6284,9 +6212,9 @@ async function runOrphanPaymentFix({ cpfFilter = null, onComplete = null } = {})
                 `);
 
                 if (recentInvoice.length > 0) {
-                    // Fatura FECHADA Ã© imutÃ¡vel: ajustamos o BANCO DO PAGAMENTO (refund
+                    // Fatura FECHADA é imutável: ajustamos o BANCO DO PAGAMENTO (refund
                     // para balance) em vez de mexer em valor_pago. Excedente vira saldo credor
-                    // e abaterÃ¡ a prÃ³xima fatura via creditoExcedente.
+                    // e abaterá a próxima fatura via creditoExcedente.
                     const inv = recentInvoice[0];
                     const excess = round2(missing);
                     if (excess > 0.01) {
@@ -6312,10 +6240,10 @@ async function runOrphanPaymentFix({ cpfFilter = null, onComplete = null } = {})
                 }
             }
 
-            // Caso B: valor_pago > pagamentos (legado â€” sÃ³ acontece em faturas prÃ©-migration
-            // onde valor_pago ficou inflado pelo bug). Como fatura FECHADA Ã© imutÃ¡vel, o
-            // ajuste Ã© devolvido para o balance do usuÃ¡rio â€” o caminho novo lÃª SUM(pagamentos)
-            // e nÃ£o usa mais esse campo para derivar quitaÃ§Ã£o.
+            // Caso B: valor_pago > pagamentos (legado — só acontece em faturas pré-migration
+            // onde valor_pago ficou inflado pelo bug). Como fatura FECHADA é imutável, o
+            // ajuste é devolvido para o balance do usuário — o caminho novo lê SUM(pagamentos)
+            // e não usa mais esse campo para derivar quitação.
             if (invoiceTotalPago > paymentTotal + 0.02) {
                 const excess = round2(invoiceTotalPago - paymentTotal);
                 if (excess > 0.01) {
@@ -6347,7 +6275,7 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
     const allowed = cpfFilter && typeof cpfFilter === 'string' && cpfFilter.replace(/\D/g, '').length === 11;
     const filterCpf = allowed ? cpfFilter.replace(/\D/g, '') : null;
 
-    // â”€â”€ PaginaÃ§Ã£o: limit (padrÃ£o 20) e offset (padrÃ£o 0) â”€â”€
+    // —— Paginação: limit (padrão 20) e offset (padrão 0) ——
     const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
     const rawOffset = parseInt(String(req.query?.offset ?? ''), 10);
     const limit = !isNaN(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 100) : 20;
@@ -6355,7 +6283,7 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
 
     const round2 = n => Math.round(n * 100) / 100;
 
-    // 1. Contar TOTAL de usuÃ¡rios com INVOICE_PAYMENT (sem LIMIT/OFFSET) para metadata
+    // 1. Contar TOTAL de usuários com INVOICE_PAYMENT (sem LIMIT/OFFSET) para metadata
     let countSql = `
         SELECT COUNT(DISTINCT t.cpf) AS total
         FROM ${dbService.fq('transactions')} t
@@ -6371,7 +6299,7 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
     const currentPage = Math.floor(offset / limit) + 1;
     const hasMore = offset + limit < totalUsers;
 
-    // 2. Buscar usuÃ¡rios com INVOICE_PAYMENT (paginado)
+    // 2. Buscar usuários com INVOICE_PAYMENT (paginado)
     let sql = `
         SELECT DISTINCT t.cpf, u.full_name
         FROM ${dbService.fq('transactions')} t
@@ -6414,13 +6342,13 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
         const invoiceTotalPago = invoiceRows.reduce((sum, r) => sum + parseFloat(r.valor_pago || 0), 0);
         const invoiceCount = invoiceRows.length;
 
-        // 5. Calcular discrepÃ¢ncia
+        // 5. Calcular discrepância
         const diff = round2(Math.abs(paymentTotal - invoiceTotalPago));
         const isDiscrepancy = diff > 0.02;
 
         if (isDiscrepancy) totalDiscrepancies++;
 
-        // 6. Verificar pagamentos Ã³rfÃ£os (transactions sem invoice)
+        // 6. Verificar pagamentos órfãos (transactions sem invoice)
         const isOrphan = paymentCount > 0 && invoiceCount === 0;
 
         const userResult = {
@@ -6456,10 +6384,10 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
         results.push(userResult);
     }
 
-    // â”€â”€ totalDiscrepancies de TODOS os CPFs (nÃ£o sÃ³ da pÃ¡gina atual) â”€â”€
-    // O aggregate abaixo faz uma Ãºnica query que cruza pagamentos com valor_pago
+    // —— totalDiscrepancies de TODOS os CPFs (não só da página atual) ——
+    // O aggregate abaixo faz uma única query que cruza pagamentos com valor_pago
     // em lote (sem o loop CPF a CPF), garantindo que o resumo seja preciso
-    // independente da paginaÃ§Ã£o.
+    // independente da paginação.
     let aggDiscrepancies = 0;
     try {
         const aggSql = `
@@ -6481,7 +6409,7 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
         const aggRows = await dbService.executeQuery(aggSql);
         aggDiscrepancies = aggRows.length;
     } catch (_aggErr) {
-        console.warn('âš ï¸ [audit-orphan-payments] Aggregate de discrepÃ¢ncias falhou, usando fallback:', _aggErr.message);
+        console.warn('⚠️ [audit-orphan-payments] Aggregate de discrepâncias falhou, usando fallback:', _aggErr.message);
         aggDiscrepancies = totalDiscrepancies;
     }
 
@@ -6502,10 +6430,10 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
     });
 }));
 
-// Auditoria consolidada READ-ONLY: pagamentos Ã³rfÃ£os, saldo negativo, overpayment e
-// faturas pagas sem data_pagamento â€” os quatro num Ãºnico retorno, para nÃ£o obrigar o
-// painel a chamar trÃªs rotas. Mesma aritmÃ©tica dos scripts scripts/audit_*.js.
-// Nada Ã© corrigido aqui: correÃ§Ã£o Ã© POST /admin/fix-orphan-payments ou os scripts
+// Auditoria consolidada READ-ONLY: pagamentos órfãos, saldo negativo, overpayment e
+// faturas pagas sem data_pagamento — os quatro num único retorno, para não obrigar o
+// painel a chamar três rotas. Mesma aritmética dos scripts scripts/audit_*.js.
+// Nada é corrigido aqui: correção é POST /admin/fix-orphan-payments ou os scripts
 // com --fix --confirm.
 apiRouter.get('/admin/audit-full', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { esc } = repoContext;
@@ -6559,7 +6487,7 @@ apiRouter.get('/admin/audit-full', bearerAuth(), authenticateAdmin, asyncHandler
 
         const issues = [];
 
-        // 1. Pagamento Ã³rfÃ£o: dinheiro debitado que nÃ£o aparece em nenhuma invoice
+        // 1. Pagamento órfão: dinheiro debitado que não aparece em nenhuma invoice
         const orphanDiff = round2(paymentTotal - invoiceTotalPago);
         if (orphanDiff > 0.02) {
             summary.orphanPayments++;
@@ -6573,7 +6501,7 @@ apiRouter.get('/admin/audit-full', bearerAuth(), authenticateAdmin, asyncHandler
         // 2. Saldo negativo
         if (balance < -0.005) {
             summary.negativeBalance++;
-            issues.push({ type: 'negative_balance', amount: round2(balance), detail: 'balance do usuÃ¡rio estÃ¡ negativo' });
+            issues.push({ type: 'negative_balance', amount: round2(balance), detail: 'balance do usuário está negativo' });
         }
 
         // 3. Overpayment: valor_pago acima do bruto congelado da fatura
@@ -6591,7 +6519,7 @@ apiRouter.get('/admin/audit-full', bearerAuth(), authenticateAdmin, asyncHandler
             }
         }
 
-        // 4. Fatura quitada sem data_pagamento: some do histÃ³rico e volta a ser cobrada
+        // 4. Fatura quitada sem data_pagamento: some do histórico e volta a ser cobrada
         for (const inv of invoiceRows) {
             const gross = round2(computeInvoiceGross(inv));
             const pago = parseFloat(inv.valor_pago || 0);
@@ -6621,9 +6549,9 @@ apiRouter.get('/admin/audit-full', bearerAuth(), authenticateAdmin, asyncHandler
     res.json({ success: true, readOnly: true, summary, results });
 }));
 
-// â”€â”€ Auditoria de consistÃªncia: users.days_overdue vs real-time â”€â”€
-// Compara users.days_overdue e invoices.dias_atraso com o cÃ¡lculo
-// real-time (CURRENT_DATE - due_date::date) para detectar desatualizaÃ§Ãµes.
+// —— Auditoria de consistência: users.days_overdue vs real-time ——
+// Compara users.days_overdue e invoices.dias_atraso com o cálculo
+// real-time (CURRENT_DATE - due_date::date) para detectar desatualizações.
 apiRouter.get('/admin/audit-consistency', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { esc } = repoContext;
     const rawCpf = typeof req.query?.cpf === 'string' ? req.query.cpf.replace(/\D/g, '') : '';
@@ -6706,10 +6634,10 @@ apiRouter.get('/admin/audit-consistency', bearerAuth(), authenticateAdmin, async
     });
 }));
 
-// â”€â”€ Auditoria de double-counting: pagamentos (INVOICE_PAYMENT) vs valor_pago das invoices â”€â”€
-// LÃ³gica extraÃ­da de scripts/audit_completo.js::runDoubleCountAudit (somente leitura, sem --fix,
+// —— Auditoria de double-counting: pagamentos (INVOICE_PAYMENT) vs valor_pago das invoices ——
+// Lógica extraída de scripts/audit_completo.js::runDoubleCountAudit (somente leitura, sem --fix,
 // sem console.log). Para cada CPF com INVOICE_PAYMENT, compara soma dos pagamentos com a soma de
-// invoices.valor_pago; diff > R$0,02 conta como discrepÃ¢ncia.
+// invoices.valor_pago; diff > R$0,02 conta como discrepância.
 async function runDoubleCountAuditQuery(cpfFilter, limit) {
     const { esc } = repoContext;
 
@@ -6794,16 +6722,16 @@ apiRouter.get('/admin/audit-double-count', bearerAuth(), authenticateAdmin, asyn
         details: report.details,
         filters: { cpf: filterCpf || null, limit },
         tip: report.discrepancies > 0
-            ? 'Execute node scripts/audit_completo.js --fix --confirm para corrigir discrepÃ¢ncias.'
+            ? 'Execute node scripts/audit_completo.js --fix --confirm para corrigir discrepâncias.'
             : undefined
     });
 }));
 
-// GET /admin/audit/run-full â€” Auditoria completa (consistÃªncia + pagamentos) em uma chamada
+// GET /admin/audit/run-full — Auditoria completa (consistência + pagamentos) em uma chamada
 apiRouter.get('/admin/audit/run-full', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { esc } = repoContext;
 
-    // 1. ConsistÃªncia (mesma query do /admin/audit-consistency)
+    // 1. Consistência (mesma query do /admin/audit-consistency)
     const consistencyRows = await dbService.executeQuery(`
         SELECT u.cpf, u.full_name, u.account_status,
                COALESCE(u.days_overdue, 0) AS user_days_overdue,
@@ -6887,21 +6815,21 @@ apiRouter.get('/admin/audit/run-full', bearerAuth(), authenticateAdmin, asyncHan
             }
         },
         tip: cpfComIssue.size > 0 || dcDiscrepancies > 0 || (nbRows || []).length > 0
-            ? 'DiscrepÃ¢ncias encontradas. Execute os scripts da pasta scripts/ para corrigir.'
+            ? 'Discrepâncias encontradas. Execute os scripts da pasta scripts/ para corrigir.'
             : undefined
     });
 }));
 
-// GET /admin/audit/orphans-pre005 â€” Ã“rfÃ£os prÃ©-migration 005 por CPF, com cobertura/delta.
-// Read-only. Exposa a MESMA anÃ¡lise do fix_orphan_payment_step7.cjs --all (dry-run):
+// GET /admin/audit/orphans-pre005 — Ã“rfãos pré-migration 005 por CPF, com cobertura/delta.
+// Read-only. Exposa a MESMA análise do fix_orphan_payment_step7.cjs --all (dry-run):
 // para cada massa com INVOICE_PAYMENT sem invoice_id criado ANTES da migration 005,
-// mostra os Ã³rfÃ£os, as faturas FECHADA que eles deveriam quitar, a cobertura
-// (Ã³rfÃ£os consumÃ­veis + pagamentos jÃ¡ vinculados) e o delta (dÃ©ficit/excedente).
-// Contas de serviÃ§o (role='admin' / usuÃ¡rios inexistentes) sÃ£o excluÃ­das.
+// mostra os órfãos, as faturas FECHADA que eles deveriam quitar, a cobertura
+// (órfãos consumíveis + pagamentos já vinculados) e o delta (déficit/excedente).
+// Contas de serviço (role='admin' / usuários inexistentes) são excluídas.
 apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { esc } = repoContext;
 
-    // PaginaÃ§Ã£o (padrÃ£o do painel): limit (mÃ¡x 100) e offset
+    // Paginação (padrão do painel): limit (máx 100) e offset
     const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
     const rawOffset = parseInt(String(req.query?.offset ?? ''), 10);
     const limit = !isNaN(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 100) : 20;
@@ -6911,11 +6839,11 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
     const allowed = cpfFilter && typeof cpfFilter === 'string' && cpfFilter.replace(/\D/g, '').length === 11;
     const filterCpf = allowed ? cpfFilter.replace(/\D/g, '') : null;
 
-    // Cutoff dinÃ¢mico da migration 005 (mesma precedÃªncia do health check diÃ¡rio)
+    // Cutoff dinâmico da migration 005 (mesma precedência do health check diário)
     const cutoffIso = await resolveOrphanCutoff(dbService);
     const cutoffFilter = `AND t.date < '${cutoffIso}'::timestamptz`;
 
-    // 1. Total de CPFs com Ã³rfÃ£os prÃ©-005 (para metadata, sem paginaÃ§Ã£o)
+    // 1. Total de CPFs com órfãos pré-005 (para metadata, sem paginação)
     let countSql = `
         SELECT COUNT(DISTINCT t.cpf) AS total
         FROM ${dbService.fq('transactions')} t
@@ -6933,7 +6861,7 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
     const totalPages = Math.ceil(totalUsers / limit) || 0;
     const hasMore = offset + limit < totalUsers;
 
-    // 2. CPFs com Ã³rfÃ£os prÃ©-005 (paginado)
+    // 2. CPFs com órfãos pré-005 (paginado)
     let listSql = `
         SELECT t.cpf, u.full_name, COUNT(*) AS orphan_count,
                COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) AS orphan_sum
@@ -6953,18 +6881,18 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
     const results = [];
     let totalCovered = 0, totalExceeded = 0, totalDeficit = 0;
 
-    // Totais GLOBAIS por status (nÃ£o sÃ³ da pÃ¡gina atual): mesmo padrÃ£o do
-    // aggregate aggDiscrepancies do /admin/audit-orphan-payments â€” uma Ãºnica query
-    // em lote para que o summary seja preciso independente da paginaÃ§Ã£o.
-    // UNION ALL agrupa por CPF em 3 subqueries simples (sem FULL JOIN, que nÃ£o
-    // aceita condiÃ§Ã£o OR no Postgres): Ã³rfÃ£os (invoice_id NULL), vinculados
+    // Totais GLOBAIS por status (não só da página atual): mesmo padrão do
+    // aggregate aggDiscrepancies do /admin/audit-orphan-payments — uma única query
+    // em lote para que o summary seja preciso independente da paginação.
+    // UNION ALL agrupa por CPF em 3 subqueries simples (sem FULL JOIN, que não
+    // aceita condição OR no Postgres): órfãos (invoice_id NULL), vinculados
     // (invoice_id setado) e valor_pago das faturas FECHADA.
     let aggCovered = 0, aggExceeded = 0, aggDeficit = 0;
     try {
         const aggRows = await dbService.executeQuery(`
             SELECT cpf, SUM(coverage) AS coverage, SUM(valor_pago) AS valor_pago
             FROM (
-                -- Ã“rfÃ£os PRÃ‰-005 (mesma semÃ¢ntica da pÃ¡gina): invoice_id NULL + cutoff
+                -- Ã“rfãos PRÃ‰-005 (mesma semântica da página): invoice_id NULL + cutoff
                 SELECT t.cpf, ABS(CAST(t.amount AS DECIMAL(15,2))) AS coverage, 0 AS valor_pago
                 FROM ${dbService.fq('transactions')} t
                 LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
@@ -6975,7 +6903,7 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
                   AND u.cpf IS NOT NULL
                   AND u.role IS DISTINCT FROM 'admin'
                 UNION ALL
-                -- Pagamentos VINCULADOS (invoice_id setado) â€” completam a cobertura
+                -- Pagamentos VINCULADOS (invoice_id setado) — completam a cobertura
                 SELECT t.cpf, ABS(CAST(t.amount AS DECIMAL(15,2))) AS coverage, 0 AS valor_pago
                 FROM ${dbService.fq('transactions')} t
                 LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
@@ -6995,21 +6923,21 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
             GROUP BY cpf
         `);
         for (const r of aggRows || []) {
-            // coverage global = Ã³rfÃ£os prÃ©-005 + vinculados (mesma fÃ³rmula da pÃ¡gina)
+            // coverage global = órfãos pré-005 + vinculados (mesma fórmula da página)
             const delta = round2(parseFloat(r.valor_pago || 0) - parseFloat(r.coverage || 0));
             if (Math.abs(delta) < 0.02) aggCovered++;
             else if (delta < 0) aggExceeded++;
             else aggDeficit++;
         }
     } catch (_aggErr) {
-        console.warn('âš ï¸ [audit/orphans-pre005] Aggregate de status falhou, usando fallback da pÃ¡gina:', _aggErr.message);
+        console.warn('⚠️ [audit/orphans-pre005] Aggregate de status falhou, usando fallback da página:', _aggErr.message);
         aggCovered = totalCovered; aggExceeded = totalExceeded; aggDeficit = totalDeficit;
     }
 
     for (const user of users) {
         const cpf = user.cpf;
 
-        // 3. Ã“rfÃ£os individuais do CPF
+        // 3. Ã“rfãos individuais do CPF
         const orphanRows = await dbService.executeQuery(`
             SELECT t.id, t.type, t.amount, t.description, t.date, t.status
             FROM ${dbService.fq('transactions')} t
@@ -7045,7 +6973,7 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
         }));
         const valorPagoTotal = round2(invoices.reduce((s, i) => s + i.valorPago, 0));
 
-        // 5. Pagamentos JÃ vinculados (invoice_id setado) â€” completam a cobertura
+        // 5. Pagamentos JÃ vinculados (invoice_id setado) — completam a cobertura
         const linkedRes = await dbService.executeQuery(`
             SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS total
             FROM ${dbService.fq('transactions')}
@@ -7057,7 +6985,7 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
         const linkedTotal = round2(parseFloat(linkedRes[0]?.total || 0));
 
         // 6. Cobertura e delta
-        // coverage = o que os Ã³rfÃ£os + vÃ­nculos pagam; cobertura contra o valor_pago legado.
+        // coverage = o que os órfãos + vínculos pagam; cobertura contra o valor_pago legado.
         const coverage = round2(orphanSum + linkedTotal);
         const delta = round2(valorPagoTotal - coverage);
         let status;
@@ -7104,14 +7032,14 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
     });
 }));
 
-// GET /admin/health/charges â€” Auditoria de consistÃªncia de encargos via calcAllCharges
+// GET /admin/health/charges — Auditoria de consistência de encargos via calcAllCharges
 // Para cada massa inadimplente, recalcula os encargos com invoiceMath.js e compara
 // com os valores armazenados em billing_charges. Alerta se divergirem.
 apiRouter.get('/admin/health/charges', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // 1. Buscar inadimplentes com suas faturas fechadas nÃ£o pagas
+    // 1. Buscar inadimplentes com suas faturas fechadas não pagas
     const users = await dbService.executeQuery(`
         SELECT u.cpf, u.full_name, COALESCE(u.days_overdue, 0) AS days_overdue
         FROM ${dbService.fq('users')} u
@@ -7162,9 +7090,9 @@ apiRouter.get('/admin/health/charges', bearerAuth(), authenticateAdmin, asyncHan
             continue;
         }
 
-        // Usar days_overdue do banco (jÃ¡ sincronizado pelo runBillingValidation)
-        // para evitar falsa divergÃªncia por timing (1 dia a mais entre execuÃ§Ãµes).
-        // invData.realDaysOverdue Ã© mantido como referÃªncia informativa.
+        // Usar days_overdue do banco (já sincronizado pelo runBillingValidation)
+        // para evitar falsa divergência por timing (1 dia a mais entre execuções).
+        // invData.realDaysOverdue é mantido como referência informativa.
         const daysForCalc = Math.max(0, parseInt(u.days_overdue || 0));
         const computed = calcAllCharges(invData.residual, daysForCalc);
         const stored = storedByCpf.get(u.cpf) || {};
@@ -7201,7 +7129,7 @@ apiRouter.get('/admin/health/charges', bearerAuth(), authenticateAdmin, asyncHan
 
     res.json({
         success: true,
-        message: `Auditoria de encargos concluÃ­da. ${totalOk} consistentes, ${totalDivergence} divergentes, ${totalNoInvoice} sem fatura.`,
+        message: `Auditoria de encargos concluída. ${totalOk} consistentes, ${totalDivergence} divergentes, ${totalNoInvoice} sem fatura.`,
         summary: {
             totalUsers: users.length,
             consistent: totalOk,
@@ -7213,8 +7141,8 @@ apiRouter.get('/admin/health/charges', bearerAuth(), authenticateAdmin, asyncHan
     });
 }));
 
-// Dry-run: como um pagamento de `amount` seria distribuÃ­do entre as faturas fechadas
-// em aberto. NÃ£o grava nada â€” mesma funÃ§Ã£o pura que a rota de pagamento usa.
+// Dry-run: como um pagamento de `amount` seria distribuído entre as faturas fechadas
+// em aberto. Não grava nada — mesma função pura que a rota de pagamento usa.
 apiRouter.get('/admin/invoice-payment-distribution/:cpf', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const rawCpf = String(req.params.cpf || '').replace(/\D/g, '');
     if (rawCpf.length !== 11) {
@@ -7227,7 +7155,7 @@ apiRouter.get('/admin/invoice-payment-distribution/:cpf', bearerAuth(), authenti
     ) * 100) / 100;
 
     const rawAmount = parseFloat(String(req.query?.amount ?? ''));
-    // Sem `amount`, simula a quitaÃ§Ã£o integral da dÃ­vida consolidada
+    // Sem `amount`, simula a quitação integral da dívida consolidada
     const amount = !isNaN(rawAmount) && rawAmount > 0 ? rawAmount : totalOwed;
 
     const plan = planDistribution(invoices, amount);
@@ -7252,7 +7180,7 @@ apiRouter.post('/admin/fix-orphan-payments', bearerAuth(), authenticateAdmin, as
     if (confirm !== true) {
         return res.status(400).json({
             success: false,
-            message: 'ConfirmaÃ§Ã£o necessÃ¡ria. Envie { "confirm": true } no body para aplicar correÃ§Ãµes.'
+            message: 'Confirmação necessária. Envie { "confirm": true } no body para aplicar correções.'
         });
     }
 
@@ -7266,7 +7194,7 @@ apiRouter.post('/admin/fix-orphan-payments', bearerAuth(), authenticateAdmin, as
     res.json(result);
 }));
 
-// â”€â”€â”€ Badge de cobertura de regras (shields.io compatible) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— Badge de cobertura de regras (shields.io compatible) ——————————————————
 apiRouter.get('/admin/badge/rules-coverage', asyncHandler(async (req, res) => {
     try {
         const { computeStats } = require('./scripts/statsUtils');
@@ -7282,19 +7210,66 @@ apiRouter.get('/admin/badge/rules-coverage', asyncHandler(async (req, res) => {
 }));
 
 
-// Listar credit vouchers do usuÃ¡rio (ownership check â€” dono do recurso ou admin).
+// Listar credit vouchers do usuário (ownership check — dono do recurso ou admin).
 
 app.use('/api', apiRouter);
 app.use('/api/v1', apiRouter);
+
+// ─── SSE (Server-Sent Events) — atualização em tempo real ──────────────
+const sseService = require('./services/sseService');
+
+app.get('/api/events/stream', (req, res) => {
+    // EventSource não suporta headers — aceitar token via query param ou header
+    let cpf = null;
+    const authHeader = req.headers.authorization;
+    const tokenParam = req.query.token;
+    
+    try {
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET);
+            cpf = decoded.cpf;
+        } else if (tokenParam) {
+            const decoded = jwt.verify(tokenParam, JWT_SECRET);
+            cpf = decoded.cpf;
+        }
+    } catch (_e) { /* token inválido */ }
+    
+    if (!cpf) return res.status(401).json({ message: 'Unauthorized' });
+
+    // Headers SSE
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders();
+
+    // Heartbeat a cada 30s para manter a conexão viva
+    const heartbeat = setInterval(() => {
+        try { res.write(':heartbeat\n\n'); } catch (_e) {}
+    }, 30000);
+
+    sseService.addClient(cpf, res);
+
+    // Enviar evento inicial de conexão
+    res.write(`event: connected\ndata: ${JSON.stringify({ cpf, timestamp: new Date().toISOString() })}\n\n`);
+
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        sseService.removeClient(cpf, res);
+    });
+});
+
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// Endpoint para servir o Swagger JSON (necessÃ¡rio para importaÃ§Ã£o no Postman)
+// Endpoint para servir o Swagger JSON (necessário para importação no Postman)
 app.get('/api-docs/swagger.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.send(JSON.stringify(swaggerDocument, null, 2));
 });
 
-// Middleware 404 serÃ¡ adicionado apÃ³s o bootstrap para garantir que todas as rotas estejam registradas
+// Middleware 404 será adicionado após o bootstrap para garantir que todas as rotas estejam registradas
 
 app.get('/api-docs/swagger.yaml', (req, res) => {
     res.setHeader('Content-Type', 'text/yaml');
@@ -7303,7 +7278,7 @@ app.get('/api-docs/swagger.yaml', (req, res) => {
     res.send(fs.readFileSync(path.join(__dirname, 'swagger.yaml'), 'utf8'));
 });
 
-// Iniciar servidor apenas apÃ³s conexÃ£o com banco
+// Iniciar servidor apenas após conexão com banco
 // T6: catch-up do motor diario no boot. O cron so dispara com o processo Node vivo
 // a meia-noite; API iniciada manualmente a cada sessao significa que maquina/processo
 // desligado nesse horario deixa o dia inteiro sem fechamento de fatura nem geracao de
@@ -7358,7 +7333,7 @@ if (!IS_TEST) {
     bootstrap().then(() => {
         catchUpDailyMotorIfNeeded();
 
-    // Inicializar o Job/Cron de ConciliaÃ§Ã£o DiÃ¡ria de Faturas e Extratos
+    // Inicializar o Job/Cron de Conciliação Diária de Faturas e Extratos
     try {
         const { initReconciliationScheduler, runDailyReconciliation } = require('./services/cronReconciliation');
         initReconciliationScheduler();
@@ -7368,14 +7343,14 @@ if (!IS_TEST) {
             return res.json(auditResult);
         });
     } catch (cronErr) {
-        console.warn('âš ï¸ NÃ£o foi possÃ­vel iniciar o Cron de conciliaÃ§Ã£o no bootstrap:', cronErr.message);
+        console.warn('⚠️ Não foi possível iniciar o Cron de conciliação no bootstrap:', cronErr.message);
     }
 
     app.post('/api/admin/users/mass', async (req, res) => {
         try {
             const payload = req.body;
             if (!payload || !payload.cpf || !payload.fullName) {
-                return res.status(400).json({ success: false, message: 'Dados incompletos para criaÃ§Ã£o da massa.' });
+                return res.status(400).json({ success: false, message: 'Dados incompletos para criação da massa.' });
             }
             const created = await usersRepo.createMassUser(payload);
             telegramService.ensureTopic(created.cpf, created.fullName);
@@ -7385,7 +7360,7 @@ if (!IS_TEST) {
                 user: created
             });
         } catch (err) {
-            console.error('âŒ Erro ao gravar massa no PostgreSQL:', err);
+            console.error('❌ Erro ao gravar massa no PostgreSQL:', err);
             return res.status(500).json({ success: false, message: err.message || 'Erro interno ao gravar massa no banco.' });
         }
     });
@@ -7394,29 +7369,29 @@ if (!IS_TEST) {
         res.status(200).json({ status: 'ok' });
     });
 
-    // Middleware para tratar rotas nÃ£o encontradas (404) - DEVE vir DEPOIS de todas as rotas
-    // Este middleware sÃ³ serÃ¡ executado se nenhuma rota anterior corresponder
+    // Middleware para tratar rotas não encontradas (404) - DEVE vir DEPOIS de todas as rotas
+    // Este middleware só será executado se nenhuma rota anterior corresponder
     app.use((req, res, next) => {
-        // Se a requisiÃ§Ã£o Ã© para uma rota da API e nenhuma rota correspondeu, retornar JSON
+        // Se a requisição é para uma rota da API e nenhuma rota correspondeu, retornar JSON
         if (req.path.startsWith('/api')) {
             return res.status(404).json({
                 success: false,
-                message: `Rota nÃ£o encontrada: ${req.method} ${req.path}`,
+                message: `Rota não encontrada: ${req.method} ${req.path}`,
                 path: req.path,
                 method: req.method
             });
         }
-        // Para outras rotas, passar para o prÃ³ximo middleware (pode ser o Swagger UI, etc)
+        // Para outras rotas, passar para o próximo middleware (pode ser o Swagger UI, etc)
         next();
     });
 
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`API ouvindo em http://0.0.0.0:${PORT}`);
-        console.log(`ðŸŒ Acesse via rede local: http://192.168.0.110:${PORT}`);
-        console.log(`ðŸ“‹ Swagger: http://192.168.0.110:${PORT}/api-docs`);
+        console.log(`🌐 Acesse via rede local: http://192.168.0.110:${PORT}`);
+        console.log(`📋 Swagger: http://192.168.0.110:${PORT}/api-docs`);
     });
 }).catch((err) => {
-    console.error("âŒ Erro no bootstrap:", err.message);
+    console.error("❌ Erro no bootstrap:", err.message);
     if (!IS_TEST) process.exit(1);
 });
 }

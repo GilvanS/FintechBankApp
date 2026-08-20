@@ -199,6 +199,31 @@ async function runEngine(targetCpf = null) {
             console.log(`[InvoiceEngine] CPF ${user.cpf}: congelando R$ ${frozenChargesTotal.toFixed(2)} de encargos pendentes nas colunas da fatura fechada (multa ${multa.toFixed(2)}, juros mora ${jurosMora.toFixed(2)}, juros rem ${jurosRem.toFixed(2)}, IOF ${iof.toFixed(2)}). Charges continuam 'pending' para a coleta.`);
         }
 
+        // GUARDA DE IDEMPOTÊNCIA: verificar se já existe fatura fechada para este due_date
+        const existingInvoice = await db.executeQuery(`
+          SELECT id FROM ${db.fq('invoices')}
+          WHERE cpf = ${esc(user.cpf)}
+            AND due_date = ${esc(dueDate.toISOString())}
+            AND status = 'FECHADA'
+          LIMIT 1
+        `);
+        if (existingInvoice.length > 0) {
+          console.log(`[InvoiceEngine] Fatura para CPF ${user.cpf} com vencimento ${dueDate.toISOString().slice(0,10)} já existe (id: ${existingInvoice[0].id}). Pulando INSERT.
+`);
+          // Rolar o due_date para o próximo mês mesmo assim
+          const dueDay = user.credit_card_due_day || 15;
+          const nextDueDate = new Date(dueDate);
+          nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+          nextDueDate.setDate(dueDay);
+          await db.executeQuery(
+            `UPDATE ${db.fq('users')}
+             SET credit_card_invoice_due_date = ${esc(nextDueDate.toISOString())}, updated_at = CURRENT_TIMESTAMP
+             WHERE cpf = ${esc(user.cpf)}`
+          );
+          processedCount++;
+          continue;
+        }
+
         await db.executeQuery(`
           INSERT INTO ${db.fq('invoices')} (id, cpf, status, due_date, valor_total, created_at, updated_at, saldo_anterior, valor_iof, valor_juros_remuneratorios, valor_juros_mora, valor_multa, itemized_transactions)
           VALUES (${esc(invoiceId)}, ${esc(user.cpf)}, 'FECHADA', ${esc(dueDate.toISOString())}, ${invoiceAmount.toFixed(2)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${saldoAnterior}, ${iof}, ${jurosRem}, ${jurosMora}, ${multa}, ${esc(itemizedTransactionsJson)})
