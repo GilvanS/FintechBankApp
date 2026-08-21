@@ -5,6 +5,12 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
 import { ShoppingCart, Search, Zap, LogIn, Sparkles, UserCheck, X, CheckCircle2, Lock } from 'lucide-react';
 import { getProducts, checkout } from '../services/api';
+import {
+    IntervaloOferta,
+    lerIntervaloOferta,
+    indiceDestaque,
+    proximaTrocaEm,
+} from '../utils/ofertaDestaque';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -110,6 +116,21 @@ export const ShopLanding: React.FC = () => {
 
     const fecharModal = () => setProdutoNoModal(null);
 
+    // Intervalo do rodízio, definido no painel admin. `storage` cobre a mudança
+    // feita em outra aba; o evento próprio cobre a mesma aba, que não recebe
+    // `storage` do próprio documento.
+    const [intervaloOferta, setIntervaloOferta] = useState<IntervaloOferta>(() => lerIntervaloOferta());
+
+    useEffect(() => {
+        const ler = () => setIntervaloOferta(lerIntervaloOferta());
+        window.addEventListener('storage', ler);
+        window.addEventListener('volt:oferta-intervalo', ler as EventListener);
+        return () => {
+            window.removeEventListener('storage', ler);
+            window.removeEventListener('volt:oferta-intervalo', ler as EventListener);
+        };
+    }, []);
+
     // Teclado e foco do diálogo: Esc fecha e o primeiro campo recebe o cursor,
     // para que a compra possa ser concluída sem tocar no mouse.
     useEffect(() => {
@@ -165,16 +186,46 @@ export const ShopLanding: React.FC = () => {
         [produtos]
     );
 
-    const destaque = produtos[0];
+    // A oferta em destaque gira sozinha: o índice sai do relógio e do intervalo
+    // configurado no painel. O timer existe só para virar na hora certa — agenda
+    // exatamente a próxima troca, em vez de ficar consultando de tempos em tempos.
+    const [agora, setAgora] = useState(() => Date.now());
+
+    useEffect(() => {
+        const t = window.setTimeout(() => setAgora(Date.now()), proximaTrocaEm(intervaloOferta) + 500);
+        return () => window.clearTimeout(t);
+    }, [intervaloOferta, agora]);
+
+    const indiceEmDestaque = useMemo(
+        () => indiceDestaque(produtos.length, intervaloOferta, agora),
+        [produtos.length, intervaloOferta, agora]
+    );
+
+    const destaque = produtos[indiceEmDestaque];
+
+    // Contagem visível até a próxima troca, para o rodízio não parecer aleatório.
+    const [contagem, setContagem] = useState('--:--:--');
+
+    useEffect(() => {
+        const formatar = () => {
+            const s = Math.max(0, Math.floor(proximaTrocaEm(intervaloOferta) / 1000));
+            const h = String(Math.floor(s / 3600)).padStart(2, '0');
+            const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+            return `${h}:${m}:${String(s % 60).padStart(2, '0')}`;
+        };
+        setContagem(formatar());
+        const t = window.setInterval(() => setContagem(formatar()), 1000);
+        return () => window.clearInterval(t);
+    }, [intervaloOferta]);
 
     const visiveis = useMemo(() => {
-        const resto = produtos.slice(1);
+        const resto = produtos.filter((_, i) => i !== indiceEmDestaque);
         const termo = busca.trim().toLowerCase();
         return resto.filter(p =>
             (categoria === 'Todos' || p.category === categoria) &&
             (!termo || p.name.toLowerCase().includes(termo))
         );
-    }, [produtos, categoria, busca]);
+    }, [produtos, categoria, busca, indiceEmDestaque]);
 
     // Cada nível é um contrato de movimento distinto, então a animação é
     // recriada quando o nível ou a lista muda. O useGSAP reverte a anterior.
@@ -370,9 +421,17 @@ export const ShopLanding: React.FC = () => {
                 <section className="w-full px-4 sm:px-6 lg:px-10 py-10 lg:py-16 border-b border-white/10">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
                         <div className="space-y-4">
-                            <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-volt-green">
-                                <Sparkles className="w-3.5 h-3.5" /> Oferta da semana
-                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-volt-green">
+                                    <Sparkles className="w-3.5 h-3.5" /> Oferta da semana
+                                </span>
+                                <span
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-white/15 text-white/60 font-mono"
+                                    title="Tempo até o próximo produto entrar em destaque"
+                                >
+                                    troca em {contagem}
+                                </span>
+                            </div>
                             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black uppercase leading-tight">
                                 {destaque.name}
                             </h1>
