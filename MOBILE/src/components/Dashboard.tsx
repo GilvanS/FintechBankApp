@@ -19,7 +19,7 @@ import BoletoModal from './BoletoModal';
 import InstallmentModal from './InstallmentModal';
 import PurchaseConfirmation from './PurchaseConfirmation';
 import BottomNavBar from './BottomNavBar';
-import Admin from './Admin';
+import AdminDashboard from './Admin/AdminDashboard';
 import Investments from './Investments';
 import Wallet from './Wallet';
 import Loans from './Loans';
@@ -713,11 +713,11 @@ const Dashboard: React.FC = () => {
             case 'admin':
                 return (
                     <div className={`min-h-full pb-20 ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
-                        <Admin 
+                        <AdminDashboard
                             onClose={() => {
                                 if (topLevelView === 'admin') navigateTo('dashboard');
                                 handleNavigate('home');
-                            }} 
+                            }}
                         />
                     </div>
                 );

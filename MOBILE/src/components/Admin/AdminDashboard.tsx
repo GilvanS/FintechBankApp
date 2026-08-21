@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, CreditCard, Receipt, FileText, ArrowLeft } from 'lucide-react';
+import { Shield, Users, CreditCard, Receipt, FileText, ArrowLeft, Sparkles, Repeat, Send, ShieldCheck } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 
-// Import sub-components (We will create these next)
+// Import sub-components
 import AdminLegacy from '../Admin';
 import UserManagement from './UserManagement';
 import RequestsManagement from './RequestsManagement';
 import CardsManagement from './CardsManagement';
 import BillingManagement from './BillingManagement';
+import RecurringBillsManagement from './RecurringBillsManagement';
+import { MainMassCreatorFlow } from './MainMassCreatorFlow';
+import TelegramManagement from './TelegramManagement';
+import AuditSection from './AuditSection';
 
 interface AdminDashboardProps {
     onClose: () => void;
 }
 
-type AdminTab = 'users' | 'cards' | 'billing' | 'requests' | 'legacy';
+type AdminTab = 'mass-creator' | 'users' | 'cards' | 'billing' | 'recurring' | 'requests' | 'telegram' | 'audit' | 'legacy';
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     const { theme } = useAppState();
@@ -32,15 +36,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     }, []);
 
     const tabs = [
+        { id: 'mass-creator', label: 'Gerador de Massa', icon: Sparkles },
         { id: 'users', label: 'Usuários', icon: Users },
         { id: 'cards', label: 'Cartões & Massa', icon: CreditCard },
         { id: 'billing', label: 'Faturamento', icon: Receipt },
+        { id: 'recurring', label: 'Contas Recorrentes', icon: Repeat },
         { id: 'requests', label: 'Solicitações', icon: FileText },
+        { id: 'telegram', label: 'Telegram', icon: Send },
+        { id: 'audit', label: 'Auditoria', icon: ShieldCheck },
         { id: 'legacy', label: 'Legado', icon: Shield },
     ] as const;
 
     const renderContent = () => {
         switch (activeTab) {
+            case 'mass-creator':
+                return <MainMassCreatorFlow onSuccess={() => setActiveTab('users')} onCancel={() => setActiveTab('users')} />;
             case 'legacy':
                 return <AdminLegacy onClose={onClose} />;
             case 'users':
@@ -49,8 +59,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 return <CardsManagement />;
             case 'billing':
                 return <BillingManagement />;
+            case 'recurring':
+                return <RecurringBillsManagement />;
             case 'requests':
                 return <RequestsManagement />;
+            case 'telegram':
+                return <TelegramManagement />;
+            case 'audit':
+                return <AuditSection />;
             default:
                 return null;
         }

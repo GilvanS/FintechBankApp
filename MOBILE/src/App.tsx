@@ -9,7 +9,7 @@ import PreLoginDashboard from './pages/PreLoginDashboard';
 import Dashboard from './components/Dashboard';
 import SignUp from './SignUp';
 import ResetPassword from './components/ResetPassword';
-import Admin from './components/Admin';
+import AdminDashboard from './components/Admin/AdminDashboard';
 import { DialogProvider } from './contexts/GlobalDialogContext';
 import { AppStateProvider } from './contexts/AppStateContext';
 import { initializeApi, getUserMe as getProfile } from './services/api';
@@ -217,7 +217,7 @@ const App: React.FC = () => {
       case 'resetPassword':
         return <ResetPassword onNavigateToLogin={() => setView('login')} onResetSuccess={() => setView('login')} />;
       case 'admin':
-        return <Admin isOpen={true} onClose={() => setView('home')} />;
+        return <AdminDashboard onClose={() => setView('home')} />;
       case 'home':
       case 'cards':
       case 'shop':

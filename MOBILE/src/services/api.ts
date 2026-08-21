@@ -1437,4 +1437,646 @@ export async function adminCloseInvoice(cpf: string): Promise<{ success: boolean
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// Portado do WEB/services/api.ts — paridade de funcionalidades (auditoria,
+// contas recorrentes, boleto/PIX de fatura, Telegram admin, gerador de massa).
+// ══════════════════════════════════════════════════════════════════════
+
+// AdminDashboard chama esta função para guardar o token da sessão admin.
+// No mobile não há concorrência multi-aba (app nativo, sessão única), então
+// isso é inofensivo mesmo sem um seletor de token dedicado como no WEB.
+export function setAdminSessionToken(token: string | null): void {
+    if (token) {
+        sessionStorage.setItem('sessionAdminToken', token);
+    } else {
+        sessionStorage.removeItem('sessionAdminToken');
+    }
+}
+
+// No-op no modo API real; existe só para paridade de import com o WEB.
+export async function initializeMockUsers(): Promise<void> {}
+
+export async function adminGetOverdueMasses(): Promise<{
+    success: boolean;
+    stats?: {
+        totalUsers: number;
+        overdueCount: number;
+        regularizedCount: number;
+        overdueRatePercentage: number;
+        totalOverdueAmount: number;
+        avgDaysOverdue: number;
+    };
+    overdueMasses?: Array<{
+        cpf: string;
+        fullName: string;
+        accountStatus: string;
+        faturaFechada: number;
+        daysOverdue: number;
+        dueDate: string;
+        hoursAgo?: number;
+        regularizedAt?: string;
+        encargos: { multa: number; jurosMora: number; jurosRemuneratorios: number; iof: number; totalEncargos: number };
+        totalQuitacao: number;
+    }>;
+    regularizedReport?: Array<{
+        cpf: string;
+        fullName: string;
+        valorTotal: number;
+        valorPago: number;
+        paymentType: 'TOTAL' | 'MINIMO' | 'PARCIAL';
+        paidAt: string;
+        hoursAgo: number;
+        hoursToPay: number | null;
+        dueDate: string | null;
+    }>;
+}> {
+    try {
+        const res = await api.get('/admin/overdue-masses-dashboard', { headers: getAuthHeaders('none') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false };
+    }
+}
+
+// --- Motor de Geração de Boleto e PIX por Fatura ---
+export interface PaymentCodesRequest {
+    cpf: string;
+    name: string;
+    amount: number;
+    dueDate: string; // YYYY-MM-DD
+    invoiceId: string;
+}
+
+export interface PaymentCodesResponse {
+    success: boolean;
+    data: {
+        invoice: {
+            id: string;
+            amount: number;
+            amountFormatted: string;
+            dueDate: string;
+            dueDateFormatted: string;
+            payerName: string;
+            payerCpf: string;
+        };
+        boleto: {
+            barcode: string;
+            linhaDigitavel: string;
+            linhaDigitavelRaw: string;
+            amount: number;
+            amountFormatted: string;
+            dueDate: string;
+            dueDateFormatted: string;
+            dueDateFactor: number;
+            beneficiary: { name: string; cnpj: string; bankCode: string; bankName: string };
+            payer: { name: string; cpf: string; cpfFormatted: string };
+            invoiceId: string;
+        };
+        pix: {
+            payload: string;
+            qrcodeSvg: string;
+            amount: number;
+            amountFormatted: string;
+            pixKey: string;
+            txid: string;
+            beneficiary: { name: string; cnpj: string };
+            payer: { name: string; cpf: string; cpfFormatted: string };
+            invoiceId: string;
+        };
+        generatedAt: string;
+    };
+}
+
+export async function generateInvoicePaymentCodes(request: PaymentCodesRequest): Promise<PaymentCodesResponse> {
+    try {
+        const res = await api.post('/invoices/generate-payment-codes', request, { headers: getAuthHeaders('json') });
+        if (res.data && res.data.success) return res.data;
+        return generatePaymentCodesFallbackLocal(request);
+    } catch (error) {
+        return generatePaymentCodesFallbackLocal(request);
+    }
+}
+
+// Fallback local (Febraban/EMV-PIX) para quando o backend não está disponível.
+// Copiado 1:1 do WEB — lógica de checksum financeiro não deve divergir.
+function generatePaymentCodesFallbackLocal(req: PaymentCodesRequest): PaymentCodesResponse {
+    const { cpf, name, amount, dueDate, invoiceId } = req;
+    const FEBRABAN_BASE = new Date(1997, 9, 7);
+    const dueObj = new Date(dueDate + 'T00:00:00');
+    const factor = Math.floor((dueObj.getTime() - FEBRABAN_BASE.getTime()) / (1000 * 60 * 60 * 24));
+    const factorStr = String(factor).padStart(4, '0');
+    const amountCents = Math.round(amount * 100);
+    const amountStr = String(amountCents).padStart(10, '0');
+
+    let hashVal = 0;
+    for (let i = 0; i < invoiceId.length; i++) {
+        hashVal = ((hashVal << 5) - hashVal + invoiceId.charCodeAt(i)) | 0;
+    }
+    const freeField = String(Math.abs(hashVal)).padEnd(25, '0').slice(0, 25);
+
+    function mod11(digits: string): number {
+        const weights = [2, 3, 4, 5, 6, 7, 8, 9];
+        let total = 0;
+        for (let i = digits.length - 1, w = 0; i >= 0; i--, w++) {
+            total += parseInt(digits[i]) * weights[w % weights.length];
+        }
+        const r = total % 11;
+        const dv = 11 - r;
+        return (dv === 0 || dv === 10 || dv === 11) ? 1 : dv;
+    }
+
+    function mod10(digits: string): number {
+        const weights = [2, 1];
+        let total = 0;
+        for (let i = digits.length - 1, w = 0; i >= 0; i--, w++) {
+            const product = parseInt(digits[i]) * weights[w % 2];
+            total += Math.floor(product / 10) + (product % 10);
+        }
+        const r = total % 10;
+        return r === 0 ? 0 : 10 - r;
+    }
+
+    const barcodeNoDv = `5989${factorStr}${amountStr}${freeField}`;
+    const dv = mod11(barcodeNoDv);
+    const barcode = `5989${dv}${factorStr}${amountStr}${freeField}`;
+
+    const f1raw = barcode.slice(0, 4) + barcode.slice(19, 24);
+    const dv1 = mod10(f1raw);
+    const f1 = `${f1raw.slice(0, 5)}.${f1raw.slice(5)}${dv1}`;
+    const f2raw = barcode.slice(24, 34);
+    const dv2 = mod10(f2raw);
+    const f2 = `${f2raw.slice(0, 5)}.${f2raw.slice(5)}${dv2}`;
+    const f3raw = barcode.slice(34, 44);
+    const dv3 = mod10(f3raw);
+    const f3 = `${f3raw.slice(0, 5)}.${f3raw.slice(5)}${dv3}`;
+    const f4 = barcode[4];
+    const f5 = barcode.slice(5, 19);
+    const linhaDigitavel = `${f1} ${f2} ${f3} ${f4} ${f5}`;
+
+    function emvField(tag: string, value: string): string {
+        return `${tag}${String(value.length).padStart(2, '0')}${value}`;
+    }
+    function crc16(data: string): string {
+        let crc = 0xFFFF;
+        for (let i = 0; i < data.length; i++) {
+            crc ^= data.charCodeAt(i) << 8;
+            for (let j = 0; j < 8; j++) {
+                if (crc & 0x8000) crc = (crc << 1) ^ 0x1021;
+                else crc = crc << 1;
+                crc &= 0xFFFF;
+            }
+        }
+        return crc.toString(16).toUpperCase().padStart(4, '0');
+    }
+
+    const pixKey = 'financeiro@fintechbank.com.br';
+    const txid = invoiceId.replace(/[-\s]/g, '').slice(0, 25);
+    const gui = emvField('00', 'BR.GOV.BCB.PIX');
+    const pixKeyField = emvField('01', pixKey);
+    const merchantAccount = emvField('26', gui + pixKeyField);
+    const txidField = emvField('05', txid);
+    const additionalData = emvField('62', txidField);
+    const payloadParts = [
+        emvField('00', '01'), emvField('01', '12'), merchantAccount,
+        emvField('52', '0000'), emvField('53', '986'),
+        emvField('54', amount.toFixed(2)), emvField('58', 'BR'),
+        emvField('59', 'Fintech Bank App'.slice(0, 25)),
+        emvField('60', 'Sao Paulo'.slice(0, 15)), additionalData
+    ];
+    const payloadNoCrc = payloadParts.join('') + '6304';
+    const crcVal = crc16(payloadNoCrc);
+    const pixPayload = payloadNoCrc + crcVal;
+
+    const cpfClean = cpf.replace(/\D/g, '').padStart(11, '0');
+    const cpfFmt = `${cpfClean.slice(0, 3)}.${cpfClean.slice(3, 6)}.${cpfClean.slice(6, 9)}-${cpfClean.slice(9, 11)}`;
+    const amountFmt = `R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const dueFmt = dueObj.toLocaleDateString('pt-BR');
+
+    return {
+        success: true,
+        data: {
+            invoice: { id: invoiceId, amount, amountFormatted: amountFmt, dueDate, dueDateFormatted: dueFmt, payerName: name, payerCpf: cpf },
+            boleto: {
+                barcode, linhaDigitavel, linhaDigitavelRaw: linhaDigitavel.replace(/[. ]/g, ''),
+                amount, amountFormatted: amountFmt, dueDate, dueDateFormatted: dueFmt, dueDateFactor: factor,
+                beneficiary: { name: 'Fintech Bank App S.A.', cnpj: '00000000000191', bankCode: '598', bankName: '598 - Fintech Bank App' },
+                payer: { name, cpf: cpfClean, cpfFormatted: cpfFmt }, invoiceId
+            },
+            pix: {
+                payload: pixPayload, qrcodeSvg: '', amount, amountFormatted: amountFmt,
+                pixKey, txid,
+                beneficiary: { name: 'Fintech Bank App S.A.', cnpj: '00000000000191' },
+                payer: { name, cpf: cpfClean, cpfFormatted: cpfFmt }, invoiceId
+            },
+            generatedAt: new Date().toISOString()
+        }
+    };
+}
+
+// --- Contas Recorrentes (cliente) ---
+export async function getRecurringBills(cpf: string): Promise<{ success: boolean; bills?: any[]; message?: string }> {
+    try {
+        const res = await api.get(`/recurring-bills/${cpf}`, { headers: getAuthHeaders('none') });
+        return { success: true, bills: res.data.bills || [] };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao buscar contas recorrentes.' };
+    }
+}
+
+export async function createRecurringBill(cpf: string, data: { name: string; amount: number; dueDay: number; category?: string; frequency?: string; paymentMethod?: string }): Promise<{ success: boolean; bill?: any; message?: string }> {
+    try {
+        const res = await api.post(`/recurring-bills/${cpf}`, data, { headers: getAuthHeaders('json') });
+        return { success: true, bill: res.data.bill };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao criar conta recorrente.' };
+    }
+}
+
+// Pagamento manual de conta recorrente (débito em conta / cartão).
+export async function payRecurringBill(cpf: string, billId: string, data: { paymentMethod?: 'ACCOUNT_DEBIT' | 'CREDIT_CARD'; name?: string; amount?: number; dueDay?: number; category?: string; frequency?: string }): Promise<{ success: boolean; message?: string; bill?: any; transactionId?: string; paymentMethod?: string; newBalance?: number }> {
+    try {
+        const res = await api.post(`/recurring-bills/${cpf}/${billId}/pay`, data, { headers: getAuthHeaders('json') });
+        return { success: true, ...res.data };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao pagar conta recorrente.' };
+    }
+}
+
+export async function updateRecurringBill(cpf: string, billId: string, data: { name?: string; amount?: number; dueDay?: number; category?: string }): Promise<{ success: boolean; message?: string }> {
+    try {
+        const res = await api.put(`/recurring-bills/${cpf}/${billId}`, data, { headers: getAuthHeaders('json') });
+        return { success: true, message: res.data.message };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao editar conta recorrente.' };
+    }
+}
+
+export async function removeRecurringBill(cpf: string, billId: string): Promise<{ success: boolean; message?: string }> {
+    try {
+        const res = await api.delete(`/recurring-bills/${cpf}/${billId}`, { headers: getAuthHeaders('none') });
+        return { success: true, message: res.data.message };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao cancelar conta recorrente.' };
+    }
+}
+
+// --- Admin: Auditoria ---
+export async function adminGetRegularizedTimeline(): Promise<{
+    success: boolean;
+    timeline: Array<{ date: string; label: string; count: number; totalAmount: number }>;
+    total: number;
+}> {
+    try {
+        const res = await api.get('/admin/regularized-timeline', { headers: getAuthHeaders('none') });
+        return res.data.success ? res.data : { success: false, timeline: [], total: 0 };
+    } catch {
+        return { success: false, timeline: [], total: 0 };
+    }
+}
+
+export async function adminCheckRegularized(since: string): Promise<{
+    success: boolean;
+    count: number;
+    totalPaid: number;
+    items: Array<{ cpf: string; fullName: string; valorTotal: number; valorPago: number; paidAt: string; dueDate: string }>;
+    checkedAt: string;
+    message?: string;
+}> {
+    try {
+        const params = new URLSearchParams({ since });
+        const res = await api.get(`/admin/regularized/check?${params.toString()}`, { headers: getAuthHeaders('none') });
+        return res.data.success ? res.data : { success: false, count: 0, totalPaid: 0, items: [], checkedAt: new Date().toISOString(), message: res.data.message };
+    } catch (error: any) {
+        return { success: false, count: 0, totalPaid: 0, items: [], checkedAt: new Date().toISOString(), message: error?.response?.data?.message };
+    }
+}
+
+export async function adminAuditConsistency(options?: { cpf?: string; limit?: number }): Promise<{
+    success: boolean;
+    message?: string;
+    summary?: {
+        totalScanned: number;
+        usersConsistent: number;
+        usersDesatualizados: number;
+        invoicesConsistent: number;
+        invoicesDesatualizadas: number;
+        totalInvoices: number;
+    };
+    details?: Array<{
+        cpf: string; name: string; status: string; dueDate: string;
+        userDaysOverdue: number; invoiceDiasAtraso: number; realTimeDays: number;
+        diffUser: number; diffInvoice: number;
+    }>;
+    filters?: { cpf: string | null; limit: number };
+    tip?: string;
+}> {
+    try {
+        const params = new URLSearchParams();
+        if (options?.cpf) params.set('cpf', options.cpf);
+        if (options?.limit) params.set('limit', String(options.limit));
+        const qs = params.toString();
+        const res = await api.get(`/admin/audit-consistency${qs ? '?' + qs : ''}`, { headers: getAuthHeaders('none') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao auditar consistência' };
+    }
+}
+
+export async function adminAuditDoubleCount(options?: { cpf?: string; limit?: number }): Promise<{
+    success: boolean;
+    message?: string;
+    scanned?: number;
+    withPayments?: number;
+    discrepancies?: number;
+    details?: Array<{
+        cpf: string; name: string; status: string;
+        payments: Array<{ id: string; amount: number; description: string; date: string }>;
+        invoices: Array<{ id: string; dueDate: string; status: string; valorTotal: number; valorPago: number; dataPagamento: string | null }>;
+        paymentTotal: number; invoiceTotalPago: number; diff: number;
+    }>;
+    filters?: { cpf: string | null; limit: number };
+    tip?: string;
+}> {
+    try {
+        const params = new URLSearchParams();
+        if (options?.cpf) params.set('cpf', options.cpf);
+        if (options?.limit) params.set('limit', String(options.limit));
+        const qs = params.toString();
+        const res = await api.get(`/admin/audit-double-count${qs ? '?' + qs : ''}`, { headers: getAuthHeaders('none') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao auditar double-counting' };
+    }
+}
+
+export async function adminRunFullAudit(): Promise<{
+    success: boolean;
+    message?: string;
+    consistency?: {
+        totalScanned: number; usersConsistent: number; usersDesatualizados: number;
+        invoicesConsistent: number; invoicesDesatualizadas: number; totalInvoices: number;
+    };
+    payments?: {
+        doubleCount: { scanned: number; discrepancies: number };
+        negativeBalance: { scanned: number; issues: number; totalExcess: number };
+    };
+    tip?: string;
+}> {
+    try {
+        const res = await api.get('/admin/audit/run-full', { headers: getAuthHeaders('none') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao executar auditoria completa' };
+    }
+}
+
+export async function adminHealthCharges(): Promise<{
+    success: boolean;
+    message?: string;
+    summary?: { totalUsers: number; consistent: number; divergent: number; noInvoice: number };
+    details?: Array<{
+        cpf: string; name: string; residual: number; daysOverdue: number; realDaysOverdue: number;
+        computed: { multa: number; jurosMora: number; jurosRem: number; iof: number; total: number };
+        stored: { multa: number; jurosMora: number; jurosRem: number; iof: number; total: number };
+        diff: { multa: number; jurosMora: number; jurosRem: number; iof: number; total: number };
+        divergence: boolean;
+    }>;
+    hasDivergence?: boolean;
+    tip?: string;
+}> {
+    try {
+        const res = await api.get('/admin/health/charges', { headers: getAuthHeaders('none') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao auditar encargos' };
+    }
+}
+
+export async function adminAuditOrphansPre005(): Promise<{ success: boolean; data?: any; message?: string }> {
+    try {
+        const res = await api.get('/admin/audit/orphans-pre005', { headers: getAuthHeaders('none') });
+        return { success: true, data: res.data };
+    } catch (err: any) {
+        return { success: false, message: err?.response?.data?.message || 'Erro ao auditar órfãos pré-005' };
+    }
+}
+
+export async function adminFixOrphanPayments(): Promise<{
+    success: boolean;
+    message?: string;
+    summary?: { usersScanned: number; fixed: number; errors: number };
+    details?: any[];
+}> {
+    try {
+        const res = await api.post('/admin/fix-orphan-payments', { confirm: true }, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao corrigir pagamentos órfãos' };
+    }
+}
+
+export async function adminGetCpfByCardNumber(cardNumber: string): Promise<{ success: boolean; cpf?: string; isVirtual?: boolean; type?: string; message?: string }> {
+    try {
+        const res = await api.get(`/admin/acquirer-simulate/card/${cardNumber}/cpf`, { headers: getAuthHeaders('none') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro na comunicação.' };
+    }
+}
+
+export async function adminForceRecurringEngine(cpf?: string): Promise<{ success: boolean; processedCount?: number; successCount?: number; failedCount?: number; message?: string }> {
+    try {
+        const res = await api.post('/admin/subscriptions/engine/force-cycle', { cpf }, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao forçar motor de recorrência.' };
+    }
+}
+
+// Lista TODAS as contas recorrentes de todas as massas (admin).
+export async function adminGetAllRecurringBills(opts: { status?: string; cpf?: string } = {}): Promise<{ success: boolean; bills?: any[]; message?: string }> {
+    try {
+        const params = new URLSearchParams();
+        if (opts.status) params.set('status', opts.status);
+        if (opts.cpf) params.set('cpf', opts.cpf);
+        const qs = params.toString() ? `?${params.toString()}` : '';
+        const res = await api.get(`/admin/recurring-bills${qs}`, { headers: getAuthHeaders('none') });
+        return { success: true, bills: res.data.bills || [] };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao listar contas recorrentes.' };
+    }
+}
+
+export async function adminGetTransactionById(id: string): Promise<{ success: boolean; transaction?: any; message?: string }> {
+    try {
+        const res = await api.get(`/admin/transactions/${id}`, { headers: getAuthHeaders('none') });
+        return { success: true, transaction: res.data.transaction };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao buscar transação.' };
+    }
+}
+
+export async function adminCancelTransaction(cpf: string, id: string): Promise<{ success: boolean; message: string; plan?: any }> {
+    try {
+        const res = await api.post(`/admin/transactions/${cpf}/${id}/cancel`, {}, { headers: getAuthHeaders('json') });
+        return { success: true, message: res.data.message, plan: res.data.plan };
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao estornar transação.' };
+    }
+}
+
+export async function adminCreateMassUser(payload: any): Promise<{ success: boolean; message: string; user?: User }> {
+    try {
+        const res = await api.post('/admin/users/mass', payload, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (error: any) {
+        return { success: false, message: error?.response?.data?.message || 'Erro ao criar massa.' };
+    }
+}
+
+// --- Admin: Telegram ---
+export interface TelegramTopic {
+    cpf: string;
+    topicId: number;
+    fullName?: string;
+}
+
+export interface TelegramLogEntry {
+    id: number;
+    cpf: string;
+    topic_id?: number | null;
+    category: string;
+    destination: string;
+    message_type: string;
+    message_id?: string | null;
+    ok: boolean;
+    error?: string | null;
+    created_at: string;
+}
+
+export interface TelegramSetting {
+    category: string;
+    enabled: boolean;
+    valid_from?: string | null;
+    valid_until?: string | null;
+    ttl_minutes?: number | null;
+    updated_at?: string;
+    updated_by?: string | null;
+}
+
+export async function adminTelegramStatus(): Promise<{ configured: boolean; botName?: string; chatId?: string }> {
+    try {
+        const res = await api.get('/admin/telegram/status', { headers: getAuthHeaders('none') });
+        return res.data;
+    } catch {
+        return { configured: false };
+    }
+}
+
+export async function adminTelegramTopics(): Promise<TelegramTopic[]> {
+    try {
+        const res = await api.get('/admin/telegram/topics', { headers: getAuthHeaders('none') });
+        return res.data.topics || [];
+    } catch {
+        return [];
+    }
+}
+
+export async function adminTelegramCreateTopic(cpf: string): Promise<{ success: boolean; message: string; topicId?: number }> {
+    try {
+        const res = await api.post('/admin/telegram/topics', { cpf }, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (err: any) {
+        return { success: false, message: err?.response?.data?.message || 'Erro ao criar tópico Telegram' };
+    }
+}
+
+export async function adminTelegramDeleteTopic(cpf: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.delete('/admin/telegram/topics/' + cpf, { headers: getAuthHeaders('none') });
+        return res.data;
+    } catch (err: any) {
+        return { success: false, message: err?.response?.data?.message || 'Erro ao remover tópico Telegram' };
+    }
+}
+
+export async function adminTelegramTest(): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post('/admin/telegram/test', {}, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (err: any) {
+        return { success: false, message: err?.response?.data?.message || 'Erro ao testar envio Telegram' };
+    }
+}
+
+export async function adminTelegramSendMessage(cpf: string, text: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post('/admin/telegram/send', { cpf, text }, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (err: any) {
+        return { success: false, message: err?.response?.data?.message || 'Erro ao enviar mensagem Telegram' };
+    }
+}
+
+export async function adminTelegramSettings(): Promise<TelegramSetting[]> {
+    try {
+        const res = await api.get('/admin/telegram/settings', { headers: getAuthHeaders('none') });
+        return res.data.settings || [];
+    } catch {
+        return [];
+    }
+}
+
+export async function adminTelegramUpdateSetting(category: string, fields: Partial<TelegramSetting>): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.patch('/admin/telegram/settings/' + category, fields, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (err: any) {
+        return { success: false, message: err?.response?.data?.message || 'Erro ao atualizar configuração do Telegram' };
+    }
+}
+
+export async function adminTelegramTestCategory(category: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post('/admin/telegram/settings/' + category + '/test', {}, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (err: any) {
+        return { success: false, message: err?.response?.data?.message || 'Erro ao testar categoria Telegram' };
+    }
+}
+
+export async function adminTelegramSendPdf(cpf: string, type: 'open' | 'closed' | 'previous'): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post('/admin/telegram/topics/' + cpf + '/send-pdf', { type }, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (err: any) {
+        return { success: false, message: err?.response?.data?.message || 'Erro ao enviar PDF' };
+    }
+}
+
+export async function adminTelegramSendTable(cpf: string, payload: { title: string; headers: string[]; rows: string[][] }): Promise<{ success: boolean; message: string }> {
+    try {
+        const res = await api.post('/admin/telegram/topics/' + cpf + '/send-table', payload, { headers: getAuthHeaders('json') });
+        return res.data;
+    } catch (err: any) {
+        return { success: false, message: err?.response?.data?.message || 'Erro ao enviar tabela ASCII' };
+    }
+}
+
+export async function adminTelegramLog(filters?: { cpf?: string; category?: string; destination?: string; limit?: number }): Promise<TelegramLogEntry[]> {
+    try {
+        const params = new URLSearchParams();
+        if (filters?.cpf) params.set('cpf', filters.cpf.replace(/\D/g, ''));
+        if (filters?.category) params.set('category', filters.category);
+        if (filters?.destination) params.set('destination', filters.destination);
+        if (filters?.limit) params.set('limit', String(filters.limit));
+        const qs = params.toString();
+        const res = await api.get('/admin/telegram/log' + (qs ? '?' + qs : ''), { headers: getAuthHeaders('none') });
+        return res.data.entries || [];
+    } catch (err: any) {
+        console.warn('[api] adminTelegramLog:', err?.message || err);
+        return [];
+    }
+}
+
 export default api;
