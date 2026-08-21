@@ -91,6 +91,15 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
             if ((result as any).token) {
                 const isAdmin = (result.user as any)?.role === 'admin';
                 localStorage.setItem(isAdmin ? 'adminToken' : 'authToken', (result as any).token);
+            } else {
+                // O modo demo não emite JWT: a sessão viveria só na memória desta
+                // aba, e telas abertas em aba própria (vitrine, painel) tratariam
+                // o usuário como visitante. Este marcador não é credencial — só
+                // identifica quem entrou, sobre dados fictícios.
+                localStorage.setItem('demoSession', JSON.stringify({
+                    cpf: result.user.cpf,
+                    role: (result.user as any)?.role || 'user',
+                }));
             }
             auth.login(result.user);
             showSuccess('Login efetuado com sucesso');

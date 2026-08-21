@@ -63,14 +63,21 @@ export const ShopLanding: React.FC = () => {
     useEffect(() => {
         const ler = () => {
             const token = localStorage.getItem('authToken') || localStorage.getItem('adminToken');
-            if (!token) { setSessao(null); return; }
-            try {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                const expirado = payload.exp && payload.exp * 1000 < Date.now();
-                setSessao(expirado ? null : { cpf: payload.cpf, role: payload.role });
-            } catch {
-                setSessao(null);
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    const expirado = payload.exp && payload.exp * 1000 < Date.now();
+                    setSessao(expirado ? null : { cpf: payload.cpf, role: payload.role });
+                    return;
+                } catch { /* token ilegível: tenta o modo demo abaixo */ }
             }
+
+            // No modo demo não há JWT — o login deixa apenas um marcador.
+            const demo = localStorage.getItem('demoSession');
+            if (demo) {
+                try { setSessao(JSON.parse(demo)); return; } catch { /* ignora */ }
+            }
+            setSessao(null);
         };
         ler();
 
