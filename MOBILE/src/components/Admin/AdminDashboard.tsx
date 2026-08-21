@@ -36,7 +36,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     }, []);
 
     const tabs = [
-        { id: 'mass-creator', label: 'Gerador de Massa', icon: Sparkles },
+        { id: 'mass-creator', label: 'Gerador de Massa 3.0', icon: Sparkles },
         { id: 'users', label: 'Usuários', icon: Users },
         { id: 'cards', label: 'Cartões & Massa', icon: CreditCard },
         { id: 'billing', label: 'Faturamento', icon: Receipt },

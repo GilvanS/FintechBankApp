@@ -53,12 +53,18 @@ const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceS
 // art. 52 CDC — payload único de encargos de juros exposto nas rotas de compra
 // (shop/checkout e acquirer-simulate) e nas transações enriquecidas do cartão.
 // Fonte única: evita duplicar a matemática entre as rotas.
-const buildJurosPayload = ({ original, totalWithInterest, installments, interestRate }) => {
+const buildJurosPayload = ({ original, totalWithInterest, installments, interestRate, daysUntilBilling }) => {
     const rate = Number(interestRate) || 0;
     const qty = Number(installments) || 1;
     const originalVal = Number(original) || 0;
     const tWI = Number(totalWithInterest) || 0;
     const ef = calcEffectiveRates(rate, qty);
+    // IOF: adicional fixo (0,38%) + diário (0,0082%/dia)
+    const principal = round2(tWI);
+    const iofDays = Number(daysUntilBilling) || 30;
+    const iofAdicional = round2(principal * 0.0038);
+    const iofDiario = round2(principal * 0.000082 * iofDays);
+    const iofTotal = round2(iofAdicional + iofDiario);
     return {
         originalAmount: round2(originalVal),
         jurosTotal: rate > 0 ? round2(Math.max(0, tWI - originalVal)) : 0,
@@ -67,6 +73,10 @@ const buildJurosPayload = ({ original, totalWithInterest, installments, interest
         valorParcela: round2(qty > 1 ? tWI / qty : tWI),
         taxaEfetivaMensal: ef.mensal,
         taxaEfetivaAnual: ef.anual,
+        iofAdicional,
+        iofDiario,
+        iofTotal,
+        iofDias: iofDays,
     };
 };
 
@@ -102,6 +112,10 @@ function buildPurchaseTelegramMessage({ tipo, estabelecimento, original, totalPa
     }
     if (jp.jurosTotal > 0) {
         rows.push(['JUROS', 'Juros do financiamento', `${(jp.interestRate * 100).toFixed(1)}% a.m. · efetiva ${jp.taxaEfetivaMensal.toFixed(2)}% a.m.`, fx(jp.jurosTotal)]);
+        // IOF: adicional fixo (0,38%) + diário (0,0082%/dia × dias estimados)
+        rows.push(['IOF-AD', 'IOF adicional (0,38% fixo)', 'Única', fx(jp.iofAdicional || 0)]);
+        rows.push(['IOF-DIA', `IOF diário (0,0082%/dia × ${jp.iofDias || 30}d)`, 'Acresce ao saldo', fx(jp.iofDiario || 0)]);
+        rows.push(['IOF-TOT', 'Total IOF estimado', `adicional + ${jp.iofDias || 30} dias`, fx(jp.iofTotal || 0)]);
     } else if (qty > 1) {
         rows.push(['JUROS', 'Sem juros', '0.00% a.m.', '0.00']);
     }
@@ -7361,6 +7375,19 @@ if (!IS_TEST) {
             });
         } catch (err) {
             console.error('❌ Erro ao gravar massa no PostgreSQL:', err);
+
+            // 23505 = unique_violation. A mensagem crua do Postgres cita só o nome da
+            // constraint, que não diz ao operador qual campo repetiu nem o que fazer.
+            if (err.code === '23505') {
+                const campo = /email/i.test(err.constraint || '') ? 'e-mail'
+                    : /cpf|pkey/i.test(err.constraint || '') ? 'CPF'
+                    : 'um dos campos únicos';
+                return res.status(409).json({
+                    success: false,
+                    message: `Já existe uma massa com esse ${campo}. Sorteie novamente para gerar outro.`
+                });
+            }
+
             return res.status(500).json({ success: false, message: err.message || 'Erro interno ao gravar massa no banco.' });
         }
     });

@@ -138,10 +138,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         },
         {
             id: 'massa',
-            label: 'Gerador 2.0',
+            label: 'Gerador 3.0',
             icon: Sparkles,
             tabs: [
-                { id: 'mass-creator', label: '⚡ Gerador de Massa 2.0', icon: Sparkles }
+                { id: 'mass-creator', label: '⚡ Gerador de Massa 3.0', icon: Sparkles }
             ]
         },
         {

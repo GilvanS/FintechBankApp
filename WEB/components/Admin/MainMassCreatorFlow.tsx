@@ -125,39 +125,78 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
     const isAddressValid = () => Boolean(formData.address.street && formData.address.number && formData.address.city);
     const isFormValid = () => isProfileValid() && isAddressValid();
 
-    // Submeter Criação de Massa e Gravação Síncrona no PGDB
+    // E-mail corporativo: nome.sobrenome@fintech.com. O nome é normalizado porque massas
+    // estrangeiras trazem acentos e hífens, que não podem ir na parte local do endereço.
+    const buildEmail = (fullName: string) => {
+        const partes = fullName
+            .normalize('NFD')
+            .replace(/\p{M}/gu, '')
+            .toLowerCase()
+            .replace(/[^a-z\s]/g, ' ')
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
+        if (!partes.length) return 'massa@fintech.com';
+        const nome = partes[0];
+        const sobrenome = partes.length > 1 ? partes[partes.length - 1] : '';
+        return sobrenome ? `${nome}.${sobrenome}@fintech.com` : `${nome}@fintech.com`;
+    };
+
+    const montarPayload = (dados: GeneratedMassData) => ({
+        fullName: dados.fullName,
+        cpf: dados.cpf.replace(/\D/g, ''),
+        email: buildEmail(dados.fullName),
+        password: 'admin999',
+        initialBalance: dados.balance,
+        creditLimit: dados.creditCard.limit,
+        pixLimit: dados.dailyPixLimit,
+        accountStatus: dados.overdueState === 'EM_DIA' ? 'adimplente' : 'inadimplente',
+        daysOverdue: dados.overdueState === 'EM_DIA' ? 0 : OVERDUE_TIERS[dados.overdueState].days,
+        overdueAmount: dados.overdueState === 'EM_DIA' ? 0 : OVERDUE_TIERS[dados.overdueState].amount,
+        birthDate: dados.birthDate,
+        age: dados.age,
+        hasTutor: false,
+        tutor: undefined,
+        address: dados.address,
+        countryOrigin: dados.countryOrigin,
+        cardBrand: dados.creditCard.brand,
+        dueDay: dados.creditCard.dueDay,
+        cardType: dados.creditCard.cardType,
+        cardActivation: dados.creditCard.activationState
+    });
+
+    // O gerador sorteia de uma lista finita de nomes, então cedo ou tarde repete um
+    // nome já usado e o e-mail derivado dele bate na constraint users_email_key.
+    // Nesse caso trocamos nome e sobrenome por outro do mesmo país e tentamos de novo,
+    // em vez de devolver o erro cru do banco para o operador.
+    const MAX_TENTATIVAS_NOME = 5;
+
     const handleFinalSubmit = async () => {
         setIsSaving(true);
         try {
-            const payload = {
-                fullName: formData.fullName,
-                cpf: formData.cpf.replace(/\D/g, ''),
-                email: `${formData.fullName.toLowerCase().replace(/\s+/g, '')}@fintech.com`,
-                password: 'admin999',
-                initialBalance: formData.balance,
-                creditLimit: formData.creditCard.limit,
-                pixLimit: formData.dailyPixLimit,
-                accountStatus: formData.overdueState === 'EM_DIA' ? 'adimplente' : 'inadimplente',
-                daysOverdue: formData.overdueState === 'EM_DIA' ? 0 : OVERDUE_TIERS[formData.overdueState].days,
-                overdueAmount: formData.overdueState === 'EM_DIA' ? 0 : OVERDUE_TIERS[formData.overdueState].amount,
-                birthDate: formData.birthDate,
-                age: formData.age,
-                hasTutor: false,
-                tutor: undefined,
-                address: formData.address,
-                countryOrigin: formData.countryOrigin,
-                cardBrand: formData.creditCard.brand,
-                dueDay: formData.creditCard.dueDay,
-                cardType: formData.creditCard.cardType,
-                cardActivation: formData.creditCard.activationState
-            };
+            let dados = formData;
 
-            const result = await adminCreateMassUser(payload);
-            if (result.success) {
-                showToast(`🚀 Massa ${formData.fullName} (CPF: ${formData.cpf}) criada com sucesso no PGDB!`, 'success');
-                onSuccess?.();
-            } else {
-                showToast(result.message || 'Erro ao gravar massa no PGDB.', 'error');
+            for (let tentativa = 1; tentativa <= MAX_TENTATIVAS_NOME; tentativa++) {
+                const result = await adminCreateMassUser(montarPayload(dados));
+
+                if (result.success) {
+                    showToast(`🚀 Massa ${dados.fullName} (CPF: ${dados.cpf}) criada com sucesso no PGDB!`, 'success');
+                    onSuccess?.();
+                    return;
+                }
+
+                const emailDuplicado = /e-?mail/i.test(result.message || '');
+                if (!emailDuplicado || tentativa === MAX_TENTATIVAS_NOME) {
+                    showToast(result.message || 'Erro ao gravar massa no PGDB.', 'error');
+                    return;
+                }
+
+                // Reaproveita só o nome do novo sorteio: CPF, endereço e valores
+                // configurados pelo operador permanecem intactos.
+                const novoNome = generateRandomMassData(dados.countryOrigin).fullName;
+                dados = { ...dados, fullName: novoNome };
+                setFormData(dados);
+                showToast(`✉️ E-mail já usado. Trocando para ${novoNome}...`, 'success');
             }
         } catch (err: any) {
             showToast(err.message || 'Erro ao conectar ao banco.', 'error');
@@ -215,11 +254,15 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
                 </div>
             </div>
 
-            {/* Grid principal: esquerda (perfil, endereço, financeiro) | direita (cartão em destaque) */}
-            <div ref={gridRef} className="grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-4">
-                <div className="space-y-4">
+            {/* No desktop: Perfil + Financeiro à esquerda, Cartão + Endereço à direita.
+                Em tela estreita tudo vira uma coluna na ordem Perfil → Cartão → Financeiro → Endereço.
+                `contents` dissolve os wrappers de coluna nesse caso, para que `order-*` valha entre
+                todas as seções — entre irmãos de wrappers diferentes o `order` não teria efeito. */}
+            <div ref={gridRef} className="grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-4 lg:items-start">
+                {/* Coluna esquerda */}
+                <div className="contents lg:block lg:space-y-4">
                     {/* PERFIL */}
-                    <div data-mass-section className={`p-4 rounded-3xl ${cardClass} space-y-3`}>
+                    <div data-mass-section className={`order-1 p-4 rounded-3xl ${cardClass} space-y-3`}>
                         <div className="flex justify-between items-center border-b border-black/10 dark:border-white/10 pb-2.5">
                             <h3 className="font-black text-sm flex items-center gap-1.5">
                                 <UserIcon className="w-4 h-4 text-blue-500" />
@@ -290,91 +333,8 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
                         </div>
                     </div>
 
-                    {/* ENDEREÇO */}
-                    <div data-mass-section className={`p-4 rounded-3xl ${cardClass} space-y-3`}>
-                        <div className="flex justify-between items-center border-b border-black/10 dark:border-white/10 pb-2.5">
-                            <h3 className="font-black text-sm flex items-center gap-1.5">
-                                <MapPin className="w-4 h-4 text-emerald-500" />
-                                <span>Endereço SAC</span>
-                            </h3>
-                            <button
-                                type="button"
-                                onClick={() => handleRandomFill(formData.countryOrigin)}
-                                className="text-[11px] font-bold text-blue-500 hover:underline flex items-center gap-1 cursor-pointer"
-                            >
-                                <Dices className="w-3 h-3" /> Sortear
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-3">
-                            <div className="space-y-1">
-                                <label className="text-[11px] font-bold opacity-80">CEP:</label>
-                                <input
-                                    type="text"
-                                    value={formData.address.cep}
-                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, cep: e.target.value } })}
-                                    className={`w-full p-2.5 rounded-xl text-xs font-mono font-bold ${inputClass}`}
-                                />
-                            </div>
-                            <div className="col-span-2 space-y-1">
-                                <label className="text-[11px] font-bold opacity-80">Logradouro:</label>
-                                <input
-                                    type="text"
-                                    value={formData.address.street}
-                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, street: e.target.value } })}
-                                    className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-3">
-                            <div className="space-y-1">
-                                <label className="text-[11px] font-bold opacity-80">Número:</label>
-                                <input
-                                    type="text"
-                                    value={formData.address.number}
-                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, number: e.target.value } })}
-                                    className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[11px] font-bold opacity-80">Bairro:</label>
-                                <input
-                                    type="text"
-                                    value={formData.address.neighborhood}
-                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, neighborhood: e.target.value } })}
-                                    className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[11px] font-bold opacity-80">Cidade/UF:</label>
-                                <div className="flex gap-1.5">
-                                    <input
-                                        type="text"
-                                        value={formData.address.city}
-                                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, city: e.target.value } })}
-                                        className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
-                                    />
-                                    <input
-                                        type="text"
-                                        value={formData.address.state}
-                                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, state: e.target.value } })}
-                                        className={`w-14 p-2.5 rounded-xl text-xs font-bold uppercase text-center ${inputClass}`}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-[11px] flex items-start gap-2">
-                            <PackageCheck className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
-                            <p className="opacity-80 leading-snug">
-                                {formData.address.street}, nº {formData.address.number} - {formData.address.neighborhood}, {formData.address.city}/{formData.address.state} · CEP {formData.address.cep}
-                            </p>
-                        </div>
-                    </div>
-
                     {/* FINANCEIRO */}
-                    <div data-mass-section className={`p-4 rounded-3xl ${cardClass} space-y-3`}>
+                    <div data-mass-section className={`order-3 p-4 rounded-3xl ${cardClass} space-y-3`}>
                         <h3 className="font-black text-sm flex items-center gap-1.5 border-b border-black/10 dark:border-white/10 pb-2.5">
                             <DollarSign className="w-4 h-4 text-volt-green" />
                             <span>Financeiro</span>
@@ -440,8 +400,10 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
                     </div>
                 </div>
 
-                {/* CARTÃO — coluna em destaque, sozinho, com flip 3D */}
-                <div data-mass-section className={`p-4 rounded-3xl ${cardClass} space-y-3 lg:sticky lg:top-4 self-start`}>
+                {/* Coluna direita */}
+                <div className="contents lg:block lg:space-y-4">
+                    {/* CARTÃO — em destaque, com flip 3D */}
+                    <div data-mass-section className={`order-2 p-4 rounded-3xl ${cardClass} space-y-3`}>
                     <div className="flex justify-between items-center border-b border-black/10 dark:border-white/10 pb-2.5">
                         <h3 className="font-black text-sm flex items-center gap-1.5">
                             <CardIcon className="w-4 h-4 text-purple-500" />
@@ -569,6 +531,90 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
                             <option value="ACTIVATED">✅ Já Ativado</option>
                             <option value="AWAITING_ACTIVATION">⏳ Aguardando Ativação</option>
                         </select>
+                    </div>
+                    </div>
+
+                    {/* ENDEREÇO */}
+                    <div data-mass-section className={`order-4 p-4 rounded-3xl ${cardClass} space-y-3`}>
+                        <div className="flex justify-between items-center border-b border-black/10 dark:border-white/10 pb-2.5">
+                            <h3 className="font-black text-sm flex items-center gap-1.5">
+                                <MapPin className="w-4 h-4 text-emerald-500" />
+                                <span>Endereço SAC</span>
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => handleRandomFill(formData.countryOrigin)}
+                                className="text-[11px] font-bold text-blue-500 hover:underline flex items-center gap-1 cursor-pointer"
+                            >
+                                <Dices className="w-3 h-3" /> Sortear
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">CEP:</label>
+                                <input
+                                    type="text"
+                                    value={formData.address.cep}
+                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, cep: e.target.value } })}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-mono font-bold ${inputClass}`}
+                                />
+                            </div>
+                            <div className="col-span-2 space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">Logradouro:</label>
+                                <input
+                                    type="text"
+                                    value={formData.address.street}
+                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, street: e.target.value } })}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">Número:</label>
+                                <input
+                                    type="text"
+                                    value={formData.address.number}
+                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, number: e.target.value } })}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">Bairro:</label>
+                                <input
+                                    type="text"
+                                    value={formData.address.neighborhood}
+                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, neighborhood: e.target.value } })}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">Cidade/UF:</label>
+                                <div className="flex gap-1.5">
+                                    <input
+                                        type="text"
+                                        value={formData.address.city}
+                                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, city: e.target.value } })}
+                                        className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
+                                    />
+                                    <input
+                                        type="text"
+                                        value={formData.address.state}
+                                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, state: e.target.value } })}
+                                        className={`w-14 p-2.5 rounded-xl text-xs font-bold uppercase text-center ${inputClass}`}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-[11px] flex items-start gap-2">
+                            <PackageCheck className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
+                            <p className="opacity-80 leading-snug">
+                                {formData.address.street}, nº {formData.address.number} - {formData.address.neighborhood}, {formData.address.city}/{formData.address.state} · CEP {formData.address.cep}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
