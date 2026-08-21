@@ -47,17 +47,32 @@ describe('⚡ MainMassCreatorFlow & 360 Global Mass Engine', () => {
         }
     });
 
-    it('deve renderizar a jornada multi-telas de 4 etapas e navegar com sucesso', () => {
+    it('renderiza o painel 3.0 em pagina unica, sem wizard de etapas', () => {
         renderWithContext(<MainMassCreatorFlow />);
 
-        // Etapa 1 deve estar visível
-        expect(screen.getByText(/Etapa 1: Dados Pessoais, País e Governança de Idade/i)).toBeInTheDocument();
+        // Todas as secoes visiveis de uma vez — nao ha mais navegacao entre etapas.
+        expect(screen.getByText('Perfil')).toBeInTheDocument();
+        expect(screen.getByText('Endereço SAC')).toBeInTheDocument();
+        expect(screen.getByText('Financeiro')).toBeInTheDocument();
+        expect(screen.getByText('Cartão')).toBeInTheDocument();
 
-        // Clicar em Avançar para Etapa 2
-        const nextButton = screen.getByRole('button', { name: /Avançar/i });
-        fireEvent.click(nextButton);
+        expect(screen.queryByRole('button', { name: /Avançar/i })).not.toBeInTheDocument();
+    }, 25000);
 
-        // Etapa 2 (Endereço SAC) visível
-        expect(screen.getByText(/Etapa 2: Endereço Residencial para Entregas & Atendimento SAC/i)).toBeInTheDocument();
+    it('expoe as acoes de gerar e concluir no topo do painel', () => {
+        renderWithContext(<MainMassCreatorFlow />);
+
+        expect(screen.getByRole('button', { name: /Gerar Aleatório/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Concluir e Criar/i })).toBeInTheDocument();
+    }, 25000);
+
+    it('vira o cartao para revelar o CVV ao clicar', () => {
+        renderWithContext(<MainMassCreatorFlow />);
+
+        const card = screen.getByLabelText(/Virar cartão para ver CVV/i);
+        expect(card).toHaveStyle({ transform: 'rotateY(0deg)' });
+
+        fireEvent.click(card);
+        expect(card).toHaveStyle({ transform: 'rotateY(180deg)' });
     }, 25000);
 });

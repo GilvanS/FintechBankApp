@@ -1,24 +1,23 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { adminCreateMassUser } from '../../services/api';
 import { showToast } from '../../utils/toast';
-import { generateRandomMassData, GeneratedMassData, OVERDUE_TIERS, OverdueState } from '../../utils/massGenerator';
+import { generateRandomMassData, GeneratedMassData, OVERDUE_TIERS } from '../../utils/massGenerator';
+import { useButtonAnimation } from '../../hooks/useGsapMotion';
 import {
     User as UserIcon,
     CreditCard as CardIcon,
-    ShieldAlert,
     MapPin,
     Calendar,
     Dices,
-    Zap,
-    ArrowLeft,
-    ArrowRight,
     CheckCircle2,
-    Building2,
     Globe2,
     DollarSign,
     Sparkles,
-    PackageCheck
+    PackageCheck,
+    X as CloseIcon
 } from 'lucide-react';
 
 interface Props {
@@ -26,16 +25,54 @@ interface Props {
     onCancel?: () => void;
 }
 
+const prefersReducedMotion = () =>
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const CARD_GRADIENT: Record<GeneratedMassData['creditCard']['brand'], string> = {
+    VISA: 'from-blue-700 via-indigo-800 to-black',
+    AMEX: 'from-cyan-600 via-teal-800 to-black',
+    ELO: 'from-zinc-800 via-neutral-900 to-black',
+    MASTERCARD: 'from-rose-700 via-red-900 to-black',
+    HIPERCARD: 'from-rose-700 via-red-900 to-black'
+};
+
 export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) => {
     const { theme } = useAppState();
     const isMidnight = theme === 'midnight';
 
-    // Step State (1: Perfil/Idade, 2: Endereço SAC, 3: Cartão/Bandeira, 4: Limites/PGDB)
-    const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
-
-    // Form State
     const [formData, setFormData] = useState<GeneratedMassData>(() => generateRandomMassData('Brasil'));
     const [isSaving, setIsSaving] = useState(false);
+    const [cardFlipped, setCardFlipped] = useState(false);
+    const [cardHovering, setCardHovering] = useState(false);
+
+    const gridRef = useRef<HTMLDivElement>(null);
+    const dicesBtn = useButtonAnimation();
+    const submitBtn = useButtonAnimation();
+
+    // Entrada em stagger dos blocos + escopo para o pulso de "sorteio"
+    const { contextSafe } = useGSAP(() => {
+        if (prefersReducedMotion()) return;
+        const sections = gridRef.current?.querySelectorAll('[data-mass-section]');
+        if (sections?.length) {
+            gsap.fromTo(
+                sections,
+                { opacity: 0, y: 14 },
+                { opacity: 1, y: 0, duration: 0.45, stagger: 0.08, ease: 'power2.out' }
+            );
+        }
+    }, { scope: gridRef });
+
+    const pulseGrid = contextSafe(() => {
+        if (prefersReducedMotion()) return;
+        const sections = gridRef.current?.querySelectorAll('[data-mass-section]');
+        if (sections?.length) {
+            gsap.fromTo(
+                sections,
+                { scale: 0.985, filter: 'brightness(1.25)' },
+                { scale: 1, filter: 'brightness(1)', duration: 0.45, ease: 'back.out(2)', stagger: 0.03 }
+            );
+        }
+    });
 
     // Aesthetics Classes
     const cardClass = isMidnight
@@ -50,6 +87,10 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
         ? 'bg-volt-green text-black hover:bg-[#a3ff12] font-black uppercase shadow-[0_0_15px_rgba(163,255,18,0.3)]'
         : 'bg-volt-yellow border-2 border-black text-black font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-volt-yellow-pastel active:translate-y-0.5 active:shadow-none';
 
+    const successBtnClass = isMidnight
+        ? 'bg-emerald-500 text-black hover:bg-emerald-400 font-black uppercase shadow-[0_0_15px_rgba(16,185,129,0.35)]'
+        : 'bg-emerald-400 border-2 border-black text-black font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-emerald-300 active:translate-y-0.5 active:shadow-none';
+
     const secondaryBtnClass = isMidnight
         ? 'border border-white/20 bg-white/5 hover:bg-white/10 text-white font-bold'
         : 'border-2 border-black bg-white hover:bg-black/5 text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]';
@@ -60,6 +101,7 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
         const random = generateRandomMassData(country);
         setFormData(random);
         showToast(`🎲 Dados gerados com sucesso (${random.countryOrigin})!`, 'success');
+        pulseGrid();
     };
 
     // Calcular idade quando muda a data de nascimento
@@ -79,19 +121,9 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
         }));
     };
 
-    // Validação da Etapa 1
-    const isStep1Valid = () => {
-        if (!formData.fullName || !formData.cpf || !formData.birthDate) return false;
-        if (formData.hasTutor) {
-            return Boolean(formData.tutor?.fullName && formData.tutor?.cpf);
-        }
-        return true;
-    };
-
-    // Validação da Etapa 2
-    const isStep2Valid = () => {
-        return Boolean(formData.address.street && formData.address.number && formData.address.city);
-    };
+    const isProfileValid = () => Boolean(formData.fullName && formData.cpf && formData.birthDate);
+    const isAddressValid = () => Boolean(formData.address.street && formData.address.number && formData.address.city);
+    const isFormValid = () => isProfileValid() && isAddressValid();
 
     // Submeter Criação de Massa e Gravação Síncrona no PGDB
     const handleFinalSubmit = async () => {
@@ -135,710 +167,428 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel }) =>
     };
 
     return (
-        <div className="w-full max-w-5xl mx-auto space-y-6">
-            {/* Header com Título e Botão Mágico Global (🎲) */}
-            <div className={`p-6 rounded-3xl ${cardClass} flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4`}>
-                <div>
-                    <div className="flex items-center gap-2">
-                        <span className="p-2 rounded-xl bg-volt-yellow/20 text-volt-yellow font-bold">⚡</span>
-                        <h2 className="text-xl font-black uppercase tracking-wide">Gerador de Massa 2.0 (Onboarding 360°)</h2>
+        <div className="w-full max-w-6xl mx-auto space-y-4">
+            {/* Header: título + ações principais (sempre visíveis, sem avançar de tela) */}
+            <div className={`p-4 rounded-3xl ${cardClass} flex flex-col sm:flex-row items-stretch sm:items-center gap-3`}>
+                <div className="flex-1 min-w-0 flex items-center gap-3">
+                    <span className="p-2 rounded-xl bg-volt-yellow/20 text-volt-yellow font-bold shrink-0">⚡</span>
+                    <div className="min-w-0">
+                        <h2 className="text-base font-black uppercase tracking-wide leading-tight">Gerador de Massa 3.0</h2>
+                        <p className="text-[10px] opacity-70 leading-tight">Painel único — gere, ajuste e conclua sem trocar de tela.</p>
                     </div>
-                    <p className="text-xs opacity-70 mt-1">
-                        Jornada dedicada para cadastro de massas com governança de idade, endereço SAC e sincronia PostgreSQL.
-                    </p>
                 </div>
 
-                <button
-                    type="button"
-                    onClick={() => handleRandomFill()}
-                    className={`px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 transition-all cursor-pointer ${primaryBtnClass}`}
-                >
-                    <Dices className="w-4 h-4 animate-spin-slow" />
-                    <span>🎲 Gerar Massa Aleatória Instantânea</span>
-                </button>
+                <div className="flex gap-2 shrink-0">
+                    <button
+                        ref={dicesBtn.buttonRef}
+                        {...dicesBtn.buttonProps}
+                        type="button"
+                        onClick={() => handleRandomFill()}
+                        className={`px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 cursor-pointer ${primaryBtnClass}`}
+                    >
+                        <Dices className="w-4 h-4 animate-spin-slow" />
+                        <span>Gerar Aleatório</span>
+                    </button>
+
+                    <button
+                        ref={submitBtn.buttonRef}
+                        {...submitBtn.buttonProps}
+                        type="button"
+                        onClick={handleFinalSubmit}
+                        disabled={!isFormValid() || isSaving}
+                        className={`px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 cursor-pointer disabled:opacity-40 ${successBtnClass}`}
+                    >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>{isSaving ? 'Gravando...' : 'Concluir e Criar'}</span>
+                    </button>
+
+                    {onCancel && (
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            className={`px-3 py-2.5 rounded-2xl text-xs cursor-pointer ${secondaryBtnClass}`}
+                            title="Fechar"
+                        >
+                            <CloseIcon className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
             </div>
 
-            {/* Stepper Header (1 -> 2 -> 3 -> 4) */}
-            <div className={`p-4 rounded-2xl ${cardClass} grid grid-cols-2 md:grid-cols-4 gap-2 text-xs`}>
-                <button
-                    type="button"
-                    onClick={() => setCurrentStep(1)}
-                    className={`p-3 rounded-xl flex items-center gap-2.5 transition-all text-left ${
-                        currentStep === 1
-                            ? isMidnight ? 'bg-volt-green/20 text-volt-green border border-volt-green/40 font-black' : 'bg-volt-yellow border-2 border-black font-black'
-                            : 'opacity-60 hover:opacity-100'
-                    }`}
-                >
-                    <div className="w-6 h-6 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center font-bold text-[11px]">1</div>
-                    <div>
-                        <p className="font-bold leading-tight">Perfil & Idade</p>
-                        <p className="text-[10px] opacity-70">Trava de Tutor</p>
-                    </div>
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => isStep1Valid() && setCurrentStep(2)}
-                    disabled={!isStep1Valid()}
-                    className={`p-3 rounded-xl flex items-center gap-2.5 transition-all text-left disabled:opacity-30 ${
-                        currentStep === 2
-                            ? isMidnight ? 'bg-volt-green/20 text-volt-green border border-volt-green/40 font-black' : 'bg-volt-yellow border-2 border-black font-black'
-                            : 'opacity-60 hover:opacity-100'
-                    }`}
-                >
-                    <div className="w-6 h-6 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center font-bold text-[11px]">2</div>
-                    <div>
-                        <p className="font-bold leading-tight">Endereço SAC</p>
-                        <p className="text-[10px] opacity-70">Checagem Logística</p>
-                    </div>
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => isStep1Valid() && isStep2Valid() && setCurrentStep(3)}
-                    disabled={!isStep1Valid() || !isStep2Valid()}
-                    className={`p-3 rounded-xl flex items-center gap-2.5 transition-all text-left disabled:opacity-30 ${
-                        currentStep === 3
-                            ? isMidnight ? 'bg-volt-green/20 text-volt-green border border-volt-green/40 font-black' : 'bg-volt-yellow border-2 border-black font-black'
-                            : 'opacity-60 hover:opacity-100'
-                    }`}
-                >
-                    <div className="w-6 h-6 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center font-bold text-[11px]">3</div>
-                    <div>
-                        <p className="font-bold leading-tight">Bandeira Cartão</p>
-                        <p className="text-[10px] opacity-70">SVGs & Vencimento</p>
-                    </div>
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => isStep1Valid() && isStep2Valid() && setCurrentStep(4)}
-                    disabled={!isStep1Valid() || !isStep2Valid()}
-                    className={`p-3 rounded-xl flex items-center gap-2.5 transition-all text-left disabled:opacity-30 ${
-                        currentStep === 4
-                            ? isMidnight ? 'bg-volt-green/20 text-volt-green border border-volt-green/40 font-black' : 'bg-volt-yellow border-2 border-black font-black'
-                            : 'opacity-60 hover:opacity-100'
-                    }`}
-                >
-                    <div className="w-6 h-6 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center font-bold text-[11px]">4</div>
-                    <div>
-                        <p className="font-bold leading-tight">Saldo & PGDB</p>
-                        <p className="text-[10px] opacity-70">Sincronia Final</p>
-                    </div>
-                </button>
-            </div>
-
-            {/* Conteúdo Dinâmico do Step */}
-            <div className={`p-6 rounded-3xl ${cardClass} space-y-6`}>
-
-                {/* ETAPA 1: Perfil, Origem do País & Idade (Trava Tutor) */}
-                {currentStep === 1 && (
-                    <div className="space-y-5 animate-fade-in">
-                        <div className="flex justify-between items-center border-b border-black/10 dark:border-white/10 pb-3">
-                            <h3 className="font-black text-base flex items-center gap-2">
-                                <UserIcon className="w-5 h-5 text-blue-500" />
-                                <span>Etapa 1: Dados Pessoais, País e Governança de Idade</span>
+            {/* Grid principal: esquerda (perfil, endereço, financeiro) | direita (cartão em destaque) */}
+            <div ref={gridRef} className="grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-4">
+                <div className="space-y-4">
+                    {/* PERFIL */}
+                    <div data-mass-section className={`p-4 rounded-3xl ${cardClass} space-y-3`}>
+                        <div className="flex justify-between items-center border-b border-black/10 dark:border-white/10 pb-2.5">
+                            <h3 className="font-black text-sm flex items-center gap-1.5">
+                                <UserIcon className="w-4 h-4 text-blue-500" />
+                                <span>Perfil</span>
                             </h3>
-                            <span className="text-xs font-bold opacity-60">País Atual: {formData.countryOrigin}</span>
-                        </div>
-
-                        {/* Seletor de Origem por País */}
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-bold opacity-80 flex items-center gap-1.5">
-                                <Globe2 className="w-4 h-4 text-emerald-500" />
-                                <span>País de Origem da Massa:</span>
-                            </label>
                             <select
                                 value={formData.countryOrigin}
                                 onChange={(e) => handleRandomFill(e.target.value)}
-                                className={`w-full p-3 rounded-xl text-xs font-bold cursor-pointer ${inputClass}`}
+                                className={`p-1.5 rounded-lg text-[11px] font-bold cursor-pointer ${inputClass}`}
                             >
-                                <option value="Brasil">🇧🇷 Brasil (São Paulo, RJ, Curitiba)</option>
-                                <option value="Estados Unidos">🇺🇸 Estados Unidos (Nova York, Miami, LA)</option>
-                                <option value="Japão">🇯🇵 Japão (Tóquio, Quioto, Osaka)</option>
-                                <option value="China">🇨🇳 China (Pequim, Xangai)</option>
-                                <option value="Coreia do Sul">🇰🇷 Coreia do Sul (Seul, Busan)</option>
-                                <option value="Arábia Saudita">🇸🇦 Arábia Saudita (Riad, Jeda)</option>
-                                <option value="Portugal">🇵🇹 Portugal (Lisboa, Porto)</option>
-                                <option value="Alemanha">🇩🇪 Alemanha (Berlim, Munique)</option>
-                                <option value="França">🇫🇷 França (Paris, Marselha)</option>
-                                <option value="Itália">🇮🇹 Itália (Roma, Milão)</option>
-                                <option value="Argentina">🇦🇷 Argentina (Buenos Aires, Córdoba)</option>
+                                <option value="Brasil">🇧🇷 Brasil</option>
+                                <option value="Estados Unidos">🇺🇸 EUA</option>
+                                <option value="Japão">🇯🇵 Japão</option>
+                                <option value="China">🇨🇳 China</option>
+                                <option value="Coreia do Sul">🇰🇷 Coreia do Sul</option>
+                                <option value="Arábia Saudita">🇸🇦 Arábia Saudita</option>
+                                <option value="Portugal">🇵🇹 Portugal</option>
+                                <option value="Alemanha">🇩🇪 Alemanha</option>
+                                <option value="França">🇫🇷 França</option>
+                                <option value="Itália">🇮🇹 Itália</option>
+                                <option value="Argentina">🇦🇷 Argentina</option>
                             </select>
                         </div>
 
-                        {/* Nome Completo e CPF */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">Nome Completo do Cliente:</label>
-                                <input
-                                    type="text"
-                                    value={formData.fullName}
-                                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                                    placeholder="Ex: Lucas Gabriel Ferreira"
-                                    className={`w-full p-3 rounded-xl font-bold ${inputClass}`}
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">CPF (Com DV Válido):</label>
+                        <div className="space-y-1">
+                            <label className="text-[11px] font-bold opacity-80">Nome Completo:</label>
+                            <input
+                                type="text"
+                                value={formData.fullName}
+                                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                                placeholder="Ex: Lucas Gabriel Ferreira"
+                                className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">CPF:</label>
                                 <input
                                     type="text"
                                     value={formData.cpf}
                                     onChange={(e) => setFormData({ ...formData, cpf: e.target.value })}
                                     placeholder="000.000.000-00"
-                                    className={`w-full p-3 rounded-xl font-mono font-bold ${inputClass}`}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-mono font-bold ${inputClass}`}
                                 />
                             </div>
-                        </div>
-
-                        {/* Data de Nascimento & Idade Calculada */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80 flex items-center gap-1">
-                                    <Calendar className="w-3.5 h-3.5 text-amber-500" />
-                                    <span>Data de Nascimento:</span>
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80 flex items-center gap-1">
+                                    <Calendar className="w-3 h-3 text-amber-500" />
+                                    <span>Nascimento:</span>
                                 </label>
                                 <input
                                     type="date"
                                     value={formData.birthDate}
                                     onChange={(e) => handleBirthDateChange(e.target.value)}
-                                    className={`w-full p-3 rounded-xl font-mono font-bold ${inputClass}`}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-mono font-bold ${inputClass}`}
                                 />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">Idade Calculada:</label>
-                                <div className={`p-3 rounded-xl font-mono font-black text-sm flex justify-between items-center ${inputClass}`}>
-                                    <span>{formData.age} anos</span>
-                                    {formData.age < 18 || formData.age > 80 ? (
-                                        <span className="text-[10px] bg-amber-500 text-black px-2 py-0.5 rounded-full font-bold">REQUER TUTOR</span>
-                                    ) : (
-                                        <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-bold">TITULAR DIRETO</span>
-                                    )}
-                                </div>
                             </div>
                         </div>
 
-
-                        {/* CARD DE TUTOR LEGAL (Caso Idade < 18 ou > 80) */}
-                        {formData.hasTutor && (
-                            <div className="p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/40 text-xs space-y-3 animate-shake">
-                                <div className="flex items-center gap-2 font-black text-amber-600 dark:text-amber-400">
-                                    <ShieldAlert className="w-5 h-5 text-amber-500" />
-                                    <span>Alerta de Governança: Idade fora da faixa direta (18 a 80 anos). É obrigatório o cadastro do Tutor Legal!</span>
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                    <div className="space-y-1">
-                                        <label className="font-bold opacity-80">Nome do Tutor Legal:</label>
-                                        <input
-                                            type="text"
-                                            value={formData.tutor?.fullName || ''}
-                                            onChange={(e) => setFormData({
-                                                ...formData,
-                                                tutor: { ...formData.tutor!, fullName: e.target.value }
-                                            })}
-                                            placeholder="Nome do Tutor"
-                                            className={`w-full p-2.5 rounded-xl font-bold ${inputClass}`}
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="font-bold opacity-80">CPF do Tutor:</label>
-                                        <input
-                                            type="text"
-                                            value={formData.tutor?.cpf || ''}
-                                            onChange={(e) => setFormData({
-                                                ...formData,
-                                                tutor: { ...formData.tutor!, cpf: e.target.value }
-                                            })}
-                                            placeholder="000.000.000-00"
-                                            className={`w-full p-2.5 rounded-xl font-mono font-bold ${inputClass}`}
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="font-bold opacity-80">Grau de Parentesco:</label>
-                                        <input
-                                            type="text"
-                                            value={formData.tutor?.relationship || ''}
-                                            onChange={(e) => setFormData({
-                                                ...formData,
-                                                tutor: { ...formData.tutor!, relationship: e.target.value }
-                                            })}
-                                            placeholder="Pai / Curador"
-                                            className={`w-full p-2.5 rounded-xl font-bold ${inputClass}`}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        <div className={`px-3 py-2 rounded-xl text-[11px] font-black flex justify-between items-center ${inputClass}`}>
+                            <span>{formData.age} anos</span>
+                            {formData.age < 18 || formData.age > 80 ? (
+                                <span className="text-amber-500">⚠ fora da faixa padrão (18–80)</span>
+                            ) : (
+                                <span className="text-emerald-500">✓ titular direto</span>
+                            )}
+                        </div>
                     </div>
-                )}
 
-                {/* ETAPA 2: Endereço Residencial para Checagem SAC */}
-                {currentStep === 2 && (
-                    <div className="space-y-5 animate-fade-in">
-                        <div className="flex justify-between items-center border-b border-black/10 dark:border-white/10 pb-3">
-                            <h3 className="font-black text-base flex items-center gap-2">
-                                <MapPin className="w-5 h-5 text-emerald-500" />
-                                <span>Etapa 2: Endereço Residencial para Entregas & Atendimento SAC</span>
+                    {/* ENDEREÇO */}
+                    <div data-mass-section className={`p-4 rounded-3xl ${cardClass} space-y-3`}>
+                        <div className="flex justify-between items-center border-b border-black/10 dark:border-white/10 pb-2.5">
+                            <h3 className="font-black text-sm flex items-center gap-1.5">
+                                <MapPin className="w-4 h-4 text-emerald-500" />
+                                <span>Endereço SAC</span>
                             </h3>
                             <button
                                 type="button"
                                 onClick={() => handleRandomFill(formData.countryOrigin)}
-                                className="text-xs font-bold text-blue-500 hover:underline flex items-center gap-1"
+                                className="text-[11px] font-bold text-blue-500 hover:underline flex items-center gap-1 cursor-pointer"
                             >
-                                <Dices className="w-3.5 h-3.5" /> Sortear Endereço
+                                <Dices className="w-3 h-3" /> Sortear
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">CEP / Postal Code:</label>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">CEP:</label>
                                 <input
                                     type="text"
                                     value={formData.address.cep}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
-                                        address: { ...formData.address, cep: e.target.value }
-                                    })}
-                                    className={`w-full p-3 rounded-xl font-mono font-bold ${inputClass}`}
+                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, cep: e.target.value } })}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-mono font-bold ${inputClass}`}
                                 />
                             </div>
-                            <div className="sm:col-span-2 space-y-1.5">
-                                <label className="font-bold opacity-80">Logradouro (Rua/Avenida):</label>
+                            <div className="col-span-2 space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">Logradouro:</label>
                                 <input
                                     type="text"
                                     value={formData.address.street}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
-                                        address: { ...formData.address, street: e.target.value }
-                                    })}
-                                    className={`w-full p-3 rounded-xl font-bold ${inputClass}`}
+                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, street: e.target.value } })}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
                                 />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">Número:</label>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">Número:</label>
                                 <input
                                     type="text"
                                     value={formData.address.number}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
-                                        address: { ...formData.address, number: e.target.value }
-                                    })}
-                                    className={`w-full p-3 rounded-xl font-bold ${inputClass}`}
+                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, number: e.target.value } })}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
                                 />
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">Bairro:</label>
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">Bairro:</label>
                                 <input
                                     type="text"
                                     value={formData.address.neighborhood}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
-                                        address: { ...formData.address, neighborhood: e.target.value }
-                                    })}
-                                    className={`w-full p-3 rounded-xl font-bold ${inputClass}`}
+                                    onChange={(e) => setFormData({ ...formData, address: { ...formData.address, neighborhood: e.target.value } })}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
                                 />
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">Cidade / UF:</label>
-                                <div className="flex gap-2">
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">Cidade/UF:</label>
+                                <div className="flex gap-1.5">
                                     <input
                                         type="text"
                                         value={formData.address.city}
-                                        onChange={(e) => setFormData({
-                                            ...formData,
-                                            address: { ...formData.address, city: e.target.value }
-                                        })}
-                                        className={`w-full p-3 rounded-xl font-bold ${inputClass}`}
+                                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, city: e.target.value } })}
+                                        className={`w-full p-2.5 rounded-xl text-xs font-bold ${inputClass}`}
                                     />
                                     <input
                                         type="text"
                                         value={formData.address.state}
-                                        onChange={(e) => setFormData({
-                                            ...formData,
-                                            address: { ...formData.address, state: e.target.value }
-                                        })}
-                                        className={`w-20 p-3 rounded-xl font-bold uppercase text-center ${inputClass}`}
+                                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, state: e.target.value } })}
+                                        className={`w-14 p-2.5 rounded-xl text-xs font-bold uppercase text-center ${inputClass}`}
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        {/* Pré-visualização da Etiqueta Postal de Entrega SAC */}
-                        <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-xs space-y-2">
-                            <div className="flex items-center justify-between font-bold text-blue-600 dark:text-blue-300">
-                                <span className="flex items-center gap-1.5">
-                                    <PackageCheck className="w-4 h-4" />
-                                    <span>Etiqueta de Entrega do Cartão (Simulação SAC/CS):</span>
-                                </span>
-                                <span className="text-[10px] bg-blue-500 text-white font-black px-2 py-0.5 rounded-full">VOLT EXPRESS</span>
-                            </div>
-                            <p className="font-mono text-sm font-black">{formData.fullName}</p>
-                            <p className="opacity-80">
-                                {formData.address.street}, nº {formData.address.number} - {formData.address.neighborhood}
-                            </p>
-                            <p className="opacity-80 font-semibold">
-                                {formData.address.city} / {formData.address.state} - CEP: {formData.address.cep} ({formData.countryOrigin})
+                        <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-[11px] flex items-start gap-2">
+                            <PackageCheck className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
+                            <p className="opacity-80 leading-snug">
+                                {formData.address.street}, nº {formData.address.number} - {formData.address.neighborhood}, {formData.address.city}/{formData.address.state} · CEP {formData.address.cep}
                             </p>
                         </div>
                     </div>
-                )}
 
-                {/* ETAPA 3: Bandeira do Cartão SVG & Vencimento */}
-                {currentStep === 3 && (
-                    <div className="space-y-5 animate-fade-in">
-                        <div className="flex justify-between items-center border-b border-black/10 dark:border-white/10 pb-3">
-                            <h3 className="font-black text-base flex items-center gap-2">
-                                <CardIcon className="w-5 h-5 text-purple-500" />
-                                <span>Etapa 3: Seleção de Bandeiras SVG & Dia de Vencimento</span>
-                            </h3>
-                        </div>
+                    {/* FINANCEIRO */}
+                    <div data-mass-section className={`p-4 rounded-3xl ${cardClass} space-y-3`}>
+                        <h3 className="font-black text-sm flex items-center gap-1.5 border-b border-black/10 dark:border-white/10 pb-2.5">
+                            <DollarSign className="w-4 h-4 text-volt-green" />
+                            <span>Financeiro</span>
+                        </h3>
 
-                        {/* Seletor de Bandeira com Ilustrações SVG */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold opacity-80">Escolha a Bandeira do Cartão:</label>
-                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
-                                {/* MASTERCARD */}
-                                <button
-                                    type="button"
-                                    onClick={() => setFormData({
-                                        ...formData,
-                                        creditCard: { ...formData.creditCard, brand: 'MASTERCARD' }
-                                    })}
-                                    className={`p-4 rounded-2xl border flex flex-col items-center gap-2 cursor-pointer transition-all ${
-                                        formData.creditCard.brand === 'MASTERCARD'
-                                            ? 'bg-rose-500/15 border-rose-500 ring-2 ring-rose-500/40 font-black scale-105'
-                                            : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-rose-400'
-                                    }`}
-                                >
-                                    <svg className="w-10 h-6" viewBox="0 0 36 24" fill="none">
-                                        <circle cx="12" cy="12" r="10" fill="#EB001B" />
-                                        <circle cx="24" cy="12" r="10" fill="#F79E1B" fillOpacity="0.8" />
-                                    </svg>
-                                    <span>MASTERCARD</span>
-                                </button>
-
-                                {/* VISA */}
-                                <button
-                                    type="button"
-                                    onClick={() => setFormData({
-                                        ...formData,
-                                        creditCard: { ...formData.creditCard, brand: 'VISA' }
-                                    })}
-                                    className={`p-4 rounded-2xl border flex flex-col items-center gap-2 cursor-pointer transition-all ${
-                                        formData.creditCard.brand === 'VISA'
-                                            ? 'bg-blue-500/15 border-blue-500 ring-2 ring-blue-500/40 font-black scale-105'
-                                            : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-blue-400'
-                                    }`}
-                                >
-                                    <svg className="w-10 h-6" viewBox="0 0 36 24" fill="none">
-                                        <rect width="36" height="24" rx="4" fill="#1A1F71" />
-                                        <text x="6" y="16" fill="#FFFFFF" fontSize="11" fontWeight="bold" fontStyle="italic">VISA</text>
-                                    </svg>
-                                    <span>VISA</span>
-                                </button>
-
-                                {/* ELO */}
-                                <button
-                                    type="button"
-                                    onClick={() => setFormData({
-                                        ...formData,
-                                        creditCard: { ...formData.creditCard, brand: 'ELO' }
-                                    })}
-                                    className={`p-4 rounded-2xl border flex flex-col items-center gap-2 cursor-pointer transition-all ${
-                                        formData.creditCard.brand === 'ELO'
-                                            ? 'bg-amber-500/15 border-amber-500 ring-2 ring-amber-500/40 font-black scale-105'
-                                            : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-amber-400'
-                                    }`}
-                                >
-                                    <svg className="w-10 h-6" viewBox="0 0 36 24" fill="none">
-                                        <rect width="36" height="24" rx="4" fill="#000000" />
-                                        <circle cx="12" cy="12" r="5" fill="#EF4444" />
-                                        <circle cx="18" cy="12" r="5" fill="#F59E0B" />
-                                        <circle cx="24" cy="12" r="5" fill="#3B82F6" />
-                                    </svg>
-                                    <span>ELO</span>
-                                </button>
-
-                                {/* AMEX */}
-                                <button
-                                    type="button"
-                                    onClick={() => setFormData({
-                                        ...formData,
-                                        creditCard: { ...formData.creditCard, brand: 'AMEX' }
-                                    })}
-                                    className={`p-4 rounded-2xl border flex flex-col items-center gap-2 cursor-pointer transition-all ${
-                                        formData.creditCard.brand === 'AMEX'
-                                            ? 'bg-cyan-500/15 border-cyan-500 ring-2 ring-cyan-500/40 font-black scale-105'
-                                            : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-cyan-400'
-                                    }`}
-                                >
-                                    <svg className="w-10 h-6" viewBox="0 0 36 24" fill="none">
-                                        <rect width="36" height="24" rx="4" fill="#006FCF" />
-                                        <text x="4" y="16" fill="#FFFFFF" fontSize="9" fontWeight="black">AMEX</text>
-                                    </svg>
-                                    <span>AMEX</span>
-                                </button>
-
-                                {/* HIPERCARD */}
-                                <button
-                                    type="button"
-                                    onClick={() => setFormData({
-                                        ...formData,
-                                        creditCard: { ...formData.creditCard, brand: 'HIPERCARD' }
-                                    })}
-                                    className={`p-4 rounded-2xl border flex flex-col items-center gap-2 cursor-pointer transition-all ${
-                                        formData.creditCard.brand === 'HIPERCARD'
-                                            ? 'bg-red-600/15 border-red-600 ring-2 ring-red-600/40 font-black scale-105'
-                                            : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-red-500'
-                                    }`}
-                                >
-                                    <svg className="w-10 h-6" viewBox="0 0 36 24" fill="none">
-                                        <rect width="36" height="24" rx="4" fill="#B91C1C" />
-                                        <text x="3" y="16" fill="#FFFFFF" fontSize="7.5" fontWeight="black">HIPER</text>
-                                    </svg>
-                                    <span>HIPERCARD</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Dia de Vencimento, Modalidade & Estado de Ativação */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">Dia de Vencimento da Fatura:</label>
-                                <select
-                                    value={formData.creditCard.dueDay}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
-                                        creditCard: { ...formData.creditCard, dueDay: Number(e.target.value) }
-                                    })}
-                                    className={`w-full p-3 rounded-xl font-bold cursor-pointer ${inputClass}`}
-                                >
-                                    <option value={5}>📅 Dia 05 de cada mês</option>
-                                    <option value={10}>📅 Dia 10 de cada mês</option>
-                                    <option value={15}>📅 Dia 15 de cada mês</option>
-                                    <option value={20}>📅 Dia 20 de cada mês</option>
-                                    <option value={25}>📅 Dia 25 de cada mês</option>
-                                </select>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">Modalidade de Emissão:</label>
-                                <select
-                                    value={formData.creditCard.cardType}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
-                                        creditCard: { ...formData.creditCard, cardType: e.target.value as any }
-                                    })}
-                                    className={`w-full p-3 rounded-xl font-bold cursor-pointer ${inputClass}`}
-                                >
-                                    <option value="PHYSICAL">💳 Cartão Físico Postal</option>
-                                    <option value="VIRTUAL">📱 Cartão Virtual Recorrente</option>
-                                    <option value="BOTH">✨ Ambos (Físico + Virtual)</option>
-                                </select>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">Status de Ativação do Cartão:</label>
-                                <select
-                                    value={formData.creditCard.activationState || 'ACTIVATED'}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
-                                        creditCard: { ...formData.creditCard, activationState: e.target.value as any }
-                                    })}
-                                    className={`w-full p-3 rounded-xl font-bold cursor-pointer ${
-                                        formData.creditCard.activationState === 'AWAITING_ACTIVATION'
-                                            ? 'bg-amber-500/15 border-amber-500 text-amber-600 dark:text-amber-300 font-black'
-                                            : inputClass
-                                    }`}
-                                >
-                                    <option value="ACTIVATED">✅ Já Ativado (Pronto p/ Uso)</option>
-                                    <option value="AWAITING_ACTIVATION">⏳ Cliente Aguardando p/ Ativar (App)</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* Pré-visualização do Cartão Gerado */}
-                        <div className={`p-5 rounded-2xl relative overflow-hidden text-white font-mono shadow-xl ${
-                            formData.creditCard.brand === 'VISA' ? 'bg-gradient-to-br from-blue-700 via-indigo-800 to-black' :
-                            formData.creditCard.brand === 'AMEX' ? 'bg-gradient-to-br from-cyan-600 via-teal-800 to-black' :
-                            formData.creditCard.brand === 'ELO' ? 'bg-gradient-to-br from-zinc-800 via-neutral-900 to-black border border-white/20' :
-                            'bg-gradient-to-br from-rose-700 via-red-900 to-black'
-                        }`}>
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-[10px] opacity-70 tracking-widest uppercase">VOLT BANK BLACK</p>
-                                    <p className="text-xs font-bold">{formData.creditCard.brand}</p>
-                                </div>
-                                <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded font-bold">VENC. DIA {formData.creditCard.dueDay}</span>
-                            </div>
-                            <p className="text-lg font-black tracking-widest my-4">{formData.creditCard.cardNumber}</p>
-                            <div className="flex justify-between text-[10px] opacity-80">
-                                <span>VAL: {formData.creditCard.expirationDate}</span>
-                                <span>CVV: {formData.creditCard.cvv}</span>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* ETAPA 4: Saldo, Limites & Sincronia PostgreSQL */}
-                {currentStep === 4 && (
-                    <div className="space-y-5 animate-fade-in">
-                        <div className="flex justify-between items-center border-b border-black/10 dark:border-white/10 pb-3">
-                            <h3 className="font-black text-base flex items-center gap-2">
-                                <DollarSign className="w-5 h-5 text-volt-green" />
-                                <span>Etapa 4: Saldo, Limites Financeiros & Sincronia PGDB</span>
-                            </h3>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">Saldo em Conta Corrente (R$):</label>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">Saldo (R$):</label>
                                 <input
                                     type="number"
                                     value={formData.balance}
                                     onChange={(e) => setFormData({ ...formData, balance: Number(e.target.value) })}
-                                    className={`w-full p-3 rounded-xl font-mono font-bold ${inputClass}`}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-mono font-bold ${inputClass}`}
                                 />
                             </div>
-
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">Limite de Crédito Aprovado (R$):</label>
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">Limite (R$):</label>
                                 <input
                                     type="number"
                                     value={formData.creditCard.limit}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
-                                        creditCard: { ...formData.creditCard, limit: Number(e.target.value) }
-                                    })}
-                                    className={`w-full p-3 rounded-xl font-mono font-bold ${inputClass}`}
+                                    onChange={(e) => setFormData({ ...formData, creditCard: { ...formData.creditCard, limit: Number(e.target.value) } })}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-mono font-bold ${inputClass}`}
                                 />
                             </div>
-
-                            <div className="space-y-1.5">
-                                <label className="font-bold opacity-80">Limite Diário de PIX (R$):</label>
+                            <div className="space-y-1">
+                                <label className="text-[11px] font-bold opacity-80">PIX/dia (R$):</label>
                                 <input
                                     type="number"
                                     value={formData.dailyPixLimit}
                                     onChange={(e) => setFormData({ ...formData, dailyPixLimit: Number(e.target.value) })}
-                                    className={`w-full p-3 rounded-xl font-mono font-bold ${inputClass}`}
+                                    className={`w-full p-2.5 rounded-xl text-xs font-mono font-bold ${inputClass}`}
                                 />
                             </div>
                         </div>
 
-                        {/* Estado Inicial de Faturamento */}
-                        <div className="space-y-2 text-xs">
-                            <label className="font-bold opacity-80">Estado da Massa & Faturamento Inicial:</label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setFormData({ ...formData, overdueState: 'EM_DIA' })}
-                                    className={`p-3.5 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
-                                        formData.overdueState === 'EM_DIA'
-                                            ? 'bg-emerald-500/15 border-emerald-500 ring-2 ring-emerald-500/40 font-black'
-                                            : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-emerald-300'
-                                    }`}
-                                >
-                                    <span className="text-xl">🟢</span>
-                                    <div className="text-left">
-                                        <p className="font-bold">Massa Adimplente (Em Dia)</p>
-                                        <p className="text-[10px] opacity-70">Compras correntes normais sem atrasos de pagamento</p>
-                                    </div>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setFormData({ ...formData, overdueState: 'EM_ATRASO_15D' })}
-                                    className={`p-3.5 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
-                                        formData.overdueState !== 'EM_DIA'
-                                            ? 'bg-rose-500/15 border-rose-500 ring-2 ring-rose-500/40 font-black'
-                                            : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-rose-300'
-                                    }`}
-                                >
-                                    <span className="text-xl">🔴</span>
-                                    <div className="text-left">
-                                        <p className="font-bold">Massa Inadimplente</p>
-                                        <p className="text-[10px] opacity-70">{OVERDUE_TIERS.EM_ATRASO_15D.desc}</p>
-                                    </div>
-                                </button>
-                            </div>
+                        <div className="grid grid-cols-2 gap-2.5 text-xs">
+                            <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, overdueState: 'EM_DIA' })}
+                                className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
+                                    formData.overdueState === 'EM_DIA'
+                                        ? 'bg-emerald-500/15 border-emerald-500 ring-2 ring-emerald-500/40 font-black'
+                                        : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-emerald-300'
+                                }`}
+                            >
+                                <span>🟢</span>
+                                <span>Adimplente</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, overdueState: 'EM_ATRASO_15D' })}
+                                title={OVERDUE_TIERS.EM_ATRASO_15D.desc}
+                                className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
+                                    formData.overdueState !== 'EM_DIA'
+                                        ? 'bg-rose-500/15 border-rose-500 ring-2 ring-rose-500/40 font-black'
+                                        : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-rose-300'
+                                }`}
+                            >
+                                <span>🔴</span>
+                                <span>Inadimplente</span>
+                            </button>
                         </div>
+                    </div>
+                </div>
 
-                        {/* Resumo Final de Confirmação */}
-                        <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 space-y-2 text-xs">
-                            <p className="font-black text-sm text-volt-green flex items-center gap-1.5">
-                                <Sparkles className="w-4 h-4" /> Resumo da Massa a ser Gravada no PGDB:
-                            </p>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 opacity-90 font-mono text-[11px]">
-                                <div><span className="opacity-60">Cliente:</span> {formData.fullName}</div>
-                                <div><span className="opacity-60">CPF:</span> {formData.cpf}</div>
-                                <div><span className="opacity-60">País:</span> {formData.countryOrigin}</div>
-                                <div><span className="opacity-60">Idade:</span> {formData.age}a {formData.hasTutor ? '(Tutor)' : ''}</div>
-                                <div><span className="opacity-60">Bandeira:</span> {formData.creditCard.brand}</div>
-                                <div><span className="opacity-60">Vencimento:</span> Dia {formData.creditCard.dueDay}</div>
-                                <div><span className="opacity-60">Saldo:</span> R$ {formData.balance.toFixed(2)}</div>
-                                <div><span className="opacity-60">Limite:</span> R$ {formData.creditCard.limit.toFixed(2)}</div>
+                {/* CARTÃO — coluna em destaque, sozinho, com flip 3D */}
+                <div data-mass-section className={`p-4 rounded-3xl ${cardClass} space-y-3 lg:sticky lg:top-4 self-start`}>
+                    <div className="flex justify-between items-center border-b border-black/10 dark:border-white/10 pb-2.5">
+                        <h3 className="font-black text-sm flex items-center gap-1.5">
+                            <CardIcon className="w-4 h-4 text-purple-500" />
+                            <span>Cartão</span>
+                        </h3>
+                        <span className="text-[10px] opacity-60">clique ou passe o mouse pra virar</span>
+                    </div>
+
+                    {/* Cartão com perspectiva 3D — frente (dados) / verso (CVV) */}
+                    <div className="[perspective:1200px] select-none">
+                        <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setCardFlipped((f) => !f)}
+                            onMouseEnter={() => setCardHovering(true)}
+                            onMouseLeave={() => setCardHovering(false)}
+                            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setCardFlipped((f) => !f)}
+                            aria-label="Virar cartão para ver CVV"
+                            className="relative h-40 sm:h-44 cursor-pointer"
+                            style={{
+                                transformStyle: 'preserve-3d',
+                                transition: 'transform 0.7s',
+                                transform: cardFlipped || cardHovering ? 'rotateY(180deg)' : 'rotateY(0deg)'
+                            }}
+                        >
+                            {/* FRENTE */}
+                            <div
+                                style={{ backfaceVisibility: 'hidden' }}
+                                className={`absolute inset-0 p-5 rounded-2xl text-white font-mono shadow-xl bg-gradient-to-br ${CARD_GRADIENT[formData.creditCard.brand]}`}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <p className="text-[10px] opacity-70 tracking-widest uppercase">VOLT BANK BLACK</p>
+                                        <p className="text-xs font-bold">{formData.creditCard.brand}</p>
+                                    </div>
+                                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded font-bold">VENC. DIA {formData.creditCard.dueDay}</span>
+                                </div>
+                                <p className="text-lg font-black tracking-widest my-5">{formData.creditCard.cardNumberMasked}</p>
+                                <div className="flex justify-between text-[10px] opacity-80">
+                                    <span>VAL: {formData.creditCard.expirationDate}</span>
+                                    <span>tap p/ ver CVV</span>
+                                </div>
+                            </div>
+
+                            {/* VERSO */}
+                            <div
+                                style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                                className={`absolute inset-0 rounded-2xl text-white font-mono shadow-xl bg-gradient-to-br ${CARD_GRADIENT[formData.creditCard.brand]}`}
+                            >
+                                <div className="h-9 bg-black/70 mt-5" />
+                                <div className="px-5 pt-3 flex justify-between items-center">
+                                    <div className="flex-1 h-6 bg-white/90 rounded-sm" />
+                                    <div className="ml-2 px-2.5 py-1 bg-white text-black text-xs font-black rounded">{formData.creditCard.cvv}</div>
+                                </div>
+                                <p className="px-5 mt-3 text-[10px] opacity-60">Uso exclusivo de massa de teste — não é um cartão real.</p>
                             </div>
                         </div>
                     </div>
-                )}
 
-                {/* Footer de Navegação */}
-                <div className="flex justify-between items-center pt-4 border-t border-black/10 dark:border-white/10">
-                    {currentStep > 1 ? (
-                        <button
-                            type="button"
-                            onClick={() => setCurrentStep((prev) => (prev - 1) as any)}
-                            className={`px-4 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition-all cursor-pointer ${secondaryBtnClass}`}
-                        >
-                            <ArrowLeft className="w-4 h-4" />
-                            <span>Voltar</span>
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            onClick={onCancel}
-                            className={`px-4 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition-all cursor-pointer ${secondaryBtnClass}`}
-                        >
-                            <span>Cancelar</span>
-                        </button>
-                    )}
+                    {/* Bandeiras */}
+                    <div className="grid grid-cols-5 gap-1.5 text-[10px]">
+                        {(['MASTERCARD', 'VISA', 'ELO', 'AMEX', 'HIPERCARD'] as const).map((brand) => (
+                            <button
+                                key={brand}
+                                type="button"
+                                onClick={() => setFormData({ ...formData, creditCard: { ...formData.creditCard, brand } })}
+                                className={`p-2 rounded-xl border flex flex-col items-center gap-1 cursor-pointer transition-all ${
+                                    formData.creditCard.brand === brand
+                                        ? 'bg-black/10 dark:bg-white/10 border-current ring-2 ring-current/30 font-black scale-105'
+                                        : 'bg-black/5 dark:bg-white/5 border-transparent hover:border-current/40'
+                                }`}
+                            >
+                                <svg className="w-7 h-4" viewBox="0 0 36 24" fill="none">
+                                    {brand === 'MASTERCARD' && (<><circle cx="12" cy="12" r="10" fill="#EB001B" /><circle cx="24" cy="12" r="10" fill="#F79E1B" fillOpacity="0.8" /></>)}
+                                    {brand === 'VISA' && (<><rect width="36" height="24" rx="4" fill="#1A1F71" /><text x="6" y="16" fill="#FFFFFF" fontSize="11" fontWeight="bold" fontStyle="italic">VISA</text></>)}
+                                    {brand === 'ELO' && (<><rect width="36" height="24" rx="4" fill="#000000" /><circle cx="12" cy="12" r="5" fill="#EF4444" /><circle cx="18" cy="12" r="5" fill="#F59E0B" /><circle cx="24" cy="12" r="5" fill="#3B82F6" /></>)}
+                                    {brand === 'AMEX' && (<><rect width="36" height="24" rx="4" fill="#006FCF" /><text x="4" y="16" fill="#FFFFFF" fontSize="9" fontWeight="black">AMEX</text></>)}
+                                    {brand === 'HIPERCARD' && (<><rect width="36" height="24" rx="4" fill="#B91C1C" /><text x="3" y="16" fill="#FFFFFF" fontSize="7.5" fontWeight="black">HIPER</text></>)}
+                                </svg>
+                                <span>{brand === 'MASTERCARD' ? 'MASTER' : brand}</span>
+                            </button>
+                        ))}
+                    </div>
 
-                    {currentStep < 4 ? (
-                        <button
-                            type="button"
-                            onClick={() => setCurrentStep((prev) => (prev + 1) as any)}
-                            disabled={
-                                (currentStep === 1 && !isStep1Valid()) ||
-                                (currentStep === 2 && !isStep2Valid())
-                            }
-                            className={`px-6 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40 ${primaryBtnClass}`}
+                    <div className="grid grid-cols-2 gap-3 text-[11px]">
+                        <div className="space-y-1">
+                            <label className="font-bold opacity-80">Vencimento:</label>
+                            <select
+                                value={formData.creditCard.dueDay}
+                                onChange={(e) => setFormData({ ...formData, creditCard: { ...formData.creditCard, dueDay: Number(e.target.value) } })}
+                                className={`w-full p-2 rounded-xl font-bold cursor-pointer ${inputClass}`}
+                            >
+                                <option value={5}>Dia 05</option>
+                                <option value={10}>Dia 10</option>
+                                <option value={15}>Dia 15</option>
+                                <option value={20}>Dia 20</option>
+                                <option value={25}>Dia 25</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="font-bold opacity-80">Modalidade:</label>
+                            <select
+                                value={formData.creditCard.cardType}
+                                onChange={(e) => setFormData({ ...formData, creditCard: { ...formData.creditCard, cardType: e.target.value as any } })}
+                                className={`w-full p-2 rounded-xl font-bold cursor-pointer ${inputClass}`}
+                            >
+                                <option value="PHYSICAL">Físico</option>
+                                <option value="VIRTUAL">Virtual</option>
+                                <option value="BOTH">Ambos</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="space-y-1 text-[11px]">
+                        <label className="font-bold opacity-80">Ativação:</label>
+                        <select
+                            value={formData.creditCard.activationState || 'ACTIVATED'}
+                            onChange={(e) => setFormData({ ...formData, creditCard: { ...formData.creditCard, activationState: e.target.value as any } })}
+                            className={`w-full p-2 rounded-xl font-bold cursor-pointer ${
+                                formData.creditCard.activationState === 'AWAITING_ACTIVATION'
+                                    ? 'bg-amber-500/15 border border-amber-500 text-amber-600 dark:text-amber-300 font-black'
+                                    : inputClass
+                            }`}
                         >
-                            <span>Avançar</span>
-                            <ArrowRight className="w-4 h-4" />
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            onClick={handleFinalSubmit}
-                            disabled={isSaving}
-                            className={`px-8 py-3 rounded-2xl text-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 ${primaryBtnClass}`}
-                        >
-                            {isSaving ? (
-                                <span>Sincronizando com o PGDB...</span>
-                            ) : (
-                                <>
-                                    <CheckCircle2 className="w-4 h-4 text-black" />
-                                    <span>⚡ Criar e Sincronizar Massa no PGDB</span>
-                                </>
-                            )}
-                        </button>
-                    )}
+                            <option value="ACTIVATED">✅ Já Ativado</option>
+                            <option value="AWAITING_ACTIVATION">⏳ Aguardando Ativação</option>
+                        </select>
+                    </div>
                 </div>
+            </div>
 
+            {/* RESUMO — sempre visível, reflete o estado atual */}
+            <div className={`p-3.5 rounded-2xl ${cardClass}`}>
+                <div className="flex items-center gap-1.5 font-black text-xs text-volt-green mb-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Resumo da massa a ser gravada no PGDB</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 opacity-90 font-mono text-[11px]">
+                    <div><span className="opacity-60">Cliente:</span> {formData.fullName || '—'}</div>
+                    <div><span className="opacity-60">CPF:</span> {formData.cpf || '—'}</div>
+                    <div className="flex items-center gap-1"><Globe2 className="w-3 h-3 opacity-60" /> {formData.countryOrigin}</div>
+                    <div><span className="opacity-60">Idade:</span> {formData.age}a</div>
+                    <div><span className="opacity-60">Bandeira:</span> {formData.creditCard.brand}</div>
+                    <div><span className="opacity-60">Vencimento:</span> Dia {formData.creditCard.dueDay}</div>
+                    <div><span className="opacity-60">Saldo:</span> R$ {formData.balance.toFixed(2)}</div>
+                    <div><span className="opacity-60">Estado:</span> {formData.overdueState === 'EM_DIA' ? '🟢 Adimplente' : '🔴 Inadimplente'}</div>
+                </div>
             </div>
         </div>
     );
