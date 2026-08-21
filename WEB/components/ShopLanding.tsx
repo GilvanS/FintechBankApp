@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
-import { ShoppingCart, Search, Zap, LogIn, Sparkles } from 'lucide-react';
+import { ShoppingCart, Search, Zap, LogIn, Sparkles, UserCheck } from 'lucide-react';
 import { getProducts } from '../services/api';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -55,10 +55,52 @@ export const ShopLanding: React.FC = () => {
         return (localStorage.getItem(NIVEL_KEY) as Nivel) || 'b';
     });
 
-    const autenticado = typeof window !== 'undefined' && Boolean(localStorage.getItem('authToken'));
+    // A sessão de cliente e a de admin usam chaves distintas no localStorage
+    // (authToken e adminToken), então olhar só uma delas faz um admin logado
+    // aparecer como visitante aqui.
+    const [sessao, setSessao] = useState<{ cpf?: string; role?: string } | null>(null);
+
+    useEffect(() => {
+        const ler = () => {
+            const token = localStorage.getItem('authToken') || localStorage.getItem('adminToken');
+            if (!token) { setSessao(null); return; }
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                const expirado = payload.exp && payload.exp * 1000 < Date.now();
+                setSessao(expirado ? null : { cpf: payload.cpf, role: payload.role });
+            } catch {
+                setSessao(null);
+            }
+        };
+        ler();
+
+        // A vitrine costuma ficar aberta numa aba própria enquanto o login
+        // acontece na outra: `storage` avisa quando outra aba grava o token,
+        // e `focus` cobre o retorno para cá.
+        window.addEventListener('storage', ler);
+        window.addEventListener('focus', ler);
+        return () => {
+            window.removeEventListener('storage', ler);
+            window.removeEventListener('focus', ler);
+        };
+    }, []);
+
+    const autenticado = Boolean(sessao);
 
     const raizRef = useRef<HTMLDivElement>(null);
     const heroArteRef = useRef<HTMLDivElement>(null);
+
+    // Acompanha a visibilidade da aba para refazer a entrada quando ela volta
+    // ao primeiro plano — é lá que a animação consegue de fato rodar.
+    const [abaVisivel, setAbaVisivel] = useState(
+        typeof document === 'undefined' ? true : !document.hidden
+    );
+
+    useEffect(() => {
+        const aoTrocar = () => setAbaVisivel(!document.hidden);
+        document.addEventListener('visibilitychange', aoTrocar);
+        return () => document.removeEventListener('visibilitychange', aoTrocar);
+    }, []);
 
     useEffect(() => {
         localStorage.setItem(NIVEL_KEY, nivel);
@@ -106,19 +148,40 @@ export const ShopLanding: React.FC = () => {
 
     // Cada nível é um contrato de movimento distinto, então a animação é
     // recriada quando o nível ou a lista muda. O useGSAP reverte a anterior.
+    //
+    // Toda entrada usa fromTo com clearProps: um `from` aplica o estado inicial
+    // no instante em que é criado, e se o efeito for reexecutado (a lista de
+    // produtos chega depois do primeiro render) ou revertido no meio, os cards
+    // ficam presos invisíveis. Com fromTo o destino é explícito, e o clearProps
+    // devolve o card ao CSS quando termina.
     useGSAP(() => {
-        if (carregando || prefereMenosMovimento()) return;
-
         const cards = gsap.utils.toArray<HTMLElement>('[data-produto]');
+        if (carregando || !cards.length) return;
+
+        // Rede de segurança: nada aqui pode deixar um produto invisível.
+        const limpar = 'opacity,transform';
+        gsap.set(cards, { clearProps: limpar });
+
+        // Numa aba em segundo plano o requestAnimationFrame fica suspenso: o
+        // GSAP aplicaria o estado inicial e nunca avançaria, deixando a grade
+        // invisível. Como esta vitrine é aberta justamente em aba nova, o
+        // catálogo nunca pode depender de a animação rodar — sem animação aqui,
+        // e o efeito de entrada acontece quando a aba ganha foco.
+        if (prefereMenosMovimento() || document.hidden) return;
 
         if (nivel === 'a') {
-            // Só chegada: opacidade e um deslocamento curto, ease-out.
-            gsap.from(cards, { opacity: 0, y: 12, duration: 0.3, stagger: 0.02, ease: 'power2.out' });
+            gsap.fromTo(cards,
+                { opacity: 0, y: 12 },
+                { opacity: 1, y: 0, duration: 0.3, stagger: 0.02, ease: 'power2.out', clearProps: limpar }
+            );
             return;
         }
 
         if (nivel === 'b') {
-            gsap.from(cards, { opacity: 0, y: 20, duration: 0.4, stagger: 0.04, ease: 'power2.out' });
+            gsap.fromTo(cards,
+                { opacity: 0, y: 20 },
+                { opacity: 1, y: 0, duration: 0.4, stagger: 0.04, ease: 'power2.out', clearProps: limpar }
+            );
             if (heroArteRef.current) {
                 // Parallax curto: o scrub amarra ao scroll, sem duração própria.
                 gsap.to(heroArteRef.current, {
@@ -130,7 +193,10 @@ export const ShopLanding: React.FC = () => {
             return;
         }
 
-        // Nível C: a chegada é conduzida pelo scroll, em lotes.
+        // Nível C: cada card chega quando entra na viewport. O gatilho é o
+        // próprio card e dispara uma única vez — quem já está na tela no
+        // carregamento anima de imediato, em vez de esperar um scroll que pode
+        // nunca acontecer.
         if (heroArteRef.current) {
             gsap.to(heroArteRef.current, {
                 yPercent: -28,
@@ -139,17 +205,43 @@ export const ShopLanding: React.FC = () => {
                 scrollTrigger: { trigger: raizRef.current, start: 'top top', end: '+=800', scrub: 1 },
             });
         }
-        ScrollTrigger.batch(cards, {
-            start: 'top 88%',
-            onEnter: (lote) => gsap.to(lote, { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: 'power3.out', overwrite: true }),
+        cards.forEach((card, i) => {
+            gsap.fromTo(card,
+                { opacity: 0, y: 36 },
+                {
+                    opacity: 1, y: 0, duration: 0.5, ease: 'power3.out',
+                    delay: Math.min(i, 5) * 0.06,
+                    clearProps: limpar,
+                    scrollTrigger: { trigger: card, start: 'top 92%', once: true },
+                }
+            );
         });
-        gsap.set(cards, { opacity: 0, y: 36 });
-    }, { scope: raizRef, dependencies: [nivel, carregando, visiveis.length] });
+        ScrollTrigger.refresh();
+    }, { scope: raizRef, dependencies: [nivel, carregando, visiveis.length, abaVisivel] });
 
-    const comprar = (produtoId: string) => {
+    // Watchdog do catálogo. As animações acima dependem de requestAnimationFrame,
+    // que o navegador suspende em abas de segundo plano; se uma entrada começar e
+    // o quadro seguinte nunca vier, o produto fica preso invisível. Este timer não
+    // usa rAF, então sempre corre: passado o tempo de qualquer animação, o que
+    // ainda estiver transparente volta ao normal.
+    useEffect(() => {
+        if (carregando) return;
+        const t = window.setTimeout(() => {
+            document.querySelectorAll<HTMLElement>('[data-produto]').forEach((card) => {
+                if (Number(getComputedStyle(card).opacity) < 0.9) {
+                    card.style.removeProperty('opacity');
+                    card.style.removeProperty('transform');
+                }
+            });
+        }, 1600);
+        return () => window.clearTimeout(t);
+    }, [carregando, nivel, visiveis.length, abaVisivel]);
+
+    const comprar = (_produtoId: string) => {
         if (!autenticado) {
-            // Vitrine é pública, a compra não: manda para o login preservando o destino.
-            navigate(`/login?next=${encodeURIComponent('/shop')}&produto=${encodeURIComponent(produtoId)}`);
+            // Vitrine é pública, a compra não. O login vai para outra aba para
+            // não derrubar a vitrine; ao voltar, a sessão já é reconhecida.
+            window.open('/FintechBankApp/login', 'volt-login');
             return;
         }
         setCarrinho(c => c + 1);
@@ -185,9 +277,19 @@ export const ShopLanding: React.FC = () => {
                             <ShoppingCart className="w-5 h-5" />
                             <span className="font-bold">{carrinho}</span>
                         </span>
-                        {!autenticado && (
+                        {autenticado ? (
+                            <span
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-volt-green/40 bg-volt-green/10 text-volt-green font-bold text-[11px]"
+                                title={`Sessão ativa: ${sessao?.cpf}`}
+                            >
+                                <UserCheck className="w-4 h-4" />
+                                {sessao?.role === 'admin' ? 'admin' : 'conectado'}
+                                <span className="font-mono opacity-70 hidden sm:inline">{sessao?.cpf}</span>
+                            </span>
+                        ) : (
                             <button
-                                onClick={() => navigate('/login')}
+                                onClick={() => window.open('/FintechBankApp/login', 'volt-login')}
+                                title="Abre o login em outra aba; a vitrine reconhece a sessão sozinha"
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-volt-green text-black font-black text-xs uppercase"
                             >
                                 <LogIn className="w-4 h-4" /> Entrar
