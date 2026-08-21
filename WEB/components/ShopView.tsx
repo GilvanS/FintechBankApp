@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Zap, CreditCard, CheckCircle2, AlertCircle, ShoppingCart, Sparkles, Shield, Gift, Lock, ArrowRight, Heart } from 'lucide-react';
+import { ShoppingBag, Zap, CreditCard, CheckCircle2, AlertCircle, ShoppingCart, Sparkles, Shield, Gift, Lock, ArrowRight, Heart, ExternalLink, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Product } from '../types';
 import { useAppState } from '../contexts/AppStateContext';
@@ -163,6 +163,27 @@ export const ShopView: React.FC<ShopViewProps> = ({ products: productsProp, acco
             <p className="text-xs md:text-sm font-bold opacity-80 max-w-xl">
               Adquira produtos exclusivos e serviços financeiros diretamente pelo saldo da sua conta ou cartão Volt.
             </p>
+          </div>
+
+          {/* Janelas nomeadas: clicar de novo reaproveita a que já está aberta,
+              em vez de espalhar cópias pela área de trabalho. */}
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => window.open('/FintechBankApp/shop', 'volt-vitrine', 'width=1280,height=900')}
+              title="Abrir a vitrine completa em outra janela"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black text-white font-bold text-xs uppercase hover:opacity-90 transition-opacity"
+            >
+              <ExternalLink size={14} /> Abrir vitrine
+            </button>
+            <button
+              type="button"
+              onClick={() => window.open('/FintechBankApp/monitor', 'volt-monitor', 'width=520,height=900')}
+              title="Acompanhar os eventos desta compra em tempo real"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black text-white font-bold text-xs uppercase hover:opacity-90 transition-opacity"
+            >
+              <Activity size={14} /> Monitor ao vivo
+            </button>
           </div>
         </div>
       </div>

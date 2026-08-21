@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { Shield, Users, CreditCard, Receipt, FileText, ArrowLeft, Sparkles, X, LogIn, RefreshCw, Repeat, Send, ShieldCheck } from 'lucide-react';
+import { Shield, Users, CreditCard, Receipt, FileText, ArrowLeft, Sparkles, X, LogIn, RefreshCw, Repeat, Send, ShieldCheck, Activity } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { setAdminSessionToken, login } from '../../services/api';
 
@@ -275,16 +275,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                         </div>
                     </div>
 
-                    <button
-                        onClick={onClose}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-sm transition-all ${
-                            isMidnight
-                                ? 'bg-white/10 hover:bg-white/20 text-white'
-                                : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-50 text-black active:translate-y-0.5 active:shadow-none'
-                        }`}
-                    >
-                        <ArrowLeft size={16} /> Voltar ao App
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {/* Janela nomeada: clicar de novo reaproveita a que já está
+                            aberta, em vez de espalhar cópias pela área de trabalho. */}
+                        <button
+                            onClick={() => window.open('/FintechBankApp/monitor', 'volt-monitor', 'width=520,height=900')}
+                            title="Acompanhar eventos em tempo real numa janela ao lado"
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-sm transition-all ${
+                                isMidnight
+                                    ? 'bg-volt-green/15 hover:bg-volt-green/25 text-volt-green'
+                                    : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-50 text-black active:translate-y-0.5 active:shadow-none'
+                            }`}
+                        >
+                            <Activity size={16} /> Monitor ao vivo
+                        </button>
+
+                        <button
+                            onClick={onClose}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-sm transition-all ${
+                                isMidnight
+                                    ? 'bg-white/10 hover:bg-white/20 text-white'
+                                    : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-50 text-black active:translate-y-0.5 active:shadow-none'
+                            }`}
+                        >
+                            <ArrowLeft size={16} /> Voltar ao App
+                        </button>
+                    </div>
                 </div>
 
                 {/* Grupos Principais de Abas (Reduzido e Organizado) */}

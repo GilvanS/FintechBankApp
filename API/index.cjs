@@ -1980,20 +1980,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         });
 
         // Retornar sucesso com a transação criada e detalhes dos produtos
-        // SSE: notificar frontend em tempo real
-        try {
-            const sse = require('./services/sseService');
-            sse.sendToClient(req.user.cpf, 'purchase.completed', {
-                cpf: req.user.cpf,
-                amount: netDebit,
-                method: 'debit',
-                installments: 1,
-                description: productDesc,
-                timestamp: new Date().toISOString(),
-            });
-        } catch (_sseErr) { /* SSE é fire-and-forget */ }
-
-        res.status(201).json({ 
+        res.status(201).json({
             success: true, 
             message: 'Compra realizada com sucesso',
             purchase: {
@@ -2324,19 +2311,6 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
     } else {
         finalAmountLabel = netDebit;
     }
-
-    // SSE: notificar frontend em tempo real
-    try {
-        const sse = require('./services/sseService');
-        sse.sendToClient(req.user.cpf, 'purchase.completed', {
-            cpf: req.user.cpf,
-            amount: finalAmountLabel,
-            method: paymentMethod,
-            installments: paymentMethod === 'credit' ? installments : 1,
-            description: productsDescription,
-            timestamp: new Date().toISOString(),
-        });
-    } catch (_sseErr) { /* SSE é fire-and-forget */ }
 
     res.status(201).json({
         success: true,
@@ -3703,17 +3677,17 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
         }
     }
 
-    // SSE: notificar frontend em tempo real (compra via acquirer-simulate)
+    // Publica no barramento (compra via acquirer-simulate): o relay entrega ao
+    // dono e às sessões administrativas, e o evento atravessa processos.
     try {
-        const sse = require('./services/sseService');
-        sse.sendToClient(user.cpf, 'purchase.completed', {
+        require('./services/eventBus').publish('purchase.completed', {
             cpf: user.cpf,
-            amount: numAmount,
-            method: type === 'DEBIT' ? 'debit' : 'credit',
+            totalAmount: numAmount,
+            paymentMethod: type === 'DEBIT' ? 'debit' : 'credit',
             installments: type === 'CREDIT' ? (Number(installments) || 1) : 1,
-            description,
-            timestamp: new Date().toISOString(),
-        });
+            productsDescription: description,
+            origem: 'acquirer-simulate',
+        }).catch(() => {});
     } catch (_sseErr) { /* SSE é fire-and-forget */ }
 
     res.json({
