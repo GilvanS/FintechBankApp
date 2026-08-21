@@ -251,7 +251,15 @@ function App() {
                             } />
                             {/* Vitrine pública, feita para abrir em aba própria ao lado do
                                 app. Catálogo aberto a visitantes; a compra pede sessão. */}
-                            <Route path="/shop" element={<ShopLanding />} />
+                            {/* O shell acima é h-screen com overflow-hidden, porque o
+                                dashboard rola por dentro. As páginas abertas em aba
+                                própria são documentos longos e precisam do seu próprio
+                                container rolável, senão tudo abaixo da dobra some. */}
+                            <Route path="/shop" element={
+                                <div className="h-full w-full overflow-y-auto">
+                                    <ShopLanding />
+                                </div>
+                            } />
                             {/* Monitor de eventos: janela lateral, sem chrome, para
                                 acompanhar o efeito de cada ação em tela dividida. */}
                             <Route path="/monitor" element={<EventMonitor />} />
@@ -259,7 +267,9 @@ function App() {
                                 separada: isola o ambiente e deixa o app intacto atrás. */}
                             <Route path="/admin" element={
                                 <ProtectedRoute>
-                                    <AdminDashboard onClose={() => navigate('/dashboard')} />
+                                    <div className="h-full w-full overflow-y-auto">
+                                        <AdminDashboard onClose={() => navigate('/dashboard')} />
+                                    </div>
                                 </ProtectedRoute>
                             } />
                             <Route path="/reset-password" element={
