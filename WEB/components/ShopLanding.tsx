@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
-import { ShoppingCart, Search, Zap, LogIn, Sparkles, UserCheck } from 'lucide-react';
-import { getProducts } from '../services/api';
+import { ShoppingCart, Search, Zap, LogIn, Sparkles, UserCheck, X, CheckCircle2, Lock } from 'lucide-react';
+import { getProducts, checkout } from '../services/api';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -96,6 +96,29 @@ export const ShopLanding: React.FC = () => {
 
     const raizRef = useRef<HTMLDivElement>(null);
     const heroArteRef = useRef<HTMLDivElement>(null);
+
+    // Compra: o produto escolhido abre o diálogo de confirmação.
+    const [produtoNoModal, setProdutoNoModal] = useState<Produto | null>(null);
+    const [formaPagamento, setFormaPagamento] = useState<'debit' | 'credit'>('debit');
+    const [parcelas, setParcelas] = useState(1);
+    const [pin, setPin] = useState('');
+    const [enviando, setEnviando] = useState(false);
+    const [erroCompra, setErroCompra] = useState<string | null>(null);
+    const [compraOk, setCompraOk] = useState(false);
+    const pinRef = useRef<HTMLInputElement>(null);
+    const fecharRef = useRef<HTMLButtonElement>(null);
+
+    const fecharModal = () => setProdutoNoModal(null);
+
+    // Teclado e foco do diálogo: Esc fecha e o primeiro campo recebe o cursor,
+    // para que a compra possa ser concluída sem tocar no mouse.
+    useEffect(() => {
+        if (!produtoNoModal) return;
+        const aoTeclar = (e: KeyboardEvent) => { if (e.key === 'Escape') fecharModal(); };
+        window.addEventListener('keydown', aoTeclar);
+        const t = window.setTimeout(() => (compraOk ? fecharRef : pinRef).current?.focus(), 60);
+        return () => { window.removeEventListener('keydown', aoTeclar); window.clearTimeout(t); };
+    }, [produtoNoModal, compraOk]);
 
     // Acompanha a visibilidade da aba para refazer a entrada quando ela volta
     // ao primeiro plano — é lá que a animação consegue de fato rodar.
@@ -244,14 +267,50 @@ export const ShopLanding: React.FC = () => {
         return () => window.clearTimeout(t);
     }, [carregando, nivel, visiveis.length, abaVisivel]);
 
-    const comprar = (_produtoId: string) => {
+    const comprar = (produto: Produto) => {
         if (!autenticado) {
             // Vitrine é pública, a compra não. O login vai para outra aba para
             // não derrubar a vitrine; ao voltar, a sessão já é reconhecida.
             window.open('/FintechBankApp/login', 'volt-login');
             return;
         }
-        setCarrinho(c => c + 1);
+        setErroCompra(null);
+        setCompraOk(false);
+        setPin('');
+        setParcelas(1);
+        setFormaPagamento('debit');
+        setProdutoNoModal(produto);
+    };
+
+    const confirmarCompra = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!produtoNoModal) return;
+
+        if (pin.length !== 4) {
+            setErroCompra('Digite a senha de 4 dígitos do cartão.');
+            return;
+        }
+
+        setEnviando(true);
+        setErroCompra(null);
+        try {
+            const r = await checkout({
+                items: [{ productId: produtoNoModal.id, quantity: 1 }],
+                paymentMethod: formaPagamento,
+                installments: formaPagamento === 'credit' ? parcelas : 1,
+                pin,
+            });
+            if (r.success) {
+                setCompraOk(true);
+                setCarrinho(c => c + 1);
+            } else {
+                setErroCompra(r.message || 'Não foi possível concluir a compra.');
+            }
+        } catch (err: any) {
+            setErroCompra(err?.message || 'Erro ao falar com o servidor.');
+        } finally {
+            setEnviando(false);
+        }
     };
 
     const cardHover = nivel === 'a'
@@ -329,7 +388,7 @@ export const ShopLanding: React.FC = () => {
                             </p>
                             <div className="flex flex-wrap gap-3 pt-1">
                                 <button
-                                    onClick={() => comprar(destaque.id)}
+                                    onClick={() => comprar(destaque)}
                                     className="px-6 py-3 rounded-2xl bg-volt-green text-black font-black uppercase text-sm transition-transform hover:scale-[1.03] active:scale-95"
                                 >
                                     Comprar agora
@@ -392,7 +451,7 @@ export const ShopLanding: React.FC = () => {
                                     <h3 className="text-sm font-bold leading-tight line-clamp-2">{p.name}</h3>
                                     <p className="text-base font-black mt-auto">{moeda(p.price)}</p>
                                     <button
-                                        onClick={() => comprar(p.id)}
+                                        onClick={() => comprar(p)}
                                         className="mt-1 w-full py-2 rounded-xl bg-white/10 hover:bg-volt-green hover:text-black font-bold text-xs uppercase transition-colors"
                                     >
                                         Comprar
@@ -403,6 +462,131 @@ export const ShopLanding: React.FC = () => {
                     </div>
                 )}
             </main>
+
+            {/* Confirmação da compra. O fundo fecha ao clique, Esc encerra e o
+                cursor já chega no campo da senha — o caminho até "pagar" é curto
+                porque quem chegou aqui já decidiu. */}
+            {produtoNoModal && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+                    onClick={fecharModal}
+                    role="presentation"
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={compraOk ? 'Compra concluída' : `Confirmar compra de ${produtoNoModal.name}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full max-w-md rounded-3xl border border-white/10 bg-[#141414] text-white p-5 shadow-2xl motion-safe:animate-fade-in"
+                    >
+                        {compraOk ? (
+                            <div className="text-center space-y-3 py-2">
+                                <CheckCircle2 className="w-12 h-12 text-volt-green mx-auto" />
+                                <h3 className="font-black uppercase text-lg">Compra aprovada</h3>
+                                <p className="text-sm opacity-80">
+                                    {produtoNoModal.name} · {moeda(produtoNoModal.price)}
+                                    {formaPagamento === 'credit' && parcelas > 1 ? ` em ${parcelas}x` : ''}
+                                </p>
+                                <p className="text-[11px] opacity-50">
+                                    O lançamento aparece no extrato e no monitor de eventos.
+                                </p>
+                                <button
+                                    ref={fecharRef}
+                                    onClick={fecharModal}
+                                    className="w-full py-3 rounded-2xl bg-volt-green text-black font-black uppercase text-sm"
+                                >
+                                    Continuar comprando
+                                </button>
+                            </div>
+                        ) : (
+                            <form onSubmit={confirmarCompra} className="space-y-4">
+                                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                                    <h3 className="font-black uppercase text-sm flex items-center gap-2">
+                                        <ShoppingCart className="w-4 h-4" /> Confirmar compra
+                                    </h3>
+                                    <button type="button" onClick={fecharModal} aria-label="Fechar" className="p-1 opacity-60 hover:opacity-100">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center gap-3 bg-white/5 p-3 rounded-2xl">
+                                    {produtoNoModal.image
+                                        ? <img src={produtoNoModal.image} alt="" className="w-12 h-12 rounded-xl object-cover" />
+                                        : <div className="w-12 h-12 rounded-xl bg-white/10" />}
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-sm leading-tight truncate">{produtoNoModal.name}</p>
+                                        <p className="text-volt-green font-black">{moeda(produtoNoModal.price)}</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    {([['debit', 'Saldo em conta'], ['credit', 'Cartão de crédito']] as const).map(([id, rotulo]) => (
+                                        <button
+                                            key={id}
+                                            type="button"
+                                            onClick={() => setFormaPagamento(id)}
+                                            aria-pressed={formaPagamento === id}
+                                            className={`p-2.5 rounded-xl border text-xs font-bold transition-colors ${
+                                                formaPagamento === id
+                                                    ? 'border-volt-green bg-volt-green/10 text-volt-green'
+                                                    : 'border-white/15 hover:border-white/40'
+                                            }`}
+                                        >
+                                            {rotulo}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {formaPagamento === 'credit' && (
+                                    <label className="block space-y-1">
+                                        <span className="text-[10px] font-black uppercase opacity-70">Parcelamento</span>
+                                        <select
+                                            value={parcelas}
+                                            onChange={(e) => setParcelas(Number(e.target.value))}
+                                            className="w-full p-2.5 rounded-xl bg-[#0d0d0d] border border-white/15 text-sm font-bold"
+                                        >
+                                            {[1, 2, 3, 4, 5, 6, 10, 12].map(n => (
+                                                <option key={n} value={n}>
+                                                    {n}x de {moeda(produtoNoModal.price / n)} sem juros
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                )}
+
+                                <label className="block space-y-1">
+                                    <span className="text-[10px] font-black uppercase opacity-70 flex items-center gap-1">
+                                        <Lock className="w-3 h-3" /> Senha do cartão
+                                    </span>
+                                    <input
+                                        ref={pinRef}
+                                        type="password"
+                                        inputMode="numeric"
+                                        maxLength={4}
+                                        placeholder="••••"
+                                        value={pin}
+                                        onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                                        className="w-full p-3 rounded-xl bg-[#0d0d0d] border border-white/15 text-center text-lg tracking-[0.4em] font-mono"
+                                        required
+                                    />
+                                </label>
+
+                                {erroCompra && (
+                                    <p role="alert" className="text-xs font-bold text-rose-400">{erroCompra}</p>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={enviando}
+                                    className="w-full py-3 rounded-2xl bg-volt-green text-black font-black uppercase text-sm disabled:opacity-50 transition-transform active:scale-[0.98]"
+                                >
+                                    {enviando ? 'Processando...' : `Pagar ${moeda(produtoNoModal.price)}`}
+                                </button>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Seletor de intensidade: as três abordagens na mesma peça. */}
             <div className="fixed bottom-4 right-4 z-40 rounded-2xl border border-white/15 bg-[#141414]/95 backdrop-blur px-3 py-2 shadow-2xl">
