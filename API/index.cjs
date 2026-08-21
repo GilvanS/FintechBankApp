@@ -2012,6 +2012,14 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
                 }
             }
         });
+
+        require('./services/eventBus').publish('purchase.completed', {
+            cpf: req.user.cpf,
+            totalAmount: netDebit,
+            paymentMethod: 'debit',
+            productsDescription: productDesc,
+            transactionId: txId,
+        }).catch(() => {});
         return;
     } else if (paymentMethod === 'credit') {
         if (!Number.isInteger(installments) || installments < 1 || installments > 24) {
@@ -2330,8 +2338,8 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         });
     } catch (_sseErr) { /* SSE é fire-and-forget */ }
 
-    res.status(201).json({ 
-        success: true, 
+    res.status(201).json({
+        success: true,
         message: 'Compra realizada com sucesso',
         purchase: {
             products: purchasedProducts,
@@ -2344,6 +2352,17 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             ...(purchaseJuros || {})
         }
     });
+
+    // Publicado após a persistência: o evento não pode anunciar uma compra que
+    // ainda poderia falhar. Falha no barramento não afeta o checkout.
+    require('./services/eventBus').publish('purchase.completed', {
+        cpf: req.user.cpf,
+        totalAmount: finalAmountLabel,
+        paymentMethod,
+        installments: paymentMethod === 'credit' ? installments : 1,
+        productsDescription,
+        transactionId: creditTransactionId,
+    }).catch(() => {});
 }));
 
 // --- Rotas PIX ---
@@ -5980,6 +5999,16 @@ async function bootstrap() {
             console.log("🎯 Servidor pronto para uso com Postgres!");
             console.log("📋 Swagger disponível em: http://localhost:3001/api-docs");
         }
+
+        // Liga o barramento de eventos às conexões SSE. Sem isso o stream abre e
+        // fica mudo: os eventos são publicados mas ninguém os repassa ao navegador.
+        if (!IS_TEST) {
+            try {
+                await require('./services/eventRelay').start();
+            } catch (relayErr) {
+                console.warn('⚠️ [EventRelay] Não foi possível iniciar o relay de eventos:', relayErr.message);
+            }
+        }
     } catch (error) {
         console.error("❌ Erro ao inicializar:", error.message);
         if (!IS_TEST) process.exit(1); // em teste, deixa a suite reportar a falha
@@ -7232,22 +7261,38 @@ app.use('/api/v1', apiRouter);
 // ─── SSE (Server-Sent Events) — atualização em tempo real ──────────────
 const sseService = require('./services/sseService');
 
+// Diagnóstico do canal de eventos: quantas sessões estão ouvindo e se o relay
+// que liga o barramento ao SSE chegou a subir. Sem isso, um stream mudo é
+// indistinguível de um sistema sem eventos.
+app.get('/api/events/status', (req, res) => {
+    const relay = require('./services/eventRelay');
+    res.json({
+        success: true,
+        clients: sseService.getClientCount(),
+        adminClients: sseService.getAdminClientCount(),
+        relay: relay.getStatus(),
+    });
+});
+
 app.get('/api/events/stream', (req, res) => {
     // EventSource não suporta headers — aceitar token via query param ou header
     let cpf = null;
+    let role = null;
     const authHeader = req.headers.authorization;
     const tokenParam = req.query.token;
-    
+
     try {
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET);
             cpf = decoded.cpf;
+            role = decoded.role;
         } else if (tokenParam) {
             const decoded = jwt.verify(tokenParam, JWT_SECRET);
             cpf = decoded.cpf;
+            role = decoded.role;
         }
     } catch (_e) { /* token inválido */ }
-    
+
     if (!cpf) return res.status(401).json({ message: 'Unauthorized' });
 
     // Headers SSE
@@ -7264,10 +7309,10 @@ app.get('/api/events/stream', (req, res) => {
         try { res.write(':heartbeat\n\n'); } catch (_e) {}
     }, 30000);
 
-    sseService.addClient(cpf, res);
+    sseService.addClient(cpf, res, role);
 
     // Enviar evento inicial de conexão
-    res.write(`event: connected\ndata: ${JSON.stringify({ cpf, timestamp: new Date().toISOString() })}\n\n`);
+    res.write(`event: connected\ndata: ${JSON.stringify({ cpf, role: role || 'user', timestamp: new Date().toISOString() })}\n\n`);
 
     req.on('close', () => {
         clearInterval(heartbeat);
@@ -7368,6 +7413,14 @@ if (!IS_TEST) {
             }
             const created = await usersRepo.createMassUser(payload);
             telegramService.ensureTopic(created.cpf, created.fullName);
+
+            require('./services/eventBus').publish('mass.created', {
+                cpf: created.cpf,
+                fullName: created.fullName,
+                accountStatus: payload.accountStatus,
+                cardBrand: payload.cardBrand,
+            }).catch(() => {});
+
             return res.json({
                 success: true,
                 message: `Massa ${created.fullName} (CPF ${created.cpf}) gravada com sucesso no PostgreSQL!`,

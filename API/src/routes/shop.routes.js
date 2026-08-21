@@ -1,3 +1,4 @@
+const eventBus = require('../../services/eventBus');
 /**
  * shop.routes.js — Registro das rotas do Shop e Vouchers.
  *
@@ -231,6 +232,14 @@ module.exports = function registerShopRoutes({
                     }
                 }
             });
+
+            eventBus.publish('purchase.completed', {
+                cpf: req.user.cpf,
+                totalAmount: netDebit,
+                paymentMethod: 'debit',
+                productsDescription: productDesc,
+                transactionId: txId,
+            }).catch(() => {});
             return;
         } else if (paymentMethod === 'ACCOUNT_DEBIT') {
             const billId = dbService.generateUUID();
@@ -365,6 +374,7 @@ module.exports = function registerShopRoutes({
 
             // Validar limite disponível - IMPORTANTE: usar limite do cartão, NÃO o saldo da conta
             if (!Number.isFinite(finalAvailableLimit) || finalAvailableLimit < consumoLimite) {
+                eventBus.publish('purchase.declined', { cpf: req.user.cpf, requiredAmount: consumoLimite, availableLimit: finalAvailableLimit, reason: 'limite_insuficiente', type: 'credit' }).catch(() => {});
                 return res.status(400).json({
                     success: false,
                     message: `Limite de credito insuficiente. Disponivel: R$ ${finalAvailableLimit.toFixed(2)}, Necessario: R$ ${consumoLimite.toFixed(2)}`
@@ -612,6 +622,17 @@ module.exports = function registerShopRoutes({
                 ...(purchaseJuros || {})
             }
         });
+
+        // Publicado depois da persistência: o evento não pode anunciar uma compra
+        // que ainda poderia falhar. Falha no barramento não afeta o checkout.
+        eventBus.publish('purchase.completed', {
+            cpf: req.user.cpf,
+            totalAmount: finalAmountLabel,
+            paymentMethod,
+            installments: paymentMethod === 'credit' ? installments : 1,
+            productsDescription,
+            transactionId: creditTransactionId,
+        }).catch(() => {});
     }));
 
     // --- Vouchers ---

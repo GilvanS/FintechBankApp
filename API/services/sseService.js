@@ -15,16 +15,23 @@
 // Mapa de conexões ativas: cpf → Set<response>
 const clients = new Map();
 
+// Conexões abertas por sessões administrativas. O monitor de eventos acompanha a
+// atividade de todas as massas, mas um cliente comum só pode receber o que é dele —
+// por isso o recorte por papel fica separado do mapa por CPF.
+const adminClients = new Set();
+
 /**
  * Registra uma nova conexão SSE para um CPF.
  * @param {string} cpf - CPF do usuário conectado
  * @param {object} res - Response do Express (stream aberto)
+ * @param {string} [role] - Papel do usuário; 'admin' habilita receber broadcast administrativo
  */
-function addClient(cpf, res) {
+function addClient(cpf, res, role) {
     if (!clients.has(cpf)) {
         clients.set(cpf, new Set());
     }
     clients.get(cpf).add(res);
+    if (role === 'admin') adminClients.add(res);
     console.log(`[SSE] Cliente conectado: ${cpf} (total: ${clients.get(cpf).size})`);
 }
 
@@ -39,6 +46,7 @@ function removeClient(cpf, res) {
         set.delete(res);
         if (set.size === 0) clients.delete(cpf);
     }
+    adminClients.delete(res);
     console.log(`[SSE] Cliente desconectado: ${cpf} (restantes: ${clients.get(cpf)?.size || 0})`);
 }
 
@@ -83,6 +91,25 @@ function broadcast(event, data) {
 }
 
 /**
+ * Envia um evento apenas para as sessões administrativas conectadas.
+ * É o canal do monitor de eventos: o admin acompanha a atividade de todas as massas
+ * sem que o evento de um cliente chegue à sessão de outro.
+ * @param {string} event
+ * @param {object} data
+ */
+function broadcastToAdmins(event, data) {
+    if (adminClients.size === 0) return;
+    const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const res of adminClients) {
+        try {
+            res.write(payload);
+        } catch (err) {
+            adminClients.delete(res);
+        }
+    }
+}
+
+/**
  * Retorna o número total de conexões ativas.
  */
 function getClientCount() {
@@ -91,10 +118,19 @@ function getClientCount() {
     return total;
 }
 
+/**
+ * Retorna o número de conexões administrativas ativas.
+ */
+function getAdminClientCount() {
+    return adminClients.size;
+}
+
 module.exports = {
     addClient,
     removeClient,
     sendToClient,
     broadcast,
+    broadcastToAdmins,
     getClientCount,
+    getAdminClientCount,
 };
