@@ -6,6 +6,7 @@ import Login from './components/Login';
 import SignUp from './components/SignUp';
 import PreLoginDashboard from './components/PreLoginDashboard';
 import ResetPassword from './components/ResetPassword';
+import ShopLanding from './components/ShopLanding';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthContext } from './context/AuthContext';
 import DemoBanner from './components/DemoBanner';
@@ -246,6 +247,9 @@ function App() {
                                     onNavigateToLogin={() => navigate('/login')}
                                 />
                             } />
+                            {/* Vitrine pública, feita para abrir em aba própria ao lado do
+                                app. Catálogo aberto a visitantes; a compra pede sessão. */}
+                            <Route path="/shop" element={<ShopLanding />} />
                             <Route path="/reset-password" element={
                                 <ResetPassword
                                     onResetSuccess={() => navigate('/login')}

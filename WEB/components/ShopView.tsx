@@ -3,16 +3,48 @@ import { ShoppingBag, Zap, CreditCard, CheckCircle2, AlertCircle, ShoppingCart, 
 import { motion, AnimatePresence } from 'framer-motion';
 import { Product } from '../types';
 import { useAppState } from '../contexts/AppStateContext';
-import { checkout } from '../services/api';
+import { checkout, getProducts } from '../services/api';
 
 interface ShopViewProps {
-  products: Product[];
+  /** Opcional: quando não vem do pai, a própria tela busca o catálogo. */
+  products?: Product[];
   accountBalance: number;
 }
 
-export const ShopView: React.FC<ShopViewProps> = ({ products, accountBalance }) => {
+export const ShopView: React.FC<ShopViewProps> = ({ products: productsProp, accountBalance }) => {
   const { theme } = useAppState();
   const isMidnight = theme === 'midnight';
+
+  // O Dashboard renderiza esta tela sem passar `products`, então o catálogo é
+  // carregado aqui — mesmo padrão já usado na versão mobile. A lista começa
+  // vazia para a primeira renderização não quebrar no map.
+  const [fetchedProducts, setFetchedProducts] = useState<Product[]>([]);
+  const products = productsProp ?? fetchedProducts;
+
+  useEffect(() => {
+    if (productsProp) return;
+    let active = true;
+
+    (async () => {
+      try {
+        const result = await getProducts();
+        if (!active || !result.success || !result.products) return;
+        setFetchedProducts(result.products.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          cashback: p.cashback || '5%',
+          category: p.category || 'Geral',
+          image: p.imageUrl || p.image || '',
+          description: p.description || '',
+        })));
+      } catch (err) {
+        console.error('[ShopView] Falha ao carregar catálogo:', err);
+      }
+    })();
+
+    return () => { active = false; };
+  }, [productsProp]);
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'balance' | 'credit'>('balance');
