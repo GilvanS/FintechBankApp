@@ -9,16 +9,34 @@ interface BottomNavBarProps {
     isAdmin?: boolean;
 }
 
-const getNavItems = (isAdmin: boolean) => {
-    const items = [
+// Base do app em produção (GitHub Pages), igual ao basename do BrowserRouter.
+const BASE = '/FintechBankApp';
+
+interface NavItem {
+    label: string;
+    view: string;
+    icon: any;
+    /** Quando presente, o item abre nesta rota em aba própria em vez de navegar por dentro. */
+    externalPath?: string;
+    /** Nome da janela: clicar de novo reaproveita a que já está aberta. */
+    janela?: string;
+}
+
+/**
+ * Shop e Admin abrem em aba própria: cada um é um ambiente completo, e mantê-los
+ * separados deixa o app intacto atrás — útil para testar com abas abrindo e
+ * fechando sem perder o estado da tela principal. Os demais navegam por dentro.
+ */
+const getNavItems = (isAdmin: boolean): NavItem[] => {
+    const items: NavItem[] = [
         { label: 'Início',   view: 'home',     icon: Home },
         { label: 'Faturas',  view: 'invoices', icon: FileText },
         { label: 'Limites',  view: 'limit',    icon: Sliders },
-        { label: 'Shop',     view: 'shop',     icon: ShoppingBag },
+        { label: 'Shop',     view: 'shop',     icon: ShoppingBag, externalPath: `${BASE}/shop`, janela: 'volt-vitrine' },
         { label: 'Perfil',   view: 'profile',  icon: User },
     ];
     if (isAdmin) {
-        items.push({ label: 'Admin', view: 'admin', icon: Shield });
+        items.push({ label: 'Admin', view: 'admin', icon: Shield, externalPath: `${BASE}/admin`, janela: 'volt-admin' });
     }
     return items;
 };
@@ -44,7 +62,14 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentView, onNavigate, th
                     return (
                         <button
                             key={item.view}
-                            onClick={() => onNavigate(item.view as any)}
+                            onClick={() => {
+                                if (item.externalPath) {
+                                    window.open(item.externalPath, item.janela || '_blank');
+                                    return;
+                                }
+                                onNavigate(item.view as any);
+                            }}
+                            title={item.externalPath ? `${item.label} — abre em outra aba` : undefined}
                             className="relative flex flex-col items-center justify-center w-16 h-16 rounded-2xl transition-colors cursor-pointer group shrink-0"
                         >
                             {isActive && (

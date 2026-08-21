@@ -8,6 +8,7 @@ import PreLoginDashboard from './components/PreLoginDashboard';
 import ResetPassword from './components/ResetPassword';
 import ShopLanding from './components/ShopLanding';
 import EventMonitor from './components/EventMonitor';
+import AdminDashboard from './components/Admin/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthContext } from './context/AuthContext';
 import DemoBanner from './components/DemoBanner';
@@ -254,6 +255,13 @@ function App() {
                             {/* Monitor de eventos: janela lateral, sem chrome, para
                                 acompanhar o efeito de cada ação em tela dividida. */}
                             <Route path="/monitor" element={<EventMonitor />} />
+                            {/* Painel administrativo em rota própria, para abrir em aba
+                                separada: isola o ambiente e deixa o app intacto atrás. */}
+                            <Route path="/admin" element={
+                                <ProtectedRoute>
+                                    <AdminDashboard onClose={() => navigate('/dashboard')} />
+                                </ProtectedRoute>
+                            } />
                             <Route path="/reset-password" element={
                                 <ResetPassword
                                     onResetSuccess={() => navigate('/login')}
