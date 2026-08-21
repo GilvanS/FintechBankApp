@@ -1,5 +1,6 @@
 
-import { MOCK_USERS, MOCK_PRODUCTS } from '../data/mockData';
+import { MOCK_PRODUCTS } from '../data/mockData';
+import { loadDemoUsersFromCsv } from './csvDemoData';
 import { User, PasswordResetRequest, LimitIncreaseRequest, AppNotification, PixKey, PixContact, Transaction, PurchasedItem, CreditCard, CardTransaction } from '../types';
 
 const STORE_KEY = 'fintech_app_data';
@@ -115,12 +116,24 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 // --- API Functions ---
 
 export const initializeMockUsers = async () => {
-    await delay(500);
     const store = _getStore();
-    
-    // This ensures that mock users are always present and up-to-date
-    // It will add them if they don't exist, or update them if they do.
-    MOCK_USERS.forEach(mockUser => {
+
+    // Os CSVs exportados do PostgreSQL são a fonte de verdade do modo demo.
+    // Falha de rede não zera o store: mantém o que já estava carregado.
+    let csvUsers: User[];
+    try {
+        csvUsers = await loadDemoUsersFromCsv();
+    } catch (err) {
+        console.error('[mockApi] Falha ao carregar massas dos CSVs de demonstração:', err);
+        return;
+    }
+
+    // Massa que saiu do CSV não pode continuar logando.
+    const csvCpfs = new Set(csvUsers.map(u => u.cpf));
+    store.users = store.users.filter(u => csvCpfs.has(u.cpf));
+
+    // Preserva o que o visitante fez na sessão e reaplica os dados do CSV por cima.
+    csvUsers.forEach(mockUser => {
         const userIndex = store.users.findIndex(u => u.cpf === mockUser.cpf);
         if (userIndex !== -1) {
             // User exists, update password, role, and ensure creditCard transactions are synced
@@ -1027,7 +1040,7 @@ export const mockApiAdminGetOverdueMasses = () => {
     { cpf: '66666666666', fullName: 'Fernanda Costa Ribeiro', accountStatus: 'inadimplente', closedVal: 4120.00, daysOverdue: 12, dueDate: '2026-07-12' },
     { cpf: '77777777777', fullName: 'Lucas Gabriel Martins', accountStatus: 'inadimplente', closedVal: 6300.75, daysOverdue: 45, dueDate: '2026-06-09' },
     { cpf: '88888888888', fullName: 'Juliana Barbosa Rocha', accountStatus: 'inadimplente', closedVal: 950.00, daysOverdue: 3, dueDate: '2026-07-21' },
-    { cpf: '99999999999', fullName: 'Thiago Henrique Alves', accountStatus: 'inadimplente', closedVal: 7840.20, daysOverdue: 60, dueDate: '2026-05-25' },
+    { cpf: '99999999999', fullName: 'Admin User', accountStatus: 'inadimplente', closedVal: 7840.20, daysOverdue: 60, dueDate: '2026-05-25' },
     { cpf: '12345678901', fullName: 'Camila Fernandes Rodrigues', accountStatus: 'inadimplente', closedVal: 1890.00, daysOverdue: 21, dueDate: '2026-07-03' },
     { cpf: '23456789012', fullName: 'Gabriel Augusto Mendes', accountStatus: 'inadimplente', closedVal: 3400.00, daysOverdue: 8, dueDate: '2026-07-16' },
     { cpf: '34567890123', fullName: 'Larissa Nogueira Castro', accountStatus: 'inadimplente', closedVal: 2150.60, daysOverdue: 17, dueDate: '2026-07-07' },
@@ -1315,7 +1328,7 @@ const _mockCurrentUser = (): any | null => {
     }
     if (!user) {
         const store = _getStore();
-        user = store.users && store.users.length > 0 ? store.users[0] : MOCK_USERS[0];
+        user = store.users && store.users.length > 0 ? store.users[0] : undefined;
     }
     if (user && user.creditCard) {
         _syncInstallmentCarryover(user.creditCard);
@@ -1726,3 +1739,314 @@ export const adminCreateMassUser = async (payload: any): Promise<{ success: bool
         return { success: false, message: err.message || 'Erro ao criar massa.' };
     }
 };
+
+// ══════════════════════════════════════════════════════════════════════
+// Paridade de exports com services/api.ts.
+// O modo demo (GitHub Pages) aliasa api.ts → mockApi.ts, então toda função
+// importada pelos componentes precisa existir aqui senão o build quebra.
+// Operações de cliente têm comportamento real sobre o localStorage; operações
+// administrativas que dependem do backend retornam aviso de indisponibilidade.
+// ══════════════════════════════════════════════════════════════════════
+
+const DEMO_UNAVAILABLE = 'Indisponível no modo demonstração (sem backend).';
+const demoFail = async (message = DEMO_UNAVAILABLE) => ({ success: false, message });
+
+export const setAdminSessionToken = (_token: string | null): void => {};
+
+// --- Contas recorrentes (cliente) ---
+const RECURRING_KEY = 'fintech_demo_recurring_bills';
+
+const _getBills = (cpf: string): any[] => {
+    try {
+        const all = JSON.parse(localStorage.getItem(RECURRING_KEY) || '{}');
+        return all[cpf] || [];
+    } catch {
+        return [];
+    }
+};
+
+const _saveBills = (cpf: string, bills: any[]) => {
+    let all: Record<string, any[]> = {};
+    try {
+        all = JSON.parse(localStorage.getItem(RECURRING_KEY) || '{}');
+    } catch {}
+    all[cpf] = bills;
+    localStorage.setItem(RECURRING_KEY, JSON.stringify(all));
+};
+
+export const getRecurringBills = async (cpf: string) => {
+    await delay(200);
+    return { success: true, bills: _getBills(cpf) };
+};
+
+export const createRecurringBill = async (cpf: string, data: { name: string; amount: number; dueDay: number; category?: string; frequency?: string; paymentMethod?: string }) => {
+    await delay(200);
+    const bills = _getBills(cpf);
+    const bill = { id: `bill-${Date.now()}`, status: 'active', ...data };
+    bills.push(bill);
+    _saveBills(cpf, bills);
+    return { success: true, bill };
+};
+
+export const updateRecurringBill = async (cpf: string, billId: string, data: { name?: string; amount?: number; dueDay?: number; category?: string }) => {
+    await delay(200);
+    const bills = _getBills(cpf);
+    const idx = bills.findIndex(b => b.id === billId);
+    if (idx === -1) return { success: false, message: 'Conta recorrente não encontrada.' };
+    bills[idx] = { ...bills[idx], ...data };
+    _saveBills(cpf, bills);
+    return { success: true, message: 'Conta recorrente atualizada.' };
+};
+
+export const removeRecurringBill = async (cpf: string, billId: string) => {
+    await delay(200);
+    _saveBills(cpf, _getBills(cpf).filter(b => b.id !== billId));
+    return { success: true, message: 'Conta recorrente cancelada.' };
+};
+
+export const payRecurringBill = async (cpf: string, billId: string, data: { paymentMethod?: 'ACCOUNT_DEBIT' | 'CREDIT_CARD'; name?: string; amount?: number; dueDay?: number; category?: string; frequency?: string }) => {
+    await delay(400);
+    const store = _getStore();
+    const user = store.users.find(u => u.cpf === cpf);
+    if (!user) return { success: false, message: 'Usuário não encontrado.' };
+
+    const bills = _getBills(cpf);
+    const idx = bills.findIndex(b => b.id === billId);
+    const amount = data.amount ?? bills[idx]?.amount ?? 0;
+    const name = data.name ?? bills[idx]?.name ?? 'Conta recorrente';
+
+    if (data.paymentMethod === 'CREDIT_CARD') {
+        user.creditCard.availableLimit -= amount;
+        user.creditCard.currentInvoice += amount;
+    } else {
+        if (user.balance < amount) return { success: false, message: 'Saldo insuficiente.' };
+        user.balance -= amount;
+    }
+
+    const transactionId = `rec-pay-${Date.now()}`;
+    user.transactions.unshift({
+        id: transactionId,
+        type: 'PAYMENT',
+        amount: -amount,
+        date: new Date().toISOString(),
+        description: name,
+    });
+    _saveStore(store);
+
+    if (idx !== -1) {
+        bills[idx] = { ...bills[idx], status: 'paid', lastPaidAt: new Date().toISOString() };
+        _saveBills(cpf, bills);
+    }
+
+    return {
+        success: true,
+        message: 'Pagamento efetuado.',
+        bill: bills[idx],
+        transactionId,
+        paymentMethod: data.paymentMethod || 'ACCOUNT_DEBIT',
+        newBalance: user.balance,
+    };
+};
+
+// --- Boleto / PIX de fatura (cliente) ---
+export interface PaymentCodesRequest {
+    cpf: string;
+    name: string;
+    amount: number;
+    dueDate: string;
+    invoiceId: string;
+}
+
+export interface PaymentCodesResponse {
+    success: boolean;
+    data: {
+        invoice: { id: string; amount: number; amountFormatted: string; dueDate: string; dueDateFormatted: string; payerName: string; payerCpf: string };
+        boleto: {
+            barcode: string; linhaDigitavel: string; linhaDigitavelRaw: string;
+            amount: number; amountFormatted: string; dueDate: string; dueDateFormatted: string; dueDateFactor: number;
+            beneficiary: { name: string; cnpj: string; bankCode: string; bankName: string };
+            payer: { name: string; cpf: string; cpfFormatted: string };
+            invoiceId: string;
+        };
+        pix: {
+            payload: string; qrcodeSvg: string; amount: number; amountFormatted: string; pixKey: string; txid: string;
+            beneficiary: { name: string; cnpj: string };
+            payer: { name: string; cpf: string; cpfFormatted: string };
+            invoiceId: string;
+        };
+        generatedAt: string;
+    };
+}
+
+const _mod11 = (digits: string): number => {
+    const weights = [2, 3, 4, 5, 6, 7, 8, 9];
+    let total = 0;
+    for (let i = digits.length - 1, w = 0; i >= 0; i--, w++) total += parseInt(digits[i]) * weights[w % weights.length];
+    const dv = 11 - (total % 11);
+    return (dv === 0 || dv === 10 || dv === 11) ? 1 : dv;
+};
+
+const _mod10 = (digits: string): number => {
+    const weights = [2, 1];
+    let total = 0;
+    for (let i = digits.length - 1, w = 0; i >= 0; i--, w++) {
+        const product = parseInt(digits[i]) * weights[w % 2];
+        total += Math.floor(product / 10) + (product % 10);
+    }
+    const r = total % 10;
+    return r === 0 ? 0 : 10 - r;
+};
+
+const _crc16 = (data: string): string => {
+    let crc = 0xFFFF;
+    for (let i = 0; i < data.length; i++) {
+        crc ^= data.charCodeAt(i) << 8;
+        for (let j = 0; j < 8; j++) {
+            crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+            crc &= 0xFFFF;
+        }
+    }
+    return crc.toString(16).toUpperCase().padStart(4, '0');
+};
+
+const _emv = (tag: string, value: string): string => `${tag}${String(value.length).padStart(2, '0')}${value}`;
+
+export const generateInvoicePaymentCodes = async (request: PaymentCodesRequest): Promise<PaymentCodesResponse> => {
+    await delay(300);
+    const { cpf, name, amount, dueDate, invoiceId } = request;
+
+    const FEBRABAN_BASE = new Date(1997, 9, 7);
+    const dueObj = new Date(dueDate + 'T00:00:00');
+    const factor = Math.floor((dueObj.getTime() - FEBRABAN_BASE.getTime()) / 86400000);
+    const factorStr = String(factor).padStart(4, '0');
+    const amountStr = String(Math.round(amount * 100)).padStart(10, '0');
+
+    let hashVal = 0;
+    for (let i = 0; i < invoiceId.length; i++) hashVal = ((hashVal << 5) - hashVal + invoiceId.charCodeAt(i)) | 0;
+    const freeField = String(Math.abs(hashVal)).padEnd(25, '0').slice(0, 25);
+
+    const barcode = `5989${_mod11(`5989${factorStr}${amountStr}${freeField}`)}${factorStr}${amountStr}${freeField}`;
+    const f1raw = barcode.slice(0, 4) + barcode.slice(19, 24);
+    const f2raw = barcode.slice(24, 34);
+    const f3raw = barcode.slice(34, 44);
+    const linhaDigitavel = `${f1raw.slice(0, 5)}.${f1raw.slice(5)}${_mod10(f1raw)} ${f2raw.slice(0, 5)}.${f2raw.slice(5)}${_mod10(f2raw)} ${f3raw.slice(0, 5)}.${f3raw.slice(5)}${_mod10(f3raw)} ${barcode[4]} ${barcode.slice(5, 19)}`;
+
+    const pixKey = 'financeiro@fintechbank.com.br';
+    const txid = invoiceId.replace(/[-\s]/g, '').slice(0, 25);
+    const payloadNoCrc = [
+        _emv('00', '01'), _emv('01', '12'),
+        _emv('26', _emv('00', 'BR.GOV.BCB.PIX') + _emv('01', pixKey)),
+        _emv('52', '0000'), _emv('53', '986'), _emv('54', amount.toFixed(2)),
+        _emv('58', 'BR'), _emv('59', 'Fintech Bank App'.slice(0, 25)), _emv('60', 'Sao Paulo'),
+        _emv('62', _emv('05', txid)),
+    ].join('') + '6304';
+
+    const cpfClean = cpf.replace(/\D/g, '').padStart(11, '0');
+    const cpfFmt = `${cpfClean.slice(0, 3)}.${cpfClean.slice(3, 6)}.${cpfClean.slice(6, 9)}-${cpfClean.slice(9, 11)}`;
+    const amountFmt = `R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const dueFmt = dueObj.toLocaleDateString('pt-BR');
+    const beneficiary = { name: 'Fintech Bank App S.A.', cnpj: '00000000000191' };
+    const payer = { name, cpf: cpfClean, cpfFormatted: cpfFmt };
+
+    return {
+        success: true,
+        data: {
+            invoice: { id: invoiceId, amount, amountFormatted: amountFmt, dueDate, dueDateFormatted: dueFmt, payerName: name, payerCpf: cpf },
+            boleto: {
+                barcode, linhaDigitavel, linhaDigitavelRaw: linhaDigitavel.replace(/[. ]/g, ''),
+                amount, amountFormatted: amountFmt, dueDate, dueDateFormatted: dueFmt, dueDateFactor: factor,
+                beneficiary: { ...beneficiary, bankCode: '598', bankName: '598 - Fintech Bank App' },
+                payer, invoiceId,
+            },
+            pix: {
+                payload: payloadNoCrc + _crc16(payloadNoCrc), qrcodeSvg: '',
+                amount, amountFormatted: amountFmt, pixKey, txid, beneficiary, payer, invoiceId,
+            },
+            generatedAt: new Date().toISOString(),
+        },
+    };
+};
+
+// --- Admin sobre o store local ---
+const _mutateUser = async (cpf: string, fn: (u: User) => void, okMessage: string) => {
+    await delay(200);
+    const store = _getStore();
+    const user = store.users.find(u => u.cpf === cpf);
+    if (!user) return { success: false, message: 'Usuário não encontrado.' };
+    fn(user);
+    _saveStore(store);
+    return { success: true, message: okMessage };
+};
+
+export const adminBlockUser = async (cpf: string) => _mutateUser(cpf, u => { u.isBlocked = true; }, 'Usuário bloqueado.');
+export const adminUnblockUser = async (cpf: string) => _mutateUser(cpf, u => { u.isBlocked = false; }, 'Usuário desbloqueado.');
+export const adminUpdateUserPassword = async (cpf: string, newPassword: string) => _mutateUser(cpf, u => { u.password = newPassword; }, 'Senha atualizada.');
+export const adminUpdateCreditLimit = async (cpf: string, creditLimit: number) => _mutateUser(cpf, u => {
+    u.creditCard.totalLimit = creditLimit;
+    u.creditCard.availableLimit = creditLimit;
+}, 'Limite de crédito atualizado.');
+export const adminUpdatePixLimit = async (cpf: string, dailyPixLimit: number) => _mutateUser(cpf, u => { u.pixDailyLimit = dailyPixLimit; }, 'Limite PIX atualizado.');
+export const adminUpdateBillingDay = async (cpf: string, billingDay: number) => _mutateUser(cpf, u => { u.creditCard.dueDay = billingDay; }, 'Dia de vencimento atualizado.');
+
+// --- Admin dependente de backend (motor, auditoria, Telegram) ---
+export const adminRunBillingCron = async () => demoFail();
+export const adminCloseInvoice = async (_cpf: string) => demoFail();
+export const adminSimulateMass = async (_payload: any) => demoFail();
+export const adminForceRecurringEngine = async (_cpf?: string) => demoFail();
+export const adminFixOrphanPayments = async () => demoFail();
+export const adminGetTransactionById = async (_id: string) => demoFail();
+export const adminCancelTransaction = async (_cpf: string, _id: string) => demoFail();
+export const adminGetCpfByCardNumber = async (_cardNumber: string) => demoFail();
+export const adminGetAllRecurringBills = async (_opts: { status?: string; cpf?: string } = {}) => ({ success: true, bills: [] });
+
+export const adminAuditConsistency = async (_options?: { cpf?: string; limit?: number }) => demoFail();
+export const adminAuditDoubleCount = async (_options?: { cpf?: string; limit?: number }) => demoFail();
+export const adminAuditOrphansPre005 = async () => demoFail();
+export const adminRunFullAudit = async () => demoFail();
+export const adminHealthCharges = async () => demoFail();
+export const adminCheckRegularized = async (_since: string) => ({
+    success: false, count: 0, totalPaid: 0, items: [], checkedAt: new Date().toISOString(), message: DEMO_UNAVAILABLE,
+});
+export const adminGetRegularizedTimeline = async () => ({ success: false, timeline: [], total: 0 });
+
+export interface TelegramTopic {
+    cpf: string;
+    topicId: number;
+    fullName?: string;
+}
+
+export interface TelegramLogEntry {
+    id: number;
+    cpf: string;
+    topic_id?: number | null;
+    category: string;
+    destination: string;
+    message_type: string;
+    message_id?: string | null;
+    ok: boolean;
+    error?: string | null;
+    created_at: string;
+}
+
+export interface TelegramSetting {
+    category: string;
+    enabled: boolean;
+    valid_from?: string | null;
+    valid_until?: string | null;
+    ttl_minutes?: number | null;
+    updated_at?: string;
+    updated_by?: string | null;
+}
+
+export const adminTelegramStatus = async (): Promise<{ configured: boolean; botName?: string; chatId?: string }> => ({ configured: false });
+export const adminTelegramTopics = async (): Promise<TelegramTopic[]> => [];
+export const adminTelegramSettings = async (): Promise<TelegramSetting[]> => [];
+export const adminTelegramLog = async (_filters?: { cpf?: string; category?: string; destination?: string; limit?: number }): Promise<TelegramLogEntry[]> => [];
+export const adminTelegramCreateTopic = async (_cpf: string) => demoFail();
+export const adminTelegramDeleteTopic = async (_cpf: string) => demoFail();
+export const adminTelegramTest = async () => demoFail();
+export const adminTelegramSendMessage = async (_cpf: string, _text: string) => demoFail();
+export const adminTelegramUpdateSetting = async (_category: string, _fields: Partial<TelegramSetting>) => demoFail();
+export const adminTelegramTestCategory = async (_category: string) => demoFail();
+export const adminTelegramSendPdf = async (_cpf: string, _type: 'open' | 'closed' | 'previous') => demoFail();
+export const adminTelegramSendTable = async (_cpf: string, _payload: { title: string; headers: string[]; rows: string[][] }) => demoFail();

@@ -1742,7 +1742,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           const usedLimit = totalLimit - availableLimit;
           const usedPct = totalLimit > 0 ? Math.min(100, Math.max(0, (usedLimit / totalLimit) * 100)) : 0;
           // Limite online = sub-limite para compras digitais (40% do limite total, mínimo R$ 500)
-          const onlineLimit = totalLimit > 0 ? Math.max(500, totalLimit * 0.4) : 0;
+          const onlineLimit = totalLimit > 0 ? Math.round(Math.max(500, totalLimit * 0.4) * 100) / 100 : 0;
           const onlineAvailable = Math.min(onlineLimit, availableLimit);
           const onlineUsedPct = onlineLimit > 0 ? Math.min(100, Math.max(0, ((onlineLimit - onlineAvailable) / onlineLimit) * 100)) : 0;
           return (

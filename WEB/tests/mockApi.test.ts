@@ -4,33 +4,44 @@ import { initializeMockUsers, login, signUp } from '../services/mockApi';
 // jsdom provides localStorage — clear between tests
 beforeEach(() => localStorage.clear());
 
+// Massa presente em public/demo-data/users.csv — a fonte de verdade do modo demo.
+const DEMO_CPF = '34310951783';
+const DEMO_PASSWORD = 'admin999';
+
 describe('mockApi — login', () => {
-    it('autentica com credenciais demo validas (CPF 11111111111 / senha admin999)', async () => {
+    it('autentica massa existente nos CSVs de demonstracao', async () => {
         await initializeMockUsers();
-        const result = await login('11111111111', 'admin999');
+        const result = await login(DEMO_CPF, DEMO_PASSWORD);
         expect(result.success).toBe(true);
-        expect(result.user?.cpf).toBe('11111111111');
+        expect(result.user?.cpf).toBe(DEMO_CPF);
         expect(result.user?.role).toBe('user');
     });
 
     it('rejeita senha incorreta', async () => {
         await initializeMockUsers();
-        const result = await login('11111111111', 'senhaerrada');
+        const result = await login(DEMO_CPF, 'senhaerrada');
         expect(result.success).toBe(false);
         expect(result.message).toBeTruthy();
     });
 
-    it('rejeita CPF nao cadastrado', async () => {
+    it('rejeita CPF ausente dos CSVs', async () => {
         await initializeMockUsers();
-        const result = await login('99999999999', '1234');
+        const result = await login('00000000000', DEMO_PASSWORD);
         expect(result.success).toBe(false);
     });
 
     it('nao retorna campo password no objeto user', async () => {
         await initializeMockUsers();
-        const result = await login('11111111111', 'admin999');
+        const result = await login(DEMO_CPF, DEMO_PASSWORD);
         expect(result.success).toBe(true);
         expect((result.user as any)?.password).toBeUndefined();
+    });
+
+    it('carrega dados relacionados (cartoes, transacoes, chaves PIX) do CSV', async () => {
+        await initializeMockUsers();
+        const result = await login(DEMO_CPF, DEMO_PASSWORD);
+        expect(result.user?.transactions.length).toBeGreaterThan(0);
+        expect(result.user?.creditCard.totalLimit).toBeGreaterThan(0);
     });
 });
 
