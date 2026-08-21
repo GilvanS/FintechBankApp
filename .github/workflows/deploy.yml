@@ -27,6 +27,12 @@ jobs:
         env:
           VITE_USE_MOCK_API: 'true'
 
+      # O Pages serve arquivos estáticos: uma rota do React Router (/login, /dashboard)
+      # não existe em disco e devolveria 404 em deep-link ou refresh. Servindo o mesmo
+      # HTML como 404.html, o router assume a rota no cliente.
+      - name: SPA fallback for client-side routes
+        run: cp WEB/dist/index.html WEB/dist/404.html
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
