@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React from 'react';
 import { Transaction } from '../types'; // Assuming Transaction type is in types
 
@@ -23,7 +24,7 @@ const ExtratoCompra: React.FC<ExtratoCompraProps> = ({ transaction, onBack }) =>
       {/* Header */}
       <header className="flex items-center justify-between p-4 bg-surface-dark">
         <button onClick={onBack} className="p-2 rounded-full hover:bg-white/10">
-          <span className="material-symbols-outlined">arrow_back</span>
+          <ArrowLeft size={22} className="shrink-0" />
         </button>
         <div className="flex items-center gap-2">
           <button className="p-2 rounded-full hover:bg-white/10">

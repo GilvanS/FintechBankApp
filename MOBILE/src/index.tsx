@@ -12,7 +12,7 @@ const root = ReactDOM.createRoot(rootElement);
 
 // CRÍTICO PARA PERFORMANCE APK: Remover StrictMode em produção
 // StrictMode causa renderizações duplas que bloqueiam o thread principal
-const isDevelopment = import.meta.env.DEV;
+const isDevelopment = (import.meta as any).env.DEV;
 
 const AppWithBoundary = (
   <ErrorBoundary>

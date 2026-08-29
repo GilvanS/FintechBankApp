@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getUserByCpf } from '../services/api';
@@ -56,7 +57,7 @@ const Limits: React.FC<LimitsProps> = ({ onBack }) => {
         <div className="bg-background-dark text-white p-4 min-h-full">
             <header className="flex items-center mb-6">
                 <button onClick={onBack} className="mr-2 p-2 rounded-full hover:bg-white/10">
-                     <span className="material-symbols-outlined">arrow_back</span>
+                     <ArrowLeft size={22} className="shrink-0" />
                 </button>
                 <h2 className="text-2xl font-bold text-white">Meus Limites PIX</h2>
             </header>

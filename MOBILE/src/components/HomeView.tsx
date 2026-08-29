@@ -1,8 +1,11 @@
-import React, { useState, useMemo, useContext } from 'react';
-import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus, Mic, Barcode } from 'lucide-react';
+import React, { useState, useMemo, useContext, useEffect } from 'react';
+import { getRecurringBills, createRecurringBill } from '../services/api';
+import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Brain, X, Plus, Mic, Barcode, Building2, Globe } from 'lucide-react';
 import InvoiceSummarySheet from './InvoiceSummarySheet';
+import PaymentTimelineChart from './PaymentTimelineChart';
 
-import type { User, Story, RecurringBill, Transaction } from '../types';
+import type { User, Story, Transaction, CardTransaction, RecurringBill } from '../types';
+
 import { useDialog } from '../contexts/GlobalDialogContext';
 import { useAuth, AuthContext } from '../context/AuthContext';
 import { useAppState } from '../contexts/AppStateContext';
@@ -18,7 +21,7 @@ import StoryHighlights from './StoryHighlights';
 import StoryViewer from './StoryViewer';
 import properties from '../properties.json';
 
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, type Variants } from 'motion/react';
 
 const MOCK_STORIES: Story[] = [
   {
@@ -86,15 +89,9 @@ const MOCK_STORIES: Story[] = [
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie } from 'recharts';
 import D3SparkLine from './charts/D3SparkLine';
 import D3RadialProgress from './charts/D3RadialProgress';
-interface RecurringBill {
-  id: string;
-  title: string;
-  amount: number;
-  category: 'refeicao' | 'mobilidade' | 'cultura' | 'saude' | 'outros';
-  dueDate: string;
-  status: 'pending' | 'paid';
-  paidAtDate?: string;
-}
+import FinancialInsightsCarouselModal from './FinancialInsightsCarouselModal';
+import OverdueAlertModal from './OverdueAlertModal';
+
 
 
 interface HomeViewProps {
@@ -105,6 +102,7 @@ interface HomeViewProps {
     setIsAiRecurringModalOpen?: (open: boolean) => void;
     setActiveDrawer?: (drawer: 'balance' | 'analytics' | 'insights' | 'trends' | null) => void;
     openBoletoModal?: () => void;
+    openCardUnlockModal?: () => void;
 }
 
 const HomeView: React.FC<HomeViewProps> = ({
@@ -114,7 +112,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   setIsFinancialHealthOpen,
   setIsAiRecurringModalOpen,
   setActiveDrawer,
-  openBoletoModal
+  openBoletoModal,
+  openCardUnlockModal
 }) => {
   const { showDialog } = useDialog();
   const { checkRecurringBillNotifications } = useAppState();
@@ -129,6 +128,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [isInvoiceSummaryOpen, setIsInvoiceSummaryOpen] = useState(false);
   const [pendingBillId, setPendingBillId] = useState<string | null>(null);
   const [isPasswordVerifyOpen, setIsPasswordVerifyOpen] = useState(false);
+  const [isCarouselInsightsOpen, setIsCarouselInsightsOpen] = useState(false);
 
   const showStoriesStatus = (() => {
     const localVal = localStorage.getItem('volt_show_home_stories_status');
@@ -182,6 +182,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [newBillAmount, setNewBillAmount] = useState('');
   const [newBillCategory, setNewBillCategory] = useState<'refeicao' | 'mobilidade' | 'cultura' | 'saude' | 'outros'>('outros');
   const [newBillDueDate, setNewBillDueDate] = useState('');
+  const [newBillFrequency, setNewBillFrequency] = useState<'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL'>('MONTHLY');
+  const [newBillPaymentMethod, setNewBillPaymentMethod] = useState<'CREDIT_CARD' | 'ACCOUNT_DEBIT'>('CREDIT_CARD');
 
   const handleAddRecurringBill = () => {
     if (!newBillTitle.trim()) {
@@ -209,11 +211,25 @@ const HomeView: React.FC<HomeViewProps> = ({
       amount: -parsedAmount,
       category: newBillCategory,
       dueDate: formattedDueDate,
-      status: 'pending'
+      status: 'pending',
+      frequency: newBillFrequency,
+      paymentMethod: newBillPaymentMethod
     };
     const updatedBills = [...recurringBills, newBill];
     setRecurringBills(updatedBills);
     localStorage.setItem('volt_recurring_bills', JSON.stringify(updatedBills));
+
+    if (user?.cpf) {
+      createRecurringBill(user.cpf, {
+        name: newBillTitle,
+        amount: parsedAmount,
+        dueDay: parseInt(formattedDueDate.split('/')[0] || '1', 10),
+        category: newBillCategory,
+        frequency: newBillFrequency,
+        paymentMethod: newBillPaymentMethod
+      });
+    }
+
     setIsAddingBill(false);
     setNewBillTitle('');
     setNewBillAmount('');
@@ -305,7 +321,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       if (
         txDate.getMonth() === now.getMonth() &&
         txDate.getFullYear() === now.getFullYear() &&
-        (tx.type === 'expense' || tx.amount < 0)
+        ((tx.type as any) === 'expense' || tx.amount < 0)
       ) {
         // Categorias da API fora das 5 monitoradas (ex: moradia, compras, educacao) contam em "outros"
         const rawCat = tx.category || 'outros';
@@ -388,7 +404,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         if (
           txDate >= wk.start && 
           txDate <= wk.end && 
-          (tx.type === 'expense' || tx.amount < 0)
+          ((tx.type as any) === 'expense' || tx.amount < 0)
         ) {
           const rawCat = tx.category || 'outros';
           // Categorias da API fora das 5 monitoradas (ex: moradia, compras, educacao) contam em "outros"
@@ -532,27 +548,84 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [recurringBills, setRecurringBills] = useState<RecurringBill[]>(() => {
     const saved = localStorage.getItem('volt_recurring_bills');
     if (saved) return JSON.parse(saved);
-    // Sem fallback mockado — só contas que o próprio usuário cadastrar
     return [];
   });
+
+  const [advancePaymentBill, setAdvancePaymentBill] = useState<RecurringBill | null>(null);
+  const [paymentChoiceBill, setPaymentChoiceBill] = useState<RecurringBill | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'ACCOUNT_DEBIT' | 'CREDIT_CARD'>('ACCOUNT_DEBIT');
+  const [pendingPaymentMethod, setPendingPaymentMethod] = useState<'ACCOUNT_DEBIT' | 'CREDIT_CARD'>('ACCOUNT_DEBIT');
+
+  const visibleRecurringBills = React.useMemo(() => {
+    const nowTs = Date.now();
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+    // 1. Ocultar contas pagas há mais de 24h
+    const nonExpired = recurringBills.filter((bill) => {
+      if (bill.status === 'paid') {
+        const paidTs = bill.paidTimestamp || (bill.paidAtDate ? new Date(bill.paidAtDate).getTime() : 0);
+        if (paidTs > 0 && (nowTs - paidTs > TWENTY_FOUR_HOURS)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // 2. Desduplicar itens com mesmo título, status e data
+    const seen = new Set<string>();
+    const result: RecurringBill[] = [];
+    for (const b of nonExpired) {
+      const key = `${b.title.trim().toLowerCase()}_${b.status}_${b.dueDate}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(b);
+      }
+    }
+    return result;
+  }, [recurringBills]);
+
+  useEffect(() => {
+    if (user?.cpf) {
+      getRecurringBills(user.cpf).then(res => {
+        if (res.success && res.bills && res.bills.length > 0) {
+          const apiBills: RecurringBill[] = res.bills.map(b => ({
+            id: b.id,
+            title: b.name,
+            amount: -Math.abs(parseFloat(b.amount)),
+            category: b.category || 'outros',
+            dueDate: b.dueDay ? `Dia ${b.dueDay}` : 'Em breve',
+            dueDay: b.dueDay || 25,
+            status: b.status === 'paid' ? 'paid' : 'pending',
+            frequency: b.frequency || 'MONTHLY',
+            paymentMethod: b.paymentMethod || b.payment_method || 'ACCOUNT_DEBIT',
+            nextBillingDate: b.nextBillingDate,
+            createdAt: b.createdAt || new Date().toISOString()
+          }));
+          setRecurringBills(apiBills);
+          try {
+            localStorage.setItem('volt_recurring_bills', JSON.stringify(apiBills));
+          } catch (e) {}
+        }
+      });
+    }
+  }, [user?.cpf]);
 
   const handlePayRecurringBill = (billId: string) => {
     const bill = recurringBills.find(b => b.id === billId);
     if (!bill) return;
 
-    if (bill.status === 'paid') {
-      showDialog({ title: 'Aviso', message: 'Esta conta já foi paga!' });
+    const isAlreadyPaid = bill.status === 'paid' || recurringBills.some(
+      b => b.title.trim().toLowerCase() === bill.title.trim().toLowerCase() && b.status === 'paid'
+    );
+
+    if (isAlreadyPaid) {
+      setAdvancePaymentBill(bill);
       return;
     }
 
-    const absoluteAmount = Math.abs(bill.amount);
-    if (accountBalance < absoluteAmount) {
-      showDialog({ title: 'Saldo insuficiente', message: `Saldo insuficiente! Seu saldo atual é R$ ${accountBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, mas o valor da conta é R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` });
-      return;
-    }
-
-    setPendingBillId(billId);
-    setIsPasswordVerifyOpen(true);
+    setPaymentChoiceBill(bill);
+    const initialMethod = bill.paymentMethod === 'CREDIT_CARD' || bill.paymentMethod === 'CREDIT' ? 'CREDIT_CARD' : 'ACCOUNT_DEBIT';
+    setSelectedPaymentMethod(initialMethod);
   };
 
   const handlePasswordConfirm = async (enteredPin: string) => {
@@ -570,6 +643,23 @@ const HomeView: React.FC<HomeViewProps> = ({
     if (!bill) return;
 
     const absoluteAmount = Math.abs(bill.amount);
+    const chosenMethod = pendingPaymentMethod || 'ACCOUNT_DEBIT';
+    const isAccountDebit = chosenMethod === 'ACCOUNT_DEBIT';
+
+    // Validações de Saldo / Limite antes do processamento
+    if (isAccountDebit) {
+      if (accountBalance < absoluteAmount) {
+        showDialog({ title: 'Saldo insuficiente', message: `Saldo insuficiente em conta! Seu saldo atual é R$ ${accountBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, mas o valor da conta é R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` });
+        return;
+      }
+    } else {
+      const availableLimit = user.creditCard?.availableLimit ?? 0;
+      if (availableLimit < absoluteAmount) {
+        showDialog({ title: 'Limite insuficiente', message: `Limite de cartão insuficiente! Seu limite disponível é R$ ${availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, mas o valor da conta é R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` });
+        return;
+      }
+    }
+
     const now = new Date();
     const formatNumber = (num: number) => String(num).padStart(2, '0');
     const formattedDateString = `${formatNumber(now.getDate())}/${formatNumber(now.getMonth() + 1)}/${now.getFullYear()}`;
@@ -585,52 +675,97 @@ const HomeView: React.FC<HomeViewProps> = ({
         month = 1;
         year += 1;
       }
-      const formatNumber = (num: number) => String(num).padStart(2, '0');
       return `${formatNumber(day)}/${formatNumber(month)}/${year}`;
     };
 
-    const nextBills: RecurringBill[] = [];
+    const nowTs = Date.now();
+    const nextDueDate = getNextMonthDate(bill.dueDate);
+
+    // 1. Atualiza conta recorrente atual e agenda próximo mês
     const updatedBills = recurringBills.map(b => {
       if (b.id === billId) {
-        const nextId = b.id.includes('_next') ? b.id + 'x' : `${b.id}_next`;
-        nextBills.push({
-          ...b,
-          id: nextId,
-          dueDate: getNextMonthDate(b.dueDate),
-          status: 'pending' as const,
-          paidAtDate: undefined
-        });
-
         return {
           ...b,
           status: 'paid' as const,
           paidAtDate: formattedDateString,
+          paidTimestamp: nowTs,
+          paymentMethod: chosenMethod,
         };
       }
       return b;
     });
 
-    const finalBills = [...updatedBills, ...nextBills];
-    setRecurringBills(finalBills);
-    localStorage.setItem('volt_recurring_bills', JSON.stringify(finalBills));
+    const nextAlreadyExists = updatedBills.some(
+      b => b.title.trim().toLowerCase() === bill.title.trim().toLowerCase() && (b.dueDate === nextDueDate || b.status === 'pending')
+    );
+
+    if (!nextAlreadyExists) {
+      const nextId = bill.id.includes('_next') ? bill.id + 'x' : `${bill.id}_next`;
+      updatedBills.push({
+        ...bill,
+        id: nextId,
+        dueDate: nextDueDate,
+        status: 'pending' as const,
+        paidAtDate: undefined,
+        paidTimestamp: undefined,
+        paymentMethod: chosenMethod,
+      });
+    }
+
+    setRecurringBills(updatedBills);
+    localStorage.setItem('volt_recurring_bills', JSON.stringify(updatedBills));
     checkRecurringBillNotifications();
+
+    // 2. Processamento Financeiro (Débito vs Crédito)
+    let newBalance = user.balance;
+    let updatedCreditCard = user.creditCard
+      ? { ...user.creditCard }
+      : { availableLimit: 0, totalLimit: 0, currentInvoice: 0, closedInvoice: 0, pointsBalance: 0, isBlocked: false, dueDate: '', invoiceDueDate: '', transactions: [], closedTransactions: [] };
+
+    const methodLabel = isAccountDebit ? 'Débito em Conta' : 'Faturado no Cartão de Crédito';
+
+    if (isAccountDebit) {
+      // Débito em Conta: deduz do saldo em conta e registra no extrato da CONTA
+      // (user.transactions, o newTx abaixo). NÃO lança nada na fatura do cartão de
+      // crédito — débito em conta é lançamento do extrato da conta, não do cartão.
+      // A linha "Quitado no Débito" com R$ 0,00 que aparecia nos lançamentos do
+      // cartão era vazamento de canal (recorrência de débito exibida como crédito).
+      newBalance = user.balance - absoluteAmount;
+    } else {
+      // Adiantar no Crédito: Lança na fatura atual do cartão e consome limite. Saldo em conta permanece intacto.
+      updatedCreditCard.availableLimit = Math.max(0, (updatedCreditCard.availableLimit || 0) - absoluteAmount);
+      updatedCreditCard.currentInvoice = (updatedCreditCard.currentInvoice || 0) + absoluteAmount;
+      const newCardTx: CardTransaction = {
+        id: `card-rec-${Date.now()}`,
+        date: now.toISOString().split('T')[0],
+        merchant: `Recorrência: ${bill.title}`,
+        amount: absoluteAmount,
+        type: 'CREDIT',
+        installments: 'À vista'
+      };
+      updatedCreditCard.transactions = [newCardTx, ...(updatedCreditCard.transactions || [])];
+    }
 
     const newTx: Transaction = {
       id: `rec-pay-${Date.now()}`,
-      type: 'payment',
+      type: 'PAYMENT',
       amount: -absoluteAmount,
-      description: `Pagamento Recorrente: ${bill.title}`,
+      description: `Pagamento Recorrente: ${bill.title} (${methodLabel})`,
       date: now.toISOString(),
-      category: bill.category || 'outros',
+      category: bill.category || 'pagamentos',
     };
 
     updateUser({
       ...user,
-      balance: user.balance - absoluteAmount,
+      balance: newBalance,
+      creditCard: updatedCreditCard as any,
       transactions: [newTx, ...(user.transactions || [])],
     });
 
-    showDialog({ title: 'Sucesso', message: `Sucesso! O pagamento de ${bill.title} de R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} foi realizado.` });
+    showDialog({
+      title: 'Sucesso!',
+      message: `O pagamento de ${bill.title} de R$ ${absoluteAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} foi realizado com sucesso via ${methodLabel}.`
+    });
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -693,12 +828,12 @@ const HomeView: React.FC<HomeViewProps> = ({
     },
   };
 
-  const itemVariants = {
+  const itemVariants: Variants = {
     hidden: { y: 20, opacity: 0 },
     show: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 300, damping: 24 } },
   };
 
-  // Generate the last 6 calendar months of spending, anchored on the current date
+  // Generate the last 6 calendar months of spending
   const getChartData = () => {
     const data = [];
     const now = new Date();
@@ -717,7 +852,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           return (
             txDate.getMonth() === monthIndex &&
             txDate.getFullYear() === year &&
-            (tx.type === 'expense' || tx.amount < 0)
+            ((tx.type as any) === 'expense' || tx.amount < 0)
           );
         })
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
@@ -763,7 +898,6 @@ const HomeView: React.FC<HomeViewProps> = ({
       });
       
       return {
-        // ISO string — D3SparkLine faz new Date(d.date); "DD/MM" retorna Invalid Date
         date: day.toISOString().split('T')[0],
         balance: parseFloat(computedBalance.toFixed(2)),
       };
@@ -812,31 +946,21 @@ const HomeView: React.FC<HomeViewProps> = ({
     return data;
   }, [transactions, theme]);
 
-  const currentMonthSpending = (() => {
-    const now = new Date();
-    return transactions
-      .filter((tx) => {
-        const txDate = new Date(tx.date);
-        return (
-          txDate.getMonth() === now.getMonth() &&
-          txDate.getFullYear() === now.getFullYear() &&
-          (tx.type === 'expense' || tx.amount < 0)
-        );
-      })
-      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-  })();
+  const currentMonthSpending = transactions
+    .filter((tx) => {
+      const txDate = new Date(tx.date);
+      const now = new Date();
+      return (
+        txDate.getMonth() === now.getMonth() &&
+        txDate.getFullYear() === now.getFullYear() &&
+        ((tx.type as any) === 'expense' || tx.amount < 0)
+      );
+    })
+    .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
 
   const goalConsumptionPercent = monthlyGoal > 0 ? Math.min(100, Math.round((currentMonthSpending / monthlyGoal) * 100)) : 0;
 
-  const juneIncome = useMemo(() => {
-    const now = new Date();
-    return transactions
-      .filter((tx) => {
-        const txDate = new Date(tx.date);
-        return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear() && tx.amount > 0;
-      })
-      .reduce((sum, tx) => sum + tx.amount, 0);
-  }, [transactions]);
+  const juneIncome = useMemo(() => transactions.filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0), [transactions]);
   const juneExpenses = currentMonthSpending;
   const juneSavingsRate = juneIncome > 0 ? Math.round(((juneIncome - juneExpenses) / juneIncome) * 100) : 0;
 
@@ -863,17 +987,17 @@ const HomeView: React.FC<HomeViewProps> = ({
       {spendingLimitEnabled && currentMonthSpending > spendingLimitAmount && (
         <motion.div
           variants={itemVariants}
-          className="bg-red-500 border-4 border-black text-black p-4 rounded-2xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex gap-3.5 items-start relative overflow-hidden"
+          className="bg-red-500 border-4 border-black text-white p-4 rounded-2xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex gap-3.5 items-start relative overflow-hidden"
         >
-          <div className="absolute right-[-10px] top-[-10px] text-black/5 text-7xl font-black pointer-events-none select-none">
+          <div className="absolute right-[-10px] top-[-10px] text-white/5 text-7xl font-black pointer-events-none select-none">
             ⚠️
           </div>
           <div className="bg-black text-red-500 p-2 text-xs rounded-xl shrink-0 border-2 border-black flex items-center justify-center font-bold">
             ⚠️
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="text-xs font-black uppercase tracking-wider text-black">Alerta de Limite Excedido!</h4>
-            <p className="text-[11px] text-black font-extrabold mt-1 leading-snug">
+            <h4 className="text-xs font-black uppercase tracking-wider text-white">Alerta de Limite Excedido!</h4>
+            <p className="text-[11px] text-white font-extrabold mt-1 leading-snug">
               Aviso Volt: Suas despesas mensais de <span className="underline">R$ {currentMonthSpending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span> ultrapassaram o limite configurado de <span className="underline">R$ {spendingLimitAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>.
             </p>
             <div className="mt-2 flex">
@@ -888,11 +1012,11 @@ const HomeView: React.FC<HomeViewProps> = ({
 
       {/* Dashboard Title & Personalize Button */}
       <motion.div variants={itemVariants} className="flex justify-between items-center">
-        <h2 className={`text-[11px] font-black tracking-wider uppercase ${isMidnight ? 'text-white' : 'text-black'}`}>
+        <h2 className={`text-[11px] font-black tracking-wider uppercase ${isMidnight ? 'text-white' : 'text-white'}`}>
           SEU DASHBOARD
         </h2>
         <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 border-black font-black text-[9px] uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform active:scale-95 ${
-          isMidnight ? 'bg-[#003d25] text-volt-green' : 'bg-volt-green text-black'
+          isMidnight ? 'bg-[#003d25] text-volt-green' : 'bg-volt-green text-white'
         }`}>
           <div className="w-1.5 h-1.5 rounded-full bg-current" />
           PERSONALIZAR PAINEL
@@ -904,16 +1028,16 @@ const HomeView: React.FC<HomeViewProps> = ({
         variants={itemVariants}
         className={`rounded-2xl p-6 flex flex-col gap-2 relative overflow-hidden transition-all ${
           isMidnight 
-            ? 'bg-volt-surface border border-white/5 neon-glow' 
-            : 'bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
+            ? 'bg-gradient-to-br from-zinc-900 via-zinc-950 to-black border-2 border-emerald-500/40 shadow-[0_0_30px_rgba(0,255,157,0.15)]' 
+            : 'bg-zinc-900 border-2 border-emerald-500/40 shadow-[0_0_20px_rgba(0,255,157,0.15)]'
         }`}
       >
         <div className="flex justify-between items-center w-full">
           <span className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${
-            isMidnight ? 'text-gray-400' : 'text-black'
+            isMidnight ? 'text-gray-400' : 'text-white'
           }`}>
             <span className={`w-3 h-3 rounded-full flex items-center justify-center ${
-              isMidnight ? 'bg-zinc-800' : 'bg-gray-200'
+              isMidnight ? 'bg-zinc-900 border border-zinc-700' : 'bg-gray-200'
             }`}>
               <div className={`w-1.5 h-1.5 rounded-full ${isMidnight ? 'bg-volt-green' : 'bg-black'}`}></div>
             </span>
@@ -922,7 +1046,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           <button
             onClick={toggleBalanceVisibility}
             className={`transition-colors p-1.5 rounded-full border-2 border-transparent hover:border-black active:scale-90 ${
-              isMidnight ? 'text-gray-400 hover:text-white' : 'text-black'
+              isMidnight ? 'text-zinc-300 hover:text-white' : 'text-white'
             }`}
           >
             {balanceIsVisible ? <Eye size={18} className="stroke-[2.5]" /> : <EyeOff size={18} className="stroke-[2.5]" />}
@@ -930,13 +1054,13 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
 
         <div className="flex items-baseline gap-2 mt-2">
-          <span className={`text-xl font-black ${isMidnight ? 'text-volt-green' : 'text-black'}`}>R$</span>
+          <span className={`text-xl font-black ${isMidnight ? 'text-volt-green' : 'text-white'}`}>R$</span>
           {balanceIsVisible ? (
-            <span className={`text-[40px] leading-none font-black tracking-tighter ${isMidnight ? 'text-white' : 'text-black'}`}>
+            <span className={`text-[40px] leading-none font-black tracking-tighter ${isMidnight ? 'text-white' : 'text-white'}`}>
               {accountBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
           ) : (
-            <span className={`text-[40px] leading-none font-black tracking-widest ${isMidnight ? 'text-white/30' : 'text-black/30'}`}>
+            <span className={`text-[40px] leading-none font-black tracking-widest ${isMidnight ? 'text-white/30' : 'text-white/30'}`}>
               ••••••
             </span>
           )}
@@ -948,14 +1072,18 @@ const HomeView: React.FC<HomeViewProps> = ({
           <TrendingUp size={14} className="stroke-[3]" />
           <span>+2.5% este mês (Rendimento 110% CDI)</span>
         </div>
+        {/* Gráfico de pagamentos do cliente (7 dias) */}
+        <div className="mt-4">
+          <PaymentTimelineChart userCpf={user.cpf} />
+      </div>
 
         <div className={`grid grid-cols-3 gap-1.5 mt-4 pt-4 ${isMidnight ? 'border-t border-white/5' : 'border-t-2 border-black'}`}>
           <button
             onClick={() => onNavigate('pix')}
             className={`py-2 px-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer ${
               isMidnight
-                ? 'bg-volt-green text-black'
-                : 'bg-[#A2FF00] text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
+                ? 'bg-volt-green text-white'
+                : 'bg-[#A2FF00] text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
             }`}
           >
             <Bolt size={12} className="fill-current shrink-0" />
@@ -965,8 +1093,8 @@ const HomeView: React.FC<HomeViewProps> = ({
             onClick={() => showDialog({ title: 'Depositar', message: 'Depósito via boleto ou TED estará disponível em breve.' })}
             className={`py-2 px-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer ${
               isMidnight
-                ? 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
-                : 'bg-[#FFED86] text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
+                ? 'bg-zinc-900/5 border border-white/10 text-white hover:bg-zinc-900/10'
+                : 'bg-[#FFED86] text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
             }`}
           >
             <Sparkles size={12} className={isMidnight ? 'text-volt-green shrink-0' : 'shrink-0'} />
@@ -976,8 +1104,8 @@ const HomeView: React.FC<HomeViewProps> = ({
             onClick={() => showDialog({ title: 'Lançar por Voz', message: 'Lançamento de transações com IA por voz está em desenvolvimento.' })}
             className={`relative py-2 px-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer ${
               isMidnight
-                ? 'bg-white/5 border border-white/10 text-volt-green hover:bg-white/10'
-                : 'bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
+                ? 'bg-zinc-900/5 border border-white/10 text-volt-green hover:bg-zinc-900/10'
+                : 'bg-zinc-900 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
             }`}
           >
             <span className="absolute -top-1 -right-1 flex h-2 w-2">
@@ -993,10 +1121,10 @@ const HomeView: React.FC<HomeViewProps> = ({
       {/* Quick Access Grid */}
       <motion.section variants={itemVariants} className="space-y-3 mb-6">
         <div className="flex justify-between items-center px-1">
-          <h3 className={`text-xs font-black uppercase tracking-widest ${isMidnight ? 'text-white' : 'text-black'}`}>
+          <h3 className={`text-xs font-black uppercase tracking-widest ${isMidnight ? 'text-white' : 'text-white'}`}>
             Acesso Rápido
           </h3>
-          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider animate-pulse">
+          <span className="text-[9px] font-black text-zinc-300 uppercase tracking-wider animate-pulse">
             Deslize para ver mais ➔
           </span>
         </div>
@@ -1028,9 +1156,9 @@ const HomeView: React.FC<HomeViewProps> = ({
         >
           {[
             { label: 'PIX', icon: Bolt, action: () => onNavigate('pix'), highlight: true },
-            { label: 'Shop', icon: ShoppingBag, action: () => onNavigate('shop'), highlight: false },
-            { label: 'Cartões', icon: CreditCard, action: () => onNavigate('cards'), highlight: false },
-            { label: 'Pagar Boleto', icon: Receipt, action: () => openBoletoModal?.(), highlight: true },
+            { label: 'Meus Cartões', icon: CreditCard, action: () => onNavigate('cards'), highlight: true },
+            { label: 'Faturas', icon: FileText, action: () => onNavigate('invoices'), highlight: false },
+            { label: 'Pagar', icon: Receipt, action: () => openBoletoModal?.(), highlight: true },
             { label: 'Extrato', icon: FileText, action: () => onNavigate('statement'), highlight: false },
           ].map((item, index) => {
             const Icon = item.icon;
@@ -1044,15 +1172,15 @@ const HomeView: React.FC<HomeViewProps> = ({
                 <div
                   className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 border-black transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
                     item.highlight
-                      ? 'bg-volt-green text-black'
+                      ? 'bg-volt-green text-white'
                       : isMidnight
-                        ? 'bg-zinc-900 text-white hover:bg-zinc-800'
-                        : 'bg-white text-black hover:bg-gray-50'
+                        ? 'bg-zinc-900 text-white hover:bg-zinc-900 border border-zinc-700'
+                        : 'bg-zinc-900 text-white hover:bg-gray-50'
                   }`}
                 >
                   <Icon size={20} className={item.highlight ? 'stroke-[2.5]' : 'stroke-[2]'} />
                 </div>
-                <span className={`text-[11px] font-black transition-colors text-center truncate w-full ${isMidnight ? 'text-zinc-400 group-hover:text-white' : 'text-gray-800'}`}>
+                <span className={`text-[11px] font-black transition-colors text-center truncate w-full ${isMidnight ? 'text-zinc-200 group-hover:text-white' : 'text-gray-800'}`}>
                   {item.label}
                 </span>
               </button>
@@ -1064,10 +1192,10 @@ const HomeView: React.FC<HomeViewProps> = ({
       {/* Aprenda Mais Section */}
       <motion.section variants={itemVariants} className="space-y-3">
         <div className="flex justify-between items-center px-1">
-          <h3 className={`text-xs font-black uppercase tracking-widest ${isMidnight ? 'text-white' : 'text-black'}`}>
+          <h3 className={`text-xs font-black uppercase tracking-widest ${isMidnight ? 'text-white' : 'text-white'}`}>
             Aprenda mais
           </h3>
-          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider animate-pulse">
+          <span className="text-[9px] font-black text-zinc-300 uppercase tracking-wider animate-pulse">
             Deslize para ver mais ➔
           </span>
         </div>
@@ -1096,27 +1224,27 @@ const HomeView: React.FC<HomeViewProps> = ({
           {/* Card 1: Aprenda a usar o seu Volt Hub */}
           <button
             onClick={() => setIsViewingStories(true)}
-            className="flex flex-col rounded-3xl overflow-hidden bg-white text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer shrink-0 w-[185px] text-left"
+            className="flex flex-col rounded-3xl overflow-hidden bg-zinc-900 text-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer shrink-0 w-[185px] text-left"
             onDragStart={(e) => e.preventDefault()}
           >
             <div className="h-24 bg-gradient-to-br from-[#E11D48] to-[#9F1239] relative flex items-center justify-center overflow-hidden border-b-4 border-black p-2">
               <div className="w-11 h-20 bg-zinc-950 rounded-xl border border-black shadow-md relative flex flex-col p-1 transform rotate-12 scale-105">
-                <div className="w-2.5 h-0.5 bg-zinc-800 rounded-full mx-auto mb-1" />
+                <div className="w-2.5 h-0.5 bg-zinc-900 border border-zinc-700 rounded-full mx-auto mb-1" />
                 <div className="flex-1 bg-zinc-900 rounded-md flex flex-col justify-between p-1">
                   <div className="w-full h-1 bg-pink-500 rounded-full" />
                   <div className="w-2/3 h-1 bg-zinc-700 rounded-full" />
                   <div className="w-1/2 h-1 bg-zinc-700 rounded-full" />
                   <div className="flex justify-between items-center mt-auto">
                     <div className="w-1.5 h-1.5 rounded-full bg-volt-green" />
-                    <div className="w-3 h-1 bg-zinc-800 rounded" />
+                    <div className="w-3 h-1 bg-zinc-900 border border-zinc-700 rounded" />
                   </div>
                 </div>
               </div>
             </div>
             <div className="p-3.5 flex flex-col justify-between h-[85px] relative">
               <div>
-                <h4 className="text-[12px] font-black leading-tight text-gray-900">Aprenda a</h4>
-                <h4 className="text-[12px] font-black leading-tight text-gray-900">usar o seu app</h4>
+                <h4 className="text-[12px] font-black leading-tight text-white">Aprenda a</h4>
+                <h4 className="text-[12px] font-black leading-tight text-white">usar o seu app</h4>
               </div>
               <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center text-white active:scale-95 transition-transform">
                 <ChevronRight size={14} />
@@ -1127,7 +1255,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           {/* Card 2: Como fazer um pix */}
           <button
             onClick={() => setIsViewingStories(true)}
-            className="flex flex-col rounded-3xl overflow-hidden bg-white text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer shrink-0 w-[185px] text-left"
+            className="flex flex-col rounded-3xl overflow-hidden bg-zinc-900 text-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer shrink-0 w-[185px] text-left"
             onDragStart={(e) => e.preventDefault()}
           >
             <div className="h-24 bg-[#E8EFFF] relative flex items-center justify-center overflow-hidden border-b-4 border-black p-2">
@@ -1140,8 +1268,8 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
             <div className="p-3.5 flex flex-col justify-between h-[85px] relative">
               <div>
-                <h4 className="text-[12px] font-black leading-tight text-gray-900">Como fazer</h4>
-                <h4 className="text-[12px] font-black leading-tight text-gray-900">um pix.</h4>
+                <h4 className="text-[12px] font-black leading-tight text-white">Como fazer</h4>
+                <h4 className="text-[12px] font-black leading-tight text-white">um pix.</h4>
               </div>
               <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center text-white active:scale-95 transition-transform">
                 <ChevronRight size={14} />
@@ -1152,7 +1280,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           {/* Card 3: Como pagar suas contas */}
           <button
             onClick={() => setIsViewingStories(true)}
-            className="flex flex-col rounded-3xl overflow-hidden bg-white text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer shrink-0 w-[185px] text-left"
+            className="flex flex-col rounded-3xl overflow-hidden bg-zinc-900 text-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer shrink-0 w-[185px] text-left"
             onDragStart={(e) => e.preventDefault()}
           >
             <div className="h-24 bg-[#EEF2F6] relative flex items-center justify-center overflow-hidden border-b-4 border-black p-2">
@@ -1162,8 +1290,8 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
             <div className="p-3.5 flex flex-col justify-between h-[85px] relative">
               <div>
-                <h4 className="text-[12px] font-black leading-tight text-gray-900">Como pagar</h4>
-                <h4 className="text-[12px] font-black leading-tight text-gray-900">suas contas.</h4>
+                <h4 className="text-[12px] font-black leading-tight text-white">Como pagar</h4>
+                <h4 className="text-[12px] font-black leading-tight text-white">suas contas.</h4>
               </div>
               <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center text-white active:scale-95 transition-transform">
                 <ChevronRight size={14} />
@@ -1173,462 +1301,29 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </motion.section>
 
-      {/* Account Balance History (Last 30 Days Line Chart) */}
-      <motion.section
-        variants={itemVariants}
-        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
-          isMidnight ? 'bg-volt-surface text-white' : 'bg-white text-black'
-        }`}
-      >
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-volt-green border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs text-black">
-              📈
-            </div>
-            <div>
-              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Evolução do Saldo</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-gray-400' : 'text-gray-700'}`}>Histórico de saldo da conta (30d)</p>
-            </div>
-          </div>
-          <span className={`text-[9px] font-black uppercase tracking-wider text-black border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-            isMidnight ? 'bg-volt-green' : 'bg-[#00E5FF]'
-          }`}>
-            30 Dias
-          </span>
-        </div>
-
-        {/* D3 SparkLine container */}
-        <div className="w-full h-40 mt-2">
-          {balanceIsVisible ? (
-             <D3SparkLine data={balanceHistoryData} theme={theme} />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center border-2 border-dashed border-black/20 rounded-xl bg-black/5 p-4 text-center">
-              <span className="text-xl block mb-1">🔒</span>
-              <p className="text-[11px] font-black text-black">Saldo oculto por segurança</p>
-              <p className="text-[9px] text-gray-600">Toque no ícone de olho acima para revelar o histórico.</p>
-            </div>
-          )}
-        </div>
-      </motion.section>
-
-      {/* Visão Geral de Orçamentos (Bento Box brutalista - Task 3) */}
-      <motion.section
-        variants={itemVariants}
-        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
-          isMidnight ? 'bg-volt-surface text-white' : 'bg-white text-black'
-        }`}
-      >
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-              isMidnight ? 'bg-volt-green text-black' : 'bg-[#00E5FF] text-black'
-            }`}>
-              🎯
-            </div>
-            <div>
-              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Visão Geral de Orçamentos</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Controle de limites mensais por categoria ({new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })})</p>
-            </div>
-          </div>
-          <button
-            onClick={() => isEditingBudgets ? setIsEditingBudgets(false) : startEditingBudgets()}
-            className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full transition-all cursor-pointer ${
-              isMidnight
-                ? 'bg-zinc-900 text-white hover:bg-zinc-800 border-zinc-700'
-                : 'bg-[#FFED86] text-black hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            {isEditingBudgets ? 'Fechar' : 'Definir Limites'}
-          </button>
-        </div>
-
-        {isEditingBudgets ? (
-          <form onSubmit={handleSaveBudgets} className="flex flex-col gap-3">
-            <div className="grid grid-cols-1 gap-2.5">
-              {[
-                { key: 'refeicao', label: 'Refeição 🍔', color: '#FF5C8D' },
-                { key: 'mobilidade', label: 'Mobilidade 🚗', color: '#00E5FF' },
-                { key: 'cultura', label: 'Cultura 🎬', color: '#FFAA00' },
-                { key: 'saude', label: 'Saúde 💖', color: '#B026FF' },
-                { key: 'outros', label: 'Outros / Serviços 📦', color: '#A2FF00' },
-              ].map((cat) => (
-                <div key={cat.key} className="flex items-center justify-between gap-3 p-1">
-                  <span className={`text-[11px] font-black uppercase flex items-center gap-1.5 ${isMidnight ? 'text-zinc-200' : 'text-gray-800'}`}>
-                    <span className="w-2.5 h-2.5 rounded-full border border-black" style={{ backgroundColor: cat.color }}></span>
-                    {cat.label}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-[10px] font-black ${isMidnight ? 'text-white' : 'text-black'}`}>R$</span>
-                    <input
-                      type="number"
-                      step="1"
-                      min="0"
-                      value={editingBudgets[cat.key] || '0'}
-                      onChange={(e) => handleBudgetInputChange(cat.key, e.target.value)}
-                      className={`border-2 border-black rounded-lg px-2 py-1 text-xs font-bold w-24 text-right ${
-                        isMidnight ? 'bg-zinc-900 text-white border-zinc-700' : 'bg-white text-black'
-                      }`}
-                      required
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className={`mt-2 pt-3 border-t-2 border-dashed border-black ${isMidnight ? 'border-zinc-800' : 'border-black'}`}>
-              <div className="flex items-center justify-between gap-3 p-1">
-                <span className={`text-[11px] font-black uppercase flex items-center gap-1.5 ${isMidnight ? 'text-zinc-200' : 'text-gray-800'}`}>
-                  <span>🚀</span> Meta de Economia (Stretch Goal)
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[10px] font-black ${isMidnight ? 'text-white' : 'text-black'}`}>R$</span>
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={editingSavingsTarget}
-                    onChange={(e) => setEditingSavingsTarget(e.target.value)}
-                    className={`border-2 border-black rounded-lg px-2 py-1 text-xs font-bold w-24 text-right ${
-                      isMidnight ? 'bg-zinc-900 text-white border-zinc-700' : 'bg-white text-black'
-                    }`}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              <button
-                type="button"
-                onClick={() => setIsEditingBudgets(false)}
-                className={`text-xs font-black uppercase tracking-wider py-1.5 rounded-xl transition-all border-2 border-black ${
-                  isMidnight ? 'bg-zinc-900 text-volt-green hover:bg-zinc-800 border-zinc-800' : 'btn-secondary'
-                }`}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className={`text-xs font-black uppercase tracking-wider py-1.5 rounded-xl transition-all border-2 border-black ${
-                  isMidnight ? 'bg-volt-green text-zinc-950 hover:bg-volt-primary-dark' : 'btn-primary'
-                }`}
-              >
-                Salvar Limites
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className="space-y-4">
-            {/* Daily Budget Alert */}
-            {dailyBudgetAlert.status === 'inactive' ? (
-              <div className={`p-3 rounded-xl border-2 border-dashed flex flex-col gap-1 text-left ${
-                isMidnight ? 'bg-zinc-950 border-zinc-800 text-zinc-400' : 'bg-gray-50 border-gray-300 text-gray-500'
-              }`}>
-                <div className="flex items-center gap-1.5 font-black text-[10px] uppercase tracking-wide">
-                  <span>💡</span> Alerta de Orçamento Diário
-                </div>
-                <span className="text-[10px] font-medium leading-relaxed">
-                  Defina limites de gastos nas categorias abaixo para calcular sua média diária disponível para o restante do mês.
-                </span>
-              </div>
-            ) : dailyBudgetAlert.status === 'critical' ? (
-              <div className={`p-3.5 rounded-xl border-2 border-black flex flex-col gap-2 text-left transition-all ${
-                isMidnight ? 'bg-red-950/20 text-red-200 border-red-500/50' : 'bg-red-50 text-red-900 border-red-500 shadow-[3px_3px_0px_0px_rgba(239,68,68,1)]'
-              }`}>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm">🚨</span>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-red-500">
-                      Alerta de Orçamento Crítico
-                    </span>
-                  </div>
-                  <span className="bg-red-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-black animate-pulse">
-                    Crítico
-                  </span>
-                </div>
-                
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="text-xl font-black tracking-tight text-red-500">
-                    R$ {dailyBudgetAlert.dailyAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                  <span className="text-[10px] font-bold text-zinc-500">
-                    / dia restante
-                  </span>
-                </div>
-                
-                <p className={`text-[10px] font-medium leading-normal ${isMidnight ? 'text-zinc-400' : 'text-red-800/90'}`}>
-                  {dailyBudgetAlert.message} Restam <strong>{dailyBudgetAlert.daysRemaining} dias</strong> no mês com um saldo total disponível de R$ {dailyBudgetAlert.remainingAllowance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
-                </p>
-              </div>
-            ) : dailyBudgetAlert.status === 'warning' ? (
-              <div className={`p-3.5 rounded-xl border-2 border-black flex flex-col gap-2 text-left transition-all ${
-                isMidnight ? 'bg-amber-950/20 text-amber-200 border-amber-500/50' : 'bg-amber-50 text-amber-900 border-amber-500 shadow-[3px_3px_0px_0px_rgba(245,158,11,1)]'
-              }`}>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm">⚠️</span>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-500">
-                      Orçamento em Atenção
-                    </span>
-                  </div>
-                  <span className="bg-amber-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-black">
-                    Atenção
-                  </span>
-                </div>
-                
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="text-xl font-black tracking-tight text-amber-600 dark:text-amber-400">
-                    R$ {dailyBudgetAlert.dailyAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                  <span className="text-[10px] font-bold text-zinc-500">
-                    / dia restante
-                  </span>
-                </div>
-                
-                <p className={`text-[10px] font-medium leading-normal ${isMidnight ? 'text-zinc-400' : 'text-amber-800/95'}`}>
-                  {dailyBudgetAlert.message} Restam <strong>{dailyBudgetAlert.daysRemaining} dias</strong> de Junho. Seu limite total disponível é de R$ {dailyBudgetAlert.remainingAllowance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
-                </p>
-              </div>
-            ) : (
-              <div className={`p-3.5 rounded-xl border-2 border-black flex flex-col gap-2 text-left transition-all ${
-                isMidnight ? 'bg-zinc-950/80 text-white border-zinc-800' : 'bg-green-50/50 text-black border-black shadow-[3px_3px_0px_0px_rgba(0,229,255,1)]'
-              }`}>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm">💵</span>
-                    <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-green-600'}`}>
-                      Orçamento Diário Disponível
-                    </span>
-                  </div>
-                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-black ${
-                    isMidnight ? 'bg-volt-green text-zinc-950' : 'bg-[#A2FF00] text-black'
-                  }`}>
-                    Sob Controle
-                  </span>
-                </div>
-                
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className={`text-xl font-black tracking-tight ${isMidnight ? 'text-volt-green' : 'text-green-600'}`}>
-                    R$ {dailyBudgetAlert.dailyAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                  <span className="text-[10px] font-bold text-zinc-500">
-                    / dia restante
-                  </span>
-                </div>
-                
-                <p className={`text-[10px] font-medium leading-normal ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
-                  {dailyBudgetAlert.message} Você tem <strong>{dailyBudgetAlert.daysRemaining} dias</strong> para usufruir de R$ {dailyBudgetAlert.remainingAllowance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} sem estourar o limite planejado.
-                </p>
-              </div>
-            )}
-
-            {[
-              { key: 'refeicao', label: 'Refeição', emoji: '🍔', color: isMidnight ? '#FF5E5E' : '#FF5C8D' },
-              { key: 'mobilidade', label: 'Mobilidade', emoji: '🚗', color: isMidnight ? '#0084FF' : '#00E5FF' },
-              { key: 'cultura', label: 'Cultura', emoji: '🎬', color: isMidnight ? '#FFB800' : '#FFAA00' },
-              { key: 'saude', label: 'Saúde', emoji: '💖', color: isMidnight ? '#C278FF' : '#B026FF' },
-              { key: 'outros', label: 'Outros / Serviços', emoji: '📦', color: isMidnight ? '#00DF89' : '#A2FF00' },
-            ].map((cat) => {
-              const spent = categorySpendingCurrentMonth[cat.key] || 0;
-              const limit = budgets[cat.key] || 0;
-              const percent = limit > 0 ? Math.round((spent / limit) * 100) : 0;
-              const isOverBudget = spent > limit && limit > 0;
-
-              return (
-                <div key={cat.key} className="flex items-center gap-4 py-2 border-b border-dashed border-zinc-300 dark:border-zinc-800 last:border-0">
-                  <div>
-                    <D3RadialProgress value={spent} total={limit} theme={theme} size={40} />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <div className="flex justify-between items-center text-[10px] font-black uppercase">
-                      <span className="flex items-center gap-1.5">
-                        <span>{cat.emoji}</span>
-                        <span>{cat.label}</span>
-                      </span>
-                      <span className={isOverBudget ? 'text-red-500 font-extrabold' : 'text-zinc-500'}>
-                        R$ {spent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} /{' '}
-                        <span className="text-[9px] font-medium text-zinc-400">R$ {limit.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span>
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between items-center text-[9px] font-bold text-on-surface-variant">
-                      <span className={isMidnight ? 'text-zinc-400' : 'text-gray-600'}>{percent}% utilizado</span>
-                      {limit > 0 ? (
-                        isOverBudget ? (
-                          <span className="text-red-500 font-extrabold">Excedeu R$ {(spent - limit).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                        ) : (
-                          <span className={isMidnight ? 'text-volt-green' : 'text-green-600'}>R$ {(limit - spent).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} restantes</span>
-                        )
-                      ) : (
-                        <span className="text-gray-400">Sem limite configurado</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Weekly Streak Section */}
-            <hr className={`border-t-2 border-dashed my-4 ${isMidnight ? 'border-zinc-800' : 'border-black'}`} />
-            <WeeklyStreak
-              streakCount={weeklyStreakCalculation.streakCount}
-              weeks={weeklyStreakCalculation.weeks}
-              theme={theme}
-            />
-
-            {/* Savings Stretch Goal Section */}
-            <hr className={`border-t-2 border-dashed my-4 ${isMidnight ? 'border-zinc-800' : 'border-black'}`} />
-            
-            <div className={`p-4 rounded-xl border-2 border-black text-left flex flex-col gap-3 transition-all ${
-              isMidnight
-                ? 'bg-zinc-950/60 text-white shadow-[2px_2px_0px_0px_rgba(0,255,157,0.15)]'
-                : 'bg-green-50/40 text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-            }`}>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs">🚀</span>
-                  <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-black'}`}>
-                    Meta de Economia (Stretch Goal)
-                  </span>
-                </div>
-                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border border-black ${
-                  isMidnight ? 'bg-volt-green text-black border-zinc-800' : 'bg-[#FFED86] text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
-                }`}>
-                  {savingsCalculation.percentReached}% Concluída
-                </span>
-              </div>
-
-              {/* Progress bar */}
-              <div className="space-y-1">
-                <div className={`w-full h-3.5 border-2 border-black rounded-full overflow-hidden ${
-                  isMidnight ? 'bg-zinc-950' : 'bg-gray-100'
-                }`}>
-                  <motion.div
-                    className="h-full rounded-full border-r border-black bg-[#00DF89]"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${savingsCalculation.percentReached}%` }}
-                    transition={{ duration: 0.6, ease: 'easeOut' }}
-                  />
-                </div>
-                <div className="flex justify-between text-[9px] font-bold text-gray-500">
-                  <span>R$ {savingsCalculation.savedSoFar.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} economizados</span>
-                  <span>Meta: R$ {savingsTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                </div>
-              </div>
-
-              {/* Checkpoints timeline */}
-              <div className="mt-1 mb-1">
-                <span className={`text-[9px] font-black uppercase tracking-wider block mb-2 ${
-                  isMidnight ? 'text-zinc-400' : 'text-gray-600'
-                }`}>
-                  Marcos de Conquista (Toque para Celebrar)
-                </span>
-                <div className="flex justify-between items-center relative px-2 py-1">
-                  {/* Connective line behind */}
-                  <div className={`absolute left-4 right-4 h-0.5 border-b-2 border-dashed z-0 ${
-                    isMidnight ? 'border-zinc-800' : 'border-black/20'
-                  }`} />
-                  
-                  {[
-                    { percent: 25, label: '25%', emoji: '🥉', name: 'Bronze', color: 'bg-[#CD7F32]' },
-                    { percent: 50, label: '50%', emoji: '🥈', name: 'Prata', color: 'bg-[#C0C0C0]' },
-                    { percent: 75, label: '75%', emoji: '🥇', name: 'Ouro', color: 'bg-[#FFD700]' },
-                    { percent: 100, label: '100%', emoji: '🏆', name: 'Meta', color: 'bg-[#FFED86]' }
-                  ].map((m) => {
-                    const isReached = savingsCalculation.percentReached >= m.percent;
-                    return (
-                      <motion.button
-                        key={m.percent}
-                        whileHover={isReached ? { scale: 1.12, y: -2 } : {}}
-                        whileTap={isReached ? { scale: 0.95 } : {}}
-                        type="button"
-                        onClick={() => {
-                          if (isReached) {
-                            setCelebrationMilestone(null); // reset first to force rerun
-                            setTimeout(() => setCelebrationMilestone(m.percent), 50);
-                          }
-                        }}
-                        className={`relative z-10 w-11 h-11 rounded-full border-2 border-black flex flex-col items-center justify-center transition-all shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] ${
-                          isReached 
-                            ? `${m.color} text-black cursor-pointer` 
-                            : 'bg-zinc-200 text-zinc-400 opacity-40 cursor-not-allowed'
-                        }`}
-                      >
-                        <span className="text-sm -mt-0.5">{m.emoji}</span>
-                        <span className="text-[8px] font-black -mt-0.5">{m.label}</span>
-                        
-                        {/* Reached tiny indicator */}
-                        {isReached && (
-                          <span className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full p-0.5 border border-black text-[6px] font-extrabold flex items-center justify-center w-3.5 h-3.5">
-                            ✓
-                          </span>
-                        )}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Daily dynamic requirement card */}
-              <div className={`p-3 rounded-lg border-2 border-black flex flex-col gap-1 ${
-                isMidnight ? 'bg-zinc-900/80 text-white' : 'bg-white text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-              }`}>
-                <span className={`text-[9px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>
-                  Meta Diária de Economia Necessária
-                </span>
-                {savingsCalculation.remainingToSave > 0 ? (
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-sm font-black text-red-500">
-                        R$ {savingsCalculation.dailySavingsNeeded.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / dia
-                      </span>
-                      <span className={`text-[9px] font-bold ${isMidnight ? 'text-zinc-500' : 'text-gray-500'}`}>
-                        durante os próximos {savingsCalculation.daysRemaining} dias
-                      </span>
-                    </div>
-                    <p className={`text-[8px] font-bold leading-normal ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
-                      Faltam guardar R$ {savingsCalculation.remainingToSave.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para cumprir seu objetivo do mês.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-black text-[#00DF89]">
-                      ✨ R$ 0,00 / dia
-                    </span>
-                    <p className={`text-[8px] font-bold leading-normal ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
-                      Parabéns! Você já bateu sua meta de economia mensal! Continue assim.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </motion.section>
-
       {/* Meta de Gastos Section */}
       <motion.section
         variants={itemVariants}
         className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
-          isMidnight ? 'bg-volt-surface' : 'bg-white'
+          isMidnight ? 'bg-zinc-900/90 border-2 border-zinc-800 shadow-xl' : 'bg-zinc-900'
         }`}
       >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-              isMidnight ? 'bg-volt-green text-black' : 'bg-[#FFD700] text-black'
+              isMidnight ? 'bg-volt-green text-white' : 'bg-[#FFD700] text-white'
             }`}>
               🎯
             </div>
             <div>
-              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Meta de Gastos</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Limite mensal de despesas</p>
+              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-white'}`}>Meta de Gastos</h3>
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-200' : 'text-zinc-100'}`}>Limite mensal de despesas</p>
             </div>
           </div>
           <button
             onClick={() => { setIsEditingGoal(!isEditingGoal); setTempGoal(String(monthlyGoal)); }}
             className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full transition-all cursor-pointer ${
-              isMidnight ? 'bg-zinc-900 text-white hover:bg-zinc-800 border-zinc-700' : 'bg-[#FFED86] text-black hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+              isMidnight ? 'bg-zinc-900 text-white hover:bg-zinc-900 border border-zinc-700 border-zinc-700' : 'bg-[#FFED86] text-white hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
             }`}
           >
             {isEditingGoal ? 'Cancelar' : 'Editar'}
@@ -1637,7 +1332,7 @@ const HomeView: React.FC<HomeViewProps> = ({
 
         {isEditingGoal ? (
           <div className="flex gap-2 items-center">
-            <span className={`text-xs font-black ${isMidnight ? 'text-white' : 'text-black'}`}>R$</span>
+            <span className={`text-xs font-black ${isMidnight ? 'text-white' : 'text-white'}`}>R$</span>
             <input
               type="number"
               step="1"
@@ -1645,14 +1340,14 @@ const HomeView: React.FC<HomeViewProps> = ({
               value={tempGoal}
               onChange={(e) => setTempGoal(e.target.value)}
               className={`flex-1 border-2 border-black rounded-xl px-3 py-2 text-sm font-bold ${
-                isMidnight ? 'bg-zinc-900 text-white border-zinc-700' : 'bg-white text-black'
+                isMidnight ? 'bg-zinc-900 text-white border-zinc-700' : 'bg-zinc-900 text-white'
               }`}
               autoFocus
             />
             <button
               onClick={handleSaveGoal}
               className={`text-xs font-black uppercase tracking-wider border-2 border-black px-3 py-2 rounded-xl transition-all cursor-pointer ${
-                isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                isMidnight ? 'bg-volt-green text-white' : 'bg-[#A2FF00] text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
               }`}
             >
               Salvar
@@ -1662,22 +1357,22 @@ const HomeView: React.FC<HomeViewProps> = ({
           <div className="flex flex-col gap-3">
             <div className="flex justify-between items-end">
               <div>
-                <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>Gasto atual</p>
+                <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-200' : 'text-zinc-200'}`}>Gasto atual</p>
                 <p className={`text-xl font-black ${
-                  goalConsumptionPercent > 100 ? 'text-[#FF5C8D]' : goalConsumptionPercent > 75 ? 'text-[#FFD700]' : isMidnight ? 'text-white' : 'text-black'
+                  goalConsumptionPercent > 100 ? 'text-[#FF5C8D]' : goalConsumptionPercent > 75 ? 'text-[#FFD700]' : isMidnight ? 'text-white' : 'text-white'
                 }`}>
                   R$ {currentMonthSpending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div className="text-right">
-                <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>Meta</p>
-                <p className={`text-sm font-black ${isMidnight ? 'text-zinc-300' : 'text-gray-700'}`}>
+                <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-200' : 'text-zinc-200'}`}>Meta</p>
+                <p className={`text-sm font-black ${isMidnight ? 'text-zinc-300' : 'text-zinc-100'}`}>
                   R$ {monthlyGoal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
 
-            <div className={`w-full h-5 rounded-full overflow-hidden border-2 border-black ${isMidnight ? 'bg-zinc-800' : 'bg-gray-200'}`}>
+            <div className={`w-full h-5 rounded-full overflow-hidden border-2 border-black ${isMidnight ? 'bg-zinc-900 border border-zinc-700' : 'bg-gray-200'}`}>
               <div
                 className="h-full rounded-full transition-all duration-700"
                 style={{
@@ -1694,7 +1389,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 {goalConsumptionPercent}% da meta usada
               </span>
               {goalConsumptionPercent <= 100 ? (
-                <span className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>
+                <span className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-200' : 'text-zinc-200'}`}>
                   R$ {(monthlyGoal - currentMonthSpending).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} restam
                 </span>
               ) : (
@@ -1707,220 +1402,29 @@ const HomeView: React.FC<HomeViewProps> = ({
         )}
       </motion.section>
 
-      {/* Saúde Financeira Section */}
-      <motion.section
-        variants={itemVariants}
-        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
-          isMidnight ? 'bg-volt-surface' : 'bg-white'
-        }`}
-      >
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-              isMidnight ? 'bg-[#B026FF] text-white' : 'bg-[#FF5C8D] text-white'
-            }`}>
-              💖
-            </div>
-            <div>
-              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Saúde Financeira</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Resumo financeiro de {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsFinancialHealthOpen?.(true)}
-            className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full transition-all cursor-pointer ${
-              isMidnight ? 'bg-zinc-900 text-white hover:bg-zinc-800 border-zinc-700' : 'bg-[#FFED86] text-black hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            Ver Detalhes
-          </button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Entradas', value: juneIncome, color: '#00CC7A', icon: '📈' },
-            { label: 'Saídas', value: juneExpenses, color: '#FF5C8D', icon: '📉' },
-            { label: 'Poupança', value: Math.max(0, juneIncome - juneExpenses), color: isMidnight ? '#00ff9d' : '#A2FF00', icon: '💰' },
-          ].map(({ label, value, color, icon }) => (
-            <div key={label} className={`p-3 rounded-xl text-center ${
-              isMidnight ? 'bg-zinc-900 border border-zinc-800' : 'bg-[#FFED86] border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-            }`}>
-              <span className="text-base block mb-1">{icon}</span>
-              <p className={`text-[8px] font-black uppercase tracking-wider mb-1 ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>{label}</p>
-              <p className="text-[10px] font-black" style={{ color }}>R$ {value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className={`p-3 rounded-xl flex items-center justify-between ${
-          isMidnight ? 'bg-zinc-900 border border-zinc-800' : 'bg-gray-50 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-        }`}>
-          <div>
-            <p className={`text-[9px] font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>Taxa de poupança</p>
-            <p className={`text-lg font-black ${
-              juneSavingsRate >= 20 ? 'text-[#00CC7A]' : juneSavingsRate >= 10 ? 'text-[#FFD700]' : 'text-[#FF5C8D]'
-            }`}>{juneSavingsRate}%</p>
-          </div>
-          <span className={`text-[9px] font-black uppercase tracking-wider border-2 border-black px-2.5 py-1 rounded-full ${
-            juneSavingsRate >= 20
-              ? isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black'
-              : juneSavingsRate >= 10
-              ? 'bg-[#FFD700] text-black'
-              : 'bg-[#FF5C8D] text-white'
-          }`}>
-            {juneSavingsRate >= 20 ? 'Excelente' : juneSavingsRate >= 10 ? 'Saudável' : juneSavingsRate >= 0 ? 'Equilibrado' : 'Atenção'}
-          </span>
-        </div>
-      </motion.section>
-
-      {/* Painel de Análise e Insights */}
-      <motion.section
-        variants={itemVariants}
-        className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-3 ${
-          isMidnight ? 'bg-volt-surface' : 'bg-white'
-        }`}
-      >
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
-              isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black'
-            }`}>
-              ⚡
-            </div>
-            <div>
-              <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Painel de Análise e Insights</h3>
-              <p className={`text-[10px] font-bold ${isMidnight ? 'text-zinc-400' : 'text-gray-700'}`}>Dados interativos e inteligência preditiva</p>
-            </div>
-          </div>
-          <span className={`text-[8px] font-black uppercase tracking-wider border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-            isMidnight ? 'bg-volt-green text-black' : 'bg-[#A2FF00] text-black'
-          }`}>Análises</span>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => setIsFinancialHealthOpen?.(true)}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,200,120,0.2)]' : 'bg-emerald-50 hover:bg-emerald-100 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">🏥</span>
-              <span className="text-[8px] font-black uppercase tracking-wider text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">Inteligência IA</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Saúde Financeira</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Diagnóstico IA Volt</span>
-            </div>
-          </button>
-          <button
-            onClick={() => setIsAiRecurringModalOpen?.(true)}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(100,100,255,0.2)]' : 'bg-indigo-50 hover:bg-indigo-100 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">🔄</span>
-              <span className="text-[8px] font-black uppercase tracking-wider text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded-md">Otimizador IA</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Assinaturas IA</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Detecção automática</span>
-            </div>
-          </button>
-          <button
-            onClick={() => onNavigate('statement')}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">📈</span>
-              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                isMidnight ? 'text-zinc-400 bg-zinc-800' : 'text-zinc-500 bg-zinc-100'
-              }`}>30d</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Evolução do Saldo</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Histórico financeiro</span>
-            </div>
-          </button>
-          <button
-            onClick={() => onNavigate('statement')}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">📊</span>
-              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                isMidnight ? 'text-zinc-400 bg-zinc-800' : 'text-zinc-500 bg-zinc-100'
-              }`}>6m</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Análise de Gastos</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Gastos consolidados</span>
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveDrawer?.('insights')}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">💡</span>
-              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                isMidnight ? 'text-zinc-400 bg-zinc-800' : 'text-zinc-500 bg-zinc-100'
-              }`}>Uso</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Insights de Gastos</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Uso por categoria</span>
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveDrawer?.('trends')}
-            className={`p-3.5 rounded-xl border-2 border-black text-left flex flex-col justify-between h-24 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 ${
-              isMidnight ? 'bg-zinc-900/60 hover:bg-zinc-900 text-white shadow-[2px_2px_0px_0px_rgba(0,255,157,0.2)]' : 'bg-white hover:bg-gray-50 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-lg">🔮</span>
-              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                isMidnight ? 'text-volt-green bg-volt-green/10' : 'text-[#00c97b] bg-[#00c97b]/10'
-              }`}>Volt Forecast™</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-tight block">Tendências e Previsões</span>
-              <span className={`text-[9px] font-bold block mt-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-500'}`}>Inteligência Preditiva</span>
-            </div>
-          </button>
-        </div>
-      </motion.section>
-
       {/* Recurring Payments Section */}
       <motion.section
         variants={itemVariants}
         className={`rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 ${
-          isMidnight ? 'bg-volt-surface' : 'bg-white'
+          isMidnight ? 'bg-zinc-900/90 border-2 border-zinc-800 shadow-xl' : 'bg-zinc-900'
         }`}
       >
         <div className="flex flex-col gap-3">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-[#00E5FF] border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs text-black">
+              <div className="w-8 h-8 rounded-xl bg-[#00E5FF] border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs text-white">
                 📅
               </div>
               <div>
-                <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-black'}`}>Contas Recorrentes</h3>
-                <p className={`text-[10px] font-bold ${isMidnight ? 'text-gray-400' : 'text-gray-700'}`}>Pagamentos mensais de assinaturas</p>
+                <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-white' : 'text-white'}`}>Contas Recorrentes</h3>
+                <p className={`text-[10px] font-bold ${isMidnight ? 'text-gray-400' : 'text-zinc-100'}`}>Pagamentos mensais de assinaturas</p>
               </div>
             </div>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setIsAiRecurringModalOpen?.(true)}
                 className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-wider border-2 border-black px-2 py-1 rounded-full transition-all cursor-pointer ${
-                  isMidnight ? 'bg-zinc-900 text-volt-green border-zinc-700 hover:bg-zinc-800' : 'bg-[#A2FF00] text-black hover:bg-[#8fff00] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                  isMidnight ? 'bg-zinc-900 text-volt-green border-zinc-700 hover:bg-zinc-900 border border-zinc-700' : 'bg-[#A2FF00] text-white hover:bg-[#8fff00] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
                 }`}
               >
                 <Sparkles size={9} /> IA
@@ -1928,43 +1432,141 @@ const HomeView: React.FC<HomeViewProps> = ({
               <button
                 onClick={() => setIsAddingBill(!isAddingBill)}
                 className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-wider border-2 border-black px-2 py-1 rounded-full transition-all cursor-pointer ${
-                  isMidnight ? 'bg-zinc-900 text-white border-zinc-700 hover:bg-zinc-800' : 'bg-[#FFED86] text-black hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                  isMidnight ? 'bg-zinc-900 text-white border-zinc-700 hover:bg-zinc-900 border border-zinc-700' : 'bg-[#FFED86] text-white hover:bg-[#ffe333] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
                 }`}
               >
                 <Plus size={9} /> {isAddingBill ? 'Fechar' : 'Nova'}
               </button>
               {isMidnight ? (
                 <span className="text-[10px] font-black uppercase tracking-wider bg-zinc-900 text-white border border-zinc-800 px-2 py-1 rounded-full">
-                  {recurringBills.filter((b) => b.status === 'pending').length} PEND
+                  {visibleRecurringBills.filter((b) => b.status === 'pending').length} PEND
                 </span>
               ) : (
-                <span className="text-[9px] font-black uppercase tracking-wider bg-[#FFED86] text-black border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-                  {recurringBills.filter((b) => b.status === 'pending').length} Pend
+                <span className="text-[9px] font-black uppercase tracking-wider bg-[#FFED86] text-white border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                  {visibleRecurringBills.filter((b) => b.status === 'pending').length} Pend
                 </span>
               )}
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { label: 'Estimado', value: recurringBills.reduce((a, b) => a + Math.abs(b.amount), 0), textColor: isMidnight ? 'text-white' : 'text-black' },
-              { label: 'Pago', value: recurringBills.filter(b => b.status === 'paid').reduce((a, b) => a + Math.abs(b.amount), 0), textColor: 'text-[#00CC7A]' },
-              { label: 'Pendente', value: recurringBills.filter(b => b.status === 'pending').reduce((a, b) => a + Math.abs(b.amount), 0), textColor: 'text-[#FF5C8D]' },
+              { label: 'Estimado', value: visibleRecurringBills.reduce((a, b) => a + Math.abs(b.amount), 0), textColor: isMidnight ? 'text-white' : 'text-white' },
+              { label: 'Pago', value: visibleRecurringBills.filter(b => b.status === 'paid').reduce((a, b) => a + Math.abs(b.amount), 0), textColor: 'text-[#00CC7A]' },
+              { label: 'Pendente', value: visibleRecurringBills.filter(b => b.status === 'pending').reduce((a, b) => a + Math.abs(b.amount), 0), textColor: 'text-[#FF5C8D]' },
             ].map(({ label, value, textColor }) => (
               <div key={label} className={`p-2.5 rounded-xl text-center ${
                 isMidnight ? 'bg-zinc-900 border border-zinc-800' : 'bg-[#FFED86] border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
               }`}>
-                <p className={`text-[8px] font-black uppercase tracking-wider mb-0.5 ${isMidnight ? 'text-zinc-400' : 'text-gray-600'}`}>{label}</p>
+                <p className={`text-[8px] font-black uppercase tracking-wider mb-0.5 ${isMidnight ? 'text-zinc-200' : 'text-zinc-200'}`}>{label}</p>
                 <p className={`text-[10px] font-black ${textColor}`}>R$ {value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
               </div>
             ))}
           </div>
         </div>
 
+        {isAddingBill && (
+          <div className={`p-4 rounded-2xl border-2 space-y-3 transition-all ${
+            isMidnight ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-zinc-900 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-white'
+          }`}>
+            <h4 className="font-black text-xs uppercase tracking-wider">Cadastrar Nova Conta Recorrente</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Nome da Conta / Assinatura</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Netflix, Spotify, Luz" 
+                  value={newBillTitle} 
+                  onChange={(e) => setNewBillTitle(e.target.value)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-900 border border-zinc-700 border-zinc-700 text-white' : 'bg-gray-100 border-black text-white'
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Valor (R$)</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="0.00" 
+                  value={newBillAmount} 
+                  onChange={(e) => setNewBillAmount(e.target.value)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-900 border border-zinc-700 border-zinc-700 text-white' : 'bg-gray-100 border-black text-white'
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Data de Vencimento</label>
+                <input 
+                  type="date" 
+                  value={newBillDueDate} 
+                  onChange={(e) => setNewBillDueDate(e.target.value)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-900 border border-zinc-700 border-zinc-700 text-white' : 'bg-gray-100 border-black text-white'
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Categoria</label>
+                <select 
+                  value={newBillCategory} 
+                  onChange={(e) => setNewBillCategory(e.target.value as any)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-900 border border-zinc-700 border-zinc-700 text-white' : 'bg-gray-100 border-black text-white'
+                  }`}
+                >
+                  <option value="cultura">Cultura / Streaming</option>
+                  <option value="refeicao">Alimentação</option>
+                  <option value="mobilidade">Transporte</option>
+                  <option value="saude">Saúde</option>
+                  <option value="outros">Outros</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Frequência</label>
+                <select 
+                  value={newBillFrequency} 
+                  onChange={(e) => setNewBillFrequency(e.target.value as any)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-900 border border-zinc-700 border-zinc-700 text-white' : 'bg-gray-100 border-black text-white'
+                  }`}
+                >
+                  <option value="MONTHLY">Mensal</option>
+                  <option value="QUARTERLY">Trimestral</option>
+                  <option value="SEMIANNUAL">Semestral</option>
+                  <option value="ANNUAL">Anual</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] font-bold uppercase block mb-1">Método de Pagamento</label>
+                <select 
+                  value={newBillPaymentMethod} 
+                  onChange={(e) => setNewBillPaymentMethod(e.target.value as any)} 
+                  className={`w-full p-2 text-xs rounded-xl border outline-none font-bold ${
+                    isMidnight ? 'bg-zinc-900 border border-zinc-700 border-zinc-700 text-white' : 'bg-gray-100 border-black text-white'
+                  }`}
+                >
+                  <option value="CREDIT_CARD">Cartão de Crédito</option>
+                  <option value="ACCOUNT_DEBIT">Débito Automático em Conta</option>
+                </select>
+              </div>
+            </div>
+            <button 
+              onClick={handleAddRecurringBill}
+              className={`w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider border-2 border-black transition-all cursor-pointer ${
+                isMidnight ? 'bg-volt-green text-white hover:bg-[#a3ff12]' : 'bg-[#FFED86] text-white hover:bg-[#ffe333] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+              }`}
+            >
+              Adicionar Conta Recorrente
+            </button>
+          </div>
+        )}
+
         <div className="space-y-3">
-          {recurringBills.map((bill) => {
+          {visibleRecurringBills.map((bill) => {
             const isPaid = bill.status === 'paid';
             const billAmountAbs = Math.abs(bill.amount);
-            const iconColorClass = isMidnight ? "text-[#00DF89]" : "text-black";
+            const iconColorClass = isMidnight ? "text-[#00DF89]" : "text-white";
             
             const getBillIcon = (cat: string) => {
               switch (cat) {
@@ -1987,7 +1589,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 className={`flex items-center justify-between gap-3 p-3 rounded-xl transition-all ${
                   isMidnight
                     ? `border border-zinc-800 bg-zinc-900 ${isPaid ? 'opacity-50' : ''}`
-                    : `border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${isPaid ? 'bg-gray-100 opacity-75' : 'bg-white'}`
+                    : `border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${isPaid ? 'bg-gray-100 opacity-75' : 'bg-zinc-900'}`
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -2000,19 +1602,92 @@ const HomeView: React.FC<HomeViewProps> = ({
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h4 className={`text-xs font-black truncate ${isMidnight ? 'text-white' : 'text-black'}`}>{bill.title}</h4>
-                    <div className="flex items-center gap-1.5 text-[9px] font-bold mt-0.5 text-on-surface-variant">
-                      <span className="flex items-center gap-0.5">
-                        <Calendar size={10} />
-                        {isPaid ? `Pago em ${bill.paidAtDate}` : `Vence em ${bill.dueDate}`}
-                      </span>
-                    </div>
+                    <h4 className={`text-xs font-black truncate ${isMidnight ? 'text-white' : 'text-white'}`}>{bill.title}</h4>
+                    
+                    {(() => {
+                      const isAccountDebit = bill.paymentMethod === 'ACCOUNT_DEBIT' || bill.paymentMethod === 'ACCOUNT' || bill.paymentMethod === 'DEBIT';
+                      const cutoffDay = bill.dueDay || (bill.dueDate ? parseInt(bill.dueDate.replace(/\D/g, ''), 10) : 25) || 25;
+
+                      // Data de autorização / lançamento
+                      const createdDate = bill.createdAt ? new Date(bill.createdAt) : new Date();
+                      const authDay = createdDate.getDate();
+                      const authDateFormatted = createdDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+                      // Regra de Corte da Fatura (Cartão de Crédito)
+                      const isBeforeCutoff = authDay <= cutoffDay;
+
+                      if (isPaid) {
+                        const methodBadge = isAccountDebit ? 'Débito em Conta' : 'Cartão de Crédito';
+                        return (
+                          <div className="flex flex-col gap-0.5 mt-0.5">
+                            <div className="flex items-center gap-1 text-[9.5px] font-bold text-[#00CC7A]">
+                              <Calendar size={10} />
+                              <span>Pago/Faturado em {bill.paidAtDate || authDateFormatted}</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-[8.5px] font-bold text-zinc-200 dark:text-zinc-200">
+                              {isAccountDebit ? <Building2 size={9} /> : <CreditCard size={9} />}
+                              <span>Método: {methodBadge}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const isNextMonthBill = bill.id.includes('_next') || bill.dueDate.includes('/') || (bill.dueDate && !bill.dueDate.startsWith('Dia'));
+                      const targetDueDateLabel = bill.dueDate || `Dia ${cutoffDay}`;
+
+                      if (isAccountDebit) {
+                        return (
+                          <div className="flex flex-col gap-0.5 mt-0.5">
+                            <div className="flex items-center gap-1 text-[9.5px] font-bold text-emerald-600 dark:text-emerald-400 flex-wrap">
+                              <Building2 size={10} />
+                              <span>Débito Agendado: {targetDueDateLabel}</span>
+                              {isNextMonthBill && (
+                                <span className="text-[7.5px] px-1 py-0.2 rounded font-black border uppercase tracking-tighter bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30">
+                                  Próximo Mês
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[8.5px] opacity-70 font-semibold text-on-surface-variant flex items-center gap-1">
+                              <Calendar size={9} />
+                              <span>Débito automático direto na conta no vencimento</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Cartão de Crédito com Autorização + Regra de Corte do Faturamento
+                      return (
+                        <div className="flex flex-col gap-0.5 mt-0.5">
+                          <div className="flex items-center gap-1 text-[9.5px] font-bold text-blue-600 dark:text-blue-400 flex-wrap">
+                            <CreditCard size={10} />
+                            <span>Vencimento: {targetDueDateLabel}</span>
+                            {isNextMonthBill ? (
+                              <span className="text-[7.5px] px-1 py-0.2 rounded font-black border uppercase tracking-tighter bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30">
+                                Próximo Mês / Pendente
+                              </span>
+                            ) : (
+                              <span className={`text-[7.5px] px-1 py-0.2 rounded font-black border uppercase tracking-tighter ${
+                                isBeforeCutoff 
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30' 
+                                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30'
+                              }`}>
+                                {isBeforeCutoff ? 'Antes do Corte' : 'Após o Corte'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[8.5px] opacity-70 font-semibold text-on-surface-variant flex items-center gap-1">
+                            <Calendar size={9} />
+                            <span>Corte/Vencimento da Fatura: Dia {cutoffDay}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
-                    <span className={`text-xs font-black block ${isMidnight ? 'text-white' : 'text-black'}`}>
+                    <span className={`text-xs font-black block ${isMidnight ? 'text-white' : 'text-white'}`}>
                       R$ {billAmountAbs.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </span>
                     <span className={`text-[8px] font-black uppercase tracking-wider block ${
@@ -2028,7 +1703,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                     className={`text-[10px] font-black uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all ${
                       isPaid
                         ? isMidnight
-                          ? 'bg-zinc-800 text-zinc-600 border border-zinc-800 cursor-not-allowed pointer-events-none'
+                          ? 'bg-zinc-900 border border-zinc-700 text-zinc-600 border border-zinc-800 cursor-not-allowed pointer-events-none'
                           : 'bg-gray-200 text-gray-400 border-2 border-gray-400 shadow-none cursor-not-allowed pointer-events-none'
                         : 'btn-primary'
                     }`}
@@ -2045,7 +1720,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       {/* Credit Card Section */}
       <motion.section
         variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border border-white/5 overflow-hidden shadow-lg"
+        className="bg-zinc-900/90 border-2 border-zinc-800 shadow-xl rounded-2xl border border-white/5 overflow-hidden shadow-lg"
       >
         {(() => {
           const cc = user.creditCard;
@@ -2055,7 +1730,12 @@ const HomeView: React.FC<HomeViewProps> = ({
             d ? d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '').toUpperCase() : '--';
           const totalLimit = cc?.totalLimit || 0;
           const availableLimit = cc?.availableLimit || 0;
-          const usedPct = totalLimit > 0 ? Math.min(100, Math.max(0, ((totalLimit - availableLimit) / totalLimit) * 100)) : 0;
+          const usedLimit = totalLimit - availableLimit;
+          const usedPct = totalLimit > 0 ? Math.min(100, Math.max(0, (usedLimit / totalLimit) * 100)) : 0;
+          // Limite online = sub-limite para compras digitais (40% do limite total, mínimo R$ 500)
+          const onlineLimit = totalLimit > 0 ? Math.round(Math.max(500, totalLimit * 0.4) * 100) / 100 : 0;
+          const onlineAvailable = Math.min(onlineLimit, availableLimit);
+          const onlineUsedPct = onlineLimit > 0 ? Math.min(100, Math.max(0, ((onlineLimit - onlineAvailable) / onlineLimit) * 100)) : 0;
           return (
             <div className="p-5 flex flex-col gap-4">
               <div className="flex justify-between items-center">
@@ -2063,7 +1743,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                   <CreditCard size={18} className="text-volt-green" />
                   <h3 className="font-bold text-sm">Fatura aberta</h3>
                 </div>
-                <span className="text-[10px] font-bold text-on-surface-variant bg-white/5 px-2.5 py-1 rounded-full uppercase">
+                <span className="text-[10px] font-bold text-on-surface-variant bg-zinc-900/5 px-2.5 py-1 rounded-full uppercase">
                   Venc. {fmtShort(invoiceDue)}
                 </span>
               </div>
@@ -2078,39 +1758,86 @@ const HomeView: React.FC<HomeViewProps> = ({
                   </span>
                   <button
                     onClick={() => setHideHomeInvoice((v) => !v)}
-                    className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-on-surface-variant hover:bg-white/10"
+                    className="w-7 h-7 rounded-full bg-zinc-900/5 flex items-center justify-center text-on-surface-variant hover:bg-zinc-900/10"
                     aria-label={hideHomeInvoice ? 'Mostrar valor' : 'Ocultar valor'}
                   >
                     {hideHomeInvoice ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
+                  {/* Badge Fatura Paga — ao lado do eye, mostra se a fechada foi quitada */}
+                  {cc?.closedInvoiceIsPaid && (
+                    <span className="text-[10px] px-2 py-1 rounded-full font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      ✓ PAGA{cc.closedInvoicePaidAt
+                        ? ' ' + new Date(cc.closedInvoicePaidAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                        : ''}
+                    </span>
+                  )}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <div className="bg-white/5 rounded-xl px-3 py-2">
+                <div className="bg-zinc-900/5 rounded-xl px-3 py-2">
                   <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider">Melhor dia de compra</p>
                   <p className="text-xs font-black text-white mt-0.5">{fmtShort(bestBuy)}</p>
                 </div>
-                <div className="bg-white/5 rounded-xl px-3 py-2">
+                <div className="bg-zinc-900/5 rounded-xl px-3 py-2">
                   <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider">Vencimento</p>
                   <p className="text-xs font-black text-white mt-0.5">{fmtShort(invoiceDue)}</p>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-on-surface-variant">Limite Disponível</span>
-                  <span className="font-bold text-white">
-                    R$ {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
+              {/* Limites - Total, Disponivel, Usado */}
+              <div className="flex flex-col gap-3">
+                {/* Limite de Credito Geral */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-on-surface-variant font-medium">Limite de Crédito</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-on-surface-variant/70">
+                        Utilizado: <span className="text-amber-400 font-bold">R$ {usedLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      </span>
+                      <span className="font-bold text-white">
+                        R$ {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 bg-zinc-900/5 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: '0%' }}
+                      animate={{ width: `${usedPct}%` }}
+                      transition={{ duration: 1, ease: 'easeOut' }}
+                      className="h-full bg-volt-green rounded-full shadow-[0_0_10px_rgba(0,227,139,0.5)]"
+                    />
+                  </div>
+                  <div className="flex justify-between text-[9px] text-on-surface-variant/60 font-medium">
+                    <span>R$ 0</span>
+                    <span>Total: R$ {totalLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: '0%' }}
-                    animate={{ width: `${usedPct}%` }}
-                    transition={{ duration: 1, ease: 'easeOut' }}
-                    className="h-full bg-volt-green rounded-full shadow-[0_0_10px_rgba(0,227,139,0.5)]"
-                  />
+
+                {/* Limite Online (sub-limite para compras digitais) */}
+                <div className="flex flex-col gap-1.5 border-t border-white/5 pt-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Globe size={11} className="text-blue-400" />
+                      <span className="text-on-surface-variant font-medium">Limite Online</span>
+                      <span className="text-[9px] bg-blue-500/15 text-blue-400 border border-blue-400/30 px-1.5 py-0.5 rounded-full font-bold">E-COMMERCE</span>
+                    </div>
+                    <span className="font-bold text-white">
+                      R$ {onlineAvailable.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-zinc-900/5 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: '0%' }}
+                      animate={{ width: `${onlineUsedPct}%` }}
+                      transition={{ duration: 1.2, ease: 'easeOut' }}
+                      className="h-full bg-blue-400 rounded-full"
+                    />
+                  </div>
+                  <div className="flex justify-between text-[9px] text-on-surface-variant/60 font-medium">
+                    <span>Para compras em lojas online e apps</span>
+                    <span>Limite: R$ {onlineLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
               </div>
 
@@ -2118,19 +1845,19 @@ const HomeView: React.FC<HomeViewProps> = ({
               <div className="flex gap-2.5 overflow-x-auto hide-scrollbar py-1 -mx-1 px-1">
                 <button
                   onClick={() => onNavigate('cards')}
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-zinc-900/5 hover:bg-zinc-900/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
                 >
                   <Barcode size={14} /> Pagar fatura
                 </button>
                 <button
                   onClick={() => onNavigate('cards')}
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-zinc-900/5 hover:bg-zinc-900/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
                 >
                   <CreditCard size={14} /> Meus cartões
                 </button>
                 <button
                   onClick={() => setIsInvoiceSummaryOpen(true)}
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-zinc-900/5 hover:bg-zinc-900/10 rounded-full text-xs font-bold whitespace-nowrap text-white transition-all active:scale-95"
                 >
                   <FileText size={14} /> Resumo da fatura
                 </button>
@@ -2140,17 +1867,19 @@ const HomeView: React.FC<HomeViewProps> = ({
         })()}
       </motion.section>
 
-      <InvoiceSummarySheet
+      <InvoiceSummarySheet {...({ open: isInvoiceSummaryOpen, onClose: () => setIsInvoiceSummaryOpen(false), user } as any)}
         open={isInvoiceSummaryOpen}
         onClose={() => setIsInvoiceSummaryOpen(false)}
         type="aberta"
-        title="Resumo da fatura aberta"
+        title="Resumo da Fatura"
+        showTypeToggle={true}
+        user={user}
       />
 
       {/* Spending Analytics Section */}
       <motion.section
         variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black"
+        className="bg-zinc-900/90 border-2 border-zinc-800 shadow-xl rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-white"
       >
         <div className="flex justify-between items-center mb-3">
           <div className="flex items-center gap-2">
@@ -2158,11 +1887,11 @@ const HomeView: React.FC<HomeViewProps> = ({
               📊
             </div>
             <div>
-              <h3 className="font-black text-xs uppercase tracking-wider text-black">Análise de Gastos</h3>
-              <p className="text-[10px] font-bold text-gray-700">Gastos mensais consolidados</p>
+              <h3 className="font-black text-xs uppercase tracking-wider text-white">Análise de Gastos</h3>
+              <p className="text-[10px] font-bold text-zinc-100">Gastos mensais consolidados</p>
             </div>
           </div>
-          <span className="text-[9px] font-black uppercase tracking-wider bg-[#00E5FF] text-black border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+          <span className="text-[9px] font-black uppercase tracking-wider bg-[#00E5FF] text-white border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
             6 Meses
           </span>
         </div>
@@ -2211,7 +1940,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       {/* Financial Insights Section */}
       <motion.section
         variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black"
+        className="bg-zinc-900/90 border-2 border-zinc-800 shadow-xl rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-white"
       >
         <div className="flex justify-between items-center mb-3">
           <div className="flex items-center gap-2">
@@ -2219,11 +1948,11 @@ const HomeView: React.FC<HomeViewProps> = ({
               💡
             </div>
             <div>
-              <h3 className="font-black text-xs uppercase tracking-wider text-black">Insights Financeiros</h3>
-              <p className="text-[10px] font-bold text-gray-700">Distribuição de gastos por categoria</p>
+              <h3 className="font-black text-xs uppercase tracking-wider text-white">Insights Financeiros</h3>
+              <p className="text-[10px] font-bold text-zinc-100">Distribuição de gastos por categoria</p>
             </div>
           </div>
-          <span className="text-[9px] font-black uppercase tracking-wider bg-[#FFED86] text-black border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+          <span className="text-[9px] font-black uppercase tracking-wider bg-[#FFED86] text-white border-2 border-black px-2 py-0.5 rounded-full shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
             Gráfico
           </span>
         </div>
@@ -2267,8 +1996,8 @@ const HomeView: React.FC<HomeViewProps> = ({
 
               {/* Total Indicator inside the donut center */}
               <div className="absolute flex flex-col items-center justify-center pointer-events-none text-center">
-                <span className={`text-[9px] font-black uppercase tracking-wider ${theme === 'midnight' ? 'text-zinc-400' : 'text-gray-600'}`}>Total</span>
-                <span className={`text-xs font-black ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>
+                <span className={`text-[9px] font-black uppercase tracking-wider ${theme === 'midnight' ? 'text-zinc-200' : 'text-zinc-200'}`}>Total</span>
+                <span className={`text-xs font-black ${theme === 'midnight' ? 'text-white' : 'text-white'}`}>
                   R$ {categorySpendingData.reduce((acc, curr) => acc + curr.value, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -2283,7 +2012,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                   <div
                     key={entry.key}
                     className={`flex items-center gap-2 p-2 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-                      theme === 'midnight' ? 'bg-zinc-900 text-white' : 'bg-white text-black'
+                      theme === 'midnight' ? 'bg-zinc-900 text-white' : 'bg-zinc-900 text-white'
                     }`}
                   >
                     <div
@@ -2294,8 +2023,8 @@ const HomeView: React.FC<HomeViewProps> = ({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
-                        <span className={`text-[10px] font-black truncate ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>{entry.name}</span>
-                        <span className={`text-[9px] font-black shrink-0 ${theme === 'midnight' ? 'text-zinc-400' : 'text-gray-700'}`}>{percent}%</span>
+                        <span className={`text-[10px] font-black truncate ${theme === 'midnight' ? 'text-white' : 'text-white'}`}>{entry.name}</span>
+                        <span className={`text-[9px] font-black shrink-0 ${theme === 'midnight' ? 'text-zinc-200' : 'text-zinc-100'}`}>{percent}%</span>
                       </div>
                       <span className={`text-[9px] font-black block ${theme === 'midnight' ? 'text-zinc-300' : 'text-gray-800'}`}>
                         R$ {entry.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -2308,11 +2037,11 @@ const HomeView: React.FC<HomeViewProps> = ({
           </div>
         ) : (
           <div className={`text-center py-8 border-2 border-black rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] ${
-            theme === 'midnight' ? 'bg-zinc-900 text-white' : 'bg-white text-black'
+            theme === 'midnight' ? 'bg-zinc-900 text-white' : 'bg-zinc-900 text-white'
           }`}>
             <span className="text-2xl block mb-2">💸</span>
             <p className="text-xs font-black">Nenhum gasto registrado</p>
-            <p className={`text-[10px] ${theme === 'midnight' ? 'text-zinc-400' : 'text-gray-600'}`}>Suas despesas aparecerão aqui assim que realizar compras ou pagamentos.</p>
+            <p className={`text-[10px] ${theme === 'midnight' ? 'text-zinc-200' : 'text-zinc-200'}`}>Suas despesas aparecerão aqui assim que realizar compras ou pagamentos.</p>
           </div>
         )}
       </motion.section>
@@ -2320,7 +2049,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       {/* Transactions Search and List Section */}
       <motion.section
         variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-4"
+        className="bg-zinc-900/90 border-2 border-zinc-800 shadow-xl rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-white flex flex-col gap-4"
       >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -2328,8 +2057,8 @@ const HomeView: React.FC<HomeViewProps> = ({
               🔍
             </div>
             <div>
-              <h3 className="font-black text-xs uppercase tracking-wider text-black">Buscar Transações</h3>
-              <p className="text-[10px] font-bold text-gray-700">Filtro em tempo real</p>
+              <h3 className="font-black text-xs uppercase tracking-wider text-white">Buscar Transações</h3>
+              <p className="text-[10px] font-bold text-zinc-100">Filtro em tempo real</p>
             </div>
           </div>
           {searchQuery && (
@@ -2344,13 +2073,13 @@ const HomeView: React.FC<HomeViewProps> = ({
 
         {/* Real-time Search input field */}
         <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-black" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white" />
           <input
             type="text"
             placeholder="Buscar por nome ou categoria..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs font-bold rounded-xl border-2 border-black bg-white text-black placeholder-gray-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none"
+            className="w-full pl-9 pr-3 py-2 text-xs font-bold rounded-xl border-2 border-black bg-zinc-900 text-white placeholder-gray-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none"
           />
         </div>
 
@@ -2370,19 +2099,19 @@ const HomeView: React.FC<HomeViewProps> = ({
                     className="flex items-center gap-3 p-2.5 bg-[#FFED86] border-2 border-black rounded-xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-0.5 transition-transform"
                   >
                     {/* Icon */}
-                    <div className="w-8 h-8 rounded-lg bg-white border-2 border-black flex items-center justify-center text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-900 border-2 border-black flex items-center justify-center text-white shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                       {getHomeTxIcon(tx.description, tx.type, tx.amount)}
                     </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-center gap-1">
-                        <h4 className="text-xs font-black text-black truncate">{tx.description}</h4>
-                        <span className={`text-xs font-black shrink-0 ${isIncome ? 'text-[#00E5FF] drop-shadow-[1px_1px_0px_rgba(0,0,0,1)]' : 'text-black'}`}>
+                        <h4 className="text-xs font-black text-white truncate">{tx.description}</h4>
+                        <span className={`text-xs font-black shrink-0 ${isIncome ? 'text-[#00E5FF] drop-shadow-[1px_1px_0px_rgba(0,0,0,1)]' : 'text-white'}`}>
                           {isIncome ? '+' : '-'} R$ {Math.abs(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-[9px] text-gray-700 mt-0.5 font-bold">
+                      <div className="flex justify-between items-center text-[9px] text-zinc-100 mt-0.5 font-bold">
                         <span className="uppercase">
                           {tx.type === 'PIX_SENT' || tx.type === 'PIX_CREDIT_SENT' ? 'PIX' : tx.type === 'SHOP_DEBIT' ? 'Compra' : tx.type === 'PAYMENT' ? 'Pagamento' : tx.type === 'DEPOSIT' ? 'Depósito' : tx.type === 'PIX_RECEIVED' ? 'PIX Recebido' : tx.type === 'CASHBACK_CREDIT' ? 'Cashback' : 'Transação'}
                         </span>
@@ -2395,7 +2124,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             ) : (
               <div className="text-center py-6">
                 <p className="text-xs text-gray-800 font-bold">Nenhuma transação encontrada</p>
-                <p className="text-[10px] text-gray-600">Altere o termo da busca.</p>
+                <p className="text-[10px] text-zinc-200">Altere o termo da busca.</p>
               </div>
             )}
           </AnimatePresence>
@@ -2406,7 +2135,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       <motion.section
         variants={itemVariants}
         onClick={() => showDialog({ title: 'Aviso', message: 'Parabéns pelo interesse! A Carteira Volt Rendimentos já está em desenvolvimento e oferecerá aplicações automáticas no CDI.' })}
-        className="relative rounded-2xl h-44 bg-volt-surface overflow-hidden flex items-center p-5 group cursor-pointer active:scale-[0.99] transition-transform shadow-2xl"
+        className="relative rounded-2xl h-44 bg-zinc-900/90 border-2 border-zinc-800 shadow-xl overflow-hidden flex items-center p-5 group cursor-pointer active:scale-[0.99] transition-transform shadow-2xl"
       >
         <div className="z-10 flex flex-col gap-1.5 max-w-[62%]">
           <span className="text-[10px] font-extrabold text-volt-green uppercase tracking-wider">
@@ -2512,7 +2241,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               exit={{ scale: 0.5, y: 50, opacity: 0 }}
               transition={{ type: "spring", damping: 15, stiffness: 200 }}
               className={`relative max-w-sm w-full border-4 border-black p-6 rounded-[24px] text-center shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] z-10 flex flex-col items-center gap-4 ${
-                isMidnight ? 'bg-zinc-950 text-white border-zinc-800 shadow-[8px_8px_0px_0px_#00ff9d]' : 'bg-[#FFED86] text-black border-black'
+                isMidnight ? 'bg-zinc-950 text-white border-zinc-800 shadow-[8px_8px_0px_0px_#00ff9d]' : 'bg-[#FFED86] text-white border-black'
               }`}
             >
               {/* Badge Icon Element */}
@@ -2542,7 +2271,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               {/* Texts */}
               <div className="space-y-1">
                 <span className={`text-[10px] font-black tracking-widest uppercase block ${
-                  isMidnight ? 'text-volt-green' : 'text-gray-700'
+                  isMidnight ? 'text-volt-green' : 'text-zinc-100'
                 }`}>
                   Conquista de Poupança!
                 </span>
@@ -2587,8 +2316,8 @@ const HomeView: React.FC<HomeViewProps> = ({
                 onClick={() => setCelebrationMilestone(null)}
                 className={`w-full py-3 px-4 rounded-xl font-black text-sm border-2 border-black uppercase tracking-wider shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-colors cursor-pointer ${
                   isMidnight
-                    ? 'bg-volt-green text-black border-black hover:bg-volt-primary-dark'
-                    : 'bg-white text-black border-black hover:bg-gray-50'
+                    ? 'bg-volt-green text-white border-black hover:bg-volt-primary-dark'
+                    : 'bg-zinc-900 text-white border-black hover:bg-gray-50'
                 }`}
               >
                 Continuar Poupando! 🚀
@@ -2609,20 +2338,20 @@ const HomeView: React.FC<HomeViewProps> = ({
               className={`p-4 rounded-3xl border-4 border-black text-white w-72 flex flex-col gap-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] pointer-events-auto ${
                 isMidnight
                   ? 'bg-zinc-950/95 text-white border-zinc-800'
-                  : 'bg-white text-black border-black'
+                  : 'bg-zinc-900 text-white border-black'
               }`}
             >
               <div className="flex justify-between items-center pb-2 border-b-2 border-dashed border-black/10 dark:border-white/10">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm">🔮</span>
-                  <span className={`text-[11px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-black'}`}>
+                  <span className={`text-[11px] font-black uppercase tracking-wider ${isMidnight ? 'text-volt-green' : 'text-white'}`}>
                     Central de Painéis Volt
                   </span>
                 </div>
                 <button
                   onClick={() => setIsIntelligenceMenuOpen(false)}
-                  className={`p-1 rounded-full border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer text-xs ${
-                    isMidnight ? 'text-zinc-400' : 'text-zinc-700'
+                  className={`p-1 rounded-full border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-zinc-900/5 cursor-pointer text-xs ${
+                    isMidnight ? 'text-zinc-200' : 'text-zinc-700'
                   }`}
                 >
                   <X size={12} />
@@ -2638,15 +2367,15 @@ const HomeView: React.FC<HomeViewProps> = ({
                       setIsIntelligenceMenuOpen(false);
                     }}
                     className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
-                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-emerald-50 hover:bg-emerald-100 text-black'
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-emerald-50 hover:bg-emerald-100 text-white'
                     }`}
                   >
                     <span className="text-xl shrink-0">🏥</span>
                     <div className="min-w-0 flex-1">
                       <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Saúde Financeira IA</h5>
-                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Diagnóstico inteligente Volt IA</p>
+                      <p className="text-[9px] text-zinc-200 font-bold truncate leading-none mt-0.5">Diagnóstico inteligente Volt IA</p>
                     </div>
-                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                    <ChevronRight size={14} className="text-zinc-200 shrink-0" />
                   </button>
                 )}
 
@@ -2658,15 +2387,15 @@ const HomeView: React.FC<HomeViewProps> = ({
                       setIsIntelligenceMenuOpen(false);
                     }}
                     className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
-                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-indigo-50 hover:bg-indigo-100 text-black'
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-indigo-50 hover:bg-indigo-100 text-white'
                     }`}
                   >
                     <span className="text-xl shrink-0">🔄</span>
                     <div className="min-w-0 flex-1">
                       <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Assinaturas IA</h5>
-                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Detecção automática de contas</p>
+                      <p className="text-[9px] text-zinc-200 font-bold truncate leading-none mt-0.5">Detecção automática de contas</p>
                     </div>
-                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                    <ChevronRight size={14} className="text-zinc-200 shrink-0" />
                   </button>
                 )}
 
@@ -2678,15 +2407,15 @@ const HomeView: React.FC<HomeViewProps> = ({
                       setIsIntelligenceMenuOpen(false);
                     }}
                     className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
-                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-white hover:bg-gray-50 text-black'
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-zinc-900 hover:bg-gray-50 text-white'
                     }`}
                   >
                     <span className="text-xl shrink-0">📈</span>
                     <div className="min-w-0 flex-1">
                       <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Evolução do Saldo</h5>
-                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Histórico financeiro (30 dias)</p>
+                      <p className="text-[9px] text-zinc-200 font-bold truncate leading-none mt-0.5">Histórico financeiro (30 dias)</p>
                     </div>
-                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                    <ChevronRight size={14} className="text-zinc-200 shrink-0" />
                   </button>
                 )}
 
@@ -2698,15 +2427,15 @@ const HomeView: React.FC<HomeViewProps> = ({
                       setIsIntelligenceMenuOpen(false);
                     }}
                     className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
-                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-white hover:bg-gray-50 text-black'
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-zinc-900 hover:bg-gray-50 text-white'
                     }`}
                   >
                     <span className="text-xl shrink-0">📊</span>
                     <div className="min-w-0 flex-1">
                       <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Análise de Gastos</h5>
-                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Consolidado semestral de despesas</p>
+                      <p className="text-[9px] text-zinc-200 font-bold truncate leading-none mt-0.5">Consolidado semestral de despesas</p>
                     </div>
-                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                    <ChevronRight size={14} className="text-zinc-200 shrink-0" />
                   </button>
                 )}
 
@@ -2718,15 +2447,15 @@ const HomeView: React.FC<HomeViewProps> = ({
                       setIsIntelligenceMenuOpen(false);
                     }}
                     className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
-                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-white hover:bg-gray-50 text-black'
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-zinc-900 hover:bg-gray-50 text-white'
                     }`}
                   >
                     <span className="text-xl shrink-0">💡</span>
                     <div className="min-w-0 flex-1">
                       <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Insights de Gastos</h5>
-                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Uso por categoria e alertas</p>
+                      <p className="text-[9px] text-zinc-200 font-bold truncate leading-none mt-0.5">Uso por categoria e alertas</p>
                     </div>
-                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                    <ChevronRight size={14} className="text-zinc-200 shrink-0" />
                   </button>
                 )}
 
@@ -2738,15 +2467,15 @@ const HomeView: React.FC<HomeViewProps> = ({
                       setIsIntelligenceMenuOpen(false);
                     }}
                     className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
-                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-white hover:bg-gray-50 text-black'
+                      isMidnight ? 'bg-zinc-900/80 hover:bg-zinc-900 text-white' : 'bg-zinc-900 hover:bg-gray-50 text-white'
                     }`}
                   >
                     <span className="text-xl shrink-0">🔮</span>
                     <div className="min-w-0 flex-1">
                       <h5 className="text-[11px] font-black uppercase tracking-tight leading-tight">Tendências e Previsões</h5>
-                      <p className="text-[9px] text-zinc-400 font-bold truncate leading-none mt-0.5">Volt Forecast™ Inteligência Preditiva</p>
+                      <p className="text-[9px] text-zinc-200 font-bold truncate leading-none mt-0.5">Volt Forecast™ Inteligência Preditiva</p>
                     </div>
-                    <ChevronRight size={14} className="text-zinc-400 shrink-0" />
+                    <ChevronRight size={14} className="text-zinc-200 shrink-0" />
                   </button>
                 )}
               </div>
@@ -2759,7 +2488,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           onClick={() => setIsIntelligenceMenuOpen(prev => !prev)}
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
-          className="w-14 h-14 rounded-full border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer pointer-events-auto bg-volt-green text-black relative group"
+          className="w-14 h-14 rounded-full border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer pointer-events-auto bg-volt-green text-white relative group"
         >
           {/* Pulsing aura */}
           <span className="absolute inset-0 rounded-full bg-volt-green opacity-20 group-hover:animate-ping pointer-events-none" />
@@ -2779,12 +2508,194 @@ const HomeView: React.FC<HomeViewProps> = ({
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {advancePaymentBill && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className={`relative w-full max-w-sm rounded-3xl p-6 border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] ${
+                isMidnight ? 'bg-[#131313] text-white border-zinc-700' : 'bg-zinc-900 text-white border-black'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-400 text-white border-2 border-black flex items-center justify-center text-xl font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  📅
+                </div>
+                <div>
+                  <h3 className="font-black text-xs uppercase tracking-wide">Adiantar Pagamento?</h3>
+                  <p className="text-[10px] font-bold text-gray-500 dark:text-zinc-200">Mês vigente já quitado</p>
+                </div>
+              </div>
+
+              <p className="text-xs font-extrabold leading-relaxed mb-3 text-gray-800 dark:text-zinc-200">
+                A conta <span className="font-black text-emerald-600 dark:text-volt-green">{advancePaymentBill.title}</span> já consta como paga para este período. Deseja adiantar o pagamento da próxima fatura/vencimento no valor de <span className="font-black">R$ {Math.abs(advancePaymentBill.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>?
+              </p>
+
+              <div className="mb-5 p-2.5 rounded-xl bg-gray-100 dark:bg-zinc-900 border border-zinc-700/80 border border-black/10 dark:border-zinc-700 flex items-center justify-between text-[11px] font-extrabold">
+                <span className="text-gray-500 dark:text-zinc-200">Método de Cobrança:</span>
+                <span className="flex items-center gap-1.5 text-blue-600 dark:text-cyan-400 font-black">
+                  {advancePaymentBill.paymentMethod === 'ACCOUNT_DEBIT' || advancePaymentBill.paymentMethod === 'ACCOUNT' || advancePaymentBill.paymentMethod === 'DEBIT' ? (
+                    <>
+                      <Building2 size={12} /> Débito em Conta
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard size={12} /> Cartão de Crédito
+                    </>
+                  )}
+                </span>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAdvancePaymentBill(null)}
+                  className={`flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider border-2 border-black ${
+                    isMidnight ? 'bg-zinc-900 border border-zinc-700 text-white hover:bg-zinc-700' : 'bg-gray-200 text-white hover:bg-gray-300'
+                  }`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    setPaymentChoiceBill(advancePaymentBill);
+                    setSelectedPaymentMethod(advancePaymentBill.paymentMethod === 'CREDIT_CARD' || advancePaymentBill.paymentMethod === 'CREDIT' ? 'CREDIT_CARD' : 'ACCOUNT_DEBIT');
+                    setAdvancePaymentBill(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider border-2 border-black bg-[#A2FF00] text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#8fff00] cursor-pointer"
+                >
+                  Sim, Adiantar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Payment Method Choice Modal (Débito em Conta vs Adiantar no Crédito) */}
+      <AnimatePresence>
+        {paymentChoiceBill && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className={`relative w-full max-w-md rounded-3xl p-6 border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] ${
+                isMidnight ? 'bg-[#131313] text-white border-zinc-700' : 'bg-zinc-900 text-white border-black'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#00E5FF] text-white border-2 border-black flex items-center justify-center text-xl font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  💳
+                </div>
+                <div>
+                  <h3 className="font-black text-xs uppercase tracking-wide">Opção de Pagamento</h3>
+                  <p className="text-[10px] font-bold text-gray-500 dark:text-zinc-200">{paymentChoiceBill.title} • R$ {Math.abs(paymentChoiceBill.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+
+              <p className="text-xs font-bold leading-relaxed mb-4 text-zinc-100 dark:text-zinc-300">
+                Como você deseja efetuar o pagamento da conta <span className="font-black text-white dark:text-white">{paymentChoiceBill.title}</span>?
+              </p>
+
+              <div className="space-y-3 mb-6">
+                {/* Opção 1: Débito em Conta */}
+                <div
+                  onClick={() => setSelectedPaymentMethod('ACCOUNT_DEBIT')}
+                  className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                    selectedPaymentMethod === 'ACCOUNT_DEBIT'
+                      ? isMidnight ? 'bg-emerald-950/40 border-volt-green text-white shadow-[3px_3px_0px_0px_rgba(0,229,255,1)]' : 'bg-emerald-50 border-emerald-600 text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                      : isMidnight ? 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:border-zinc-500' : 'bg-gray-50 border-gray-300 text-zinc-200 hover:border-gray-400'
+                  }`}
+                >
+                  <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                    selectedPaymentMethod === 'ACCOUNT_DEBIT' ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-400'
+                  }`}>
+                    {selectedPaymentMethod === 'ACCOUNT_DEBIT' && <div className="w-2 h-2 rounded-full bg-zinc-900" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 font-black text-xs uppercase tracking-wide">
+                      <Building2 size={14} className="text-emerald-500" />
+                      <span>Pagar no Débito (Saldo da Conta)</span>
+                    </div>
+                    <p className="text-[9.5px] font-semibold mt-1 text-gray-500 dark:text-zinc-200 leading-snug">
+                      Deduz R$ {Math.abs(paymentChoiceBill.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} do saldo imediatamente. A cobrança no cartão fica zerada para não cobrar indevidamente.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Opção 2: Adiantar no Crédito */}
+                <div
+                  onClick={() => setSelectedPaymentMethod('CREDIT_CARD')}
+                  className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                    selectedPaymentMethod === 'CREDIT_CARD'
+                      ? isMidnight ? 'bg-blue-950/40 border-cyan-400 text-white shadow-[3px_3px_0px_0px_rgba(0,229,255,1)]' : 'bg-blue-50 border-blue-600 text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                      : isMidnight ? 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:border-zinc-500' : 'bg-gray-50 border-gray-300 text-zinc-200 hover:border-gray-400'
+                  }`}
+                >
+                  <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                    selectedPaymentMethod === 'CREDIT_CARD' ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-400'
+                  }`}>
+                    {selectedPaymentMethod === 'CREDIT_CARD' && <div className="w-2 h-2 rounded-full bg-zinc-900" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 font-black text-xs uppercase tracking-wide">
+                      <CreditCard size={14} className="text-blue-500" />
+                      <span>Adiantar no Crédito (Lançar na Fatura)</span>
+                    </div>
+                    <p className="text-[9.5px] font-semibold mt-1 text-gray-500 dark:text-zinc-200 leading-snug">
+                      Lança R$ {Math.abs(paymentChoiceBill.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} na fatura do cartão de crédito. O saldo em conta permanece intacto agora.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPaymentChoiceBill(null)}
+                  className={`flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider border-2 border-black ${
+                    isMidnight ? 'bg-zinc-900 border border-zinc-700 text-white hover:bg-zinc-700' : 'bg-gray-200 text-white hover:bg-gray-300'
+                  }`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    setPendingBillId(paymentChoiceBill.id);
+                    setPendingPaymentMethod(selectedPaymentMethod);
+                    setPaymentChoiceBill(null);
+                    setIsPasswordVerifyOpen(true);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider border-2 border-black bg-[#A2FF00] text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#8fff00] cursor-pointer"
+                >
+                  Continuar Pagamento
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <PasswordModal
         isOpen={isPasswordVerifyOpen}
         onClose={() => setIsPasswordVerifyOpen(false)}
         onConfirm={handlePasswordConfirm}
         title="Confirmar Pagamento Recorrente"
         description="Digite seu PIN de 4 dígitos para autorizar o pagamento desta conta."
+      />
+
+      <FinancialInsightsCarouselModal
+        isOpen={isCarouselInsightsOpen}
+        onClose={() => setIsCarouselInsightsOpen(false)}
+        onNavigate={onNavigate}
+        theme={theme === 'yellow' ? 'yellow' : 'midnight'}
+        userProfile={user}
+      />
+
+      <OverdueAlertModal
+        user={user}
+        onNavigate={onNavigate}
       />
     </motion.div>
   );

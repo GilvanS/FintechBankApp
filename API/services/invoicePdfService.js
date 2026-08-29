@@ -775,7 +775,8 @@ async function generatePaymentReceiptPDF(data) {
  *   { nome, cpfFormatado, cartaoFinal, estabelecimento, formaPagamento,
  *     tipoPagamento, totalParcelas, parcelaAtual, originalAmount, jurosTotal,
  *     interestRate, totalParcelado, valorParcela, taxaEfetivaMensal,
- *     taxaEfetivaAnual, dataCompra, horaCompra, autenticacao, transactionId, nota }
+ *     taxaEfetivaAnual, iofAdicional, iofDiario, iofTotal, iofDias,
+ *     dataCompra, horaCompra, autenticacao, transactionId, nota }
  * @returns {Promise<Buffer>}
  */
 async function generatePurchaseReceiptPDF(data) {
@@ -858,6 +859,14 @@ async function generatePurchaseReceiptPDF(data) {
                     art52Rows.push(['Taxa efetiva anual', `${(Number(data.taxaEfetivaAnual || 0) * 100).toFixed(2)}% a.a.`]);
                 } else {
                     art52Rows.push(['Juros do financiamento', 'R$ 0,00 — parcelamento sem juros']);
+                }
+                // IOF (adicional fixo 0,38% + diário 0,0082%/dia)
+                if (comJuros) {
+                    const iofAd = Number(data.iofAdicional || 0);
+                    const iofDi = Number(data.iofDiario || 0);
+                    art52Rows.push(['IOF adicional (0,38% fixo)', brl(iofAd)]);
+                    art52Rows.push([`IOF diário (0,0082%/dia × ${data.iofDias || 30} dias)`, brl(iofDi)]);
+                    art52Rows.push(['Total IOF', brl(Number(data.iofTotal || 0))]);
                 }
             } else {
                 art52Rows.push(['Valor pago', brl(data.totalParcelado || data.originalAmount || 0)]);

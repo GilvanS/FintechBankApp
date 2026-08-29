@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Brain, Lightbulb, RefreshCw, X, Home, ChevronRight, AlertTriangle, CheckCircle2, TrendingDown, Eye, HelpCircle, Plus } from 'lucide-react';
-import { Transaction, RecurringBill } from '../types';
+import { Transaction } from '../types';
 
 interface AiRecurringBillModalProps {
   isOpen: boolean;

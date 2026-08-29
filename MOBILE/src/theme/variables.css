@@ -1,6 +1,9 @@
 /* ─── Google Fonts (redesign) ───────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=Space+Grotesk:wght@500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 
+/* ─── Google Fonts (Direção Dark Glass Neon — docs/plans/2026-08-27-plano-de-para-web-mobile.md Fase 1) ───────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Manrope:wght@400;500;600;700&display=swap');
+
 @import "tailwindcss";
 
 @plugin "@tailwindcss/forms";
@@ -704,4 +707,41 @@ body:not(.theme-midnight) .exempt-brutalist * {
 }
 body:not(.theme-midnight) .exempt-brutalist text {
     fill: #ffffff !important;
+}
+
+/* ════════════════════════════════════════════════════════════ */
+/*  DIREÇÃO "DARK GLASS NEON" — opt-in, só no tema Midnight      */
+/*  Classes novas, não sobrescrevem nada existente. Aplicar tela */
+/*  por tela conforme migração (docs/plans/2026-08-27-plano-de-  */
+/*  para-web-mobile.md). Tokens espelhados em theme/designTokens.ts */
+/* ════════════════════════════════════════════════════════════ */
+
+.font-display-glass { font-family: 'Unbounded', 'Sora', sans-serif; }
+.font-body-glass { font-family: 'Manrope', system-ui, -apple-system, sans-serif; }
+
+body.theme-midnight .glass-card {
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+
+/* Fundo de tela com o mesmo mesh gradiente do mockup validado (verde +
+   lilás — únicos tons usados são tokens reais do projeto, ver design-dna). */
+body.theme-midnight .gradient-mesh-bg {
+    background-image:
+        radial-gradient(480px 380px at 15% 5%, rgba(0, 255, 157, 0.20), transparent 60%),
+        radial-gradient(420px 340px at 95% 30%, rgba(201, 191, 255, 0.14), transparent 60%),
+        radial-gradient(500px 420px at 30% 100%, rgba(0, 255, 157, 0.10), transparent 60%),
+        radial-gradient(rgba(255, 255, 255, 0.035) 1.5px, transparent 1.5px);
+    background-size: auto, auto, auto, 24px 24px;
+    background-position: center;
+}
+
+/* Número em destaque com gradiente verde→lilás (saldo, valores grandes) */
+body.theme-midnight .text-gradient-glass {
+    background: linear-gradient(90deg, #00ff9d, #c9bfff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
 }

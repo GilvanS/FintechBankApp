@@ -37,7 +37,7 @@ module.exports = function createMiscController(deps) {
     };
 
     const health = async (req, res) => {
-    console.log('ðŸ” Health check solicitado');
+    console.log('🔍 Health check solicitado');
     
     const health = {
         status: 'ok',
@@ -57,7 +57,7 @@ module.exports = function createMiscController(deps) {
     };
 
     const debugTables = async (req, res) => {
-    console.log('ðŸ” VerificaÃ§Ã£o de tabelas solicitada');
+    console.log('🔍 Verificação de tabelas solicitada');
     
     try {
         const tables = {};
@@ -77,11 +77,11 @@ module.exports = function createMiscController(deps) {
         const transactionsResult = await dbService.executeQuery(transactionsQuery);
         tables.transactions = { exists: true, count: transactionsResult[0]?.count || 0 };
         
-        console.log('âœ… VerificaÃ§Ã£o de tabelas concluÃ­da:', tables);
+        console.log('✅ Verificação de tabelas concluída:', tables);
         res.json({ success: true, data: tables });
         
     } catch (error) {
-        console.error('âŒ Erro ao verificar tabelas:', error.message);
+        console.error('❌ Erro ao verificar tabelas:', error.message);
         res.status(500).json({ 
             success: false, 
             message: 'Erro ao verificar tabelas',
@@ -92,7 +92,7 @@ module.exports = function createMiscController(deps) {
 
     const debugUserGet = async (req, res) => {
     const { cpf } = req.params;
-    console.log(`ðŸ” Debug do usuÃ¡rio ${cpf} solicitado`);
+    console.log(`🔍 Debug do usuário ${cpf} solicitado`);
     
     try {
         const query = `SELECT * FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`;
@@ -106,14 +106,14 @@ module.exports = function createMiscController(deps) {
         // Remover senha do resultado
         delete user.password;
         
-        console.log(`âœ… UsuÃ¡rio ${cpf} encontrado`);
+        console.log(`✅ Usuário ${cpf} encontrado`);
         res.json({ success: true, data: { exists: true, user } });
         
     } catch (error) {
-        console.error(`âŒ Erro ao buscar usuÃ¡rio ${cpf}:`, error.message);
+        console.error(`❌ Erro ao buscar usuário ${cpf}:`, error.message);
         res.status(500).json({ 
             success: false, 
-            message: 'Erro ao buscar usuÃ¡rio',
+            message: 'Erro ao buscar usuário',
             error: error.message 
         });
     }
@@ -121,15 +121,15 @@ module.exports = function createMiscController(deps) {
 
     const debugUserDelete = async (req, res) => {
     const { cpf } = req.params;
-    console.log(`ðŸ—‘ï¸  Verificando condiÃ§Ãµes para deletar usuÃ¡rio ${cpf}...`);
+    console.log(`🗓️  Verificando condições para deletar usuário ${cpf}...`);
     
     try {
-        // Verificar se usuÃ¡rio existe
+        // Verificar se usuário existe
         const userQuery = `SELECT cpf, balance, credit_card_total_limit, credit_card_available_limit FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`;
         const userRows = await dbService.executeQuery(userQuery);
         
         if (userRows.length === 0) {
-            return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado' });
+            return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
         }
         
         const user = userRows[0];
@@ -137,24 +137,24 @@ module.exports = function createMiscController(deps) {
         const totalLimit = parseFloat(user.credit_card_total_limit || 0);
         const availableLimit = parseFloat(user.credit_card_available_limit || 0);
         
-        // ValidaÃ§Ã£o 1: Saldo deve ser zero
+        // Validação 1: Saldo deve ser zero
         if (balance !== 0) {
             return res.status(400).json({ 
                 success: false, 
-                message: `NÃ£o Ã© possÃ­vel excluir usuÃ¡rio com saldo diferente de zero. Saldo atual: R$ ${balance.toFixed(2)}` 
+                message: `Não é possível excluir usuário com saldo diferente de zero. Saldo atual: R$ ${balance.toFixed(2)}` 
             });
         }
         
-        // ValidaÃ§Ã£o 2: Limite de crÃ©dito deve estar totalmente disponÃ­vel
+        // Validação 2: Limite de crédito deve estar totalmente disponível
         const usedLimit = totalLimit - availableLimit;
         if (usedLimit > 0) {
             return res.status(400).json({ 
                 success: false, 
-                message: `NÃ£o Ã© possÃ­vel excluir usuÃ¡rio com limite de crÃ©dito utilizado. Limite usado: R$ ${usedLimit.toFixed(2)} de R$ ${totalLimit.toFixed(2)}` 
+                message: `Não é possível excluir usuário com limite de crédito utilizado. Limite usado: R$ ${usedLimit.toFixed(2)} de R$ ${totalLimit.toFixed(2)}` 
             });
         }
         
-        // ValidaÃ§Ã£o 3: Verificar se hÃ¡ parcelas pendentes (INVOICE_INSTALLMENT)
+        // Validação 3: Verificar se há parcelas pendentes (INVOICE_INSTALLMENT)
         const pendingInstallmentsQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('transactions')} WHERE cpf = '${cpf}' AND type = 'INVOICE_INSTALLMENT'`;
         const installmentsResult = await dbService.executeQuery(pendingInstallmentsQuery);
         const pendingInstallmentsCount = parseInt(installmentsResult[0]?.count || 0);
@@ -162,11 +162,11 @@ module.exports = function createMiscController(deps) {
         if (pendingInstallmentsCount > 0) {
             return res.status(400).json({ 
                 success: false, 
-                message: `NÃ£o Ã© possÃ­vel excluir usuÃ¡rio com parcelas pendentes. Total de parcelas: ${pendingInstallmentsCount}` 
+                message: `Não é possível excluir usuário com parcelas pendentes. Total de parcelas: ${pendingInstallmentsCount}` 
             });
         }
         
-        // ValidaÃ§Ã£o 4: Verificar se hÃ¡ faturas abertas ou vencidas
+        // Validação 4: Verificar se há faturas abertas ou vencidas
         const openInvoicesQuery = `SELECT COUNT(*) as count FROM ${dbService.fq('invoices')} WHERE cpf = '${cpf}' AND status IN ('ABERTA', 'VENCIDA')`;
         const invoicesResult = await dbService.executeQuery(openInvoicesQuery);
         const openInvoicesCount = parseInt(invoicesResult[0]?.count || 0);
@@ -174,12 +174,12 @@ module.exports = function createMiscController(deps) {
         if (openInvoicesCount > 0) {
             return res.status(400).json({ 
                 success: false, 
-                message: `NÃ£o Ã© possÃ­vel excluir usuÃ¡rio com faturas abertas ou vencidas. Total de faturas: ${openInvoicesCount}` 
+                message: `Não é possível excluir usuário com faturas abertas ou vencidas. Total de faturas: ${openInvoicesCount}` 
             });
         }
         
-        // Todas as validaÃ§Ãµes passaram - deletar usuÃ¡rio e dados relacionados
-        console.log(`âœ… ValidaÃ§Ãµes passadas. Deletando usuÃ¡rio ${cpf} e dados relacionados...`);
+        // Todas as validações passaram - deletar usuário e dados relacionados
+        console.log(`✅ Validações passadas. Deletando usuário ${cpf} e dados relacionados...`);
         
         // Deletar dados relacionados primeiro (cascata manual)
         await dbService.executeQuery(`DELETE FROM ${dbService.fq('transactions')} WHERE cpf = '${cpf}'`);
@@ -191,24 +191,24 @@ module.exports = function createMiscController(deps) {
         await dbService.executeQuery(`DELETE FROM ${dbService.fq('installment_plans')} WHERE cpf = '${cpf}'`);
         await dbService.executeQuery(`DELETE FROM ${dbService.fq('invoices')} WHERE cpf = '${cpf}'`);
         
-        // TÃ³pico do Telegram: falha aqui nÃ£o pode impedir a exclusÃ£o da massa
+        // Tópico do Telegram: falha aqui não pode impedir a exclusão da massa
         try {
             await telegramService.deleteTopic(cpf);
         } catch (tgErr) {
-            console.warn(`âš ï¸ Falha ao apagar tÃ³pico Telegram de ${cpf}:`, tgErr.message);
+            console.warn(`⚠️ Falha ao apagar tópico Telegram de ${cpf}:`, tgErr.message);
         }
 
-        // Deletar usuÃ¡rio
+        // Deletar usuário
         await dbService.executeQuery(`DELETE FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
 
-        console.log(`âœ… UsuÃ¡rio ${cpf} e todos os dados relacionados deletados com sucesso`);
-        res.json({ success: true, message: `UsuÃ¡rio ${cpf} deletado com sucesso` });
+        console.log(`✅ Usuário ${cpf} e todos os dados relacionados deletados com sucesso`);
+        res.json({ success: true, message: `Usuário ${cpf} deletado com sucesso` });
         
     } catch (error) {
-        console.error(`âŒ Erro ao deletar usuÃ¡rio ${cpf}:`, error.message);
+        console.error(`❌ Erro ao deletar usuário ${cpf}:`, error.message);
         res.status(500).json({ 
             success: false, 
-            message: 'Erro ao deletar usuÃ¡rio',
+            message: 'Erro ao deletar usuário',
             error: error.message 
         });
     }
@@ -216,7 +216,7 @@ module.exports = function createMiscController(deps) {
 
     const testReset = async (req, res) => {
     if (process.env.NODE_ENV === 'production') {
-        return res.status(403).json({ success: false, message: 'NÃ£o disponÃ­vel em produÃ§Ã£o' });
+        return res.status(403).json({ success: false, message: 'Não disponível em produção' });
     }
 
     const requestedCpf = req.body && typeof req.body.cpf === 'string' ? req.body.cpf.replace(/\D/g, '') : null;
@@ -224,7 +224,7 @@ module.exports = function createMiscController(deps) {
     let targets;
     if (requestedCpf) {
         if (!TEST_RESET_USERS[requestedCpf]) {
-            return res.status(404).json({ success: false, message: 'CPF nÃ£o Ã© um usuÃ¡rio de teste conhecido.' });
+            return res.status(404).json({ success: false, message: 'CPF não é um usuário de teste conhecido.' });
         }
         targets = [requestedCpf];
     } else {
@@ -257,7 +257,7 @@ module.exports = function createMiscController(deps) {
 
         return res.json({ success: true, reset });
     } catch (error) {
-        console.error('âŒ [TEST RESET] Erro ao resetar usuÃ¡rios de teste:', error.message);
+        console.error('❌ [TEST RESET] Erro ao resetar usuários de teste:', error.message);
         return res.status(500).json({ success: false, message: 'Erro interno ao resetar ambiente de teste.' });
     }
     };
@@ -297,7 +297,7 @@ module.exports = function createMiscController(deps) {
         `SELECT balance, credit_card_available_limit, credit_card_total_limit FROM ${dbService.fq('users')} WHERE cpf='${escapeSQL(cpf)}'`
     );
     if (!userRows || !userRows.length) {
-        return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado.' });
+        return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
     }
     const user = userRows[0];
 
@@ -317,7 +317,7 @@ module.exports = function createMiscController(deps) {
     const utilization = totalLimit > 0 ? (usedLimit / totalLimit) * 100 : 0;
     const balance = parseFloat(user.balance) || 0;
 
-    // Score simples (0-100): saldo positivo + baixa utilizaÃ§Ã£o do crÃ©dito
+    // Score simples (0-100): saldo positivo + baixa utilização do crédito
     let score = 50;
     if (balance > 1000) score += 15;
     if (balance > 5000) score += 10;
@@ -331,9 +331,9 @@ module.exports = function createMiscController(deps) {
     score = Math.max(0, Math.min(100, Math.round(score)));
 
     const suggestions = [];
-    if (utilization > 70) suggestions.push({ type: 'warning', text: 'UtilizaÃ§Ã£o do crÃ©dito acima de 70% â€” tente reduzir.' });
-    if (balance < 500)    suggestions.push({ type: 'warning', text: 'Saldo baixo â€” considere criar uma reserva de emergÃªncia.' });
-    if (score >= 80)      suggestions.push({ type: 'success', text: 'SaÃºde financeira excelente! Continue assim.' });
+    if (utilization > 70) suggestions.push({ type: 'warning', text: 'Utilização do crédito acima de 70% — tente reduzir.' });
+    if (balance < 500)    suggestions.push({ type: 'warning', text: 'Saldo baixo — considere criar uma reserva de emergência.' });
+    if (score >= 80)      suggestions.push({ type: 'success', text: 'Saúde financeira excelente! Continue assim.' });
 
     res.json({ success: true, score, creditUtilization: Math.round(utilization), suggestions, balance });
     };
@@ -342,7 +342,7 @@ module.exports = function createMiscController(deps) {
     const { format, transactions } = req.body;
 
     if (format === 'csv') {
-        const lines = ['Data,Tipo,DescriÃ§Ã£o,Valor'];
+        const lines = ['Data,Tipo,Descrição,Valor'];
         for (const tx of transactions) {
             const date = tx.date ? new Date(tx.date).toLocaleDateString('pt-BR') : '';
             const desc = String(tx.description || '').replace(/,/g, ';');
@@ -376,31 +376,31 @@ module.exports = function createMiscController(deps) {
     const { esc } = repoContext;
     const transaction = await transactionsRepo.findById(id);
     if (!transaction || transaction.cpf !== cpf) {
-        return res.status(404).json({ success: false, message: 'TransaÃ§Ã£o nÃ£o encontrada.' });
+        return res.status(404).json({ success: false, message: 'Transação não encontrada.' });
     }
 
-    // Compras parceladas tÃªm plano prÃ³prio (installment_plans); cancelar a
-    // transaÃ§Ã£o principal aqui deixaria o parcelamento cobrando um valor que
-    // jÃ¡ nÃ£o existe mais â€” bloqueado nesta rota.
+    // Compras parceladas têm plano próprio (installment_plans); cancelar a
+    // transação principal aqui deixaria o parcelamento cobrando um valor que
+    // já não existe mais — bloqueado nesta rota.
     const activePlan = await dbService.executeQuery(`
         SELECT id FROM ${dbService.fq('installment_plans')}
         WHERE purchase_tx_id = ${esc(id)} AND status = 'ACTIVE'
         LIMIT 1
     `);
     if (activePlan.length > 0) {
-        return res.status(400).json({ success: false, message: 'Compra parcelada nÃ£o pode ser cancelada por esta rota. Cancele o parcelamento separadamente.' });
+        return res.status(400).json({ success: false, message: 'Compra parcelada não pode ser cancelada por esta rota. Cancele o parcelamento separadamente.' });
     }
 
     const result = await applyTransactionCancellation({ cpf, transaction });
     if (!result.applied) {
         const statusByReason = { 'ja-cancelada': 409, 'tipo-nao-reversivel': 400 };
-        return res.status(statusByReason[result.reason] || 400).json({ success: false, message: `Cancelamento nÃ£o permitido: ${result.reason}.` });
+        return res.status(statusByReason[result.reason] || 400).json({ success: false, message: `Cancelamento não permitido: ${result.reason}.` });
     }
 
     auditLog(req, 'transaction_cancel', 'warn', { cpf, id, kind: result.reversal.kind, amount: result.reversal.amount });
     res.json({
         success: true,
-        message: 'TransaÃ§Ã£o cancelada com sucesso.',
+        message: 'Transação cancelada com sucesso.',
         reversal: result.reversal,
         voucher: result.voucher || undefined,
     });

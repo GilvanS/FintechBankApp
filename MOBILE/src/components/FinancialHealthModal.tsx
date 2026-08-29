@@ -38,7 +38,7 @@ export default function FinancialHealthModal({ isOpen, onClose, transactions, th
       transactions.forEach((tx) => {
         const txDate = new Date(tx.date);
         if (txDate.getMonth() === monthIndex && txDate.getFullYear() === year) {
-          if (tx.type === 'income' || tx.amount > 0) {
+          if ((tx.type as any) === 'income' || tx.amount > 0) {
             actualIncome += tx.amount;
           } else {
             actualExpense += Math.abs(tx.amount);

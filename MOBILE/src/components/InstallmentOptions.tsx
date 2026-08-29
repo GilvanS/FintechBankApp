@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { User } from '../types';
 import { useAppState } from '../contexts/AppStateContext';
@@ -39,7 +40,7 @@ const InstallmentOptions: React.FC<InstallmentOptionsProps> = ({ onBack, onSelec
         <div className={`${isMidnight ? 'bg-volt-dark text-white' : 'bg-volt-yellow text-black'} min-h-full flex flex-col w-full max-w-md mx-auto pb-28`}>
             <header className={`flex items-center p-4 ${isMidnight ? 'bg-volt-surface border-b border-white/5' : 'border-b border-black/10'}`}>
                 <button onClick={onBack} className={`mr-2 p-2 -ml-2 rounded-full transition-colors ${isMidnight ? 'hover:bg-white/10' : 'hover:bg-black/10'}`}>
-                    <span className={`material-symbols-outlined ${isMidnight ? 'text-white' : 'text-black'}`}>arrow_back</span>
+                    <ArrowLeft size={22} className="shrink-0" />
                 </button>
                 <h2 className={`text-xl font-black ${isMidnight ? 'text-white' : 'text-black'}`}>Opções de Parcelamento</h2>
             </header>

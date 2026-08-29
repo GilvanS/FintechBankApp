@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 
 import React, { useState } from 'react';
 import { useToast, ToastContainer } from './components/Toast';
@@ -59,7 +60,7 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
     
     try {
         console.log('🔵 [SignUp Component] Iniciando cadastro...');
-      const result = await signUp({ cpf: cpfDigits, fullName, email, password, showStoriesPopup: true });
+      const result = await signUp({ cpf: cpfDigits, fullName, email, password });
         console.log('🔵 [SignUp Component] Resultado recebido:', result);
         
         if (result.success) {
@@ -107,7 +108,7 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
             id="btn-signup-back"
             aria-label="Voltar para login"
           >
-            <span className="material-symbols-outlined text-2xl" aria-hidden="true">arrow_back</span>
+            <ArrowLeft size={22} className="shrink-0" />
           </button>
         </header>
         

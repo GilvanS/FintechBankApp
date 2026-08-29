@@ -67,7 +67,7 @@ const RegularizedTimelineChart: React.FC = () => {
         <div className="flex items-center gap-2">
           <TrendingUp size={16} className="text-emerald-500" />
           <span className="text-xs font-black uppercase tracking-wider">
-            Regularizações (7 dias)
+            Regularizações (48 horas)
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -94,7 +94,7 @@ const RegularizedTimelineChart: React.FC = () => {
         </div>
       ) : !hasData ? (
         <div className="h-24 flex items-center justify-center opacity-40">
-          <p className="text-[10px] font-bold">Nenhum pagamento nos últimos 7 dias</p>
+          <p className="text-[10px] font-bold">Nenhum pagamento nas últimas 48 horas</p>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={100}>

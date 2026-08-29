@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { Transaction, User } from '../types';
 import { getUserStatement } from '../services/api';
@@ -119,7 +120,7 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
                     aria-label="Voltar"
                     type="button"
                 >
-                    <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                    <ArrowLeft size={22} className="shrink-0" />
                 </button>
                 <h1
                     className="text-white text-4xl font-black leading-tight tracking-[-0.033em] test-statement-title"

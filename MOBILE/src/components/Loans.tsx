@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React, { useState } from 'react';
 import { useToast, ToastContainer } from './Toast';
 import { useAppState } from '../contexts/AppStateContext';
@@ -85,7 +86,7 @@ const Loans: React.FC<LoansProps> = ({ onBack }) => {
         <div className={`min-h-full flex flex-col font-sans ${containerClass}`}>
             <header className={headerClass}>
                 <button onClick={onBack} className={`transition-all active:scale-95 flex items-center justify-center ${backBtnClass}`} aria-label="Voltar">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={22} className="shrink-0" />
                 </button>
                 <h1 className={titleClass}>Empréstimos</h1>
             </header>

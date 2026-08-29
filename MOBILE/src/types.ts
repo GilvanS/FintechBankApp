@@ -1,22 +1,35 @@
-
 export interface Transaction {
     id: string;
-    type: 'PIX_SENT' | 'PIX_RECEIVED' | 'DEPOSIT' | 'PAYMENT' | 'PIX_CREDIT_SENT' | 'SHOP_DEBIT' | 'CASHBACK_CREDIT' | 'POINTS_EARNED' | 'INVOICE_INSTALLMENT' | 'CREDIT' | 'SHOP_CREDIT' | 'INVOICE_PAYMENT';
+    type:
+        | 'PIX_SENT'
+        | 'PIX_RECEIVED'
+        | 'DEPOSIT'
+        | 'PAYMENT'
+        | 'INVOICE_PAYMENT'
+        | 'PIX_CREDIT_SENT'
+        | 'SHOP_DEBIT'
+        | 'SHOP_CREDIT'
+        | 'CASHBACK_CREDIT'
+        | 'POINTS_EARNED'
+        | 'INVOICE_INSTALLMENT'
+        | 'CREDIT';
     amount: number;
     date: string;
     description?: string;
+    informative?: boolean;
+    title?: string;
+    formattedDate?: string;
     to?: string;
     from?: string;
     recipientName?: string;
     senderName?: string;
-    merchant?: string; // Added for compatibility
-    installments?: string; // Added for compatibility
-    totalInstallments?: number; // Added for compatibility
-    /** Categoria derivada da descrição pela API (refeicao, mobilidade, cultura, saude, moradia, compras, educacao, outros) */
+    merchant?: string;
+    installments?: string;
+    totalInstallments?: number;
+    currentInstallment?: number;
+    /** Categoria derivada da descricao pela API (refeicao, mobilidade, cultura, saude, moradia, compras, educacao, outros) */
     category?: string;
-    currentInstallment?: number; // Added for compatibility
-    category?: string; // Category for shop purchases (food, transport, shopping, etc.)
-    toKey?: string; // PIX key for transfers
+    toKey?: string;
 }
 
 export interface CardTransaction {
@@ -24,11 +37,30 @@ export interface CardTransaction {
     date: string;
     merchant: string;
     amount: number;
-    type: 'CREDIT' | 'PAYMENT' | 'INVOICE_INSTALLMENT' | 'SHOP_CREDIT' | 'INVOICE_PAYMENT';
+    type: 'CREDIT' | 'PAYMENT' | 'INVOICE_PAYMENT' | 'INVOICE_INSTALLMENT' | 'SHOP_CREDIT';
     installments?: string;
     totalInstallments?: number;
     currentInstallment?: number;
+    totalAmount?: number;
+    category?: string;
+    cardNumber?: string;
+    cardLast4?: string;
+    authorizationCode?: string;
+    paymentType?: 'TOTAL' | 'MINIMO' | 'PARCIAL';
     description?: string;
+informative?: boolean;
+    title?: string;
+    formattedDate?: string;
+}
+
+export interface PaymentEntry {
+    id: string;
+    date: string;
+    amount: number;
+    description: string;
+    paymentType: 'TOTAL' | 'MINIMO' | 'PARCIAL';
+    /** Fatura quitada por este pagamento (transactions.invoice_id, migration 005). */
+    invoiceId?: string | null;
 }
 
 export interface CreditCard {
@@ -39,13 +71,36 @@ export interface CreditCard {
     currentInvoice: number;
     closedInvoice: number;
     availableLimit: number;
+    limit?: number;
     totalLimit: number;
     pointsBalance: number;
     isBlocked: boolean;
     deliveryStatus?: 'manufacturing' | 'shipping' | 'tracking' | 'delivered' | 'unlocked';
     isActivated?: boolean;
+    daysOverdue?: number;
+    billingDay?: number;
+    dailyPixLimit?: number;
+    closedInvoiceCharges?: {
+        multa: number;
+        jurosMora: number;
+        jurosRemuneratorios: number;
+        iof: number;
+        totalEncargos: number;
+    };
+    closedInvoiceTotal?: number;
+    closedInvoiceIsPaid?: boolean;
+    closedInvoicePaidAt?: string | null;
+    /** Espelho de closedInvoice enviado pelo backend (saldo residual da fatura fechada). */
+    closedInvoiceAmount?: number;
+    currentInvoiceTotal?: number;
+    currentInvoiceMinimo?: number;
+    dueDay?: number;
+    closingDay?: number;
     transactions: CardTransaction[];
     closedTransactions: CardTransaction[];
+    paymentHistory?: PaymentEntry[];
+    /** Ids das faturas fechadas em escopo - usado para filtrar paymentHistory na aba Fechada. */
+    _closedInvoiceIds?: string[];
     futureInstallments?: Record<string, number>;
     futureInstallmentsDetail?: Record<string, { description: string; amount: number; num: number; total: number }[]>;
 }
@@ -90,11 +145,17 @@ export interface Story {
     accent?: string;
     stats?: StoryStat[];
     status?: string;
+    frequency?: string;
+    paymentMethod?: string;
+    visualType?: string;
 }
 
 export interface AppNotification {
-    id: number;
+    id: number | string;
+    title?: string;
     message: string;
+    time?: string;
+    description?: string;
     created_at: string;
     is_read: boolean;
 }
@@ -103,9 +164,11 @@ export interface PurchasedItem {
     id: string;
     name: string;
     description?: string;
+    title?: string;
+    formattedDate?: string;
     price: number;
     imageUrl?: string;
-    image?: string; // Compatibility
+    image?: string;
     quantity?: number;
     purchaseDate?: string;
     pointsEarned?: number;
@@ -136,10 +199,46 @@ export interface FixedIncomeProduct {
     liquidity: string;
 }
 
+export interface CustomerCard {
+    id: string;
+    type: 'PHYSICAL' | 'VIRTUAL';
+    brand: 'MASTERCARD' | 'VISA' | 'ELO' | 'AMEX';
+    name: string;
+    cardNumberMasked: string;
+    expirationDate: string;
+    isBlocked: boolean;
+    limit: number;
+    dueDay: number;
+    createdAt?: string;
+}
+
+export interface Address {
+    cep: string;
+    street: string;
+    number: string;
+    complement?: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+}
+
+export interface LegalTutor {
+    fullName: string;
+    cpf: string;
+    relationship: string;
+}
+
 export interface User {
     cpf: string;
     fullName: string;
     username?: string;
+    avatar?: string;
+    birthDate?: string;
+    age?: number;
+    hasTutor?: boolean;
+    tutor?: LegalTutor;
+    address?: Address;
+    countryOrigin?: string;
     profileDescription?: string;
     profileMessage?: string;
     createdAt?: string;
@@ -156,9 +255,12 @@ export interface User {
     showStoriesPopup: boolean;
     purchasedItems: PurchasedItem[];
     creditCard: CreditCard;
+    cards?: CustomerCard[];
     // Billing status (issue #35)
     accountStatus?: 'adimplente' | 'inadimplente' | 'suspenso';
     daysOverdue?: number;
+    billingDay?: number;
+    dailyPixLimit?: number;
     pendingCharges?: number;
     billingCycle?: {
         ref: string;
@@ -184,6 +286,21 @@ export interface Invoice {
     items: Transaction[];
 }
 
-export type View = 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart' | 'currentInvoice' | 'closedInvoice' | 'paymentMethods' | 'purchaseConfirmation' | 'installmentReviewInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'menu' | 'notifications' | 'admin' | 'transactionReceipt' | 'anticipateInstallments' | 'points' | 'investments' | 'loans' | 'insurance' | 'marketplace';
+export type View = 'invoices' | 'home' | 'cards' | 'products' | 'profile' | 'pix' | 'shop' | 'statement' | 'shoppingCart' | 'currentInvoice' | 'closedInvoice' | 'paymentMethods' | 'purchaseConfirmation' | 'installmentReviewInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'menu' | 'notifications' | 'admin' | 'transactionReceipt' | 'anticipateInstallments' | 'points' | 'investments' | 'loans' | 'insurance' | 'marketplace' | 'invoices' | 'onboarding';
 
-export type SignUpData = Omit<User, 'balance' | 'transactions' | 'isBlocked' | 'role' | 'pixDailyLimit' | 'pixKeys' | 'pixContacts' | 'limitIncreaseRequest' | 'purchasedItems' | 'creditCard'>;
+export type SignUpData = Omit<User, 'balance' | 'transactions' | 'isBlocked' | 'role' | 'pixDailyLimit' | 'pixKeys' | 'pixContacts' | 'limitIncreaseRequest' | 'purchasedItems' | 'creditCard' | 'showStoriesPopup'>;
+export interface RecurringBill {
+    id: string;
+    title: string;
+    amount: number;
+    /** Data no formato DD/MM/AAAA, como gravado pelo app. */
+    dueDate: string;
+    category?: string;
+    status?: string;
+    frequency?: string;
+    paymentMethod?: string;
+    paidAtDate?: string;
+    paidTimestamp?: number;
+    dueDay?: number;
+    createdAt?: string;
+}

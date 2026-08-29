@@ -125,10 +125,63 @@ async function main() {
         console.log(`  ${fmtCpf(p.cpf)} | ${(p.nome || '').padEnd(24)} | ${p.motivo.padEnd(26)} | ${p.cur} → ${p.novo} | realTime=${p.rt}d total=${p.total}`);
     }
 
+    // ——— Plano de invoices (independente do plano de users) ———
+    // Mesma regra do motor/auditor: fatura SEM DÍVIDA (residual <= 0.005 pela
+    // cascata) ou com pagamento mínimo (>= 10% ou R$ 10) → dias 0; senão
+    // real-time do vencimento. A quitação é derivada das transações (cascata
+    // planDistribution), nunca de invoices.valor_pago (fechada imutável na
+    // pós-migration-005). Este plano roda MESMO quando o plano de users está
+    // vazio — uma massa com user consistente mas invoices com dias_atraso
+    // antigos (ex.: 982.158.285-07, paga por tx única) precisa ter as faturas
+    // zeradas (o auditor nível B reporta o diff).
+    const cascadeZeroIds = [];
+    const cascadeValorPagoById = new Map();
+    for (const [cpf, rs] of (() => {
+        const m = new Map();
+        for (const r of rows) {
+            if (!m.has(r.cpf)) m.set(r.cpf, []);
+            m.get(r.cpf).push(r);
+        }
+        return m;
+    })()) {
+        const total = parseFloat(rs[0]?.pago_total_cpf || 0);
+        if (total <= 0.005) continue;
+        // planDistribution espera o shape da linha `invoices` (id), mas
+        // ANCHOR_SQL aliaseia como invoice_id — sem o rename, inv.id vira
+        // undefined e nenhuma fatura é zerada (mesmo bug do auditor antes).
+        const shape = rs.map(r => ({
+            ...r,
+            id: r.invoice_id,
+            valor_total: parseFloat(r.valor_total || 0),
+            valor_pago: parseFloat(r.valor_pago || 0),
+        }));
+        const dist = planDistribution(shape, total);
+        for (const inv of dist.invoices) {
+            const pago = inv.newValorPago || 0;
+            const valorTotal = parseFloat(inv.target || inv.valor_total || 0);
+            cascadeValorPagoById.set(inv.id, pago);
+            if (pago >= Math.max(valorTotal * 0.10, 10) - 0.01) cascadeZeroIds.push(inv.id);
+        }
+    }
+    // Zera dias de faturas SEM DÍVIDA (residual <= 0.005 pela cascata) ou com
+    // pagamento mínimo (>= 10% ou R$ 10) — mesma regra do motor/auditor.
+    const zeroInvoiceIds = new Set(cascadeZeroIds);
+    for (const r of rows || []) {
+        const total = parseFloat(r.valor_total || 0);
+        const pago = cascadeValorPagoById.get(r.invoice_id) ?? parseFloat(r.valor_pago || 0);
+        if (Math.max(0, total - pago) <= 0.005) zeroInvoiceIds.add(r.invoice_id);
+    }
+    const invoicePlan = {
+        zero: zeroInvoiceIds.size,
+        realtime: rows.filter(r => !zeroInvoiceIds.has(r.invoice_id)
+            && parseInt(r.invoice_dias_atraso || 0) !== parseInt(r.real_time_days || 0)).length,
+    };
+
     if (!CONFIRM) {
-        console.log(`\n(dry-run — ${plan.length} massa(s) seriam corrigida(s). Rode com --confirm para aplicar.)`);
+        console.log(`\n(dry-run — ${plan.length} massa(s) seriam corrigida(s) no user;`);
+        console.log(`  invoices: ${invoicePlan.zero} zerada(s), ${invoicePlan.realtime} para real-time. Rode com --confirm para aplicar.)`);
         await db.disconnect();
-        process.exit(plan.length ? 2 : 0);
+        process.exit((plan.length || invoicePlan.zero || invoicePlan.realtime) ? 2 : 0);
     }
 
     // ── Aplicar em transação ──
@@ -143,51 +196,9 @@ async function main() {
                 WHERE cpf = '${p.cpf}'
             `);
         }
-        // Invoices: TODA a base (idempotente — só grava quando difere). Regra:
-        // sem dívida → dias 0; senão real-time do vencimento. Na pós-migration-005
-        // o pagamento NÃO atualiza invoices.valor_pago (fechada imutável — a
-        // quitação é derivada das transações), então a base do CASE não pode ser
-        // valor_pago: usa o pago CASCATA (planDistribution) por fatura, como o
-        // motor e o auditor — senão fatura quitada por tx única continuaria com
-        // dias real-time (bug 378/805/381 antes da cascata).
-        // Monta o pago por fatura da cascata para TODAS as rows (não só âncora).
-        const cascadeZeroIds = [];
-        const cascadeValorPagoById = new Map();
-        for (const [cpf, rs] of (() => {
-            const m = new Map();
-            for (const r of rows) {
-                if (!m.has(r.cpf)) m.set(r.cpf, []);
-                m.get(r.cpf).push(r);
-            }
-            return m;
-        })()) {
-            const total = parseFloat(rs[0]?.pago_total_cpf || 0);
-            if (total <= 0.005) continue;
-            // planDistribution espera o shape da linha `invoices` (id), mas
-            // ANCHOR_SQL aliaseia como invoice_id — sem o rename, inv.id vira
-            // undefined e nenhuma fatura é zerada (mesmo bug do auditor antes).
-            const shape = rs.map(r => ({
-                ...r,
-                id: r.invoice_id,
-                valor_total: parseFloat(r.valor_total || 0),
-                valor_pago: parseFloat(r.valor_pago || 0),
-            }));
-            const dist = planDistribution(shape, total);
-            for (const inv of dist.invoices) {
-                const pago = inv.newValorPago || 0;
-                const valorTotal = parseFloat(inv.target || inv.valor_total || 0);
-                cascadeValorPagoById.set(inv.id, pago);
-                if (pago >= Math.max(valorTotal * 0.10, 10) - 0.01) cascadeZeroIds.push(inv.id);
-            }
-        }
-        // Zera dias de faturas SEM DÍVIDA (residual <= 0.005 pela cascata) ou com
-        // pagamento mínimo (>= 10% ou R$ 10) — mesma regra do motor/auditor.
-        const zeroInvoiceIds = new Set(cascadeZeroIds);
-        for (const r of rows || []) {
-            const total = parseFloat(r.valor_total || 0);
-            const pago = cascadeValorPagoById.get(r.invoice_id) ?? parseFloat(r.valor_pago || 0);
-            if (Math.max(0, total - pago) <= 0.005) zeroInvoiceIds.add(r.invoice_id);
-        }
+        // Invoices: TODA a base (idempotente — só grava quando difere). O plano
+        // (cascadeZeroIds / zeroInvoiceIds) já foi montado acima, ANTES do gate
+        // de confirmação, para que a correção rode mesmo com plano de users vazio.
         const invRes = { rowCount: 0 };
         if (zeroInvoiceIds.size) {
             const res = await db.executeQuery(`

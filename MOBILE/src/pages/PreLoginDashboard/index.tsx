@@ -1,3 +1,4 @@
+import { ArrowRightLeft, ScanBarcode, ReceiptText, CreditCard, Store } from 'lucide-react';
 import React from 'react';
 import './PreLoginDashboard.css';
 
@@ -12,7 +13,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
 
   return (
     <div 
-      className="font-display bg-volt-yellow text-black antialiased min-h-screen flex flex-col items-center justify-between p-4 sm:p-6 lg:p-8 pb-24 safe-bottom"
+      className="font-display bg-zinc-950 text-white antialiased min-h-screen flex flex-col items-center justify-between p-4 sm:p-6 lg:p-8 pb-24 safe-bottom"
       data-testid="prelogin-screen"
       id="prelogin-screen"
     >
@@ -41,76 +42,49 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
           data-testid="prelogin-features-grid"
         >
           <div 
-            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/70 border border-black/20"
+            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-zinc-900/80 border-2 border-zinc-800 shadow-lg hover:border-[#A2FF00]/50 transition-all"
             data-testid="prelogin-feature-pix"
             id="prelogin-feature-pix"
             aria-label="PIX e transferir"
           >
-            <span 
-                className="material-symbols-outlined text-3xl text-black mb-2" 
-                aria-hidden="true"
-                style={{ 
-                    fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
-                    fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
-                }}
-            >
-                swap_horiz
-            </span>
-            <span className="text-xs sm:text-sm font-medium text-black">PIX e transferir</span>
+            <ArrowRightLeft size={32} className="text-[#A2FF00] mb-2 stroke-[2.5]" />
+            <span className="text-xs sm:text-sm font-black text-white tracking-wide">PIX e transferir</span>
           </div>
           <div 
-            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/70 border border-black/20"
+            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-zinc-900/80 border-2 border-zinc-800 shadow-lg hover:border-[#A2FF00]/50 transition-all"
             data-testid="prelogin-feature-pay"
             id="prelogin-feature-pay"
             aria-label="Pagar"
           >
-            <span 
-                className="material-symbols-outlined text-3xl text-black mb-2" 
-                aria-hidden="true"
-                style={{ 
-                    fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
-                    fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
-                }}
-            >
-                barcode_scanner
-            </span>
-            <span className="text-xs sm:text-sm font-medium text-black">Pagar</span>
+            <ScanBarcode size={32} className="text-[#A2FF00] mb-2 stroke-[2.5]" />
+            <span className="text-xs sm:text-sm font-black text-white tracking-wide">Pagar</span>
           </div>
           <div 
-            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/70 border border-black/20"
+            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-zinc-900/80 border-2 border-zinc-800 shadow-lg hover:border-[#A2FF00]/50 transition-all"
             data-testid="prelogin-feature-statement"
             id="prelogin-feature-statement"
             aria-label="Extrato"
           >
-            <span 
-                className="material-symbols-outlined text-3xl text-black mb-2" 
-                aria-hidden="true"
-                style={{ 
-                    fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
-                    fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
-                }}
-            >
-                receipt_long
-            </span>
-            <span className="text-xs sm:text-sm font-medium text-black">Extrato</span>
+            <ReceiptText size={32} className="text-[#A2FF00] mb-2 stroke-[2.5]" />
+            <span className="text-xs sm:text-sm font-black text-white tracking-wide">Extrato</span>
           </div>
           <div 
-            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/70 border border-black/20 col-span-2"
+            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-zinc-900/80 border-2 border-zinc-800 shadow-lg hover:border-[#A2FF00]/50 transition-all col-span-2"
             data-testid="prelogin-feature-cards"
             id="prelogin-feature-cards"
             aria-label="Cartões"
           >
-            <span className="material-symbols-outlined text-3xl text-black mb-2" aria-hidden="true">credit_card</span>
-            <span className="text-xs sm:text-sm font-medium text-black">Cartões</span>
+            <CreditCard size={32} className="text-[#A2FF00] mb-2 stroke-[2.5]" />
+            <span className="text-xs sm:text-sm font-black text-white tracking-wide">Cartões</span>
           </div>
           <div 
-            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/70 border border-black/20"
+            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-zinc-900/80 border-2 border-zinc-800 shadow-lg hover:border-[#A2FF00]/50 transition-all"
             data-testid="prelogin-feature-marketplace"
             id="prelogin-feature-marketplace"
             aria-label="Marketplace"
           >
-            <span className="material-symbols-outlined text-3xl text-black mb-2" aria-hidden="true">storefront</span>
-            <span className="text-xs sm:text-sm font-medium text-black">Marketplace</span>
+            <Store size={32} className="text-[#A2FF00] mb-2 stroke-[2.5]" />
+            <span className="text-xs sm:text-sm font-black text-white tracking-wide">Marketplace</span>
           </div>
         </div>
       </main>
@@ -122,7 +96,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
       >
         <button 
           onClick={onNavigateToLogin} 
-          className="w-full max-w-xs px-8 py-4 font-semibold text-black transition-transform duration-300 transform rounded-lg shadow-lg bg-volt-lime border-2 border-black hover:scale-105 hover:shadow-black/40 focus:outline-none focus:ring-4 focus:ring-black/30 mb-4"
+          className="w-full max-w-xs px-8 py-4 font-black text-black text-sm uppercase tracking-wider bg-[#00ff9d] hover:bg-[#00e38b] rounded-2xl shadow-[0_0_25px_rgba(0,255,157,0.5)] border-2 border-[#00ff9d] active:scale-95 transition-all mb-4 cursor-pointer"
           data-testid="prelogin-login-button"
           id="btn-prelogin-login"
           name="btn-prelogin-login"
@@ -133,7 +107,7 @@ const PreLoginDashboard: React.FC<PreLoginDashboardProps> = ({ onNavigateToLogin
         </button>
         <button 
           onClick={onNavigateToSignUp} 
-          className="w-full max-w-xs px-8 py-3 font-semibold transition-colors duration-300 border border-black/60 rounded-lg text-black hover:text-black hover:border-black focus:outline-none focus:ring-2 focus:ring-black/30"
+          className="w-full max-w-xs px-8 py-3.5 font-bold text-white text-xs uppercase tracking-wider bg-zinc-900 border-2 border-zinc-700 hover:border-zinc-500 rounded-2xl active:scale-95 transition-all cursor-pointer"
           data-testid="prelogin-signup-button"
           id="btn-prelogin-signup"
           name="btn-prelogin-signup"

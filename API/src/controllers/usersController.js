@@ -148,7 +148,7 @@ module.exports = function createUsersController(deps) {
         const { newLimit } = req.body;
         const now = new Date().toISOString();
         await dbService.executeQuery(`UPDATE ${dbService.fq('users')} SET pix_daily_limit = ${newLimit}, updated_at = '${now}' WHERE cpf = '${req.params.cpf}'`);
-        res.json({ success: true, message: 'Limite diÃ¡rio de PIX atualizado com sucesso!' });
+        res.json({ success: true, message: 'Limite diário de PIX atualizado com sucesso!' });
     };
 
     const getPixDailyUsage = async (req, res) => {
@@ -182,7 +182,7 @@ module.exports = function createUsersController(deps) {
             const { esc } = repoContext;
             const cpf = req.params.cpf;
 
-            // ParÃ¢metros de paginaÃ§Ã£o
+            // Parâmetros de paginação
             const page = parseInt(req.query.page || '1', 10);
             const limit = parseInt(req.query.limit || '10', 10);
             const offset = (page - 1) * limit;
@@ -208,7 +208,7 @@ module.exports = function createUsersController(deps) {
                     'PIX_CREDIT_SENT'
                 ];
             } else if (typeFilter === 'transfers') {
-                // Tipos de transferÃªncias (PIX e outras transferÃªncias futuras)
+                // Tipos de transferências (PIX e outras transferências futuras)
                 allowedTypes = [
                     'PIX_SENT',
                     'PIX_RECEIVED',
@@ -251,7 +251,7 @@ module.exports = function createUsersController(deps) {
             const total = parseInt(countResult[0]?.total || 0, 10);
             const totalPages = Math.ceil(total / limit);
 
-            // Query para buscar transaÃ§Ãµes com paginaÃ§Ã£o
+            // Query para buscar transações com paginação
             const query = `SELECT * FROM ${dbService.fq('transactions')} WHERE cpf = ${esc(cpf)} AND type IN (${typesList}) ORDER BY date DESC LIMIT ${limit} OFFSET ${offset}`;
 
             const transactions = await dbService.executeQuery(query);
@@ -270,7 +270,7 @@ module.exports = function createUsersController(deps) {
                 }
             });
         } catch (error) {
-            console.error(`âœŒ Erro ao buscar extrato para ${req.params.cpf}:`, error.message);
+            console.error(`✅ Erro ao buscar extrato para ${req.params.cpf}:`, error.message);
             console.error(error.stack);
             throw error;
         }
@@ -301,7 +301,7 @@ module.exports = function createUsersController(deps) {
         return res.json({ success: true, user: normalizeUser(user) });
     };
 
-    // --- Rotas de NotificaÃ§Ãµes (via repositÃ³rio) ---
+    // --- Rotas de Notificações (via repositório) ---
     const getNotifications = async (req, res) => {
         if (req.user.cpf !== req.params.cpf && req.user.role !== 'admin') {
             return res.status(403).json({ success: false, message: 'Acesso negado.' });

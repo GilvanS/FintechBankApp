@@ -1442,8 +1442,9 @@ export const adminUpdateUserPassword = async (cpf: string, newPassword: string):
 };
 
 export const adminUpdateCreditLimit = async (cpf: string, creditLimit: number): Promise<{ success: boolean; message: string }> => {
+    const cleanCpf = cpf.replace(/\D/g, '');
     try {
-        const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cpf}/credit-limit`, {
+        const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cleanCpf}/credit-limit`, {
             method: 'PUT',
             // Contrato do backend (/admin/users/:cpf/credit-limit): totalLimit e/ou
             // availableLimit. Um único valor informado pelo admin define AMBOS — mesmo

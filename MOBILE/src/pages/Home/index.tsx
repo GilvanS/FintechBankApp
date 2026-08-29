@@ -327,8 +327,8 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
         date: new Date().toISOString(),
         cardLast4: fallbackCardLast4,
         transactionId: `inv-pay-${Date.now()}`,
-        isPartial: isPartialInv,
-        remainingBalance: isPartialInv ? Math.max(totalDueInv - amountToPay, 0) : 0,
+        
+        // remainingBalance: isPartialInv ? Math.max(totalDueInv - amountToPay, 0) : 0,
     });
 
     try {
@@ -465,7 +465,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
             console.log('🔵 [Home] User role:', user?.role);
             if (user?.role === 'admin') {
                 console.log('✅ [Home] Renderizando componente Admin');
-                return <Suspense fallback={<LoadingFallback />}><Admin onBack={() => handleNavigate('profile')} /></Suspense>;
+                return <Suspense fallback={<LoadingFallback />}><Admin onBack={() => handleNavigate('profile')} {...({ onClose: () => handleNavigate('profile') } as any)} /></Suspense>;
             } else {
                 console.log('❌ [Home] Usuário não é admin, redirecionando para profile');
                 return <Suspense fallback={<LoadingFallback />}><Profile onNavigate={handleNavigate} /></Suspense>;
@@ -490,7 +490,7 @@ const Home: React.FC<HomeProps> = ({ user, onLogout, refreshUserData, onNavigate
             {renderContent()}
         </div>
         {showBottomNav && (
-            <BottomNavBar currentView={currentView} onNavigate={handleNavigate} />
+            <BottomNavBar currentView={currentView} onNavigate={handleNavigate as any} />
         )}
         {isInstallmentModalOpen && currentItem && (
             <Suspense fallback={null}>

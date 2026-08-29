@@ -340,7 +340,8 @@ const RequestsManagement: React.FC = () => {
     }, [overdueDashboard?.overdueMasses, sortColumn, sortDirection, showRegularized, statusFilter]);
 
     // Paginação
-    const ITEMS_PER_PAGE = 10;
+    const [itemsPerPage, setItemsPerPage] = useState(50);
+    const ITEMS_PER_PAGE = itemsPerPage;
     const [currentPage, setCurrentPage] = useState(1);
     const totalPages = Math.ceil(sortedMasses.length / ITEMS_PER_PAGE);
     const paginatedMasses = sortedMasses.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);

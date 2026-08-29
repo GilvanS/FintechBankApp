@@ -11,8 +11,9 @@
 # Desktop e, no daemon do WSL, entrega um banco VAZIO.
 #
 # Uso:
-#   .\scripts\start-docker.ps1                 # encerra o Desktop, liga o docker do WSL, sobe o Postgres
+#   .\scripts\start-docker.ps1                 # encerra o Desktop, liga o docker do WSL, sobe Postgres + Redis
 #   .\scripts\start-docker.ps1 -Full           # tambem sobe pgadmin e portainer
+#   .\scripts\start-docker.ps1 -Kafka          # tambem sobe zookeeper + kafka (profile opcional)
 #   .\scripts\start-docker.ps1 -Stop           # para containers e o dockerd do WSL
 #   .\scripts\start-docker.ps1 -KeepDesktop    # nao mexe no Docker Desktop
 #   .\scripts\start-docker.ps1 -Distro Ubuntu  # forca a distro (default: Ubuntu)
@@ -20,6 +21,7 @@
 param(
     [string]$Distro = "Ubuntu",
     [switch]$Full,
+    [switch]$Kafka,
     [switch]$Stop,
     [switch]$KeepDesktop
 )
@@ -31,7 +33,7 @@ Write-Host "Daemon alvo: docker-ce dentro da distro WSL '$Distro'. Docker Deskto
 
 if ($Stop) {
     Write-Host "==> Parando containers..."
-    wsl -d $Distro -e docker stop pgdb pgadmin portainer
+    wsl -d $Distro -e docker stop pgdb pgadmin portainer redis kafka zookeeper 2>&1 | Out-Null
     wsl -d $Distro -e sh -c "service docker stop"
     Write-Host "Parado. Os dados continuam no volume fintech_pgdata." -ForegroundColor Green
     exit 0
@@ -86,21 +88,38 @@ if (-not (Wait-Docker)) {
 }
 Write-Host "Docker Engine ativo dentro do WSL." -ForegroundColor Green
 
-Write-Host "==> Subindo o Postgres (volume fintech_pgdata)..."
+Write-Host "==> Subindo Postgres + Redis (volume fintech_pgdata)..."
 # O plugin `docker compose` instalado em /usr/local/lib e um symlink para os cli-tools
 # do Docker Desktop; com ele desligado o symlink fica quebrado. Por isso escolhemos o
 # binario do pacote docker-compose-plugin quando o subcomando nao responde.
 # Sem aspas duplas internas: o wsl.exe re-divide a linha de comando nelas.
-$up = "cd '$proj' && if docker compose version >/dev/null 2>&1; then docker compose -f $yml up -d database; else /usr/libexec/docker/cli-plugins/docker-compose -f $yml up -d database; fi"
+$up = "cd '$proj' && if docker compose version >/dev/null 2>&1; then docker compose -f $yml up -d database redis; else /usr/libexec/docker/cli-plugins/docker-compose -f $yml up -d database redis; fi"
 wsl -d $Distro -e sh -c $up
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Falha ao subir o container do Postgres." -ForegroundColor Red
+    Write-Host "Falha ao subir Postgres/Redis." -ForegroundColor Red
     exit 1
 }
 
 if ($Full) {
     Write-Host "==> Subindo extras (pgadmin, portainer)..."
-    wsl -d $Distro -e docker start pgadmin portainer
+    # Se o container ja existe (criado fora deste compose, ex: docker run manual),
+    # 'compose up' bate conflito de nome. Nesse caso so da start; senao cria via compose.
+    $upFull = "cd '$proj' && " +
+        "(docker inspect pgadmin >/dev/null 2>&1 && docker start pgadmin >/dev/null 2>&1 || " +
+        "(docker compose version >/dev/null 2>&1 && docker compose -f $yml up -d pgadmin || /usr/libexec/docker/cli-plugins/docker-compose -f $yml up -d pgadmin)); " +
+        "(docker inspect portainer >/dev/null 2>&1 && docker start portainer >/dev/null 2>&1 || " +
+        "(docker compose version >/dev/null 2>&1 && docker compose -f $yml up -d portainer || /usr/libexec/docker/cli-plugins/docker-compose -f $yml up -d portainer))"
+    wsl -d $Distro -e sh -c $upFull
+}
+
+if ($Kafka) {
+    Write-Host "==> Subindo Kafka (zookeeper + kafka, profile opcional)..."
+    $upKafka = "cd '$proj' && if docker compose version >/dev/null 2>&1; then docker compose -f $yml --profile kafka up -d zookeeper kafka; else /usr/libexec/docker/cli-plugins/docker-compose -f $yml --profile kafka up -d zookeeper kafka; fi"
+    wsl -d $Distro -e sh -c $upKafka
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Falha ao subir Kafka." -ForegroundColor Red
+        exit 1
+    }
 }
 
 Write-Host "==> Verificando o banco..."
@@ -119,8 +138,12 @@ wsl -d $Distro -e docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 Write-Host ""
 Write-Host "Postgres: localhost:5432  (db fintechbank, user postgres)"
+Write-Host "Redis:    localhost:6379"
 if ($Full) {
     Write-Host "pgAdmin:   http://localhost:16543"
     Write-Host "Portainer: http://localhost:9000"
+}
+if ($Kafka) {
+    Write-Host "Kafka:     localhost:9092"
 }
 Write-Host "Para subir a API:  cd F:\GITHUB\FintechBankApp\API ; npm run dev"

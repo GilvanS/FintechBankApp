@@ -1,184 +1,276 @@
 import React, { useState } from 'react';
-import { Transaction, User } from '../types';
-import TransactionReceipt from './TransactionReceipt';
+import { CheckCircle2 } from 'lucide-react';
+import { User, CardTransaction } from '../types';
+import { useAppState } from '../contexts/AppStateContext';
+import { isPaymentTx } from './TransactionRow';
+import PaymentTypeFilter from './PaymentTypeFilter';
+
+const statusConfig = {
+    aberta: { label: 'Fatura em aberto', icon: 'pending', color: 'text-blue-400', bg: 'bg-blue-400/10 border border-blue-400/20' },
+    fechada: { label: 'A fatura está fechada', icon: 'check_circle', color: 'text-green-400', bg: 'bg-green-400/10 border border-green-400/20' },
+    vencida: { label: 'Fatura vencida — pague para evitar inadimplência', icon: 'schedule', color: 'text-yellow-400', bg: 'bg-yellow-400/10 border border-yellow-400/20' },
+    inadimplente: { label: 'Conta inadimplente', icon: 'warning', color: 'text-red-400', bg: 'bg-red-400/10 border border-red-400/20' },
+};
 
 interface CurrentInvoiceProps {
-    user: User;
-    onBack: () => void;
+  user: User;
+  onBack: () => void;
+  theme?: 'yellow' | 'midnight';
 }
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-function txIcon(tx: Transaction): string {
-    const m = (tx.merchant ?? tx.description ?? '').toLowerCase();
-    if (m.includes('mercado') || m.includes('supermercado')) return 'shopping_cart';
-    if (m.includes('restaurante') || m.includes('lanchonete')) return 'restaurant';
-    if (m.includes('loja')) return 'storefront';
-    if (m.includes('pix')) return 'currency_exchange';
-    if (tx.type === 'INVOICE_PAYMENT' || tx.type === 'PAYMENT') return 'check_circle';
+const getIconForTx = (merchant: string) => {
+    const lowerMerchant = merchant.toLowerCase();
+    if (lowerMerchant.includes('supermercado')) return 'shopping_cart';
+    if (lowerMerchant.includes('restaurante')) return 'restaurant';
+    if (lowerMerchant.includes('loja')) return 'storefront';
+    if (lowerMerchant.includes('pix')) return 'currency_exchange';
+    if (lowerMerchant.includes('pagamento') || lowerMerchant.includes('antecipação') || lowerMerchant.includes('parcelamento')) return 'check_circle';
     return 'receipt_long';
-}
-
-const CurrentInvoiceView: React.FC<CurrentInvoiceProps> = ({ user, onBack }) => {
-    const [hideValue, setHideValue] = useState(false);
-    const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-
-    const { creditCard } = user;
-    const invoiceAmount = creditCard.currentInvoice ?? 0;
-    const isCredit = invoiceAmount < 0;
-    const minPayment = invoiceAmount > 0 ? Math.max(invoiceAmount * 0.15, 10) : 0;
-
-    const invoiceDueDate = creditCard.invoiceDueDate ? new Date(creditCard.invoiceDueDate) : new Date();
-    const endOfDay = new Date(invoiceDueDate);
-    endOfDay.setHours(23, 59, 59, 999);
-    const currentTransactions = creditCard.transactions.filter(tx => new Date(tx.date) <= endOfDay);
-
-    const vencimentoLabel = creditCard.invoiceDueDate
-        ? new Date(creditCard.invoiceDueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-        : '--/--';
-
-    const grouped = currentTransactions.reduce((acc, tx) => {
-        const key = new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(tx);
-        return acc;
-    }, {} as Record<string, Transaction[]>);
-
-    const total = currentTransactions.reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
-
-    if (selectedTransaction) {
-        return <TransactionReceipt transaction={selectedTransaction} onBack={() => setSelectedTransaction(null)} />;
-    }
-
-    return (
-        <div className="flex flex-col h-full bg-background-dark text-white">
-
-            {/* Header */}
-            <header className="flex items-center px-4 pt-4 pb-3 bg-primary sticky top-0 z-20">
-                <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10">
-                    <span className="material-symbols-outlined text-white">arrow_back</span>
-                </button>
-                <h1 className="flex-1 text-center text-lg font-semibold text-white">Fatura Aberta</h1>
-                <div className="w-10" />
-            </header>
-
-            <main className="flex-1 overflow-y-auto p-4 space-y-5 pb-8">
-
-                {/* ── Card de resumo (spec §2) ── */}
-                <div className="bg-surface-dark rounded-2xl p-5 shadow-lg space-y-4">
-                    <span className="inline-flex items-center gap-1 text-xs font-medium bg-blue-400/10 text-blue-400 border border-blue-400/20 px-3 py-1 rounded-full">
-                        <span className="material-symbols-outlined text-base">pending</span>
-                        {isCredit ? 'Não há fatura para pagar neste mês' : 'Fatura em aberto'}
-                    </span>
-
-                    <div>
-                        <p className="text-xs text-gray-400 mb-1">Valor total</p>
-                        <div className="flex items-center justify-between">
-                            <p className={`text-3xl font-bold ${isCredit ? 'text-primary' : 'text-white'}`}>
-                                {hideValue ? '••••••' : fmt(Math.abs(invoiceAmount))}
-                            </p>
-                            <button
-                                onClick={() => setHideValue(v => !v)}
-                                className="p-2 text-gray-400 hover:text-white"
-                                aria-label={hideValue ? 'Mostrar valor' : 'Ocultar valor'}
-                            >
-                                <span className="material-symbols-outlined">
-                                    {hideValue ? 'visibility_off' : 'visibility'}
-                                </span>
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Grid vencimento | pagamento mínimo */}
-                    {!isCredit && (
-                        <div className="grid grid-cols-2 gap-4 pt-1 border-t border-white/10">
-                            <div>
-                                <p className="text-xs text-gray-400">Vence em</p>
-                                <p className="text-sm font-semibold text-white">{vencimentoLabel}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400">Pagamento mínimo</p>
-                                <p className="text-sm font-semibold text-white">{fmt(minPayment)}</p>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* ── Lista de lançamentos (spec §4) ── */}
-                <div>
-                    <p className="text-xs text-gray-400 mb-3">
-                        Confira aqui os detalhes da fatura e os lançamentos do mês.
-                    </p>
-
-                    {currentTransactions.length > 0 ? (
-                        <div className="space-y-4">
-                            {Object.entries(grouped).map(([date, txs]) => (
-                                <div key={date} className="mb-4">
-                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 sticky top-0 bg-background-dark py-1">
-                                        {date}
-                                    </p>
-                                    <div className="space-y-1">
-                                        {txs.map(tx => {
-                                            const isRefund = tx.amount < 0;
-                                            const installLabel = tx.installments
-                                                ?? (tx.currentInstallment && tx.totalInstallments
-                                                    ? `(${tx.currentInstallment}/${tx.totalInstallments})`
-                                                    : null);
-                                            return (
-                                                <div key={tx.id}>
-                                                    <button
-                                                        onClick={() => setSelectedTransaction(tx)}
-                                                        className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-surface-dark/60 transition-colors text-left"
-                                                    >
-                                                        <div className="shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                                                            <span className="material-symbols-outlined text-primary text-base">
-                                                                {txIcon(tx)}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-1">
-                                                                <p className="text-sm font-medium text-white truncate">
-                                                                    {tx.merchant ?? tx.description ?? 'Lançamento'}
-                                                                </p>
-                                                                {installLabel && (
-                                                                    <span className="text-xs text-gray-400 shrink-0">{installLabel}</span>
-                                                                )}
-                                                            </div>
-                                                            <p className="text-xs text-gray-400">
-                                                                {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                                                            </p>
-                                                        </div>
-                                                        <p className={`text-sm font-semibold shrink-0 ${isRefund ? 'text-primary' : 'text-white'}`}>
-                                                            {isRefund ? '+' : ''}{fmt(Math.abs(tx.amount))}
-                                                        </p>
-                                                    </button>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="text-center py-12">
-                            <span className="material-symbols-outlined text-4xl text-gray-600">receipt_long</span>
-                            <p className="text-gray-500 mt-2">Nenhuma compra na sua fatura atual.</p>
-                        </div>
-                    )}
-                </div>
-
-                {/* ── Rodapé totalizador (spec §6) ── */}
-                {currentTransactions.length > 0 && (
-                    <div className="border-t-2 border-white/20 pt-4 flex justify-between items-center">
-                        <span className="font-semibold text-white">Total do Titular</span>
-                        <span className={`font-bold text-lg ${isCredit ? 'text-primary' : 'text-white'}`}>
-                            {fmt(Math.abs(total))}
-                        </span>
-                    </div>
-                )}
-            </main>
-        </div>
-    );
 };
 
-export default CurrentInvoiceView;
+const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: customTheme }) => {
+  const { theme: globalTheme } = useAppState();
+  const theme = customTheme || globalTheme;
+  const isMidnight = theme === 'midnight';
+  const { creditCard } = user;
+  const [hideValue, setHideValue] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState<'ALL' | 'TOTAL' | 'MINIMO' | 'PARCIAL'>('ALL');
+  const cycleStatus = user.billingCycle?.status ?? 'aberta';
+  const status = statusConfig[cycleStatus] ?? statusConfig.aberta;
+
+  const hasInvoiceDueDate = !!creditCard.invoiceDueDate && !isNaN(new Date(creditCard.invoiceDueDate).getTime());
+  const invoiceDueDate = hasInvoiceDueDate ? new Date(creditCard.invoiceDueDate) : null;
+  const endOfDay = invoiceDueDate ? new Date(invoiceDueDate) : null;
+  if (endOfDay) endOfDay.setHours(23, 59, 59, 999);
+
+  const currentTransactions = (hasInvoiceDueDate
+    ? creditCard.transactions.filter(tx => new Date(tx.date) <= (endOfDay as Date))
+    : creditCard.transactions
+  ).filter(tx => {
+    // Filtro por tipo de pagamento
+    if (paymentTypeFilter === 'ALL') return true;
+    if (isPaymentTx(tx.type)) return tx.paymentType === paymentTypeFilter;
+    return true; // não-PAYMENT sempre aparecem
+  });
+
+  const vencimentoLabel = hasInvoiceDueDate
+    ? new Date(creditCard.invoiceDueDate).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'})
+    : '--';
+
+  const isCredit = creditCard.currentInvoice < 0;
+  const minPayment = creditCard.currentInvoice > 0 ? Math.max(creditCard.currentInvoice * 0.10, 10) : 0;
+
+  const grouped: Record<string, CardTransaction[]> = {};
+  for (const tx of currentTransactions) {
+    const key = new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(tx);
+  }
+  // Linhas informativas (informative: true — ex.: 'Assinatura faturada no cartão',
+  // PAYMENT com invoice_id null) NUNCA entram no totalizador do rodapé: são apenas
+  // memória visual; o total real vem de creditCard.currentInvoice/currentInvoiceTotal.
+  const total = currentTransactions.reduce((sum, tx) => sum + (tx.informative ? 0 : (tx.amount ?? 0)), 0);
+
+  return (
+    <div className={`${isMidnight ? 'text-white' : 'text-black'} bg-volt-dark min-h-full flex flex-col w-full max-w-md mx-auto pb-28`}>
+      <header className={`flex items-center p-4 ${isMidnight ? 'bg-volt-surface border-b border-white/5' : 'bg-volt-primary text-black'}`}>
+          <button onClick={onBack} className={`mr-2 p-2 -ml-2 rounded-full transition-colors ${isMidnight ? 'hover:bg-white/10' : 'hover:bg-black/10'}`}>
+              <svg className={`w-6 h-6 ${isMidnight ? 'text-white' : 'text-black'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+        <h2 className={`text-xl font-bold flex-1 text-center pr-8 ${isMidnight ? 'text-white' : 'text-black'}`}>Fatura</h2>
+      </header>
+
+      <main className="flex-grow overflow-y-auto no-scrollbar p-4 space-y-6">
+        {/* Summary Card — conforme spec LAYOUT_FATURAS_SPEC.md seção 2 */}
+        <div className={`${isMidnight ? 'bg-volt-surface border border-white/5' : 'bg-white border-2 border-black'} rounded-2xl p-6 shadow-md space-y-4`}>
+          {/* Status tag */}
+          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${status.bg} ${status.color}`}>
+            <span className="material-symbols-outlined text-sm" aria-hidden="true">{status.icon}</span>
+            {isCredit ? 'Não há fatura para pagar neste mês' : status.label}
+          </div>
+
+          {/* Valor principal + eye toggle */}
+          <div>
+            <p className={`text-xs mb-1 ${isMidnight ? 'text-white/50' : 'text-black/50'}`}>Valor total</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className={`text-3xl font-bold ${isCredit ? 'text-volt-primary' : isMidnight ? 'text-white' : 'text-black'}`}>
+                {hideValue ? '• • • • • •' : fmt(Math.abs(creditCard.currentInvoice))}
+              </p>
+              <button
+                onClick={() => setHideValue(h => !h)}
+                className={`p-1 rounded-full transition-colors ${isMidnight ? 'hover:bg-white/10 text-white/50 hover:text-white' : 'hover:bg-black/10 text-black/50 hover:text-black'}`}
+                aria-label={hideValue ? 'Mostrar valor' : 'Ocultar valor'}
+              >
+                <span className="material-symbols-outlined text-xl">
+                  {hideValue ? 'visibility_off' : 'visibility'}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Grid: vencimento | pagamento mínimo */}
+          <div className={`grid grid-cols-2 gap-4 pt-2 border-t ${isMidnight ? 'border-white/10' : 'border-black/10'}`}>
+            <div>
+              <p className={`text-xs ${isMidnight ? 'text-white/50' : 'text-black/50'}`}>Vence em</p>
+              <p className={`text-sm font-semibold ${isMidnight ? 'text-white' : 'text-black'}`}>{vencimentoLabel}</p>
+            </div>
+            <div>
+              <p className={`text-xs ${isMidnight ? 'text-white/50' : 'text-black/50'}`}>Pagamento mínimo</p>
+              <p className={`text-sm font-semibold ${isMidnight ? 'text-white' : 'text-black'}`}>{isCredit ? '--' : fmt(minPayment)}</p>
+            </div>
+          </div>
+
+          {/* Encargos se inadimplente */}
+          {user.accountStatus === 'inadimplente' && user.pendingCharges && user.pendingCharges > 0 && (
+            <div className="flex items-center gap-2 pt-2 border-t border-red-400/20">
+              <span className="material-symbols-outlined text-red-400 text-sm" aria-hidden="true">warning</span>
+              <p className="text-xs text-red-400">
+                {user.daysOverdue ? `${user.daysOverdue} dia${user.daysOverdue !== 1 ? 's' : ''} em atraso` : 'Em atraso'} •{' '}
+                Encargos: {user.pendingCharges.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Lançamentos agrupados por data (spec §4) */}
+        <div>
+          <p className={`text-xs mb-3 ${isMidnight ? 'text-gray-400' : 'text-gray-600'}`}>
+            Confira aqui os detalhes da fatura e os lançamentos do mês.
+          </p>
+
+          {/* Payment type filter chips — shared component */}
+          {creditCard.transactions.some(tx => isPaymentTx(tx.type)) && (
+            <div className="mb-4">
+              <PaymentTypeFilter
+                activeFilter={paymentTypeFilter}
+                onFilterChange={setPaymentTypeFilter}
+                isMidnight={isMidnight}
+                size="sm"
+              />
+            </div>
+          )}
+
+          {currentTransactions.length > 0 ? (
+            <div className="space-y-4">
+              {Object.entries(grouped).map(([date, txs]) => (
+                <div key={date}>
+                  <p className="text-xs text-gray-400 font-medium mb-2 px-1">{date}</p>
+                  <div className="space-y-1">
+                    {txs.map(tx => {
+                      const isExpanded = expanded === tx.id;
+                      const isPayment = isPaymentTx(tx.type);
+                      const isRefund = tx.amount < 0 || isPayment;
+                      const installLabel = tx.installments
+                        ?? (tx.currentInstallment && tx.totalInstallments
+                          ? `${tx.currentInstallment}/${tx.totalInstallments}`
+                          : null);
+
+                      return (
+                        <div key={tx.id}>
+                          <button
+                            onClick={() => setExpanded(isExpanded ? null : tx.id)}
+                            className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left ${
+                              isPayment
+                                ? (isMidnight
+                                  ? 'bg-emerald-500/15 border border-emerald-500/40 hover:border-emerald-500/70'
+                                  : 'bg-emerald-50/90 border-2 border-emerald-400 hover:bg-emerald-100')
+                                : isMidnight ? 'hover:bg-white/10' : 'hover:bg-black/10'
+                            }`}
+                          >
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              isPayment
+                                ? (isMidnight ? 'bg-emerald-500/25 border-2 border-emerald-500/40' : 'bg-emerald-200 border-2 border-emerald-500')
+                                : isMidnight ? 'bg-volt-primary/10' : 'bg-volt-primary/20'
+                            }`}>
+                              {isPayment
+                                ? <CheckCircle2 size={20} className="text-emerald-500" />
+                                : (
+                                  <span className={`material-symbols-outlined text-lg ${isRefund ? 'text-green-400' : 'text-volt-primary'}`}>
+                                    {getIconForTx(tx.merchant)}
+                                  </span>
+                                )}
+                            </div>
+                            <div className="flex-grow min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <p className={`font-semibold text-sm truncate ${
+                                  isPayment ? (isMidnight ? 'text-emerald-300' : 'text-emerald-700') : isMidnight ? 'text-white' : 'text-black'
+                                }`}>{tx.merchant}</p>
+                                {isPayment && (
+                                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider shrink-0 ${
+                                    isMidnight
+                                      ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50'
+                                      : 'bg-emerald-500 text-white'
+                                  }`}>
+                                    Pagamento
+                                  </span>
+                                )}
+                                {installLabel && (
+                                  <span className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${isMidnight ? 'text-gray-400 bg-white/5' : 'text-gray-600 bg-black/5'}`}>
+                                    {installLabel}
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`text-xs mt-0.5 ${isMidnight ? 'text-gray-400' : 'text-gray-600'}`}>
+                                {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                              </p>
+                            </div>
+                            <p className={`font-semibold text-sm flex-shrink-0 ${isRefund ? 'text-green-400' : isMidnight ? 'text-white' : 'text-black'}`}>
+                              {isRefund ? '+' : ''}{fmt(Math.abs(tx.amount))}
+                            </p>
+                          </button>
+
+                          {/* Accordion expandido (spec §5) */}
+                          {isExpanded && (
+                            <div className={`mx-3 mb-2 rounded-xl px-4 py-3 space-y-2 ${isMidnight ? 'bg-volt-surface/50' : 'bg-black/5'}`}>
+                              <div className={`flex justify-between text-xs border-b pb-2 ${isMidnight ? 'border-white/5' : 'border-black/5'}`}>
+                                <span className={isMidnight ? 'text-gray-400' : 'text-gray-600'}>Data</span>
+                                <span className={isMidnight ? 'text-white' : 'text-black'}>
+                                  {new Date(tx.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                </span>
+                              </div>
+                              {installLabel && (
+                                <div className={`flex justify-between text-xs border-b pb-2 ${isMidnight ? 'border-white/5' : 'border-black/5'}`}>
+                                  <span className={isMidnight ? 'text-gray-400' : 'text-gray-600'}>Parcela</span>
+                                  <span className={isMidnight ? 'text-white' : 'text-black'}>{installLabel}</span>
+                                </div>
+                              )}
+                              <div className={`flex justify-between text-xs border-b pb-2 ${isMidnight ? 'border-white/5' : 'border-black/5'}`}>
+                                <span className={isMidnight ? 'text-gray-400' : 'text-gray-600'}>Tipo</span>
+                                <span className={`capitalize ${isMidnight ? 'text-white' : 'text-black'}`}>{tx.type.toLowerCase().replace('_', ' ')}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className={isMidnight ? 'text-gray-400' : 'text-gray-600'}>Valor</span>
+                                <span className={isRefund ? 'text-green-400' : isMidnight ? 'text-white' : 'text-black'}>
+                                  {fmt(Math.abs(tx.amount))}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-500 py-8">Nenhum lançamento nesta fatura.</p>
+          )}
+        </div>
+
+        {/* Footer totalizador (spec §6) */}
+        {currentTransactions.length > 0 && (
+          <div className={`border-t-2 pt-4 flex justify-between items-center ${isMidnight ? 'border-white/20' : 'border-black/20'}`}>
+            <p className={`font-semibold ${isMidnight ? 'text-white' : 'text-black'}`}>Total do Titular</p>
+            <p className={`font-bold text-lg ${isMidnight ? 'text-white' : 'text-black'}`}>{fmt(total)}</p>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
+
+export default CurrentInvoice;

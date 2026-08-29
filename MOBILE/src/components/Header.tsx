@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, HelpCircle, ArrowLeft, LogOut, ShieldAlert, Sparkles, UserCheck, Trash2, Sun, Moon, LayoutGrid, Brain, TrendingUp, BarChart2, Activity, RefreshCw, ChevronRight, GripVertical, Pin } from 'lucide-react';
+import { Menu, Bell, HelpCircle, ArrowLeft, LogOut, ShieldAlert, Sparkles, UserCheck, Trash2, Sun, Moon, LayoutGrid, Brain, TrendingUp, BarChart2, Activity, RefreshCw, ChevronRight, GripVertical, Pin } from 'lucide-react';
 import { User, Transaction } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
 import { useAppState } from '../contexts/AppStateContext';
@@ -419,7 +419,7 @@ export default function Header({
               className="p-1.5 rounded-full text-black hover:bg-black/5 transition-colors active:scale-90 border-2 border-black bg-white/50 group"
               title="Ocultar Menu"
             >
-              <span className="material-symbols-outlined text-lg group-hover:scale-110 transition-transform">menu_open</span>
+              <Menu size={22} className="shrink-0 text-white" />
             </button>
           )}
           {showBackButton ? (
@@ -547,16 +547,16 @@ export default function Header({
                         </div>
                       ) : (
                         notifications.map((notif) => (
-                          <div key={notif.id} className="p-2.5 rounded-xl bg-white/5 border border-white/5 space-y-1 relative group">
+                          <div key={String(notif.id)} className="p-2.5 rounded-xl bg-white/5 border border-white/5 space-y-1 relative group">
                             <div className="flex justify-between items-start pr-4">
                               <span className="text-xs font-bold text-white leading-tight">{notif.title}</span>
-                              <span className="text-[9px] text-zinc-400 shrink-0 font-medium ml-1">{notif.time}</span>
+                              <span className="text-[9px] text-zinc-400 shrink-0 font-medium ml-1">{(notif as any).time || notif.created_at}</span>
                             </div>
-                            <p className="text-[11px] text-zinc-300 leading-relaxed pr-4">{notif.description}</p>
+                            <p className="text-[11px] text-zinc-300 leading-relaxed pr-4">{(notif as any).description || notif.message}</p>
                             
                             {/* Individual clear button */}
                             <button
-                              onClick={() => onClearNotification(notif.id)}
+                              onClick={() => onClearNotification(String(notif.id))}
                               className="absolute top-2 right-2 text-zinc-500 hover:text-red-400 text-[10px] font-bold cursor-pointer transition-colors p-0.5 rounded hover:bg-white/5"
                               title="Descartar"
                             >

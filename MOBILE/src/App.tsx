@@ -13,6 +13,7 @@ import AdminDashboard from './components/Admin/AdminDashboard';
 import { DialogProvider } from './contexts/GlobalDialogContext';
 import { AppStateProvider } from './contexts/AppStateContext';
 import { initializeApi, getUserMe as getProfile } from './services/api';
+import { setBackHandler, runBackHandler } from './utils/backHandler';
 
 /* Core CSS & Theme - OTIMIZADO: Imports agrupados para melhor performance no APK */
 import '@ionic/react/css/core.css';
@@ -30,6 +31,7 @@ import './theme/variables.css';
 // OTIMIZADO PARA APK: setupIonicReact deve ser chamado antes de qualquer renderização
 // Mas não bloqueia - é uma configuração síncrona rápida
 setupIonicReact();
+if (typeof document !== 'undefined') { document.body.classList.add('theme-midnight'); }
 
 // Função de normalizacao do usuario vindo do backend (from WEB)
 function normalizeUserShape(input: Partial<User>): User {
@@ -128,9 +130,12 @@ const App: React.FC = () => {
 
     restoreSession();
 
-    // Back button Android: minimizar o app em vez de fechar
-    const listenerPromise = CapApp.addListener('backButton', ({ canGoBack }) => {
-      if (!canGoBack) {
+    // Back button Android: primeiro tenta a pilha de navegação interna
+    // (registrada via setBackHandler pelo próprio App ou pelo Dashboard);
+    // só minimiza o app quando não há mais para onde voltar. `canGoBack`
+    // do Capacitor não serve aqui — o app não usa router nem history.
+    const listenerPromise = CapApp.addListener('backButton', () => {
+      if (!runBackHandler()) {
         CapApp.minimizeApp();
       }
     });
@@ -193,6 +198,27 @@ const App: React.FC = () => {
   const navigateTo = (newView: 'home' | 'cards' | 'shop' | 'profile' | 'login' | 'prelogin' | 'signup' | 'resetPassword' | 'admin') => {
     setView(newView);
   };
+
+  // Botão físico de voltar por tela de nível raiz. 'home'/'cards'/'shop'/
+  // 'profile' ficam de fora: enquanto o Dashboard está montado, é ele quem
+  // registra o handler (pilha interna de currentView/previousView).
+  useEffect(() => {
+    switch (view) {
+      case 'login':
+      case 'signup':
+      case 'resetPassword':
+        setBackHandler(() => { setView('prelogin'); return true; });
+        break;
+      case 'admin':
+        setBackHandler(() => { setView('home'); return true; });
+        break;
+      case 'prelogin':
+        setBackHandler(null);
+        break;
+      default:
+        break;
+    }
+  }, [view]);
 
   const authContextValue = {
     user,

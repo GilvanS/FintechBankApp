@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -407,7 +408,7 @@ const Pix: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     aria-label="Voltar"
                     type="button"
                 >
-                    <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                    <ArrowLeft size={22} className="shrink-0" />
                 </button>
                 <h1 
                     className="text-xl font-bold text-white test-pix-header-title"

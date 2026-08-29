@@ -1,7 +1,7 @@
 
 export interface Transaction {
     id: string;
-    type: 'PIX_SENT' | 'PIX_RECEIVED' | 'DEPOSIT' | 'PAYMENT' | 'INVOICE_PAYMENT' | 'PIX_CREDIT_SENT' | 'SHOP_DEBIT' | 'CASHBACK_CREDIT' | 'POINTS_EARNED';
+    type: 'PIX_SENT' | 'PIX_RECEIVED' | 'DEPOSIT' | 'PAYMENT' | 'INVOICE_PAYMENT' | 'PIX_CREDIT_SENT' | 'SHOP_DEBIT' | 'SHOP_CREDIT' | 'CASHBACK_CREDIT' | 'POINTS_EARNED';
     amount: number;
     date: string;
     description: string;
@@ -9,6 +9,7 @@ export interface Transaction {
     from?: string;
     recipientName?: string;
     senderName?: string;
+    merchant?: string;
     /** Categoria derivada da descrição pela API (refeicao, mobilidade, cultura, saude, moradia, compras, educacao, outros) */
     category?: string;
 }
@@ -18,7 +19,7 @@ export interface CardTransaction {
     date: string;
     merchant: string;
     amount: number;
-    type: 'CREDIT' | 'PAYMENT' | 'INVOICE_PAYMENT' | 'INVOICE_INSTALLMENT';
+    type: 'CREDIT' | 'PAYMENT' | 'INVOICE_PAYMENT' | 'INVOICE_INSTALLMENT' | 'SHOP_CREDIT';
     installments?: string;
     totalInstallments?: number;
     currentInstallment?: number;
@@ -67,7 +68,6 @@ export interface CreditCard {
     closedInvoiceAmount?: number;
     currentInvoiceTotal?: number;
     currentInvoiceMinimo?: number;
-    closedInvoiceIsPaid?: boolean;
     closedInvoicePaidAt?: string | null;
     dueDay?: number;
     closingDay?: number;

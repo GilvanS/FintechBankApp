@@ -39,8 +39,8 @@ const RequestsManagement: React.FC = () => {
                 adminGetLimitRequests()
             ]);
             
-            const passReqs = passReqsResult.success ? passReqsResult.requests : [];
-            const limReqs = limReqsResult.success ? limReqsResult.requests : [];
+            const passReqs = Array.isArray(passReqsResult) ? passReqsResult : ((passReqsResult as any)?.requests || []);
+            const limReqs = Array.isArray(limReqsResult) ? limReqsResult : ((limReqsResult as any)?.requests || []);
             
             setPasswordRequests(passReqs || []);
             setLimitRequests(limReqs || []);

@@ -680,12 +680,12 @@ export default function PixView({ onBack }: PixViewProps) {
 
       {/* Contacts Subview */}
       {subView === 'contacts' && !success && (
-          <Contacts onSelectContact={handleSelectContact} theme={theme} />
+          <Contacts onSelectContact={handleSelectContact as any}  />
       )}
 
       {/* Keys Management Subview */}
       {subView === 'keyManagement' && !success && (
-          <PixKeyManagement theme={theme} />
+                <PixKeyManagement onBack={() => {}} />
       )}
 
         </div>

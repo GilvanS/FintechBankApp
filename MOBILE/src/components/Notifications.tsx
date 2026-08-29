@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getNotifications, markNotificationAsRead } from '../services/api';
@@ -131,7 +132,7 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
         <div className="bg-background-light min-h-full" id="notifications-view" data-testid="notifications-view" aria-label="Notificações">
             <header className="bg-primary text-white p-4 flex items-center safe-top" id="notifications-header" data-testid="notifications-header" aria-label="Cabeçalho de notificações">
                 <button onClick={onBack} className="mr-4 p-2 -ml-2 rounded-full hover:bg-white/20" id="notifications-back" data-testid="notifications-back" aria-label="Voltar">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={22} className="shrink-0" />
                 </button>
                 <h2 className="text-xl font-bold">Notificações</h2>
             </header>
@@ -175,7 +176,7 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack }) => {
                                     <p className={`text-text-light ${!n.is_read && 'font-semibold'}`}>{n.message}</p>
                                     <div className="flex justify-between items-center mt-2">
                                         <p className="text-xs text-subtle-light">{new Date(n.created_at).toLocaleString('pt-BR')}</p>
-                                        {!n.is_read && <button onClick={() => handleMarkAsRead(n.id)} className="text-xs text-primary font-semibold hover:underline">Marcar como lida</button>}
+                                        {!n.is_read && <button onClick={() => handleMarkAsRead(n.id as any)} className="text-xs text-primary font-semibold hover:underline">Marcar como lida</button>}
                                     </div>
                                 </li>
                             ))}

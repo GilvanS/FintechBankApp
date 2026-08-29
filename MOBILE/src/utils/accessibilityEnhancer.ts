@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 /**
  * Accessibility Enhancer for Appium Selectors
  * 
@@ -55,7 +56,7 @@ export const enhanceAccessibility = () => {
       return;
     }
 
-    // OTIMIZADO: Não processar elementos Material Symbols (evita texto "arrow_back" aparecer)
+    // OTIMIZADO: Não processar elementos Material Symbols (evita texto "ArrowLeft" aparecer)
     // Verifica se o elemento é um span com classe material-symbols-outlined ou contém um
     if (element.classList.contains('material-symbols-outlined') || 
         (element.tagName === 'SPAN' && element.classList.contains('material-symbols-outlined')) ||
@@ -71,7 +72,7 @@ export const enhanceAccessibility = () => {
 
     // Skip elementos que contêm texto de ícones Material Symbols
     const textContent = element.textContent?.trim() || '';
-    const iconTexts = ['arrow_back', 'now_back', 'swap_horiz', 'close', 'menu', 'home', 'person', 'settings'];
+    const iconTexts = ['ArrowLeft', 'now_back', 'swap_horiz', 'close', 'menu', 'home', 'person', 'settings'];
     if (iconTexts.some(icon => textContent === icon && element.tagName === 'SPAN')) {
       return; // Não processar spans que são ícones Material Symbols
     }
@@ -86,7 +87,7 @@ export const enhanceAccessibility = () => {
 
     // Priority 2: Use id if available (skip React internal IDs e ícones)
     const id = element.id;
-    if (id && !id.startsWith('react-') && !id.includes('__') && !id.includes('arrow_back') && !id.includes('now_back')) {
+    if (id && !id.startsWith('react-') && !id.includes('__') && !id.includes('ArrowLeft') && !id.includes('now_back')) {
       setContentDescription(element, id);
       element.setAttribute('data-accessibility-enhanced', 'true');
       return;

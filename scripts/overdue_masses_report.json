@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-23T17:13:24.795273",
+  "timestamp": "2026-08-17T09:22:17.594980",
   "total_massas": 20,
   "massas_em_atraso": 20,
   "taxa_inadimplencia_pct": 100.0,
@@ -144,7 +144,7 @@
     },
     {
       "cpf": "99999999999",
-      "full_name": "Thiago Henrique Alves",
+      "full_name": "Admin User",
       "status": "inadimplente",
       "fatura_fechada": 7840.2,
       "dias_atraso": 60,

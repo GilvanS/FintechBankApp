@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { adminTelegramStatus, adminTelegramTopics, adminTelegramCreateTopic, adminTelegramDeleteTopic, adminTelegramTest, adminTelegramSendMessage, adminTelegramSettings, adminTelegramUpdateSetting, adminTelegramTestCategory, adminTelegramSendPdf, adminTelegramSendTable, adminTelegramLog, TelegramTopic, TelegramSetting, TelegramLogEntry } from '../../services/api';
 import { formatCPF } from '../../utils/formatters';
 import { useAppState } from '../../contexts/AppStateContext';
@@ -59,8 +59,8 @@ const TelegramManagement: React.FC = () => {
         try {
             const [s, t, cfg] = await Promise.all([adminTelegramStatus(), adminTelegramTopics(), adminTelegramSettings()]);
             if (s && s.enabled !== undefined) setStatus({ enabled: s.enabled, chatId: s.chatId, topicCount: s.topicCount });
-            setTopics(Array.isArray(t) ? t : (t?.topics || []));
-            const settingsList = Array.isArray(cfg) ? cfg : (cfg?.settings || []);
+            setTopics(Array.isArray(t) ? t : ((t as any)?.topics || []));
+            const settingsList = Array.isArray(cfg) ? cfg : ((cfg as any)?.settings || []);
             setSettings(settingsList);
             const d: Record<string, { valid_from: string; valid_until: string; ttl_minutes: string }> = {};
             for (const st of settingsList) {

@@ -1,9 +1,5 @@
-/**
+﻿/**
  * cards.routes.js — Registro das rotas de cartões de crédito (físicos e virtuais).
- *
- * [Fase D] Extraído do index.cjs. Factory com Dependency Injection que
- * centraliza todas as rotas relacionadas ao domínio de cartões, preservando a
- * ordem original dos endpoints e seus middlewares.
  */
 module.exports = function registerCardsRoutes({
     apiRouter,
@@ -14,21 +10,19 @@ module.exports = function registerCardsRoutes({
     body,
     dbService,
     repoContext,
-    handleValidationErrors,
-    formatExpiry,
     generateCardNumber,
-    toISO,
+    formatExpiry,
+    handleValidationErrors
 }) {
-    // --- Bloco 1: Ativação física e listagem ---
-    apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req, res) => {
-        const { cvv, expiry } = req.body || {};
+    // --- Bloco 1: Cartões Físicos ---
+    apiRouter.post('/cards/unlock', bearerAuth(), [
+        body('cvv').isLength({ min: 3, max: 3 }).withMessage('CVV deve ter 3 dígitos.'),
+        body('expiry').notEmpty().withMessage('Validade é obrigatória.')
+    ], handleValidationErrors, asyncHandler(async (req, res) => {
         const cpf = req.user.cpf;
+        const { cvv, expiry } = req.body;
 
-        if (!cvv || !expiry) {
-            return res.status(400).json({ success: false, message: 'CVV e Validade são obrigatórios.' });
-        }
-
-        const [dbUser] = await dbService.executeQuery(`SELECT card_cvv, card_expiry, card_is_activated FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
+        const [dbUser] = await dbService.executeQuery(SELECT card_cvv, card_expiry, card_is_activated FROM  WHERE cpf = '');
         if (!dbUser) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
         if (dbUser.card_is_activated) return res.status(400).json({ success: false, message: 'Cartão já está ativado.' });
 
@@ -37,18 +31,19 @@ module.exports = function registerCardsRoutes({
             normalizedExpiry = normalizedExpiry.slice(0, 2) + '/' + normalizedExpiry.slice(2);
         }
 
-        if (dbUser.card_cvv != cvv || dbUser.card_expiry !== normalizedExpiry) {
+        const dbExpClean = String(dbUser.card_expiry || '').replace('/', '').trim();
+        const normExpClean = String(normalizedExpiry || '').replace('/', '').trim();
+
+        if (String(dbUser.card_cvv).trim() !== String(cvv).trim() || dbExpClean !== normExpClean) {
             return res.status(401).json({ success: false, message: 'CVV ou Validade incorretos.' });
         }
 
-        // Gerar número de cartão físico com bandeira/BIN reais sorteados (Master/Visa/Elo)
         let cardRaw, cardFormatted, cardBrand, cardBin;
         let attempts = 0;
         while (attempts < 10) {
             const gen = generateCardNumber();
-            // Verificar unicidade no banco
             const [existing] = await dbService.executeQuery(
-                `SELECT id FROM fintech.cards WHERE card_number_raw = ${repoContext.esc(gen.raw)}`
+                SELECT id FROM fintech.cards WHERE card_number_raw = 
             );
             if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; cardBrand = gen.brand; cardBin = gen.bin; break; }
             attempts++;
@@ -59,18 +54,16 @@ module.exports = function registerCardsRoutes({
         const pin = '9898';
         const { esc } = repoContext;
 
-        // Salvar cartão na tabela fintech.cards
-        await dbService.executeQuery(`
+        await dbService.executeQuery(
             INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated)
-            VALUES (${esc(cpf)}, ${esc(cardFormatted)}, ${esc(cardRaw)}, 'physical', ${esc(cardBrand)}, ${esc(cardBin)}, ${esc(expiryFull)}, ${esc(dbUser.card_expiry)}, ${esc(cvv)}, ${esc(pin)}, true)
-        `);
+            VALUES (, , , 'physical', , , , , , , true)
+        );
 
-        // Atualizar status do usuário
-        await dbService.executeQuery(`
-            UPDATE ${dbService.fq('users')}
+        await dbService.executeQuery(
+            UPDATE 
             SET card_is_activated = true, card_delivery_status = 'unlocked', updated_at = CURRENT_TIMESTAMP
-            WHERE cpf = '${cpf}'
-        `);
+            WHERE cpf = ''
+        );
 
         res.json({
             success: true,
@@ -78,25 +71,22 @@ module.exports = function registerCardsRoutes({
             card: {
                 number: cardFormatted,
                 expiry: expiryFull,
-                expiryShort: dbUser.card_expiry,
                 cvv,
                 pin,
                 brand: cardBrand,
-                type: 'physical'
+                isActivated: true
             }
         });
     }));
 
-    apiRouter.get('/cards/my-cards', bearerAuth(), asyncHandler(async (req, res) => {
+    apiRouter.get('/cards', bearerAuth(), asyncHandler(async (req, res) => {
         const cpf = req.user.cpf;
-
-        const cards = await dbService.executeQuery(`
-            SELECT id, card_number, card_number_raw, card_type, card_brand, bin,
-                   expiry, expiry_short, cvv, pin, is_activated, is_blocked, nickname, created_at
+        const cards = await dbService.executeQuery(
+            SELECT id, card_number, card_number_raw, card_type, card_brand, expiry, expiry_short, cvv, pin, is_activated, is_blocked, nickname, created_at
             FROM fintech.cards
-            WHERE user_cpf = '${cpf}'
-            ORDER BY created_at ASC
-        `);
+            WHERE user_cpf = ''
+            ORDER BY created_at DESC
+        );
 
         res.json({
             success: true,
@@ -118,14 +108,12 @@ module.exports = function registerCardsRoutes({
         });
     }));
 
-    // --- Bloco 2: Gestão do ciclo de faturamento e cartões virtuais ---
     apiRouter.put('/cards/billing-cycle', bearerAuth(), [
         body('dueDay').isInt({ min: 1, max: 28 }).withMessage('Dia de vencimento deve ser entre 1 e 28.')
     ], handleValidationErrors, asyncHandler(async (req, res) => {
         const cpf = req.user.cpf;
         const { dueDay } = req.body;
 
-        // Calcula a proxima data de vencimento da fatura com base no dueDay escolhido e no dia atual
         let now = new Date();
         let currentMonth = now.getMonth();
         let currentYear = now.getFullYear();
@@ -136,17 +124,13 @@ module.exports = function registerCardsRoutes({
         if (closingDay > 0) {
             closingDate = new Date(currentYear, currentMonth, closingDay);
         } else {
-            // Volta um mes para o fechamento
             let prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
             let yearOfPrevMonth = currentMonth === 0 ? currentYear - 1 : currentYear;
-            // Pega o ultimo dia do mes anterior + closingDay (que eh <= 0)
             let daysInPrevMonth = new Date(currentYear, currentMonth, 0).getDate();
             let prevMonthClosingDay = daysInPrevMonth + closingDay;
             closingDate = new Date(yearOfPrevMonth, prevMonth, prevMonthClosingDay);
         }
 
-        // Se a data atual ja passou da data de fechamento do mes atual, a fatura deste mes ja fechou
-        // Logo o proximo vencimento da fatura sera no proximo mes.
         let nextInvoiceMonth = currentMonth;
         let nextInvoiceYear = currentYear;
 
@@ -161,7 +145,7 @@ module.exports = function registerCardsRoutes({
         const nextInvoiceDate = new Date(nextInvoiceYear, nextInvoiceMonth, dueDay);
 
         await dbService.executeQuery(
-            `UPDATE ${dbService.fq('users')} SET credit_card_due_day = ${dueDay}, credit_card_invoice_due_date = '${nextInvoiceDate.toISOString()}' WHERE cpf = '${cpf}'`
+            UPDATE  SET credit_card_due_day = , credit_card_invoice_due_date = '' WHERE cpf = ''
         );
 
         res.json({ success: true, message: 'Dia de vencimento alterado com sucesso.', nextInvoiceDate: nextInvoiceDate.toISOString(), dueDay, closingDay: closingDate.getDate() });
@@ -171,135 +155,85 @@ module.exports = function registerCardsRoutes({
         const cpf = req.user.cpf;
         const { nickname } = req.body || {};
 
-        // Verificar se usuário tem cartão físico ativado
         const [dbUser] = await dbService.executeQuery(
-            `SELECT card_is_activated, card_expiry FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`
+            SELECT card_is_activated, card_expiry FROM  WHERE cpf = ''
         );
         if (!dbUser) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
         if (!dbUser.card_is_activated) {
             return res.status(403).json({ success: false, message: 'Ative o cartão físico antes de gerar cartões virtuais.' });
         }
 
-        // Gerar número virtual com bandeira/BIN reais sorteados (Master/Visa/Elo)
         let cardRaw, cardFormatted, cardBrand, cardBin;
         let attempts = 0;
         while (attempts < 10) {
             const gen = generateCardNumber();
             const [existing] = await dbService.executeQuery(
-                `SELECT id FROM fintech.cards WHERE card_number_raw = ${repoContext.esc(gen.raw)}`
+                SELECT id FROM fintech.cards WHERE card_number_raw = 
             );
             if (!existing) { cardRaw = gen.raw; cardFormatted = gen.formatted; cardBrand = gen.brand; cardBin = gen.bin; break; }
             attempts++;
         }
         if (!cardRaw) return res.status(500).json({ success: false, message: 'Erro ao gerar cartão virtual.' });
 
-        // CVV virtual aleatório de 3 dígitos
         const virtualCvv = String(Math.floor(Math.random() * 900) + 100);
         const expiryFull = formatExpiry(dbUser.card_expiry);
         const pin = '9898';
         const safeNickname = nickname ? String(nickname).substring(0, 100) : 'Cartão Virtual';
         const { esc } = repoContext;
 
-        await dbService.executeQuery(`
+        await dbService.executeQuery(
             INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated, nickname)
-            VALUES (${esc(cpf)}, ${esc(cardFormatted)}, ${esc(cardRaw)}, 'virtual', ${esc(cardBrand)}, ${esc(cardBin)}, ${esc(expiryFull)}, ${esc(dbUser.card_expiry)}, ${esc(virtualCvv)}, ${esc(pin)}, true, ${esc(safeNickname)})
-        `);
+            VALUES (, , , 'physical', , , , , , , true, )
+        );
 
         res.json({
             success: true,
             message: 'Cartão virtual gerado com sucesso!',
             card: {
+                id: null,
                 number: cardFormatted,
-                numberMasked: '**** **** **** ' + cardRaw.slice(-4),
                 expiry: expiryFull,
-                expiryShort: dbUser.card_expiry,
                 cvv: virtualCvv,
-                pin,
                 brand: cardBrand,
-                type: 'virtual',
                 nickname: safeNickname
             }
         });
     }));
 
-    apiRouter.put('/cards/:id/toggle-block', bearerAuth(), asyncHandler(async (req, res) => {
+    apiRouter.put('/cards/virtual/:id/toggle-block', bearerAuth(), asyncHandler(async (req, res) => {
         const cpf = req.user.cpf;
-        const cardId = parseInt(req.params.id, 10);
-        if (!Number.isInteger(cardId)) {
-            return res.status(400).json({ success: false, message: 'Id de cartão inválido.' });
-        }
+        const { id } = req.params;
 
-        const [card] = await dbService.executeQuery(`
-            SELECT id, is_blocked FROM fintech.cards
-            WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
-        `);
-        if (!card) {
-            return res.status(404).json({ success: false, message: 'Cartão virtual não encontrado.' });
-        }
+        const [card] = await dbService.executeQuery(
+            SELECT id, is_blocked FROM fintech.cards WHERE id =  AND user_cpf = '' AND card_type = 'virtual'
+        );
+        if (!card) return res.status(404).json({ success: false, message: 'Cartão virtual não encontrado.' });
 
-        const newBlocked = !card.is_blocked;
-        await dbService.executeQuery(`
-            UPDATE fintech.cards SET is_blocked = ${newBlocked}
-            WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
-        `);
+        const newBlockedState = !card.is_blocked;
+        await dbService.executeQuery(
+            UPDATE fintech.cards SET is_blocked =  WHERE id = 
+        );
 
-        res.json({ success: true, isBlocked: newBlocked, message: newBlocked ? 'Cartão bloqueado.' : 'Cartão desbloqueado.' });
+        res.json({
+            success: true,
+            message: newBlockedState ? 'Cartão virtual bloqueado com sucesso.' : 'Cartão virtual desbloqueado com sucesso.',
+            isBlocked: newBlockedState
+        });
     }));
 
-    apiRouter.delete('/cards/:id', bearerAuth(), asyncHandler(async (req, res) => {
+    apiRouter.delete('/cards/virtual/:id', bearerAuth(), asyncHandler(async (req, res) => {
         const cpf = req.user.cpf;
-        const cardId = parseInt(req.params.id, 10);
-        if (!Number.isInteger(cardId)) {
-            return res.status(400).json({ success: false, message: 'Id de cartão inválido.' });
-        }
+        const { id } = req.params;
 
-        const [card] = await dbService.executeQuery(`
-            SELECT id FROM fintech.cards
-            WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
-        `);
-        if (!card) {
-            return res.status(404).json({ success: false, message: 'Cartão virtual não encontrado (o cartão físico não pode ser excluído).' });
-        }
+        const [card] = await dbService.executeQuery(
+            SELECT id FROM fintech.cards WHERE id =  AND user_cpf = '' AND card_type = 'virtual'
+        );
+        if (!card) return res.status(404).json({ success: false, message: 'Cartão virtual não encontrado.' });
 
-        await dbService.executeQuery(`
-            DELETE FROM fintech.cards
-            WHERE id = ${cardId} AND user_cpf = '${cpf}' AND card_type = 'virtual'
-        `);
+        await dbService.executeQuery(
+            DELETE FROM fintech.cards WHERE id = 
+        );
 
-        res.json({ success: true, message: 'Cartão virtual excluído.' });
-    }));
-
-    apiRouter.put('/admin/cards/:cpf/delivery-status', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
-        const { cpf } = req.params;
-        const { status } = req.body || {};
-
-        if (!['manufacturing', 'shipping', 'tracking', 'delivered', 'unlocked'].includes(status)) {
-            return res.status(400).json({ success: false, message: 'Status inválido.' });
-        }
-
-        await dbService.executeQuery(`
-            UPDATE ${dbService.fq('users')}
-            SET card_delivery_status = '${status}', updated_at = current_timestamp()
-            WHERE cpf = '${cpf}'
-        `);
-
-        res.json({ success: true, message: 'Status de entrega updated!' });
-    }));
-
-    apiRouter.put('/cards/physical/test-delivery-status', bearerAuth(), asyncHandler(async (req, res) => {
-        const cpf = req.user.cpf;
-        const { status } = req.body || {};
-
-        if (!['manufacturing', 'shipping', 'tracking', 'delivered', 'unlocked'].includes(status)) {
-            return res.status(400).json({ success: false, message: 'Status inválido.' });
-        }
-
-        await dbService.executeQuery(`
-            UPDATE ${dbService.fq('users')}
-            SET card_delivery_status = '${status}', updated_at = current_timestamp()
-            WHERE cpf = '${cpf}'
-        `);
-
-        res.json({ success: true, message: 'Status de entrega avançado (Teste)!' });
+        res.json({ success: true, message: 'Cartão virtual cancelado e removido com sucesso.' });
     }));
 };

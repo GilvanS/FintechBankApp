@@ -1,4 +1,4 @@
-// Health check diário da imutabilidade de fatura FECHADA.
+﻿// Health check diário da imutabilidade de fatura FECHADA.
 //
 // docs/REGRAS-NEGOCIO-FATURA.md §19 — fatura fechada é imutável; pagamento e
 // saldo credor pertencem à fatura ABERTA. A trigger PG garante o bloqueio; este
@@ -10,31 +10,18 @@
 //
 //   B. Soma de pagamentos vinculados > valor_total (pagou mais do que a fatura
 //      vale). Excedente deveria ter virado creditoExcedente na fatura ABERTA;
-//      se bateu aqui, pode indicar pagamento com valor errado na origem.
+//      se bateu aqui, pode indicar pagamento com valor errado na origem ou
+//      pagamento único quitando múltiplas faturas acumuladas.
 //
 //   C. Pagamentos de ciclos antigos (invoice_id NULL) ainda usando valor_pago
 //      legado na fatura — quando a migration 005 rodou, valor_pago dessas faturas
-//      congelou com o valor histórico; se foi editado depois, leitura híbrida vê.
-//
-// Qualquer achado vai pro Telegram com categoria 'daily_anomaly' e loga no
-// audit_log. Sem auto-correção: o ajuste precisa de análise humana.
+//      foi mantido, mas edições posteriores (updated_at > created_at + 1min)
+//      com divergência indicam resíduo de bug legado.
 
-const telegramService = require('./telegramService');
+const DatabaseFactory = require('./database/DatabaseFactory');
+const telegramService = require('../services/telegramService');
+const DEFAULT_MIGRATION_005_CUTOFF = '2026-08-01T00:00:00.000Z';
 
-// Cutoff padrão da migration 005 (último recurso). Normalmente a data é lida
-// dinamicamente do knex_migrations; este fallback só é usado se o banco não
-// estiver acessível para a leitura ou a migration não estiver registrada.
-const DEFAULT_MIGRATION_005_CUTOFF = '2026-08-06T17:20:04.557Z';
-
-/**
- * Resolve o cutoff (limite inferior) da query (A) — pagamentos órfãos.
- *
- * Ordem de precedência:
- *   1. options.cutoffDate        — override explícito (ex.: chamada sob demanda)
- *   2. env IMMUTABILITY_CUTOFF   — configuração de deploy
- *   3. knex_migrations (005)     — data real de criação da migration 005 no banco
- *   4. DEFAULT_MIGRATION_005_CUTOFF — último recurso (log de aviso)
- */
 async function resolveOrphanCutoff(db, options = {}) {
     if (options.cutoffDate) {
         const d = new Date(options.cutoffDate);
@@ -47,61 +34,37 @@ async function resolveOrphanCutoff(db, options = {}) {
     }
 
     try {
-        const rows = await db.executeQuery(`
-            SELECT migration_time
-            FROM ${db.fq('knex_migrations')}
-            WHERE name LIKE '005_%'
-            ORDER BY migration_time DESC
-            LIMIT 1
-        `);
-        if (rows && rows.length && rows[0] && rows[0].migration_time) {
-            const t = new Date(rows[0].migration_time);
-            if (!isNaN(t.getTime())) return t.toISOString();
+        const rows = await db.executeQuery(
+            `SELECT created_at FROM knex_migrations WHERE name LIKE '%005%' ORDER BY id ASC LIMIT 1`
+        );
+        if (rows && rows.length > 0 && rows[0].created_at) {
+            const d = new Date(rows[0].created_at);
+            if (!isNaN(d.getTime())) return d.toISOString();
         }
     } catch (e) {
-        console.warn('[InvoiceImmutability] Falha ao ler knex_migrations — usando DEFAULT_MIGRATION_005_CUTOFF:', e.message);
+        console.warn('[InvoiceImmutability] Falha ao ler knex_migrations:', e.message);
     }
 
-    return new Date(DEFAULT_MIGRATION_005_CUTOFF).toISOString();
+    console.warn(`[InvoiceImmutability] Usando cutoff fallback: ${DEFAULT_MIGRATION_005_CUTOFF}`);
+    return DEFAULT_MIGRATION_005_CUTOFF;
 }
 
-/**
- * Health check diário da imutabilidade de fatura FECHADA.
- *
- * @param {object} dbService  provider de banco (executeQuery/fq)
- * @param {Function} auditLog         logger de auditoria
- * @param {object} [options]
- * @param {string} [options.cutoffDate]  override do cutoff da query (A) (ISO)
- * @param {number} [options.windowDays]  janela opcional: olhar só os últimos N
- *   dias a partir de agora, nunca antes do cutoff da migration 005 (para
- *   varreduras sob demanda). Omitido → janela completa desde a migration 005.
- */
 async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
     console.log('[InvoiceImmutability] Iniciando health check...');
     const db = dbService;
     const findings = [];
 
     try {
-        // ── Cutoff dinâmico + janela opcional ──
         const cutoffIso = await resolveOrphanCutoff(db, options);
+        const cutoffDt = new Date(cutoffIso);
         let lowerBound = cutoffIso;
-        if (options.windowDays && options.windowDays > 0) {
-            const windowStart = new Date(Date.now() - options.windowDays * 86400000);
-            const cutoffDt = new Date(cutoffIso);
+
+        if (options.windowDays && typeof options.windowDays === 'number' && options.windowDays > 0) {
+            const windowStart = new Date(Date.now() - options.windowDays * 24 * 60 * 60 * 1000);
             if (windowStart > cutoffDt) lowerBound = windowStart.toISOString();
         }
-        console.log(`[InvoiceImmutability] Query A — cutoff: ${lowerBound} (janela: ${options.windowDays ? options.windowDays + 'd' : 'desde migration 005'})`);
+        console.log(`[InvoiceImmutability] Query A — cutoff: ${lowerBound}`);
 
-        // (A) Pagamentos pós-005 sem invoice_id — a referência da migration é a
-        // contagem por (cpf, invoice_id) na query de quitação. Pagamento órfão
-        // não conta pra quitação, então a fatura fica "não paga" mesmo após pagar.
-        // O cutoff (limite inferior) é dinâmico: data real da migration 005 lida
-        // do knex_migrations (ou override via options/env).
-        //
-        // Filtro de contas de serviço: exclui usuários inexistentes (u.cpf NULL,
-        // ex.: 99999999999 — registros de estorno de auditoria) e role='admin'
-        // (ex.: 11111111111 — pagamentos de teste do admin). Órfãos de massas
-        // reais (role customer/user) continuam sendo reportados.
         const orphans = await db.executeQuery(`
             SELECT t.id, t.cpf, t.amount, t.date, t.description,
                    u.full_name
@@ -116,19 +79,18 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
         `);
 
         for (const tx of orphans) {
+            const val = Math.abs(parseFloat(tx.amount || 0)).toFixed(2);
             findings.push({
                 cpf: tx.cpf,
                 name: tx.full_name,
                 type: 'PAYMENT_SEM_INVOICE_ID',
                 severity: 'high',
-                details: `INVOICE_PAYMENT de R$ ${Math.abs(parseFloat(tx.amount || 0)).toFixed(2)} em ${tx.date} (${tx.description}) sem invoice_id — quitação não pode ser derivada.`
+                details: `INVOICE_PAYMENT de R$ ${val} em ${tx.date} (${tx.description}) sem invoice_id — quitação não pode ser derivada.`,
+                context: `Transação ${tx.id} gerada pós-migration 005 sem amarração da fatura âncora.`,
+                action: `Executar vinculo de invoice_id ou rodar POST /admin/fix-orphan-payments.`
             });
         }
 
-        // (B) Soma de pagamentos vinculados > valor_total — pagou a mais e a
-        // lógica de creditoExcedente pode ter falhado em detectar.
-        // Filtro de contas de serviço (mesmo padrão da query A): exclui usuários
-        // inexistentes e role='admin' — o relatório foca só em massas reais.
         const overpaid = await db.executeQuery(`
             SELECT i.cpf, i.id AS invoice_id, i.valor_total, i.due_date, u.full_name,
                    COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) AS pago
@@ -145,23 +107,21 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
 
         for (const inv of overpaid) {
             const excess = parseFloat(inv.pago) - parseFloat(inv.valor_total);
+            const valPago = parseFloat(inv.pago).toFixed(2);
+            const valDevido = parseFloat(inv.valor_total).toFixed(2);
+            const valExcedente = excess.toFixed(2);
+            
             findings.push({
                 cpf: inv.cpf,
                 name: inv.full_name,
                 type: 'PAGAMENTO_ACIMA_DO_VALOR',
                 severity: 'medium',
-                details: `Fatura ${inv.invoice_id} (vencida ${inv.due_date}): pago R$ ${parseFloat(inv.pago).toFixed(2)}, devido R$ ${parseFloat(inv.valor_total).toFixed(2)}, excedente R$ ${excess.toFixed(2)}.`
+                details: `Fatura ${inv.invoice_id} (vencida ${inv.due_date}): pago R$ ${valPago}, devido R$ ${valDevido}, excedente R$ ${valExcedente}.`,
+                context: `Pagamento único ancorado nesta fatura cobrindo faturas passadas acumuladas ou saldo credor a creditar na fatura aberta (Regra §19.3).`,
+                action: `Verificar se o excedente (R$ ${valExcedente}) já compõe o saldo/creditoExcedente ou se precisa de ajuste no balance.`
             });
         }
 
-        // (C) Faturas FECHADA cujo valor_pago foi EDITADO APÓS o fechamento e
-        // ainda diverge do SUM(payments). O filtro updated_at > created_at + 1min
-        // isola a EDIÇÃO pós-criação: faturas criadas JÁ com valor_pago (seed,
-        // updated_at == created_at) não são resíduo de edição e ficam de fora.
-        // Como a trigger rejeita UPDATE monetário em FECHADA, qualquer divergência
-        // aqui é resíduo do bug legado (ou alguém desabilitou o trigger).
-        // Filtro de contas de serviço (mesmo padrão da query A): LEFT JOIN com
-        // users + exclui inexistentes e role='admin' — foca só em massas reais.
         const legacyMutated = await db.executeQuery(`
             SELECT i.id, i.cpf, i.valor_pago, i.updated_at, i.created_at,
                    COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) AS pago
@@ -183,12 +143,16 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
         `);
 
         for (const inv of legacyMutated) {
+            const valPago = parseFloat(inv.valor_pago).toFixed(2);
+            const sumPago = parseFloat(inv.pago).toFixed(2);
             findings.push({
                 cpf: inv.cpf,
                 name: null,
                 type: 'VALOR_PAGO_LEGADO_DIVERGE_PAGAMENTOS',
                 severity: 'info',
-                details: `Fatura ${inv.id}: valor_pago legado = R$ ${parseFloat(inv.valor_pago).toFixed(2)}, SUM(payments) = R$ ${parseFloat(inv.pago).toFixed(2)}. Provável herança pré-migration — auditar.`
+                details: `Fatura ${inv.id}: valor_pago legado = R$ ${valPago}, SUM(payments) = R$ ${sumPago}. Provável herança pré-migration — auditar.`,
+                context: `Coluna legada valor_pago foi alterada após o fechamento da fatura pré-migration 005.`,
+                action: `Validar histórico com getClosedInvoiceDebt.`
             });
         }
 
@@ -197,13 +161,15 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
             for (const f of findings) {
                 const reqDummy = { user: { cpf: '00000000000', role: 'system' } };
                 await auditLog(reqDummy, 'invoice_immutability_finding', f.severity, f);
-                telegramService.alertGroup(
-                    `⚠️ <b>InvoiceImmutability [${f.type}]</b>\n\n` +
-                    `<b>Cliente</b> ${f.name || f.cpf} (${telegramService.formatCpf(f.cpf)})\n` +
-                    `<b>Severidade</b> ${f.severity}\n` +
-                    `<b>Detalhes</b> ${f.details}`,
-                    'daily_anomaly'
-                );
+                
+                let text = `⚠️ <b>InvoiceImmutability [${f.type}]</b>\n\n` +
+                           `<b>Cliente:</b> ${f.name || f.cpf} (${telegramService.formatCpf(f.cpf)})\n` +
+                           `<b>Severidade:</b> ${f.severity.toUpperCase()}\n` +
+                           `<b>Detalhes:</b> ${f.details}\n` +
+                           `<b>Contexto de Negócio:</b> ${f.context}\n` +
+                           `<b>Ação Recomendada:</b> ${f.action}`;
+
+                telegramService.alertGroup(text, 'daily_anomaly');
             }
         } else {
             console.log('[InvoiceImmutability] Nenhum achado.');

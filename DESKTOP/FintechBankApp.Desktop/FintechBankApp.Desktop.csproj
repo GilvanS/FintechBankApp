@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>FintechBankApp.Desktop</RootNamespace>
+    <AssemblyName>FintechBankApp.Desktop</AssemblyName>
+
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CefSharp.WinForms.NETCore" Version="133.4.20" />
+  </ItemGroup>
+
+  <!-- Build frontend WEB (Vite) e copia do dist para wwwroot -->
+  <PropertyGroup>
+    <WebProjectDir>$(MSBuildProjectDirectory)\..\..\WEB</WebProjectDir>
+    <WebDistDir>$(WebProjectDir)\dist</WebDistDir>
+  </PropertyGroup>
+
+  <Target Name="BuildWebFrontend"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(SkipWebBuild)' != 'true'">
+    <Message Importance="high" Text="[WEB] Gerando build de producao (vite build)..." />
+    <Exec Command="npm run build" WorkingDirectory="$(WebProjectDir)" />
+  </Target>
+
+  <Target Name="CopyWebDistToOutput"
+          AfterTargets="Build"
+          Condition="Exists('$(WebDistDir)')">
+    <ItemGroup>
+      <WebDistFiles Include="$(WebDistDir)\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WebDistFiles)"
+          DestinationFiles="@(WebDistFiles->'$(OutDir)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

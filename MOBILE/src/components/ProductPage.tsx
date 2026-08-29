@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 
 import React, { useState } from 'react';
 import { PurchasedItem } from '../types';
@@ -48,7 +49,7 @@ const ProductPage: React.FC<ProductPageProps> = ({ product, onBack, onPurchase, 
                 <header className="w-full p-4 safe-top bg-surface-dark shadow-md z-10">
                     <div className="w-full max-w-4xl mx-auto flex items-center">
                         <button onClick={onBack} className="text-subtle-dark hover:text-primary mr-4">
-                            <span className="material-symbols-outlined text-2xl">arrow_back</span>
+                            <ArrowLeft size={22} className="shrink-0" />
                         </button>
                         <h1 className="text-xl font-bold text-text-dark truncate">{product.name}</h1>
                     </div>

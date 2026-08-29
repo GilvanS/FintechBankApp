@@ -1,3 +1,4 @@
+import { Store, ArrowLeft } from 'lucide-react';
 import React, { useState } from 'react';
 import { useToast, ToastContainer } from './Toast';
 
@@ -22,7 +23,7 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onBack, isPreview = false }) 
             <div className="bg-surface-dark rounded-2xl p-4 border border-white/10">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-primary">storefront</span>
+                        <Store className="text-primary" size={24} />
                     </div>
                     <div>
                         <h3 className="text-sm font-bold text-white">Marketplace</h3>
@@ -42,7 +43,7 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onBack, isPreview = false }) 
         <div className="bg-background-dark text-white min-h-full flex flex-col">
             <header className="flex items-center p-4 border-b border-white/10 pt-[calc(1rem+env(safe-area-inset-top))]">
                 <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10" aria-label="Voltar">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={22} className="shrink-0" />
                 </button>
                 <h1 className="text-xl font-bold ml-2">Marketplace</h1>
             </header>
@@ -51,7 +52,7 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onBack, isPreview = false }) 
                 {/* Hero */}
                 <div className="flex flex-col items-center text-center gap-4 py-4">
                     <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-4xl text-primary">storefront</span>
+                        <Store className="text-primary" size={36} />
                     </div>
                     <div>
                         <span className="inline-block text-xs font-semibold bg-primary/20 text-primary px-3 py-1 rounded-full mb-3">Em breve</span>

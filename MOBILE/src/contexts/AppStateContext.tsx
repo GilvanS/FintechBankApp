@@ -105,8 +105,8 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
         setAlerts(prev => prev.filter(alert => alert.id !== id));
     };
 
-    const clearNotification = (id: string) => {
-        const updated = notifications.filter(n => n.id !== id);
+    const clearNotification = (id: any) => {
+        const updated = notifications.filter(n => String(n.id) !== String(id));
         setNotifications(updated);
         localStorage.setItem('volt_notifications', JSON.stringify(updated));
     };
@@ -133,7 +133,7 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
         if (savedNotifs) {
             currentNotifs = JSON.parse(savedNotifs);
         } else {
-            currentNotifs = DEFAULT_NOTIFICATIONS;
+        const DEFAULT_NOTIFICATIONS: AppNotification[] = [{ id: 1, title: "Notificação", message: "Bem-vindo", description: "Bem-vindo", time: "Agora", created_at: new Date().toISOString(), is_read: false }];
             localStorage.setItem('volt_notifications', JSON.stringify(currentNotifs));
         }
 
@@ -153,8 +153,8 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
         let triggeredAny = false;
         // Filter out notifications for bills that are now paid
         let updatedNotifs = currentNotifs.filter(n => {
-            if (n.id.startsWith('bill-due-')) {
-                const paidBillMatch = bills.some(b => b.status !== 'pending' && n.id.includes(`-${b.id}-`));
+            if (String(n.id).startsWith('bill-due-')) {
+                const paidBillMatch = bills.some(b => b.status !== 'pending' && String(n.id).includes(`-${b.id}-`));
                 if (paidBillMatch) {
                     triggeredAny = true;
                     return false;
@@ -176,7 +176,7 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
             // Disparar se estiver vencida ou vencer nos próximos 3 dias
             if (diffDays <= 3) {
                 const uniqueNotifId = `bill-due-${diffDays}days-${bill.id}-${bill.dueDate}`;
-                const alreadyExists = updatedNotifs.some(n => n.id === uniqueNotifId);
+                const alreadyExists = updatedNotifs.some(n => String(n.id) === String(uniqueNotifId));
 
                 if (!alreadyExists) {
                     const absAmount = Math.abs(bill.amount);
@@ -184,11 +184,14 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
                     const daysText = diffDays < 0 ? `há ${Math.abs(diffDays)} dias (atrasada)` : diffDays === 0 ? 'hoje' : diffDays === 1 ? 'em 1 dia' : `em ${diffDays} dias`;
                     
                     const newNotif: AppNotification = {
-                        id: uniqueNotifId,
-                        title: 'Previsão de Cobrança 📅',
-                        description: `A conta "${bill.title}" no valor de R$ ${formattedAmt} vence ${daysText} (${bill.dueDate}).`,
-                        time: 'Agora'
-                    };
+    id: Date.now(),
+    title: 'Previsão de Cobrança 📅',
+    message: 'Conta prestes a vencer',
+    description: 'Conta prestes a vencer',
+    created_at: new Date().toISOString(),
+    time: 'Agora',
+    is_read: false
+};
 
                     updatedNotifs = [newNotif, ...updatedNotifs];
                     triggeredAny = true;
@@ -271,11 +274,14 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
                 // Criar notificação persistente
                 const newNotifId = `smart-alert-${Date.now()}-${Math.random()}`;
                 const newNotif: AppNotification = {
-                    id: newNotifId,
-                    title: '🔮 Alerta Inteligente',
-                    description: `Compra monitorada de R$ ${absAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} realizada em "${title}" (${catLabel}) às ${currentTimeStr}.`,
-                    time: 'Agora'
-                };
+    id: Date.now(),
+    title: 'Previsão de Cobrança 📅',
+    message: 'Conta prestes a vencer',
+    description: 'Conta prestes a vencer',
+    created_at: new Date().toISOString(),
+    time: 'Agora',
+    is_read: false
+};
 
                 const currentNotifs = JSON.parse(localStorage.getItem('volt_notifications') || '[]');
                 const updatedNotifs = [newNotif, ...currentNotifs];

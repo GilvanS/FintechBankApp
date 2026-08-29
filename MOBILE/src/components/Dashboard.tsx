@@ -1,9 +1,11 @@
+import InvoicesView from './InvoicesView';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { PurchasedItem, Transaction, User } from '../types';
 import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement, InstallmentReceipt as InstallmentReceiptDetails } from '../services/api';
 import { useDialog } from '../contexts/GlobalDialogContext';
 import { useAppState } from '../contexts/AppStateContext';
+import { setBackHandler } from '../utils/backHandler';
 
 import HomeView from './HomeView';
 import Profile from './Profile';
@@ -11,7 +13,7 @@ import PixView from './PixView';
 import Statement from './Statement';
 import StatementPaginated from './StatementPaginated';
 import CardDashboard from './CardDashboard';
-import ShopView from './ShopView';
+import ShopLanding from './ShopLanding';
 import ShoppingCart from './ShoppingCart';
 import PaymentMethods from './PaymentMethods';
 import DepositModal from './DepositModal';
@@ -78,7 +80,7 @@ const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; o
 };
 
 
-type View = 'home' | 'cards' | 'shop' | 'investments' | 'wallet' | 'loans' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'installmentReceipt' | 'currentInvoice' | 'limit';
+type View = 'invoices' | 'home' | 'cards' | 'shop' | 'investments' | 'wallet' | 'loans' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'installmentReceipt' | 'currentInvoice' | 'limit';
 
 const Dashboard: React.FC = () => {
     const { user, updateUser, logout, view: topLevelView, navigateTo } = useAuth();
@@ -96,6 +98,7 @@ const Dashboard: React.FC = () => {
     // Shop is now full-page
     const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
     const [isHeaderHidden, setIsHeaderHidden] = useState(false);
+    
 
     const {
         theme,
@@ -261,6 +264,19 @@ const Dashboard: React.FC = () => {
     const handleBack = () => {
         setCurrentView(previousView);
     };
+
+    // Botão físico de voltar do Android: enquanto o Dashboard está montado,
+    // ele é quem decide — mesma pilha usada pelos botões de voltar em tela
+    // (currentView/previousView). Em 'home' não há mais para onde voltar
+    // aqui dentro; devolve false para App.tsx minimizar o app.
+    useEffect(() => {
+        setBackHandler(() => {
+            if (currentView === 'home') return false;
+            setCurrentView(previousView);
+            return true;
+        });
+        return () => setBackHandler(null);
+    }, [currentView, previousView]);
 
     const handleTransactionCompleteLimit = (newTx: Transaction, amount: number) => {
         if (!user) return;
@@ -441,7 +457,7 @@ const Dashboard: React.FC = () => {
 
 
     // --- Other Actions ---
-    const handlePayInvoice = (amount: number) => {
+    const handlePayInvoice = async (amount: number) => {
         passwordActionPayload.current = { ...(passwordActionPayload.current || {}), amount };
         setPasswordAction(() => () => executePayInvoice());
         const fmtAmt = amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -569,10 +585,24 @@ const Dashboard: React.FC = () => {
         setPasswordAction(null);
     };
     
+    const isModalOrDrawerOpen = isBoletoOpen || isPasswordModalOpen || isAiModalOpen || isFinancialHealthOpen || isAiRecurringModalOpen || Boolean(activeDrawer);
     const renderContent = () => {
 
         switch (currentView) {
             case 'home':
+                return (
+                    <div className={`transition-all duration-300 ease-out origin-top ${isModalOrDrawerOpen ? 'scale-[0.96] rounded-3xl opacity-90 blur-[0.3px] overflow-hidden shadow-2xl pointer-events-none' : 'scale-100 rounded-none opacity-100 filter-none'}`}>
+                        <HomeView
+                            user={user!}
+                            onNavigate={handleNavigate}
+                            theme={theme}
+                            setIsFinancialHealthOpen={setFinancialHealthOpen}
+                            setIsAiRecurringModalOpen={setAiRecurringModalOpen}
+                            setActiveDrawer={setActiveDrawer}
+                            openBoletoModal={() => setIsBoletoOpen(true)}
+                        />
+                    </div>
+                );
                 return (
                     <HomeView
                         user={user!}
@@ -582,6 +612,13 @@ const Dashboard: React.FC = () => {
                         setIsAiRecurringModalOpen={setAiRecurringModalOpen}
                         setActiveDrawer={setActiveDrawer}
                         openBoletoModal={() => setIsBoletoOpen(true)}
+                    />
+                );
+            case 'invoices':
+                return (
+                    <InvoicesView
+                        onBack={() => handleNavigate('home')}
+                        onNavigate={handleNavigate}
                     />
                 );
             case 'cards':
@@ -613,22 +650,7 @@ const Dashboard: React.FC = () => {
             case 'loans':
                 return <Loans onBack={() => handleNavigate('home')} />;
             case 'shop':
-                if (!user) return null;
-                return (
-                    <div className={`min-h-full pb-20 w-full max-w-4xl mx-auto ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
-                        <div className={`flex items-center gap-3 p-4 border-b sticky top-0 z-50 ${theme === 'midnight' ? 'border-white/5 bg-[#0f0f0f]' : 'border-black/5 bg-volt-yellow'}`}>
-                            <button onClick={handleBack} className={`p-2 -ml-2 rounded-full transition-colors cursor-pointer ${theme === 'midnight' ? 'hover:bg-white/10 text-white' : 'hover:bg-black/10 text-black'}`}>
-                                <span className={`text-xl ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>←</span>
-                            </button>
-                            <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Shopping Volt</h1>
-                        </div>
-                        <ShopView 
-                            accountBalance={user.balance} 
-                            onPurchaseComplete={handleTransactionCompleteLimit} 
-                            theme={theme} 
-                        />
-                    </div>
-                );
+                return <ShopLanding onBack={handleBack} />;
             case 'pix':
                 if (!user) return null;
                 return (
@@ -659,7 +681,7 @@ const Dashboard: React.FC = () => {
             case 'anticipateInstallments':
                  return <AnticipateInstallments onBack={() => handleNavigate('cards')} onConfirmAnticipation={handleAnticipateInstallments} isProcessing={isProcessing} />;
             case 'installmentReviewInvoice':
-                if (!user || !parcelDetails) return <ClosedInvoice user={user!} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
+                if (!user || !parcelDetails) return <ClosedInvoice user={user!} onBack={() => handleNavigate('cards')} onPayInvoice={async (amt) => handlePayInvoice(amt)} onParcel={handleParcelInvoice} />;
                 return <InstallmentReview type="invoice" user={user} details={parcelDetails} onConfirm={handleConfirmParcelInvoice} onBack={() => handleNavigate('installmentOptions')} />;
             case 'invoicePaymentReceipt':
                 if (!invoicePaymentDetails) return <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
@@ -671,7 +693,7 @@ const Dashboard: React.FC = () => {
                 return <Products onNavigate={handleNavigate} />;
             case 'closedInvoice':
                 if (!user) return null;
-                return <ClosedInvoice user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />;
+                return <ClosedInvoice user={user} onBack={() => handleNavigate('cards')} onPayInvoice={async (amt) => handlePayInvoice(amt)} onParcel={handleParcelInvoice} />;
             case 'installmentOptions':
                 if (!user) return null;
                 return <InstallmentOptions user={user} onBack={() => handleNavigate(parcelEntryView)} onSelectOption={handleSelectInstallmentOption} />;
@@ -685,7 +707,7 @@ const Dashboard: React.FC = () => {
                             </button>
                             <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Fatura</h1>
                         </div>
-                        <InvoiceView user={user} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} />
+                        <InvoiceView user={user} onPayInvoice={async (amt) => handlePayInvoice(amt)} onParcel={handleParcelInvoice} />
                     </div>
                 );
             case 'limit':
@@ -739,30 +761,22 @@ const Dashboard: React.FC = () => {
         >
             <SmartAlerts />
             {topLevelView !== 'admin' && !isHeaderHidden && (
-                <Header 
-                    activeTab={currentView as any}
-                    setActiveTab={(tab: any) => handleNavigate(tab)}
-                    userProfile={user as any}
-                    invoiceSubView={invoiceSubView}
-                    setInvoiceSubView={setInvoiceSubView}
-                    statementSubView={statementSubView}
-                    setStatementSubView={setStatementSubView}
-                    notifications={notifications || []}
-                    onClearNotification={clearNotification}
-                    onClearAllNotifications={clearAllNotifications}
+                <Header
+                    currentView={currentView}
+                    onNavigate={handleNavigate}
+                    user={user}
                     theme={theme}
                     onThemeToggle={handleThemeToggle}
-                    transactions={user?.transactions || []}
-                    isCentralHubOpen={isCentralHubOpen}
-                    setIsCentralHubOpen={setCentralHubOpen}
-                    isAiModalOpen={isAiModalOpen}
-                    setIsAiModalOpen={setAiModalOpen}
                     isFinancialHealthOpen={isFinancialHealthOpen}
                     setIsFinancialHealthOpen={setFinancialHealthOpen}
                     isAiRecurringModalOpen={isAiRecurringModalOpen}
                     setIsAiRecurringModalOpen={setAiRecurringModalOpen}
-                    activeDrawer={activeDrawer}
-                    setActiveDrawer={setActiveDrawer}
+                    activeDrawer={activeDrawer as any}
+                    setActiveDrawer={(d: any) => setActiveDrawer(d)}
+                    isAiModalOpen={isAiModalOpen}
+                    setIsAiModalOpen={setAiModalOpen}
+                    isCentralHubOpen={isCentralHubOpen}
+                    setIsCentralHubOpen={setCentralHubOpen}
                     onHide={() => setIsHeaderHidden(true)}
                 />
             )}
@@ -817,7 +831,7 @@ const Dashboard: React.FC = () => {
                             balance: user.balance + amount,
                             transactions: [newTx, ...user.transactions]
                         });
-                        triggerSmartAlertCheck(newTx);
+                        triggerSmartAlertCheck(newTx.description ?? '', Math.abs(newTx.amount), newTx.category || 'outros');
                     }
                 }}
                 theme={theme}
@@ -839,7 +853,6 @@ const Dashboard: React.FC = () => {
                 <AiAssistantModal 
                     isOpen={isAiModalOpen} 
                     onClose={() => setAiModalOpen(false)} 
-                    transactions={user?.transactions || []}
                     theme={theme}
                 />
             )}

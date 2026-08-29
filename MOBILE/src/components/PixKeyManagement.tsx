@@ -417,7 +417,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                             className={`absolute z-10 w-full mt-2 rounded-lg shadow-2xl overflow-hidden ${isMidnight ? 'bg-surface-dark border border-subtle-dark/50' : 'bg-white border border-black/20'}`}
                                             data-testid="pix-key-type-dropdown"
                                             id="pix-key-type-dropdown"
-                                            name="pix-key-type-dropdown"
+                                            
                                             role="listbox"
                                             aria-labelledby="pix-key-type-label"
                                             aria-label="Lista de tipos de chave PIX"

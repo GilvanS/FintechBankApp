@@ -1,3 +1,4 @@
+const eventBus = require('./eventBus');
 // Telegram alerts — tópico por CPF no fórum do grupo (bot já validado em scripts/testTelegram.js)
 // Chamado por: index.cjs (hooks compras/PIX/cron), repositories/notificationsRepo.js,
 // repositories/usersRepo.js (deposit), src/controllers/invoiceController.js
@@ -56,6 +57,14 @@ async function tg(method, body) {
 }
 
 function init(databricksService) {
+    eventBus.subscribe('purchase.declined', async (data) => {
+        try {
+            const msg = '⚠️ *Compra Recusada (Limite Insuficiente)*\n\n👤 *CPF:* ' + data.cpf + '\n💰 *Valor Necessário:* R$ ' + Number(data.requiredAmount).toFixed(2) + '\n💳 *Limite Disponível:* R$ ' + Number(data.availableLimit).toFixed(2);
+            await alertGroup(msg, 'purchases');
+        } catch (e) {
+            console.error('[TelegramService] Erro ao enviar alerta purchase.declined:', e.message);
+        }
+    });
     db = databricksService;
 }
 
@@ -140,7 +149,7 @@ function ensureTopic(cpf, nome) {
         if (before.length > 0) return; // já existia: não repete boas-vindas
         // Gate pela categoria 'welcome' — se admin desligou, não manda a mensagem.
         // O tópico é mantido (CPF/gerador precisam da row) mas sem o texto de boas-vindas.
-        if (!(await isCategoryActive('welcome'))) {
+        if (!(await isCategoryActive('welcome')) || !(await isCategoryActive('auto_create_topics'))) {
             console.debug(`[telegram:skip] category=welcome reason=disabled (ensureTopic cpf=${cpf})`);
             return;
         }

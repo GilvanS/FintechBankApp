@@ -59,7 +59,7 @@ def generate_audit_report():
         { 'cpf': '66666666666', 'full_name': 'Fernanda Costa Ribeiro', 'account_status': 'inadimplente', 'closed_invoice_amount': 4120.00, 'days_overdue': 12, 'due_date': '2026-07-12' },
         { 'cpf': '77777777777', 'full_name': 'Lucas Gabriel Martins', 'account_status': 'inadimplente', 'closed_invoice_amount': 6300.75, 'days_overdue': 45, 'due_date': '2026-06-09' },
         { 'cpf': '88888888888', 'full_name': 'Juliana Barbosa Rocha', 'account_status': 'inadimplente', 'closed_invoice_amount': 950.00, 'days_overdue': 3, 'due_date': '2026-07-21' },
-        { 'cpf': '99999999999', 'full_name': 'Thiago Henrique Alves', 'account_status': 'inadimplente', 'closed_invoice_amount': 7840.20, 'days_overdue': 60, 'due_date': '2026-05-25' },
+        { 'cpf': '99999999999', 'full_name': 'Admin User', 'account_status': 'inadimplente', 'closed_invoice_amount': 7840.20, 'days_overdue': 60, 'due_date': '2026-05-25' },
         { 'cpf': '12345678901', 'full_name': 'Camila Fernandes Rodrigues', 'account_status': 'inadimplente', 'closed_invoice_amount': 1890.00, 'days_overdue': 21, 'due_date': '2026-07-03' },
         { 'cpf': '23456789012', 'full_name': 'Gabriel Augusto Mendes', 'account_status': 'inadimplente', 'closed_invoice_amount': 3400.00, 'days_overdue': 8, 'due_date': '2026-07-16' },
         { 'cpf': '34567890123', 'full_name': 'Larissa Nogueira Castro', 'account_status': 'inadimplente', 'closed_invoice_amount': 2150.60, 'days_overdue': 17, 'due_date': '2026-07-07' },

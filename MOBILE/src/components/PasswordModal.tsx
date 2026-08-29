@@ -9,10 +9,10 @@ interface PasswordModalProps {
     onConfirm: (password: string) => void;
     title: string;
     description?: string;
-    isLoading: boolean;
+    isLoading?: boolean;
 }
 
-const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfirm, title, description, isLoading }) => {
+const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfirm, title, description, isLoading = false }) => {
     const { theme } = useAppState();
     const isMidnight = theme === 'midnight';
     

@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="FintechBankApp.Desktop.Tests/FintechBankApp.Desktop.Tests.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="FintechBankApp.Desktop/FintechBankApp.Desktop.csproj" />
+</Solution>

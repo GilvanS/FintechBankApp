@@ -33,6 +33,7 @@ r.status
 # Keystore files (important for security)
 *.jks
 *.keystore
+android/keystore.properties
 
 # Pasta de imagens de exemplo para inspiracao (nao versionar)
 .exemplos/

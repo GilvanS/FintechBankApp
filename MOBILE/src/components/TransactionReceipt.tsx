@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React, { useState } from 'react';
 import { Transaction } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -109,7 +110,7 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
         <div className="bg-background-dark text-white min-h-screen flex flex-col" data-testid="transaction-receipt">
             <header className="flex items-center justify-between p-4 pt-[calc(1rem+env(safe-area-inset-top))]">
                 <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10" data-testid="receipt-back">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={22} className="shrink-0" />
                 </button>
                 <h1 className="text-lg font-bold">Comprovante</h1>
                 <button onClick={handleShare} className="p-2 rounded-full hover:bg-white/10" data-testid="receipt-share">

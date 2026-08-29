@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { PixContact } from '../types';
@@ -157,7 +158,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
                 <h2 className={`text-xl font-bold ${titleClass}`}>Meus Contatos</h2>
                 {onBack && (
                      <button onClick={onBack} className={`p-2 rounded-full ${backBtnClass} ${titleClass}`}>
-                        <span className="material-symbols-outlined">arrow_back</span>
+                        <ArrowLeft size={22} className="shrink-0" />
                     </button>
                 )}
             </div>

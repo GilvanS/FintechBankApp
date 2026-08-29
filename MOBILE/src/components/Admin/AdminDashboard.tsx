@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, CreditCard, Receipt, FileText, ArrowLeft, Sparkles, Repeat, Send, ShieldCheck } from 'lucide-react';
+import { Shield, Users, CreditCard, Receipt, FileText, ArrowLeft, Sparkles, Repeat, Send, ShieldCheck, Timer } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 
 // Import sub-components
@@ -12,12 +12,13 @@ import RecurringBillsManagement from './RecurringBillsManagement';
 import { MainMassCreatorFlow } from './MainMassCreatorFlow';
 import TelegramManagement from './TelegramManagement';
 import AuditSection from './AuditSection';
+import ShopOfferSettings from './ShopOfferSettings';
 
 interface AdminDashboardProps {
     onClose: () => void;
 }
 
-type AdminTab = 'mass-creator' | 'users' | 'cards' | 'billing' | 'recurring' | 'requests' | 'telegram' | 'audit' | 'legacy';
+type AdminTab = 'mass-creator' | 'users' | 'cards' | 'billing' | 'recurring' | 'requests' | 'telegram' | 'audit' | 'vitrine' | 'legacy';
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     const { theme } = useAppState();
@@ -44,6 +45,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         { id: 'requests', label: 'Solicitações', icon: FileText },
         { id: 'telegram', label: 'Telegram', icon: Send },
         { id: 'audit', label: 'Auditoria', icon: ShieldCheck },
+        { id: 'vitrine', label: 'Vitrine', icon: Timer },
         { id: 'legacy', label: 'Legado', icon: Shield },
     ] as const;
 
@@ -67,6 +69,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 return <TelegramManagement />;
             case 'audit':
                 return <AuditSection />;
+            case 'vitrine':
+                return <ShopOfferSettings />;
             default:
                 return null;
         }

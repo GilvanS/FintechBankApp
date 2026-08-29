@@ -26,6 +26,45 @@ services:
     networks:
       - skynet
 
+  redis:
+    container_name: redis
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - skynet
+
+  zookeeper:
+    container_name: zookeeper
+    image: confluentinc/cp-zookeeper:7.6.1
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - skynet
+    profiles: ["kafka"]
+
+  kafka:
+    container_name: kafka
+    image: confluentinc/cp-kafka:7.6.1
+    restart: always
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - skynet
+    profiles: ["kafka"]
+
 networks:
   skynet:
     driver: bridge
@@ -35,3 +74,4 @@ volumes:
     # Volume pré-existente com o banco fintechbank (dados reais) — não recriar
     external: true
     name: 674168372df3aea2f62e43566e4c4b8e5e546a12f770cf4197b6a7f94861d081
+  redisdata:

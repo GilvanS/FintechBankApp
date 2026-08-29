@@ -9,6 +9,12 @@ import { Transaction } from '../types';
 import { getProducts, checkout } from '../services/api';
 import PasswordModal from './PasswordModal';
 import { useDialog } from '../contexts/GlobalDialogContext';
+import {
+  IntervaloOferta,
+  lerIntervaloOferta,
+  indiceDestaque,
+  proximaTrocaEm,
+} from '../utils/ofertaDestaque';
 
 interface ShopViewProps {
   accountBalance: number;
@@ -106,12 +112,62 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
     return ['Todos', ...Array.from(cats)];
   }, [products]);
 
+  // Oferta da Semana: o destaque gira sozinho, derivado do relógio e do
+  // intervalo configurado no painel admin (mesma chave de localStorage da WEB).
+  const [intervaloOferta, setIntervaloOferta] = useState<IntervaloOferta>(() => lerIntervaloOferta());
+
+  useEffect(() => {
+    const ler = () => setIntervaloOferta(lerIntervaloOferta());
+    window.addEventListener('storage', ler);
+    window.addEventListener('volt:oferta-intervalo', ler as EventListener);
+    return () => {
+      window.removeEventListener('storage', ler);
+      window.removeEventListener('volt:oferta-intervalo', ler as EventListener);
+    };
+  }, []);
+
+  const [agora, setAgora] = useState(() => Date.now());
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setAgora(Date.now()), proximaTrocaEm(intervaloOferta) + 500);
+    return () => window.clearTimeout(t);
+  }, [intervaloOferta, agora]);
+
+  const indiceEmDestaque = useMemo(
+    () => indiceDestaque(products.length, intervaloOferta, agora),
+    [products.length, intervaloOferta, agora]
+  );
+
+  const destaque = products[indiceEmDestaque];
+
+  const [contagemOferta, setContagemOferta] = useState('--:--:--');
+
+  useEffect(() => {
+    const formatarContagem = () => {
+      const s = Math.max(0, Math.floor(proximaTrocaEm(intervaloOferta) / 1000));
+      const h = String(Math.floor(s / 3600)).padStart(2, '0');
+      const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+      return `${h}:${m}:${String(s % 60).padStart(2, '0')}`;
+    };
+    setContagemOferta(formatarContagem());
+    const t = window.setInterval(() => setContagemOferta(formatarContagem()), 1000);
+    return () => window.clearInterval(t);
+  }, [intervaloOferta]);
+
   const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    if (destaque && product.id === destaque.id) return false;
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           product.category.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'Todos' || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  const abrirProduto = (product: Product) => {
+    setSelectedProduct(product);
+    setPurchaseSuccess(false);
+    setInstallments(1);
+    setPaymentMethod('balance');
+  };
 
   const handleBuyProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,13 +187,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
     setCheckoutError(null);
 
     try {
-      const response = await checkout({
-        items: [{ productId: selectedProduct.id, quantity: 1 }],
-        paymentMethod: paymentMethod === 'balance' ? 'debit' : 'credit',
-        cashbackUsed: 0,
-        installments: paymentMethod === 'credit' ? installments : 1,
-        pin: pin,
-      });
+      const response = await checkout({ cpf: "00000000000", items: [{ id: selectedProduct.id, quantity: 1 }], paymentMethod: paymentMethod === "balance" ? "debit" : "credit", cashbackUsed: 0, installments: paymentMethod === "credit" ? installments : 1, pin: pin });
 
       if (response.success && response.purchase) {
         const now = new Date();
@@ -155,11 +205,11 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
           id: serverTx.id || Math.random().toString(36).substring(2, 11),
           title: serverTx.description || response.purchase.productsDescription || `${selectedProduct.name} adquirido`,
           amount: -response.purchase.totalAmount,
-          type: 'expense',
+          type: 'SHOP_DEBIT' as any,
           category: 'outros',
           date: serverTx.date || now.toISOString(),
           formattedDate: `${weekdays[now.getDay()]} • ${formattedDate}`,
-          time: `${formatNumber(now.getHours())}:${formatNumber(now.getMinutes())}`
+          // time removed
         };
 
         // Complete purchase
@@ -270,11 +320,11 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
       id: Math.random().toString(36).substring(2, 11),
       title: 'Resgate de Cashback Volt',
       amount: redeemAmount,
-      type: 'income',
+      type: 'CASHBACK_CREDIT' as any,
       category: 'outros',
       date: now.toISOString(),
       formattedDate: `${weekdays[now.getDay()]} • ${formattedDate}`,
-      time: `${formatNumber(now.getHours())}:${formatNumber(now.getMinutes())}`
+      // time removed
     };
 
     onPurchaseComplete(newTx, redeemAmount);
@@ -442,6 +492,36 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
         </div>
       </div>
 
+      {/* Oferta da Semana: destaque rotativo, configurado no painel admin */}
+      {destaque && !searchQuery && selectedCategory === 'Todos' && (
+        <div
+          onClick={() => abrirProduto(destaque)}
+          className={`relative rounded-2xl overflow-hidden cursor-pointer flex border transition-all ${
+            isMidnight
+              ? 'bg-gradient-to-r from-zinc-900 to-zinc-950 border-volt-green/30'
+              : 'bg-gradient-to-r from-yellow-50 to-amber-100 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+          }`}
+        >
+          <div className="w-28 h-28 shrink-0">
+            <img src={destaque.image} alt={destaque.name} className="w-full h-full object-cover" />
+          </div>
+          <div className="flex-1 p-3 flex flex-col justify-center min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[8px] bg-volt-green/20 text-volt-green font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                Oferta da Semana
+              </span>
+            </div>
+            <h4 className={`text-sm font-black mt-1 truncate ${isMidnight ? 'text-white' : 'text-black'}`}>
+              {destaque.name}
+            </h4>
+            <p className="text-base font-black text-primary">{formatCurrency(destaque.price)}</p>
+            <p className="text-[9px] font-bold text-on-surface-variant mt-0.5">
+              Próxima troca em {contagemOferta}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Product List Heading */}
       <div className="flex justify-between items-center pl-1 border-t pt-4 border-zinc-900">
         <h3 className={`text-xs font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-400' : 'text-zinc-600'}`}>
@@ -459,12 +539,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
             key={product.id}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              setSelectedProduct(product);
-              setPurchaseSuccess(false);
-              setInstallments(1);
-              setPaymentMethod('balance');
-            }}
+            onClick={() => abrirProduto(product)}
             className={`relative h-56 rounded-2xl overflow-hidden cursor-pointer flex flex-col border transition-all duration-300 ${
               isMidnight 
                 ? 'bg-zinc-900 border-2 border-zinc-800 hover:border-volt-green/50 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]' 

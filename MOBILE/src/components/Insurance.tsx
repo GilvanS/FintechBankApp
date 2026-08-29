@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React, { useState } from 'react';
 import { useToast, ToastContainer } from './Toast';
 
@@ -42,7 +43,7 @@ const Insurance: React.FC<InsuranceProps> = ({ onBack, isPreview = false }) => {
         <div className="bg-background-dark text-white min-h-full flex flex-col">
             <header className="flex items-center p-4 border-b border-white/10 pt-[calc(1rem+env(safe-area-inset-top))]">
                 <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10" aria-label="Voltar">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={22} className="shrink-0" />
                 </button>
                 <h1 className="text-xl font-bold ml-2">Seguros</h1>
             </header>

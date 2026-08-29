@@ -138,7 +138,7 @@ const BillingManagement: React.FC = () => {
                                 <div>
                                     <p className="text-[10px] opacity-70 font-bold uppercase mb-1">Fatura Atual</p>
                                     <p className="text-xl font-bold text-volt-green">
-                                        R$ {((searchedUser.creditCard?.limit || 0) - (searchedUser.creditCard?.availableLimit || 0)).toFixed(2).replace('.', ',')}
+                                        R$ {(((searchedUser.creditCard?.totalLimit || searchedUser.creditCard?.limit) || 0) - (searchedUser.creditCard?.availableLimit || 0)).toFixed(2).replace('.', ',')}
                                     </p>
                                 </div>
                             </div>

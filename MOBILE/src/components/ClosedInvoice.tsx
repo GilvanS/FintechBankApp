@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React, { useState } from 'react';
 import { User, CardTransaction } from '../types';
 import { useAppState } from '../contexts/AppStateContext';
@@ -108,7 +109,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, theme: customThem
       <header className={`sticky top-0 z-20 ${isMidnight ? 'bg-volt-surface border-b border-white/5' : 'bg-volt-primary text-black'}`}>
         <div className="flex items-center px-4 pt-4 pb-2">
           <button onClick={onBack} className={`p-2 -ml-2 rounded-full transition-colors ${isMidnight ? 'hover:bg-white/10' : 'hover:bg-black/10'}`} data-testid="invoice-back">
-            <span className={`material-symbols-outlined ${isMidnight ? 'text-white' : 'text-black'}`}>arrow_back</span>
+            <ArrowLeft size={22} className="shrink-0" />
           </button>
           <h2 className={`flex-1 text-center text-lg font-semibold pr-8 ${isMidnight ? 'text-white' : 'text-black'}`}>Fatura</h2>
         </div>

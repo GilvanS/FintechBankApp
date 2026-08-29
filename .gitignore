@@ -71,4 +71,10 @@ WEB/.agents/
 
 # IDE local
 .idea/
+.vs/
+
+# DESKTOP (.NET/CefSharp) — artefatos de build
+DESKTOP/**/bin/
+DESKTOP/**/obj/
+DESKTOP/**/wwwroot/
 

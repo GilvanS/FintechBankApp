@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React, { useState, useCallback, useRef } from 'react';
 import { useIonViewWillEnter } from '@ionic/react';
 import { Preferences } from '@capacitor/preferences';
@@ -38,7 +39,7 @@ const StatusMessage: React.FC<StatusMessageProps> = ({ type, message, onClose })
       aria-atomic="true"
       aria-label={isError ? 'Mensagem de erro' : 'Mensagem de sucesso'}
       // Atributos adicionais para localização
-      name={elementId}
+      
     >
       <div 
         className="flex items-center gap-2"
@@ -266,7 +267,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
 
   return (
     <div 
-      className="font-display bg-volt-yellow text-black antialiased min-h-screen flex flex-col"
+      className="font-display bg-zinc-950 text-white antialiased min-h-screen flex flex-col"
       data-testid="login-screen"
       id="login-screen"
       aria-label="Tela de login"
@@ -293,18 +294,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
           role="button"
           type="button"
         >
-          <span 
-            className="material-symbols-outlined text-2xl" 
-            aria-hidden="true" 
-            style={{ 
-              fontFamily: "'Material Symbols Outlined', 'Roboto', sans-serif",
-              fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24",
-              display: 'inline-block',
-              lineHeight: '1'
-            }}
-          >
-            arrow_back
-          </span>
+          <ArrowLeft size={22} className="shrink-0" />
         </button>
         </header>
       
@@ -336,12 +326,12 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
           onSubmit={handleLogin}
           data-testid="login-form"
           id="login-form"
-          className="w-full max-w-sm"
+          className="w-full max-w-sm bg-zinc-900/90 border-2 border-zinc-800 p-6 rounded-3xl shadow-2xl backdrop-blur-xl relative overflow-hidden text-white"
         >
           <div data-testid="login-cpf" id="login-cpf">
             <label 
               htmlFor="login-cpf-input" 
-              className="text-sm font-medium text-black/80 mb-1 block"
+              className="text-xs font-black uppercase tracking-wider text-zinc-300 mb-2 block"
               data-testid="login-cpf-label"
               id="login-cpf-label"
             >
@@ -459,7 +449,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
         </main>
 
       <footer 
-        className="w-full bg-white/70 border-t border-black/20 p-3 safe-bottom-strong"
+        className="w-full bg-zinc-950 border-t border-zinc-800 p-4 safe-bottom-strong text-white"
         data-testid="login-footer"
         id="login-footer"
       >

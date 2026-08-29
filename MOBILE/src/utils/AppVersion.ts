@@ -1,6 +1,6 @@
 export class AppVersion {
-    private static readonly _version = "4.0.4-20260704-1031";
-    private static readonly _build = "20260704-1031";
+    private static readonly _version = "4.0.4-20260827-1252";
+    private static readonly _build = "20260827-1252";
     private static readonly _environment = "HotFix";
 
     static get current(): string {
@@ -8,6 +8,6 @@ export class AppVersion {
     }
 
     static get fullDetails(): string {
-        return `VersÃƒÂ£o: ${this._version}\nBuild: ${this._build}\nAmbiente: ${this._environment}`;
+        return `Versão: ${this._version}\nBuild: ${this._build}\nAmbiente: ${this._environment}`;
     }
 }

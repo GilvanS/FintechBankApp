@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import React from 'react';
 import { useAppState } from '../contexts/AppStateContext';
 
@@ -33,7 +34,7 @@ const Wallet: React.FC<WalletProps> = ({ onBack }) => {
         <div className={`p-4 min-h-full font-sans flex flex-col ${containerClass}`}>
             <header className="flex items-center mb-6 pt-[calc(1rem+env(safe-area-inset-top))]">
                 <button onClick={onBack} className={`mr-4 transition-all active:scale-95 flex items-center justify-center ${backBtnClass}`} aria-label="Voltar">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={22} className="shrink-0" />
                 </button>
                 <h1 className={titleClass}>Carteira</h1>
             </header>

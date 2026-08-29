@@ -1,7 +1,7 @@
 {
   "name": "fintech-bank-app",
   "private": true,
-  "version": "4.0.4-20260704-1031",
+  "version": "4.0.4-20260827-1252",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,7 +18,10 @@
     "@aparajita/capacitor-biometric-auth": "^10.0.0",
     "@capacitor/android": "^7.4.4",
     "@capacitor/app": "^7.1.2",
+    "@capacitor/haptics": "^7.0.5",
+    "@capacitor/keyboard": "^7.0.6",
     "@capacitor/preferences": "^7.0.2",
+    "@capacitor/share": "^7.0.4",
     "@ionic/react": "^8.7.9",
     "@ionic/react-router": "^8.7.9",
     "axios": "^1.13.2",

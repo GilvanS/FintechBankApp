@@ -90,7 +90,7 @@ const UserManagement: React.FC = () => {
                         setIsLoadingAction(false);
                         return;
                     }
-                    result = await adminUpdateCreditLimit(modalState.data.cpf, creditAmt);
+                    result = await adminUpdateCreditLimit(modalState.data.cpf, { totalLimit: creditAmt });
                     break;
                 case 'pixLimit':
                     const pixAmt = parseFloat(inputValue.replace(',', '.'));

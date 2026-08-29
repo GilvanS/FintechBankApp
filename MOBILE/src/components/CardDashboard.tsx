@@ -1,3 +1,5 @@
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { Capacitor } from '@capacitor/core';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CreditCard, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
@@ -49,7 +51,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
             const result = await payCreditCardInvoice(user.cpf, enteredPin);
             if (result && (result.success || (result as any).cpf)) {
                 const updatedUser = result.user || result;
-                updateUser(updatedUser);
+                updateUser(updatedUser as any);
                 setPaymentSuccess(true);
                 setTimeout(() => {
                     setPaymentSuccess(false);
@@ -80,6 +82,7 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
                     updateUser({ ...user, creditCard: { ...creditCard, ...partial } })
                 }
                 userName={user.fullName}
+                user={user}
                 profileMessage={user.profileMessage}
                 onOpenInvoice={() => onNavigate('currentInvoice')}
                 invoiceAmount={invoiceAmount}

@@ -1964,7 +1964,7 @@ export interface TelegramSetting {
     updated_by?: string | null;
 }
 
-export async function adminTelegramStatus(): Promise<{ configured: boolean; botName?: string; chatId?: string }> {
+export async function adminTelegramStatus(): Promise<{ configured: boolean; enabled?: boolean; botName?: string; chatId?: string; topicCount?: number }> {
     try {
         const res = await api.get('/admin/telegram/status', { headers: getAuthHeaders('none') });
         return res.data;
