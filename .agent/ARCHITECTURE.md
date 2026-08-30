@@ -68,14 +68,12 @@ Modular knowledge domains that agents can load on-demand. based on task context.
 | `nextjs-best-practices` | App Router, Server Components |
 | `tailwind-patterns` | Tailwind CSS v4 utilities |
 | `frontend-design` | UI/UX patterns, design systems |
-| `ui-ux-pro-max` | 50 styles, 21 palettes, 50 fonts |
 
 ### Backend & API
 
 | Skill | Description |
 | ----- | ----------- |
 | `api-patterns` | REST, GraphQL, tRPC |
-| `nestjs-expert` | NestJS modules, DI, decorators |
 | `nodejs-best-practices` | Node.js async, modules |
 | `python-patterns` | Python standards, FastAPI |
 
@@ -84,19 +82,11 @@ Modular knowledge domains that agents can load on-demand. based on task context.
 | Skill | Description |
 | ----- | ----------- |
 | `database-design` | Schema design, optimization |
-| `prisma-expert` | Prisma ORM, migrations |
-
-### TypeScript/JavaScript
-
-| Skill | Description |
-| ----- | ----------- |
-| `typescript-expert` | Type-level programming, performance |
 
 ### Cloud & Infrastructure
 
 | Skill | Description |
 | ----- | ----------- |
-| `docker-expert` | Containerization, Compose |
 | `deployment-procedures` | CI/CD, deploy workflows |
 | `server-management` | Infrastructure management |
 
@@ -158,6 +148,7 @@ Modular knowledge domains that agents can load on-demand. based on task context.
 | ----- | ----------- |
 | `clean-code` | Coding standards (Global) |
 | `behavioral-modes` | Agent personas |
+| `intelligent-routing` | Auto agent-selection protocol |
 | `parallel-agents` | Multi-agent patterns |
 | `mcp-builder` | Model Context Protocol |
 | `documentation-templates` | Doc formats |
@@ -211,13 +202,13 @@ skill-name/
 
 | Skill | Files | Coverage |
 | ----- | ----- | -------- |
-| `typescript-expert` | 5 | Utility types, tsconfig, cheatsheet |
-| `ui-ux-pro-max` | 27 | 50 styles, 21 palettes, 50 fonts |
-| `app-builder` | 20 | Full-stack scaffolding |
+| `app-builder` | 6 + 13 templates | Full-stack scaffolding |
+| `mobile-design` | 12 | Mobile UI/UX patterns |
+| `frontend-design` | 7 | Design systems, motion, UX psychology |
 
 ---
 
-## � Scripts (2)
+## 🔧 Scripts (2)
 
 Master validation scripts that orchestrate skill-level scripts.
 
