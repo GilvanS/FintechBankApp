@@ -102,4 +102,22 @@ describe('HomeView - Render', () => {
 
     expect(onNavigate).toHaveBeenCalledWith('statement');
   });
+
+  it('exibe a mensagem de boas-vindas "Olá, [Nome]" quando o parâmetro está ligado', () => {
+    localStorage.setItem('volt_show_home_welcome_message', 'true');
+    const user = makeUser({ fullName: 'Maria Silva' });
+
+    render(<HomeView user={user} onNavigate={vi.fn()} />);
+
+    expect(screen.getByTestId('home-welcome-message')).toHaveTextContent('Olá, Maria!');
+  });
+
+  it('oculta a mensagem de boas-vindas quando o parâmetro está desligado', () => {
+    localStorage.setItem('volt_show_home_welcome_message', 'false');
+    const user = makeUser();
+
+    render(<HomeView user={user} onNavigate={vi.fn()} />);
+
+    expect(screen.queryByTestId('home-welcome-message')).not.toBeInTheDocument();
+  });
 });

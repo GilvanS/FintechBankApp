@@ -143,6 +143,11 @@ const HomeView: React.FC<HomeViewProps> = ({
     const localVal = localStorage.getItem('volt_show_home_stories_status');
     return localVal !== null ? localVal !== 'false' : properties.volt_show_home_stories_status !== false;
   })();
+
+  const showWelcomeMessage = (() => {
+    const localVal = localStorage.getItem('volt_show_home_welcome_message');
+    return localVal !== null ? localVal !== 'false' : properties.volt_show_home_welcome_message !== false;
+  })();
   
   const toggleBalanceVisibility = () => {
       if (biometricEnabled && !balanceIsVisible) {
@@ -1018,6 +1023,17 @@ const HomeView: React.FC<HomeViewProps> = ({
         </motion.div>
       )}
 
+
+      {/* Home Welcome Message */}
+      {showWelcomeMessage && (
+        <motion.p
+          variants={itemVariants}
+          data-testid="home-welcome-message"
+          className={`text-sm font-bold ${isMidnight ? 'text-white/80' : 'text-black/70'}`}
+        >
+          Olá, {user.fullName.split(' ')[0]}!
+        </motion.p>
+      )}
 
       {/* Dashboard Title & Personalize Button */}
       <motion.div variants={itemVariants} className="flex justify-between items-center">

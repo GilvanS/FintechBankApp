@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../contexts/AppStateContext';
 import { payCreditCardInvoice, getUserByCpf } from '../services/api';
 import PasswordModal from './PasswordModal';
+import PaymentSuccessModal from './PaymentSuccessModal';
 import InvoiceView from './InvoiceView';
 
 interface InvoicesViewProps {
@@ -19,6 +20,7 @@ export default function InvoicesView({ onBack, onNavigate, openBoletoModal, open
   const [pendingAmount, setPendingAmount] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successInfo, setSuccessInfo] = useState<{ amount: number; date: Date } | null>(null);
 
   if (!user) return null;
 
@@ -43,6 +45,7 @@ export default function InvoicesView({ onBack, onNavigate, openBoletoModal, open
             updateUser(refreshed.user as any);
           }
         }
+        setSuccessInfo({ amount: pendingAmount, date: new Date() });
         setPendingAmount(null);
         setErrorMessage(null);
         setIsPasswordModalOpen(false);
@@ -100,6 +103,16 @@ export default function InvoicesView({ onBack, onNavigate, openBoletoModal, open
         title="Confirmar Pagamento de Fatura"
         description={`Digite seu PIN de 4 dígitos para autorizar o pagamento de R$ ${pendingAmount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} com saldo da conta.`}
       />
+
+      {successInfo && (
+        <PaymentSuccessModal
+          isOpen={true}
+          onClose={() => setSuccessInfo(null)}
+          amount={successInfo.amount}
+          cpf={user.cpf}
+          date={successInfo.date}
+        />
+      )}
     </>
   );
 }

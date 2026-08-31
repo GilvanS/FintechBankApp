@@ -13,6 +13,7 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 
 export function shouldShowOverdueAlert(user?: User): boolean {
   if (!user) return false;
+  if (localStorage.getItem('volt_show_overdue_alert_popup') === 'false') return false;
   const cc = user?.creditCard;
   const closedVal = Number(cc?.closedInvoice ?? cc?.closedInvoiceAmount ?? 0);
 

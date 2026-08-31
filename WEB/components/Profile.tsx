@@ -70,7 +70,13 @@ export default function Profile({ onNavigate }: ProfileProps) {
     const localVal = localStorage.getItem('volt_show_home_stories_status');
     return localVal !== null ? localVal !== 'false' : properties.volt_show_home_stories_status !== false;
   });
-  
+  const [showOverdueAlertPopup, setShowOverdueAlertPopup] = useState<boolean>(() => {
+    return localStorage.getItem('volt_show_overdue_alert_popup') !== 'false';
+  });
+  const [showFinancialHealthPopup, setShowFinancialHealthPopup] = useState<boolean>(() => {
+    return localStorage.getItem('volt_show_financial_health_popup') !== 'false';
+  });
+
   const [showVersionPopup, setShowVersionPopup] = useState(false);
 
   const handleToggleNotifications = (enabled: boolean) => {
@@ -157,6 +163,16 @@ export default function Profile({ onNavigate }: ProfileProps) {
   const handleToggleHomeStoriesStatus = (enabled: boolean) => {
     setShowHomeStoriesStatus(enabled);
     localStorage.setItem('volt_show_home_stories_status', String(enabled));
+  };
+
+  const handleToggleOverdueAlertPopup = (enabled: boolean) => {
+    setShowOverdueAlertPopup(enabled);
+    localStorage.setItem('volt_show_overdue_alert_popup', String(enabled));
+  };
+
+  const handleToggleFinancialHealthPopup = (enabled: boolean) => {
+    setShowFinancialHealthPopup(enabled);
+    localStorage.setItem('volt_show_financial_health_popup', String(enabled));
   };
 
   const settingsList = [
@@ -779,6 +795,58 @@ export default function Profile({ onNavigate }: ProfileProps) {
                   onChange={(e) => handleToggleHomeStoriesStatus(e.target.checked)}
                   className="sr-only peer" 
                   data-testid="toggle-stories"
+                />
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+              </label>
+            </div>
+
+            {/* Overdue Alert Popup Toggle */}
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-volt-green">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-volt-green/20 flex items-center justify-center shrink-0 text-volt-green border-2 border-volt-green/30">
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-black dark:text-white block">Aviso de Fatura em Atraso</span>
+                  <span className="text-[10px] text-black/60 dark:text-white/50 block mt-0.5 leading-tight font-bold">
+                    Exibir popup de fatura vencida ao entrar em Faturas
+                  </span>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+                <input
+                  type="checkbox"
+                  checked={showOverdueAlertPopup}
+                  onChange={(e) => handleToggleOverdueAlertPopup(e.target.checked)}
+                  className="sr-only peer"
+                  data-testid="toggle-overdue-alert"
+                />
+                <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
+              </label>
+            </div>
+
+            {/* Financial Health Popup Toggle */}
+            <div className="rounded-xl p-4 flex items-center justify-between transition-all bg-gray-50 dark:bg-zinc-950 border-2 border-black/10 dark:border-zinc-800 hover:border-volt-green">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-volt-green/20 flex items-center justify-center shrink-0 text-volt-green border-2 border-volt-green/30">
+                  <Clock size={18} />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-black dark:text-white block">Popup de Saúde Financeira</span>
+                  <span className="text-[10px] text-black/60 dark:text-white/50 block mt-0.5 leading-tight font-bold">
+                    Exibir análise automática ao fazer login (1x por dia)
+                  </span>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+                <input
+                  type="checkbox"
+                  checked={showFinancialHealthPopup}
+                  onChange={(e) => handleToggleFinancialHealthPopup(e.target.checked)}
+                  className="sr-only peer"
+                  data-testid="toggle-financial-health"
                 />
                 <div className="w-10 h-6 rounded-full transition-colors bg-black/10 dark:bg-zinc-800 border-2 border-black dark:border-zinc-700 peer-checked:bg-volt-green after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:border-2 after:border-black after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-black"></div>
               </label>

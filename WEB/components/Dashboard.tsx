@@ -164,6 +164,7 @@ const Dashboard: React.FC = () => {
     // Mostra o popup de Saude Financeira automaticamente ao logar (uma vez por dia por usuario)
     useEffect(() => {
         if (!user?.cpf) return;
+        if (localStorage.getItem('volt_show_financial_health_popup') === 'false') return;
         const today = new Date().toISOString().slice(0, 10);
         const storageKey = `volt_health_popup_seen_${user.cpf}_${today}`;
         if (localStorage.getItem(storageKey)) return;

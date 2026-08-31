@@ -67,17 +67,21 @@ describe('Profile — Preferências da Tela Inicial', () => {
         vi.clearAllMocks();
     });
 
-    it('deve renderizar a seção de preferências com os três toggles de controle', () => {
+    it('deve renderizar a seção de preferências com os cinco toggles de controle', () => {
         renderProfile();
 
         expect(screen.getByText(/Preferências da Tela Inicial/i)).toBeInTheDocument();
         expect(screen.getByText(/Mostrar Onboarding/i)).toBeInTheDocument();
         expect(screen.getByText(/Mensagem de Boas-Vindas/i)).toBeInTheDocument();
         expect(screen.getByText(/Stories\/Status do Home/i)).toBeInTheDocument();
+        expect(screen.getByText(/Aviso de Fatura em Atraso/i)).toBeInTheDocument();
+        expect(screen.getByText(/Popup de Saúde Financeira/i)).toBeInTheDocument();
 
         expect(screen.getByTestId('toggle-onboarding')).toBeInTheDocument();
         expect(screen.getByTestId('toggle-welcome')).toBeInTheDocument();
         expect(screen.getByTestId('toggle-stories')).toBeInTheDocument();
+        expect(screen.getByTestId('toggle-overdue-alert')).toBeInTheDocument();
+        expect(screen.getByTestId('toggle-financial-health')).toBeInTheDocument();
     });
 
     it('deve ler os valores iniciais do localStorage ou assumir o padrão true', () => {
@@ -86,10 +90,42 @@ describe('Profile — Preferências da Tela Inicial', () => {
         const toggleOnboarding = screen.getByTestId('toggle-onboarding') as HTMLInputElement;
         const toggleWelcome = screen.getByTestId('toggle-welcome') as HTMLInputElement;
         const toggleStories = screen.getByTestId('toggle-stories') as HTMLInputElement;
+        const toggleOverdueAlert = screen.getByTestId('toggle-overdue-alert') as HTMLInputElement;
+        const toggleFinancialHealth = screen.getByTestId('toggle-financial-health') as HTMLInputElement;
 
         expect(toggleOnboarding.checked).toBe(true);
         expect(toggleWelcome.checked).toBe(true);
         expect(toggleStories.checked).toBe(true);
+        expect(toggleOverdueAlert.checked).toBe(true);
+        expect(toggleFinancialHealth.checked).toBe(true);
+    });
+
+    it('deve alternar a propriedade Aviso de Fatura em Atraso e persistir no localStorage', () => {
+        renderProfile();
+
+        const toggleOverdueAlert = screen.getByTestId('toggle-overdue-alert') as HTMLInputElement;
+
+        fireEvent.click(toggleOverdueAlert);
+        expect(toggleOverdueAlert.checked).toBe(false);
+        expect(localStorage.getItem('volt_show_overdue_alert_popup')).toBe('false');
+
+        fireEvent.click(toggleOverdueAlert);
+        expect(toggleOverdueAlert.checked).toBe(true);
+        expect(localStorage.getItem('volt_show_overdue_alert_popup')).toBe('true');
+    });
+
+    it('deve alternar a propriedade Popup de Saúde Financeira e persistir no localStorage', () => {
+        renderProfile();
+
+        const toggleFinancialHealth = screen.getByTestId('toggle-financial-health') as HTMLInputElement;
+
+        fireEvent.click(toggleFinancialHealth);
+        expect(toggleFinancialHealth.checked).toBe(false);
+        expect(localStorage.getItem('volt_show_financial_health_popup')).toBe('false');
+
+        fireEvent.click(toggleFinancialHealth);
+        expect(toggleFinancialHealth.checked).toBe(true);
+        expect(localStorage.getItem('volt_show_financial_health_popup')).toBe('true');
     });
 
     it('deve alternar a propriedade Mostrar Onboarding e persistir no localStorage', () => {
