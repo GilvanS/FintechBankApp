@@ -271,6 +271,85 @@ function useCardOrder<T extends string>(
 
 ---
 
+## FASE 2 — Feedback do usuário sobre a tela Faturas (2026-09-05)
+
+Veredito do usuário depois de ver Faturas rodando. 4 pontos, 1 deles bug real.
+
+**Decisões já tomadas (não reabrir):**
+- Ações tipo "Pagar Fatura Atual" abrem em **modal grande dentro da tela** (reusa o modal `max-w-5xl` do `AllureShell`), não navegam pra fora.
+- Sidebar fica **à esquerda por padrão**, com botão de trocar de lado, e a escolha **persiste em `localStorage`**.
+
+---
+
+### Task 8: Sidebar com lado configurável (esquerda por padrão)
+
+**Files:** `WEB/components/shared/AllureShell.tsx` (só ele — as 4 telas herdam automaticamente)
+
+Hoje o `<aside>` é fixo à direita (`border-l`, renderizado depois do conteúdo). Precisa virar configurável.
+
+- [ ] **Passo 1:** Novo hook ou state no `AllureShell`: `sidebarSide: 'left' | 'right'`, default `'left'`, lido de `localStorage` na chave `allure-sidebar-side` (global, não por tela — o usuário escolhe uma vez e vale pra tudo).
+- [ ] **Passo 2:** Renderização condicional: `flex-row-reverse` quando `right`, `flex-row` quando `left`; a borda acompanha (`border-r` na esquerda, `border-l` na direita). Não duplicar o JSX do `<aside>` — só inverter a direção do flex do container.
+- [ ] **Passo 3:** Botão de trocar lado no topo da sidebar, ao lado do botão de recolher. Ícones `PanelLeft`/`PanelRight` (lucide). Escreve em `localStorage` a cada clique.
+- [ ] **Passo 4:** Ícones de recolher devem acompanhar o lado (`PanelLeftClose`/`PanelRightClose` conforme o lado atual) — hoje é fixo `PanelRight*`.
+- [ ] **Passo 5:** Teste em `AllureShell.test.tsx`: default é esquerda; clicar no toggle troca; valor persistido é lido no mount.
+- [ ] **Passo 6:** QA ao vivo nas 4 telas (Armadilha 7) + commit.
+
+---
+
+### Task 9: Ações abrem em modal, não navegam pra tela antiga (BUG)
+
+**Bug confirmado:** `InvoicesAllureView.tsx:168` faz `onNavigate('currentInvoice')` → sai do layout Allure e cai na tela antiga `CurrentInvoice.tsx`. O mesmo padrão está em `:178` (`onNavigate('invoices')`) e `:244` (`onNavigate('installmentOptions')`).
+
+**Files:**
+- Modify: `WEB/components/Invoices/InvoicesAllureView.tsx`
+- Modify: `WEB/components/Home/HomeAllureView.tsx` (mesmo problema provável nos botões PIX/Depositar/Boleto)
+
+**Componentes reais que já existem para reusar dentro do modal (verificado, não inventar):** `CurrentInvoice.tsx`, `ClosedInvoice.tsx`, `InvoiceInstallmentPlan.tsx`, `InvoiceSummarySheet.tsx`, `PaymentHistoryModal.tsx`, `PaymentMethods.tsx`.
+
+- [ ] **Passo 1:** Trocar `onNavigate('currentInvoice')` por abrir o modal do `AllureShell` com `<CurrentInvoice />` dentro.
+- [ ] **Passo 2:** Idem para "Ver Todas as Faturas" (`InvoicesView`/`Invoices`) e "Parcelamentos" (`InvoiceInstallmentPlan`).
+- [ ] **Passo 3:** Conferir se esses componentes assumem estar em tela cheia (props de layout, botão de voltar próprio, `fixed inset-0`). Se assumirem, passar prop de modo embutido ou envolver num wrapper que neutralize o posicionamento — **ler o componente antes de plugar**, não assumir a interface.
+- [ ] **Passo 4:** Repetir a varredura no `HomeAllureView.tsx` (`openDepositModal`, `openPixModal`, `openBoletoModal` já são props de modal — confirmar se estão ligadas ou se também usam `onNavigate`).
+- [ ] **Passo 5:** QA ao vivo: clicar em cada ação e confirmar que abre modal, fecha corretamente, e a tela por trás continua sendo a Allure.
+- [ ] **Passo 6:** Commit.
+
+---
+
+### Task 10: Expandir a navegação de Faturas
+
+Hoje só 3 seções (Resumo / Faturas / Parcelamentos). O usuário quer as funcionalidades reais de fatura expostas na sidebar.
+
+**Seções propostas (todas com componente real já existente — nada inventado):**
+
+| Seção | Componente base | Existe? |
+|---|---|---|
+| Resumo | (atual) | ✅ |
+| Fatura Atual | `CurrentInvoice.tsx` | ✅ |
+| Fatura Fechada | `ClosedInvoice.tsx` | ✅ |
+| Parcelamentos | `InvoiceInstallmentPlan.tsx` | ✅ |
+| Histórico de Pagamentos | `PaymentHistoryModal.tsx` | ✅ |
+
+- [ ] **Passo 1:** Ampliar `SectionKey` e `SECTIONS` em `InvoicesAllureView.tsx` com as seções acima (ícones `lucide` coerentes).
+- [ ] **Passo 2:** `renderSection()` monta cada uma reusando o componente existente.
+- [ ] **Passo 3:** **Regra de negócio:** fatura FECHADA é imutável — a seção "Fatura Fechada" é somente leitura, nenhum controle que sugira editar.
+- [ ] **Passo 4:** Atualizar `InvoicesAllureView.test.tsx` (títulos de sidebar) + QA ao vivo + commit.
+
+---
+
+### Task 11: Textura ASCII como fundo da tela
+
+Pedido do usuário: a textura ASCII/Halftone (hoje só um acento 120x40 no header via `AsciiHeaderAccent.tsx`) poderia virar fundo da tela inteira.
+
+**Cuidado (DESIGN.md):** fundo é a superfície de leitura de dados densos. Textura no fundo inteiro vira ruído se tiver contraste demais. Regras a respeitar: opacidade baixíssima (sugestão inicial: 0.04-0.06), `pointer-events: none`, `aria-hidden`, posicionada atrás de tudo (`z-index` negativo ou `absolute inset-0` antes do conteúdo), e **não pode reduzir o contraste do texto abaixo de 4.5:1**.
+
+- [ ] **Passo 1:** Generalizar `AsciiHeaderAccent.tsx` (ou criar `AsciiBackdrop.tsx`) que preenche o container pai, gerando o padrão em tile para não custar CPU numa área grande.
+- [ ] **Passo 2:** Montar no `AllureShell` atrás do conteúdo, opt-in por prop (`backdrop?: boolean`) — não ligar em todas as telas de uma vez sem ver.
+- [ ] **Passo 3:** Medir contraste do texto sobre o fundo com textura nos 2 temas (DevTools/`design-audit`). Se cair abaixo de 4.5:1, baixar opacidade até passar.
+- [ ] **Passo 4:** Mostrar ao usuário nos 2 temas antes de aplicar em todas as telas — é decisão estética dele.
+- [ ] **Passo 5:** Commit.
+
+---
+
 ## Task 7 (fase 3, só depois da aprovação do usuário): DESKTOP
 
 **Não iniciar antes do usuário validar o WEB.** Ordem explícita do usuário (2026-09-05): "desktop quero só efetuar quando eu validar o web".
