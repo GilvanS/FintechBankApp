@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, PanelLeft, PanelRight, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import AsciiHeaderAccent from '../Analytics/AsciiHeaderAccent';
+import AsciiBackdrop from '../Analytics/AsciiBackdrop';
 
 export interface AllureSection<K extends string> {
   key: K;
@@ -22,6 +23,7 @@ export interface AllureShellProps<K extends string> {
   children: React.ReactNode;
   expandedContent?: React.ReactNode;
   onCloseExpanded?: () => void;
+  backdrop?: boolean;
 }
 
 const sectionVariants = {
@@ -43,6 +45,7 @@ export function AllureShell<K extends string>({
   children,
   expandedContent,
   onCloseExpanded,
+  backdrop = false,
 }: AllureShellProps<K>) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarSide, setSidebarSide] = useState<'left' | 'right'>(() => {
@@ -72,12 +75,13 @@ export function AllureShell<K extends string>({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className={`min-h-screen p-4 md:p-8 flex flex-col ${
+      className={`relative min-h-screen p-4 md:p-8 flex flex-col ${
         isRight ? 'md:flex-row-reverse' : 'md:flex-row'
       } gap-6 ${
         isMidnight ? 'bg-volt-dark text-on-surface font-sans' : 'bg-volt-yellow text-black font-sans'
       }`}
     >
+      {backdrop && <AsciiBackdrop theme={theme} opacity={0.05} />}
       {/* Main Content Area */}
       <main className="flex-1 min-w-0 flex flex-col gap-6">
         {/* Header */}
