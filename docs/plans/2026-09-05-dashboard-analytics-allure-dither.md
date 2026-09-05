@@ -681,9 +681,220 @@ git commit -m "fix(web): ajustes visuais pos-verificacao da aba Analytics"
 
 ---
 
+### Task 8: Sidebar da Analytics passa para a lateral direita
+
+**Contexto:** pedido original do usuário (mensagem "o legal desse novo design é que o menu é na lateral direita...") nunca foi atendido — a implementação atual (`AnalyticsView.tsx`) renderiza o `<aside>` **antes** do conteúdo no `flex`, o que o coloca na **esquerda**. Isso é bug de implementação, não decisão de design.
+
+**Files:**
+- Modify: `WEB/components/Analytics/AnalyticsView.tsx`
+
+**O que muda:**
+1. Reordenar o JSX: o bloco `<aside>` (linhas ~188-233 atuais) passa a vir **depois** do `<div className="flex-1 ...">` (não antes), dentro do mesmo `<motion.div className="flex ...">`.
+2. `border-r` do aside vira `border-l` (a borda de separação muda de lado).
+3. Ícones de colapsar trocam de `PanelLeftClose`/`PanelLeftOpen` para `PanelRightClose`/`PanelRightOpen` (import de `lucide-react`) — semântica visual correta pra um menu que abre/fecha à direita.
+4. Nenhuma mudança de lógica (state `sidebarCollapsed`, `activeSection`, larguras `w-56`/`w-16`) — só reposicionamento.
+
+**ASCII (expandida, sidebar à direita):**
+```
+┌─────────────────────────────────────────────┬──────────────┐
+│  Analytics                          [Hero3D] │ Voltar    [x]│
+│                                               │──────────────│
+│  ┌──────────────────┬──────────────────┐     │ ▣ Visao Geral│
+│  │   Status (donut)  │   Meta de gastos │     │ ◔ Categorias │
+│  │      [maximize]   │      [maximize]  │     │ ↗ Tendencia  │
+│  └──────────────────┴──────────────────┘     │──────────────│
+│                                               │  [collapse >]│
+└─────────────────────────────────────────────┴──────────────┘
+```
+
+**ASCII (colapsada, só ícones):**
+```
+┌────────────────────────────────────────────────────────┬───┐
+│  Analytics                                    [Hero3D]  │[<]│
+│  (grid ocupa mais largura)                               │▣  │
+│                                                            │◔  │
+│                                                            │↗  │
+└────────────────────────────────────────────────────────┴───┘
+```
+
+- [ ] **Passo 1:** Reordenar `<aside>` para depois do `<div className="flex-1 flex flex-col overflow-y-auto">` no JSX de `AnalyticsView.tsx`.
+- [ ] **Passo 2:** Trocar `border-r` → `border-l` na classe do `<aside>`.
+- [ ] **Passo 3:** Trocar imports/usos de `PanelLeftClose`/`PanelLeftOpen` → `PanelRightClose`/`PanelRightOpen`.
+- [ ] **Passo 4:** Rodar `cd WEB && npm test` (regressão) e verificar visualmente no Browser pane (sidebar deve aparecer à direita, expandida e colapsada).
+- [ ] **Passo 5:** Commit:
+```bash
+git add WEB/components/Analytics/AnalyticsView.tsx
+git commit -m "fix(web): sidebar da Analytics reposicionada para lateral direita (pedido original do usuario)"
+```
+
+---
+
+### Task 9: Densidade de grid — principais em 2 colunas, menores em 3
+
+**Contexto:** hoje só a seção "Geral" usa grid de 2 colunas (Status + Meta). As seções "Categorias" e "Tendencia" mostram 1 card sozinho em `grid-cols-1`, ocupando a tela inteira sem densidade — não bate com a referência Allure/FintechX (cards menores agrupados em fileira de 3).
+
+**Duas opções de estrutura — preciso da sua escolha antes de codar:**
+
+**Opção A — mescla Categorias+Tendencia numa seção "Detalhes" (3 cards juntos)**
+- Sidebar passa de 3 itens pra 2: `Visao Geral` (2 cols) e `Detalhes` (3 cols: CategoryBarCard + TrendLineCard + novo `PeriodSummaryCard`)
+```
+┌─────────────────────────────────────────────┬──────────────┐
+│  Analytics                          [Hero3D] │ Voltar    [x]│
+│  ┌────────────┬────────────┬────────────┐   │──────────────│
+│  │ Categoria  │ Tendencia  │  Resumo    │   │ ▣ Visao Geral│
+│  │ (bar)      │ (line)     │  periodo   │   │ ◔ Detalhes ◀ │
+│  │ [maximize] │ [maximize] │ [maximize] │   │──────────────│
+│  └────────────┴────────────┴────────────┘   │              │
+└─────────────────────────────────────────────┴──────────────┘
+```
+
+**Opção B — mantém 3 seções, cada uma ganha 2 mini-cards de preenchimento pra fechar a fileira de 3**
+```
+┌─────────────────────────────────────────────┬──────────────┐
+│  Analytics > Categorias              [Hero3D]│ Voltar    [x]│
+│  ┌────────────┬────────────┬────────────┐   │──────────────│
+│  │ Categoria  │  Maior     │  Resumo    │   │ ▣ Visao Geral│
+│  │ (bar)      │  categoria │  periodo   │   │ ◔ Categorias◀│
+│  │ [maximize] │  (mini)    │  (mini)    │   │ ↗ Tendencia  │
+│  └────────────┴────────────┴────────────┘   │──────────────│
+└─────────────────────────────────────────────┴──────────────┘
+```
+Mesma estrutura se repete em "Tendencia" trocando o card principal.
+
+Opção A é mais simples (1 componente novo, 2 nav items) — Opção B mantém a navegação atual mas precisa de 2 componentes novos por seção (4 no total) e dados novos ("maior categoria", "resumo periodo" por seção).
+
+**Files (Opção A, se escolhida):**
+- Create: `WEB/components/Analytics/PeriodSummaryCard.tsx` (mini stat: total de lançamentos + ticket médio do período)
+- Modify: `WEB/components/Analytics/AnalyticsView.tsx` (`SECTIONS` array vira 2 itens; `renderSection()` funde os cases `'categorias'`/`'tendencia'` num só `'detalhes'` com `grid-cols-3`)
+
+- [ ] **Passo 1:** Implementar `PeriodSummaryCard` (recebe `{ totalTransacoes: number; ticketMedio: number }`, layout `ChartCard` com 2 números grandes empilhados).
+- [ ] **Passo 2:** Atualizar `type Section` de `'geral'|'categorias'|'tendencia'` para `'geral'|'detalhes'`; atualizar `SECTIONS` (label "Detalhes", ícone `LayoutList` ou similar).
+- [ ] **Passo 3:** `renderSection()`: case `'detalhes'` retorna `grid-cols-1 md:grid-cols-3` com `CategoryBarCard`, `TrendLineCard`, `PeriodSummaryCard`.
+- [ ] **Passo 4:** Atualizar `renderExpandedContent()` (remove cases `'categorias'`/`'tendencia'` separados se a expansão for por card individual, mantém 1 `ExpandableCard` por card).
+- [ ] **Passo 5:** Rodar `npm test` + verificação visual no Browser pane.
+- [ ] **Passo 6:** Commit:
+```bash
+git add WEB/components/Analytics/
+git commit -m "feat(web): funde categorias+tendencia em secao Detalhes com grid de 3 colunas (densidade estilo Allure)"
+```
+
+---
+
+### Task 10: Drag-to-reorder dos cards (feature real do Allure — confirmada em código)
+
+**Contexto:** o Allure Report de verdade (`A:\Workspace\AUTOMACAO-Playwright-cms-for-qas-api\output\allure-report`) tem widgets arrastáveis na Overview — confirmado inspecionando `assets/index-BraRl9ss.js`: `onWidgetDragStart`, `widget_ghost`, `.draggable-icon`, `.widget__handle`, ordem persistida (`saveWidgetOrder`). Não é suposição visual, é comportamento real do produto de referência.
+
+**Decisão técnica:** implementar com `Reorder.Group`/`Reorder.Item` de `motion/react` — **zero libs novas** (já é dependência, já importado em `AnalyticsView.tsx`). Alternativa seria `@dnd-kit`, mas violaria a constraint de "não trocar/adicionar lib sem necessidade" já que `motion` cobre o caso.
+
+**Files:**
+- Modify: `WEB/components/Analytics/ChartCard.tsx` (adicionar handle de drag — ícone `GripVertical` de `lucide-react` no header, ao lado do botão `Maximize2`)
+- Modify: `WEB/components/Analytics/AnalyticsView.tsx` (envolver o grid de cada seção em `Reorder.Group`, state de ordem por seção)
+
+**O que muda:**
+1. `AnalyticsView` ganha state `cardOrder: Record<Section, string[]>` (ids dos cards por seção), inicializado com a ordem atual.
+2. `renderSection()` troca `<div className="grid ...">` por `<Reorder.Group as="div" axis="both" values={cardOrder[activeSection]} onReorder={...} className="grid ...">`, cada card vira `<Reorder.Item as="div" value={cardId} key={cardId}>`.
+3. Ordem persiste em `localStorage` (chave `analytics-card-order-${activeSection}`), lida no mount — mesmo padrão de persistência local que o Allure usa.
+4. `ChartCard` ganha prop opcional `dragHandle?: boolean` que renderiza `<GripVertical size={14} className="cursor-grab" />` no header quando true.
+
+**ASCII (handle de drag no header do card):**
+```
+┌──────────────────────────────┐
+│ ⠿  STATUS              [⤢]  │  <- ⠿ = GripVertical (arrasta), ⤢ = Maximize2 (expande)
+│ ┌───────────────────────────┐│
+│ │       (donut chart)       ││
+```
+
+- [ ] **Passo 1:** Adicionar `dragHandle?: boolean` em `ChartCard.tsx`, renderizar `GripVertical` no header quando `true`.
+- [ ] **Passo 2:** Em `AnalyticsView.tsx`, adicionar state `cardOrder` por seção + `useEffect` de leitura/gravação em `localStorage`.
+- [ ] **Passo 3:** Trocar `<div className="grid ...">` por `<Reorder.Group>` e cada `<Card />` por `<Reorder.Item value={id}><Card /></Reorder.Item>` dentro de `renderSection()`.
+- [ ] **Passo 4:** Testar arrastar no Browser pane — reordenar 2 cards na seção Geral, recarregar página, confirmar que a ordem persistiu (leu do `localStorage`).
+- [ ] **Passo 5:** Rodar `npm test` (regressão) + commit:
+```bash
+git add WEB/components/Analytics/
+git commit -m "feat(web): drag-to-reorder dos cards da Analytics via motion Reorder (paridade com Allure real)"
+```
+
+**Nota:** esta task depende da decisão da Task 9 (Opção A ou B) — o `Reorder.Group` reordena os cards *dentro* de uma seção; quanto mais cards numa seção (Opção A: 3 juntos em "Detalhes"), mais natural fica o caso de uso de arrastar. Com Opção B (cards menores espalhados em 3 seções), o reorder fica mais raso (nunca mais que 3 itens por seção do mesmo jeito).
+
+---
+
 ### Fase futura (após Analytics fechada): expandir padrão full-bleed para o app inteiro
 
 Decisão do usuário (2026-09-05, em sessão ao vivo testando a Analytics): o layout full-bleed + sidebar validado aqui na Analytics deve virar o padrão do projeto WEB inteiro, não só desta view. Cada tela (Extrato, Faturas, Limites, Shop, Perfil, Admin) vai precisar de um ou mais "modais correlacionados" ao lado do conteúdo principal — exemplo dado pelo usuário: ao abrir Extrato, um modal de "Gastos" aparece ao lado, correlacionado aos dados do extrato. Não iniciar esta fase até a Analytics estar fechada e aprovada — o usuário explicitamente adiou ("depois que finalizar nos acertamos os modais de cada função").
+
+**ASCII conceitual (referência, não implementar ainda):**
+
+Home:
+```
+┌───────────────────────────────────────┬──────────────┐
+│ Ola, Fulano                  [Hero3D]  │ Voltar    [x]│
+│ ┌────────┬────────┬────────┬────────┐ │──────────────│
+│ │ Saldo  │ Gasto  │ Prox.  │ Limite │ │ ▣ Home       │
+│ │        │ mes    │ fatura │ disp.  │ │ ▤ Extrato    │
+│ └────────┴────────┴────────┴────────┘ │ ▥ Faturas    │
+│ ┌──────────────────┬──────────────────┐│ ▦ Limites    │
+│ │  Status (donut)   │  Trend 6 meses  ││ ◉ Perfil     │
+│ │  [maximize]       │  [maximize]     ││──────────────│
+│ └──────────────────┴──────────────────┘│  [collapse >]│
+└───────────────────────────────────────┴──────────────┘
+```
+
+Extrato (clicado no sidebar — sub-tela com modal correlacionado "Gastos"):
+```
+┌───────────────────────────┬─────────────┬──────────────┐
+│  Extrato (lista rolavel)  │ Gastos      │ Voltar    [x]│
+│  - Pix enviado   -R$50    │ (modal      │──────────────│
+│  - Deposito     +R$500    │  correlato) │ ▣ Home       │
+│  - Compra shop   -R$120   │ donut por   │ ▤ Extrato ◀  │
+│  ...  [rola pagina]       │ categoria   │ ▥ Faturas    │
+│                           │ [maximize]  │ ▦ Limites    │
+│                           │             │ ◉ Perfil     │
+└───────────────────────────┴─────────────┴──────────────┘
+```
+
+Fatura:
+```
+┌───────────────────────────────────────┬──────────────┐
+│ Fatura                       [Hero3D]  │ Voltar    [x]│
+│ ┌────────┬────────┬────────┬────────┐ │──────────────│
+│ │ Aberta │ Fechada│ Vencto │ Minimo │ │ ▣ Home       │
+│ └────────┴────────┴────────┴────────┘ │ ▤ Extrato    │
+│ ┌──────────────────┬──────────────────┐│ ▥ Faturas ◀  │
+│ │ Gasto p/categoria │ Lancamentos      ││ ▦ Limites    │
+│ │  (bar) [maximize] │ (lista rolavel)  ││ ◉ Perfil     │
+│ └──────────────────┴──────────────────┘│──────────────│
+└───────────────────────────────────────┴──────────────┘
+```
+
+Limites:
+```
+┌───────────────────────────────────────┬──────────────┐
+│ Limites                      [Hero3D]  │ Voltar    [x]│
+│ ┌────────┬────────┬────────┬────────┐ │──────────────│
+│ │ Total  │ Usado  │ Disp.  │ % uso  │ │ ▣ Home       │
+│ └────────┴────────┴────────┴────────┘ │ ▤ Extrato    │
+│ ┌────────────┬────────────┬──────────┐│ ▥ Faturas    │
+│ │ Credito    │ Pix diario │ Saque    ││ ▦ Limites ◀  │
+│ │ (progress) │ (progress) │(progress)││ ◉ Perfil     │
+│ │ [maximize] │ [maximize] │[maximize]││──────────────│
+│ └────────────┴────────────┴──────────┘│              │
+└───────────────────────────────────────┴──────────────┘
+```
+
+Perfil (foge do padrão chart-heavy — vira cards de configuracao):
+```
+┌───────────────────────────────────────┬──────────────┐
+│ Perfil                                 │ Voltar    [x]│
+│ ┌──────────────────┬──────────────────┐│──────────────│
+│ │ Dados pessoais    │ Seguranca        ││ ▣ Home       │
+│ │ nome, cpf, email  │ senha, 2FA       ││ ▤ Extrato    │
+│ │ [editar]          │ [editar]         ││ ▥ Faturas    │
+│ └──────────────────┴──────────────────┘│ ▦ Limites    │
+│ ┌──────────────────────────────────────┐│ ◉ Perfil  ◀  │
+│ │ Notificacoes (lista de toggles)      ││──────────────│
+│ └──────────────────────────────────────┘│              │
+└───────────────────────────────────────┴──────────────┘
+```
 
 ### Task 7 (fase 2, após validação WEB): Portar para DESKTOP
 

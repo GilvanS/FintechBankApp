@@ -1,7 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useMemo, useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { ArrowLeft, LayoutGrid, LayoutList, PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import DonutStatusCard from './DonutStatusCard';
 import CategoryBarCard from './CategoryBarCard';
@@ -57,9 +55,18 @@ const SECTIONS: { key: Section; label: string; icon: typeof LayoutGrid }[] = [
   { key: 'detalhes', label: 'Detalhes', icon: LayoutList },
 ];
 
+const gridVariants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08 } },
+};
+const cardVariants = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as const } },
+};
+
 const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
   const isMidnight = theme === 'midnight';
-  const gridRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
   const [activeSection, setActiveSection] = useState<Section>('geral');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedCard, setExpandedCard] = useState<ExpandableCard | null>(null);
@@ -130,27 +137,6 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
     };
   }, [transactions, saidas]);
 
-  // Stagger-reveals the grid whenever activeSection changes — the motion signals "you switched
-  // section" (state change), not a decorative flourish, so it stays a single quick beat and skips
-  // entirely for prefers-reduced-motion, matching the convention Hero3D already sets in this view.
-  useGSAP(
-    () => {
-      const grid = gridRef.current;
-      if (!grid) return;
-      const mm = gsap.matchMedia();
-      mm.add('(prefers-reduced-motion: no-preference)', () => {
-        gsap.from(grid.children, {
-          opacity: 0,
-          y: 16,
-          duration: 0.4,
-          stagger: 0.08,
-          ease: 'power2.out',
-        });
-      });
-    },
-    { scope: gridRef, dependencies: [activeSection] }
-  );
-
   const metaCard = (expand?: () => void) => (
     <ChartCard title="Meta de gastos" theme={theme} onExpand={expand}>
       <div className="flex flex-col gap-3">
@@ -160,25 +146,40 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
   );
 
   const renderSection = () => {
-    if (activeSection === 'detalhes') {
-      return (
-        <div ref={gridRef} className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 md:p-8 pt-0">
-          <CategoryBarCard data={categoryData} theme={theme} onExpand={() => setExpandedCard('categorias')} />
-          <TrendLineCard data={trendData} theme={theme} onExpand={() => setExpandedCard('tendencia')} />
-          <PeriodSummaryCard
-            totalTransacoes={periodSummary.totalTransacoes}
-            ticketMedio={periodSummary.ticketMedio}
-            theme={theme}
-            onExpand={() => setExpandedCard('resumo')}
-          />
-        </div>
-      );
-    }
+    const gridClass =
+      activeSection === 'detalhes' ? 'grid grid-cols-1 md:grid-cols-3 gap-4 p-4 md:p-8 pt-0' : 'grid grid-cols-1 md:grid-cols-2 gap-4 p-4 md:p-8 pt-0';
+    const cards =
+      activeSection === 'detalhes'
+        ? [
+            <CategoryBarCard key="categorias" data={categoryData} theme={theme} onExpand={() => setExpandedCard('categorias')} />,
+            <TrendLineCard key="tendencia" data={trendData} theme={theme} onExpand={() => setExpandedCard('tendencia')} />,
+            <PeriodSummaryCard
+              key="resumo"
+              totalTransacoes={periodSummary.totalTransacoes}
+              ticketMedio={periodSummary.ticketMedio}
+              theme={theme}
+              onExpand={() => setExpandedCard('resumo')}
+            />,
+          ]
+        : [
+            <DonutStatusCard key="status" data={donutData} centerLabel={formatBRL(resultado)} theme={theme} onExpand={() => setExpandedCard('status')} />,
+            <React.Fragment key="meta">{metaCard(() => setExpandedCard('meta'))}</React.Fragment>,
+          ];
+
     return (
-      <div ref={gridRef} className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 md:p-8 pt-0">
-        <DonutStatusCard data={donutData} centerLabel={formatBRL(resultado)} theme={theme} onExpand={() => setExpandedCard('status')} />
-        {metaCard(() => setExpandedCard('meta'))}
-      </div>
+      <motion.div
+        key={activeSection}
+        className={gridClass}
+        variants={prefersReducedMotion ? undefined : gridVariants}
+        initial={prefersReducedMotion ? undefined : 'hidden'}
+        animate={prefersReducedMotion ? undefined : 'show'}
+      >
+        {cards.map((card, i) => (
+          <motion.div key={i} variants={prefersReducedMotion ? undefined : cardVariants}>
+            {card}
+          </motion.div>
+        ))}
+      </motion.div>
     );
   };
 
