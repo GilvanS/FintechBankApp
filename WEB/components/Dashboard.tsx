@@ -6,6 +6,7 @@ import { useDialog } from '../contexts/GlobalDialogContext';
 import { useAppState } from '../contexts/AppStateContext';
 
 import HomeView from './HomeView';
+import AnalyticsView from './Analytics/AnalyticsView';
 import Profile from './Profile';
 import PixView from './PixView';
 import Statement from './Statement';
@@ -81,7 +82,7 @@ const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; o
 };
 
 
-type View = 'home' | 'cards' | 'shop' | 'investments' | 'wallet' | 'loans' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'installmentReceipt' | 'currentInvoice' | 'limit' | 'invoices';
+type View = 'home' | 'cards' | 'shop' | 'investments' | 'wallet' | 'loans' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'installmentReceipt' | 'currentInvoice' | 'limit' | 'invoices' | 'analytics';
 
 const Dashboard: React.FC = () => {
     const { user, updateUser, logout, view: topLevelView, navigateTo } = useAuth();
@@ -600,6 +601,12 @@ const Dashboard: React.FC = () => {
                         openCardUnlockModal={() => setIsCardUnlockModalOpen(true)}
                     />
                 );
+            case 'analytics':
+                return (
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <AnalyticsView onBack={() => handleNavigate('home')} transactions={user?.transactions ?? []} theme={theme} />
+                    </div>
+                );
             case 'invoices':
                 return (
                     <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar flex justify-center ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
@@ -759,7 +766,7 @@ const Dashboard: React.FC = () => {
             data-cy="dashboard"
             data-playwright="dashboard"
             data-current-view={currentView}
-            className={`h-[100dvh] w-full flex flex-col bg-volt-dark overflow-hidden ${(currentView === 'admin' || topLevelView === 'admin') ? 'max-w-screen-2xl mx-auto' : 'md:max-w-md mx-auto shadow-2xl relative'}`}
+            className={`h-[100dvh] w-full flex flex-col bg-volt-dark overflow-hidden ${(currentView === 'admin' || topLevelView === 'admin' || currentView === 'analytics') ? 'max-w-screen-2xl mx-auto' : 'md:max-w-md mx-auto shadow-2xl relative'}`}
         >
             <SmartAlerts />
             {topLevelView !== 'admin' && currentView !== 'admin' && !isHeaderHidden && (

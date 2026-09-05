@@ -1185,6 +1185,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             { label: 'Faturas', icon: FileText, action: () => onNavigate('invoices'), highlight: false },
             { label: 'Pagar', icon: Receipt, action: () => openBoletoModal?.(), highlight: true },
             { label: 'Extrato', icon: FileText, action: () => onNavigate('statement'), highlight: false },
+            { label: 'Analytics', icon: TrendingUp, action: () => onNavigate('analytics'), highlight: false },
           ].map((item, index) => {
             const Icon = item.icon;
             return (
