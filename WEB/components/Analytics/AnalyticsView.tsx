@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { motion, AnimatePresence, Reorder, useReducedMotion } from 'motion/react';
-import { ArrowLeft, LayoutGrid, LayoutList, PanelRightClose, PanelRightOpen, X } from 'lucide-react';
+import { motion, Reorder, useReducedMotion } from 'motion/react';
+import { LayoutGrid, LayoutList } from 'lucide-react';
+import { AllureShell } from '../shared/AllureShell';
+import { useCardOrder } from '../../hooks/useCardOrder';
 import DonutStatusCard from './DonutStatusCard';
 import CategoryBarCard from './CategoryBarCard';
 import ProgressBarRow from './ProgressBarRow';
@@ -8,7 +10,6 @@ import TrendLineCard from './TrendLineCard';
 import PeriodSummaryCard from './PeriodSummaryCard';
 import ChartCard from './ChartCard';
 import Hero3D from './Hero3D';
-import AsciiHeaderAccent from './AsciiHeaderAccent';
 import type { Transaction } from '../../types';
 
 interface Props {
@@ -72,30 +73,13 @@ type DetalhesCardKey = 'categorias' | 'tendencia' | 'resumo';
 const DEFAULT_GERAL_ORDER: readonly GeralCardKey[] = ['status', 'meta'];
 const DEFAULT_DETALHES_ORDER: readonly DetalhesCardKey[] = ['categorias', 'tendencia', 'resumo'];
 
-/** Reads a persisted card order from localStorage, falling back to (and reconciling with) the default order. */
-function loadCardOrder<T extends string>(section: Section, defaultOrder: readonly T[]): T[] {
-  try {
-    const raw = window.localStorage.getItem(`analytics-card-order-${section}`);
-    if (!raw) return [...defaultOrder];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [...defaultOrder];
-    const validKeys = new Set<string>(defaultOrder);
-    const kept = parsed.filter((k): k is T => typeof k === 'string' && validKeys.has(k));
-    const missing = defaultOrder.filter((k) => !kept.includes(k));
-    return kept.length > 0 ? [...kept, ...missing] : [...defaultOrder];
-  } catch {
-    return [...defaultOrder];
-  }
-}
-
 const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
   const isMidnight = theme === 'midnight';
   const prefersReducedMotion = useReducedMotion();
   const [activeSection, setActiveSection] = useState<Section>('geral');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedCard, setExpandedCard] = useState<ExpandableCard | null>(null);
-  const [geralOrder, setGeralOrder] = useState<GeralCardKey[]>(() => loadCardOrder('geral', DEFAULT_GERAL_ORDER));
-  const [detalhesOrder, setDetalhesOrder] = useState<DetalhesCardKey[]>(() => loadCardOrder('detalhes', DEFAULT_DETALHES_ORDER));
+  const [geralOrder, setGeralOrder] = useCardOrder('analytics_geral', DEFAULT_GERAL_ORDER);
+  const [detalhesOrder, setDetalhesOrder] = useCardOrder('analytics_detalhes', DEFAULT_DETALHES_ORDER);
   // Grid direction flips at the md breakpoint (single column on mobile -> single row of 2-3 cols on desktop),
   // so the Reorder axis must flip with it: dragging vertically reorders a stacked column, horizontally reorders a row.
   const [isDesktopGrid, setIsDesktopGrid] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches);
@@ -263,106 +247,20 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }} className="flex min-h-full w-full">
-      <div className="flex-1 flex flex-col overflow-y-auto">
-        <header className="flex items-center justify-between px-4 md:px-8 py-4">
-          <div className="flex items-center gap-3">
-            <button onClick={onBack} className={`md:hidden ${isMidnight ? 'text-on-surface' : 'text-black'}`} aria-label="Voltar">
-              <ArrowLeft size={20} />
-            </button>
-            <h1 className={`text-xl font-black uppercase tracking-wide ${isMidnight ? 'text-on-surface' : 'text-black'}`}>
-              Analytics
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <AsciiHeaderAccent theme={theme} />
-            <Hero3D theme={theme} size={64} />
-          </div>
-        </header>
-
-        {renderSection()}
-      </div>
-
-      {/* Sidebar - desktop only, collapsible (icon-only when collapsed), lateral direita */}
-      <aside
-        className={`hidden md:flex ${sidebarCollapsed ? 'w-16' : 'w-56'} shrink-0 flex-col gap-1 p-4 border-l transition-all duration-200 ${
-          isMidnight ? 'border-white/5 bg-volt-dark' : 'border-black/10 bg-volt-yellow-pastel'
-        }`}
-      >
-        <div className="flex items-center justify-between mb-4">
-          {!sidebarCollapsed && (
-            <button
-              onClick={onBack}
-              className={`flex items-center gap-2 text-xs font-black uppercase tracking-wider ${
-                isMidnight ? 'text-on-surface-variant hover:text-on-surface' : 'text-black hover:opacity-70'
-              }`}
-            >
-              <ArrowLeft size={16} /> Voltar
-            </button>
-          )}
-          <button
-            onClick={() => setSidebarCollapsed((v) => !v)}
-            aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
-            className={isMidnight ? 'text-on-surface-variant hover:text-on-surface' : 'text-black/60 hover:text-black'}
-          >
-            {sidebarCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
-          </button>
-        </div>
-        {SECTIONS.map(({ key, label, icon: Icon }) => {
-          const active = activeSection === key;
-          return (
-            <button
-              key={key}
-              onClick={() => setActiveSection(key)}
-              title={label}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold text-left ${
-                active
-                  ? isMidnight
-                    ? 'bg-volt-surface text-volt-green'
-                    : 'bg-black text-volt-yellow'
-                  : isMidnight
-                    ? 'text-on-surface-variant hover:bg-white/5'
-                    : 'text-black/60 hover:bg-black/5'
-              }`}
-            >
-              <Icon size={14} /> {!sidebarCollapsed && label}
-            </button>
-          );
-        })}
-      </aside>
-
-      {/* Expanded card modal */}
-      <AnimatePresence>
-        {expandedCard && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center p-6"
-            onClick={() => setExpandedCard(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-5xl max-h-[90vh] overflow-y-auto relative"
-            >
-              <button
-                onClick={() => setExpandedCard(null)}
-                aria-label="Fechar"
-                className={`absolute -top-3 -right-3 z-10 p-2 rounded-full ${
-                  isMidnight ? 'bg-volt-surface text-on-surface' : 'bg-white text-black border-2 border-black'
-                }`}
-              >
-                <X size={16} />
-              </button>
-              {renderExpandedContent()}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+    <AllureShell
+      title="Analytics"
+      subtitle="Visão consolidada de movimentações e tendências"
+      theme={theme}
+      onBack={onBack}
+      sections={SECTIONS}
+      activeSection={activeSection}
+      onSelectSection={setActiveSection}
+      headerExtra={<Hero3D theme={theme} size={64} />}
+      expandedContent={expandedCard ? renderExpandedContent() : null}
+      onCloseExpanded={() => setExpandedCard(null)}
+    >
+      {renderSection()}
+    </AllureShell>
   );
 };
 

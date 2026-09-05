@@ -37,6 +37,21 @@
 
 ---
 
+## Skills obrigatórias (checkpoints)
+
+Este plano é sobre visual — não codar sem passar pelos checkpoints abaixo. Skills reais deste projeto (`WEB/.claude/skills/`), já usadas e validadas na Analytics:
+
+| Quando | Skill | Por quê |
+|---|---|---|
+| Antes de começar QUALQUER task de UI nova (1, 3, 4, 5) | `frontend-design` (oficial Anthropic) + `ecc:frontend-design-direction` | Evita "AI-slop" — direção de design intencional antes de codar, não depois. |
+| Ao escrever qualquer animação (`motion`/`gsap`) | `motion-principles` | Regras não-negociáveis: nunca animar width/height/top/left, nunca scale(0), sempre `prefers-reduced-motion`, exit sempre mais sutil que enter. |
+| Ao final de CADA task de UI (1, 3, 4, 5), antes do commit | `design-audit` | Rodar os greps reais contra a pasta do componente novo (motion gaps, a11y, consistência de duration/easing) — feito na Analytics em 2026-09-05, resultado: 0 critical, 0 important, só nice-to-have (recharts sem reduced-motion). |
+| Se for extrair tokens de alguma outra referência visual | `WEB:design-dna` (escopado a este projeto) | Já usado pra extrair a densidade do Allure Report original — não reinventar o processo. |
+
+**Resultado da auditoria já rodada (2026-09-05) contra `WEB/components/Analytics/`:** 0 critical, 0 important. Nice-to-have pendente: recharts (Donut/Bar/Line) não respeita `prefers-reduced-motion` — a lib anima por padrão. Corrigir isso ao extrair o `AllureShell` (Task 1) se for prático, senão registrar como known-gap.
+
+---
+
 ## Armadilhas já encontradas (não repetir)
 
 1. **Stagger com GSAP em `.children` quebra.** `gsap.from(grid.children, ...)` ficava travado em `opacity: 0` quando o efeito re-executava (troca de seção). **Use `motion.div`/`Reorder.Item` com `variants`** — animação pelo ciclo de render do React, não por mutação direta do DOM. Ver `gridVariants`/`cardVariants` em `AnalyticsView.tsx`.
@@ -208,6 +223,40 @@ function useCardOrder<T extends string>(
 - [ ] **Passo 2:** Modal correlacionado: editar dados pessoais abre formulário no modal grande.
 - [ ] **Passo 3:** Incluir o toggle de tema DENTRO da sidebar desta view (o Header fica coberto pelo full-bleed — ver Armadilha 6).
 - [ ] **Passo 4:** Ligar em `Dashboard.tsx`, testes, verificação ao vivo, commit.
+
+---
+
+## Task 3.5: Corrigir campos inventados (bug encontrado em 2026-09-05)
+
+**Causa raiz:** as Tasks 1-5 foram implementadas por outro processo (não a sessão que escreveu este plano) sem ler `WEB/types.ts` antes de codar. Usou campos genéricos de "app de banco" que não existem neste schema, com fallbacks fabricados que mascaram o erro em runtime (JS não quebra com `undefined`, só usa o valor falso). Isso é exatamente a violação que a Task 3 já proibia ("sem inventar número").
+
+**8 erros de tsc encontrados, todos por campo inexistente:**
+
+| Arquivo | Linha | Campo inventado | Campo real | Fallback fabricado a remover |
+|---|---|---|---|---|
+| `HomeAllureView.tsx` | 298 | `creditCard.limit` | `creditCard.totalLimit` | `?? 5000` |
+| `HomeAllureView.tsx` | 404 | `creditCard.limit` (fallback) | usar só `availableLimit` | `?? user?.creditCard?.limit ?? 0` |
+| `HomeAllureView.tsx` | 411 | `user.name` | `user.fullName` | — |
+| `InvoicesAllureView.tsx` | 68 | `creditCard.limit` | `creditCard.totalLimit` | `?? 5000` |
+| `ProfileAllureView.tsx` | 38 | `user.name` | `user.fullName` | — |
+| `ProfileAllureView.tsx` | 66 | `user.agency` | **não existe** — app não tem conta corrente tradicional | `|| '0001'` |
+| `ProfileAllureView.tsx` | 70 | `user.accountNumber` | **não existe** | `|| 'Não informada'` |
+| `ProfileAllureView.tsx` | 74 | `user.accountType` | **não existe** | `|| 'CORRENTE'` |
+
+**Files:**
+- Modify: `WEB/components/Home/HomeAllureView.tsx`
+- Modify: `WEB/components/Invoices/InvoicesAllureView.tsx`
+- Modify: `WEB/components/Profile/ProfileAllureView.tsx`
+
+- [ ] **Passo 1:** `HomeAllureView.tsx` linha 298 — trocar `user?.creditCard?.limit ?? 5000` por `user?.creditCard?.totalLimit ?? 0`.
+- [ ] **Passo 2:** `HomeAllureView.tsx` linha 404 — trocar `user?.creditCard?.availableLimit ?? user?.creditCard?.limit ?? 0` por `user?.creditCard?.availableLimit ?? 0`.
+- [ ] **Passo 3:** `HomeAllureView.tsx` linha 411 — trocar `user?.name || 'Cliente'` por `user?.fullName || 'Cliente'`.
+- [ ] **Passo 4:** `InvoicesAllureView.tsx` linha 68 — trocar `creditCard?.limit ?? 5000` por `creditCard?.totalLimit ?? 0`.
+- [ ] **Passo 5:** `ProfileAllureView.tsx` linha 38 — trocar `user?.name` por `user?.fullName`.
+- [ ] **Passo 6:** `ProfileAllureView.tsx` linhas 62-77 — remover o `ChartCard` inteiro "Dados Bancários" (Agência/Conta Corrente/Tipo de Conta — produto não tem esse conceito). Substituir por dados reais que existem: número do cartão (`user.creditCard.number`, mascarado) e status da conta (`user.accountStatus`).
+- [ ] **Passo 7:** Rodar `cd WEB && npx tsc --noEmit` — confirmar volta aos 68 erros de baseline (zero novo).
+- [ ] **Passo 8:** Rodar `cd WEB && npm test -- --run` — confirmar 152 testes (ou mais, se Passo 6 mudar algo coberto por teste) continuam passando.
+- [ ] **Passo 9:** Commit.
 
 ---
 

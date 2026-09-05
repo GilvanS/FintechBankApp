@@ -6,6 +6,9 @@ import { useDialog } from '../contexts/GlobalDialogContext';
 import { useAppState } from '../contexts/AppStateContext';
 
 import HomeView from './HomeView';
+import HomeAllureView from './Home/HomeAllureView';
+import InvoicesAllureView from './Invoices/InvoicesAllureView';
+import ProfileAllureView from './Profile/ProfileAllureView';
 import AnalyticsView from './Analytics/AnalyticsView';
 import Profile from './Profile';
 import PixView from './PixView';
@@ -82,7 +85,7 @@ const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; o
 };
 
 
-type View = 'home' | 'cards' | 'shop' | 'investments' | 'wallet' | 'loans' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'installmentReceipt' | 'currentInvoice' | 'limit' | 'invoices' | 'analytics';
+type View = 'home' | 'homeAllure' | 'cards' | 'shop' | 'investments' | 'wallet' | 'loans' | 'profile' | 'statement' | 'pix' | 'deposit' | 'admin' | 'shoppingCart' | 'paymentMethods' | 'productPage' | 'points' | 'anticipateInstallments' | 'installmentReviewInvoice' | 'purchaseConfirmation' | 'products' | 'closedInvoice' | 'invoicePaymentReceipt' | 'installmentOptions' | 'installmentReceipt' | 'currentInvoice' | 'limit' | 'invoices' | 'analytics';
 
 const Dashboard: React.FC = () => {
     const { user, updateUser, logout, view: topLevelView, navigateTo } = useAuth();
@@ -607,12 +610,31 @@ const Dashboard: React.FC = () => {
                         <AnalyticsView onBack={() => handleNavigate('home')} transactions={user?.transactions ?? []} theme={theme} />
                     </div>
                 );
+            case 'homeAllure':
+                return (
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <HomeAllureView
+                            user={user}
+                            theme={theme}
+                            onBack={() => handleNavigate('home')}
+                            onNavigate={handleNavigate}
+                            openDepositModal={() => setIsDepositModalOpen(true)}
+                            openPixModal={() => setIsPixModalOpen(true)}
+                            openBoletoModal={() => setIsBoletoOpen(true)}
+                        />
+                    </div>
+                );
             case 'invoices':
                 return (
-                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar flex justify-center ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
-                        <div className="w-full max-w-6xl min-h-full flex flex-col">
-                            <InvoicesView onBack={() => handleNavigate('home')} onNavigate={handleNavigate} openBoletoModal={() => setIsBoletoOpen(true)} openPixModal={() => setIsPixModalOpen(true)} />
-                        </div>
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <InvoicesAllureView
+                            user={user}
+                            theme={theme}
+                            onBack={() => handleNavigate('home')}
+                            onNavigate={handleNavigate}
+                            openBoletoModal={() => setIsBoletoOpen(true)}
+                            openPixModal={() => setIsPixModalOpen(true)}
+                        />
                     </div>
                 );
             case 'cards':
@@ -625,10 +647,13 @@ const Dashboard: React.FC = () => {
                 );
             case 'profile':
                 return (
-                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto flex justify-center ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
-                        <div className="w-full max-w-md bg-transparent">
-                            <Profile onNavigate={handleNavigate} />
-                        </div>
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <ProfileAllureView
+                            user={user}
+                            theme={theme}
+                            onBack={() => handleNavigate('home')}
+                            onNavigate={handleNavigate}
+                        />
                     </div>
                 );
             case 'shoppingCart':
