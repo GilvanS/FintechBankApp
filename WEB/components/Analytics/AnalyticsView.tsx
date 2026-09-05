@@ -2,11 +2,12 @@ import React, { useMemo, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, LayoutGrid, PieChart as PieChartIcon, TrendingUp, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
+import { ArrowLeft, LayoutGrid, LayoutList, PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import DonutStatusCard from './DonutStatusCard';
 import CategoryBarCard from './CategoryBarCard';
 import ProgressBarRow from './ProgressBarRow';
 import TrendLineCard from './TrendLineCard';
+import PeriodSummaryCard from './PeriodSummaryCard';
 import ChartCard from './ChartCard';
 import Hero3D from './Hero3D';
 import type { Transaction } from '../../types';
@@ -17,8 +18,8 @@ interface Props {
   onBack: () => void;
 }
 
-type Section = 'geral' | 'categorias' | 'tendencia';
-type ExpandableCard = 'status' | 'categorias' | 'meta' | 'tendencia';
+type Section = 'geral' | 'detalhes';
+type ExpandableCard = 'status' | 'categorias' | 'meta' | 'tendencia' | 'resumo';
 
 const CATEGORY_LABELS: Record<string, string> = {
   refeicao: 'Refeicao',
@@ -53,8 +54,7 @@ function formatBRL(value: number): string {
 
 const SECTIONS: { key: Section; label: string; icon: typeof LayoutGrid }[] = [
   { key: 'geral', label: 'Visao Geral', icon: LayoutGrid },
-  { key: 'categorias', label: 'Categorias', icon: PieChartIcon },
-  { key: 'tendencia', label: 'Tendencia', icon: TrendingUp },
+  { key: 'detalhes', label: 'Detalhes', icon: LayoutList },
 ];
 
 const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
@@ -122,15 +122,30 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
   ];
   const resultado = entradas - saidas;
 
+  const periodSummary = useMemo(() => {
+    const saidaCount = transactions.filter((t) => !ENTRADA_TYPES.has(t.type)).length;
+    return {
+      totalTransacoes: saidaCount,
+      ticketMedio: saidaCount > 0 ? saidas / saidaCount : 0,
+    };
+  }, [transactions, saidas]);
+
+  // Stagger-reveals the grid whenever activeSection changes — the motion signals "you switched
+  // section" (state change), not a decorative flourish, so it stays a single quick beat and skips
+  // entirely for prefers-reduced-motion, matching the convention Hero3D already sets in this view.
   useGSAP(
     () => {
-      if (!gridRef.current) return;
-      gsap.from(gridRef.current.children, {
-        opacity: 0,
-        y: 16,
-        duration: 0.4,
-        stagger: 0.08,
-        ease: 'power2.out',
+      const grid = gridRef.current;
+      if (!grid) return;
+      const mm = gsap.matchMedia();
+      mm.add('(prefers-reduced-motion: no-preference)', () => {
+        gsap.from(grid.children, {
+          opacity: 0,
+          y: 16,
+          duration: 0.4,
+          stagger: 0.08,
+          ease: 'power2.out',
+        });
       });
     },
     { scope: gridRef, dependencies: [activeSection] }
@@ -145,17 +160,17 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
   );
 
   const renderSection = () => {
-    if (activeSection === 'categorias') {
+    if (activeSection === 'detalhes') {
       return (
-        <div ref={gridRef} className="grid grid-cols-1 gap-4 p-4 md:p-8 pt-0">
+        <div ref={gridRef} className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 md:p-8 pt-0">
           <CategoryBarCard data={categoryData} theme={theme} onExpand={() => setExpandedCard('categorias')} />
-        </div>
-      );
-    }
-    if (activeSection === 'tendencia') {
-      return (
-        <div ref={gridRef} className="grid grid-cols-1 gap-4 p-4 md:p-8 pt-0">
           <TrendLineCard data={trendData} theme={theme} onExpand={() => setExpandedCard('tendencia')} />
+          <PeriodSummaryCard
+            totalTransacoes={periodSummary.totalTransacoes}
+            ticketMedio={periodSummary.ticketMedio}
+            theme={theme}
+            onExpand={() => setExpandedCard('resumo')}
+          />
         </div>
       );
     }
@@ -177,6 +192,8 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
         return metaCard();
       case 'tendencia':
         return <TrendLineCard data={trendData} theme={theme} />;
+      case 'resumo':
+        return <PeriodSummaryCard totalTransacoes={periodSummary.totalTransacoes} ticketMedio={periodSummary.ticketMedio} theme={theme} />;
       default:
         return null;
     }
@@ -184,9 +201,25 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }} className="flex min-h-full w-full">
-      {/* Sidebar - desktop only, collapsible (icon-only when collapsed) */}
+      <div className="flex-1 flex flex-col overflow-y-auto">
+        <header className="flex items-center justify-between px-4 md:px-8 py-4">
+          <div className="flex items-center gap-3">
+            <button onClick={onBack} className={`md:hidden ${isMidnight ? 'text-on-surface' : 'text-black'}`} aria-label="Voltar">
+              <ArrowLeft size={20} />
+            </button>
+            <h1 className={`text-xl font-black uppercase tracking-wide ${isMidnight ? 'text-on-surface' : 'text-black'}`}>
+              Analytics
+            </h1>
+          </div>
+          <Hero3D theme={theme} size={64} />
+        </header>
+
+        {renderSection()}
+      </div>
+
+      {/* Sidebar - desktop only, collapsible (icon-only when collapsed), lateral direita */}
       <aside
-        className={`hidden md:flex ${sidebarCollapsed ? 'w-16' : 'w-56'} shrink-0 flex-col gap-1 p-4 border-r transition-all duration-200 ${
+        className={`hidden md:flex ${sidebarCollapsed ? 'w-16' : 'w-56'} shrink-0 flex-col gap-1 p-4 border-l transition-all duration-200 ${
           isMidnight ? 'border-white/5 bg-volt-dark' : 'border-black/10 bg-volt-yellow-pastel'
         }`}
       >
@@ -206,7 +239,7 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
             aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
             className={isMidnight ? 'text-on-surface-variant hover:text-on-surface' : 'text-black/60 hover:text-black'}
           >
-            {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            {sidebarCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
           </button>
         </div>
         {SECTIONS.map(({ key, label, icon: Icon }) => {
@@ -231,22 +264,6 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
           );
         })}
       </aside>
-
-      <div className="flex-1 flex flex-col overflow-y-auto">
-        <header className="flex items-center justify-between px-4 md:px-8 py-4">
-          <div className="flex items-center gap-3">
-            <button onClick={onBack} className={`md:hidden ${isMidnight ? 'text-on-surface' : 'text-black'}`} aria-label="Voltar">
-              <ArrowLeft size={20} />
-            </button>
-            <h1 className={`text-xl font-black uppercase tracking-wide ${isMidnight ? 'text-on-surface' : 'text-black'}`}>
-              Analytics
-            </h1>
-          </div>
-          <Hero3D theme={theme} size={64} />
-        </header>
-
-        {renderSection()}
-      </div>
 
       {/* Expanded card modal */}
       <AnimatePresence>
