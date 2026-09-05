@@ -828,7 +828,9 @@ git commit -m "feat(web): drag-to-reorder dos cards da Analytics via motion Reor
 
 ### Fase futura (após Analytics fechada): expandir padrão full-bleed para o app inteiro
 
-Decisão do usuário (2026-09-05, em sessão ao vivo testando a Analytics): o layout full-bleed + sidebar validado aqui na Analytics deve virar o padrão do projeto WEB inteiro, não só desta view. Cada tela (Extrato, Faturas, Limites, Shop, Perfil, Admin) vai precisar de um ou mais "modais correlacionados" ao lado do conteúdo principal — exemplo dado pelo usuário: ao abrir Extrato, um modal de "Gastos" aparece ao lado, correlacionado aos dados do extrato. Não iniciar esta fase até a Analytics estar fechada e aprovada — o usuário explicitamente adiou ("depois que finalizar nos acertamos os modais de cada função").
+Decisão do usuário (2026-09-05, em sessão ao vivo testando a Analytics): o layout full-bleed + sidebar validado aqui na Analytics deve virar o padrão do projeto WEB inteiro, não só desta view. Cada tela vai precisar de um ou mais "modais correlacionados" ao lado do conteúdo principal — exemplo dado pelo usuário: ao abrir Extrato, um modal de "Gastos" aparece ao lado, correlacionado aos dados do extrato. Não iniciar esta fase até a Analytics estar fechada e aprovada — o usuário explicitamente adiou ("depois que finalizar nos acertamos os modais de cada função").
+
+**Escopo confirmado (2026-09-05):** o modo Allure se aplica a **Início (Home), Faturas e Perfil** apenas. **Shop e Admin ficam de fora** — já abrem por rota/função própria separada (Admin já é full-bleed com seu próprio layout; Shop também tem fluxo próprio), não fazem parte desta migração de padrão.
 
 **ASCII conceitual (referência, não implementar ainda):**
 
