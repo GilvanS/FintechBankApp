@@ -8,6 +8,7 @@ import TrendLineCard from './TrendLineCard';
 import PeriodSummaryCard from './PeriodSummaryCard';
 import ChartCard from './ChartCard';
 import Hero3D from './Hero3D';
+import AsciiHeaderAccent from './AsciiHeaderAccent';
 import type { Transaction } from '../../types';
 
 interface Props {
@@ -273,7 +274,10 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
               Analytics
             </h1>
           </div>
-          <Hero3D theme={theme} size={64} />
+          <div className="flex items-center gap-3">
+            <AsciiHeaderAccent theme={theme} />
+            <Hero3D theme={theme} size={64} />
+          </div>
         </header>
 
         {renderSection()}

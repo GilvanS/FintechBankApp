@@ -639,19 +639,27 @@ git commit -m "feat(web): AnalyticsView monta cards de status/categoria/meta com
 
 ### Task 5: Aplicar dither escolhido como decoração pontual
 
+**Decisão do usuário (2026-09-05, via Artifact de comparação):** ASCII/Halftone. Justificativa observada: mantém uma cor de destaque em vez de virar preto/branco puro, então não briga com o "One Wire Rule" — o padrão de caracteres em `volt-green` (midnight) / preto (yellow) lê como uma textura, não como ruído aleatório.
+
 **Files:**
-- Modify: `WEB/components/Analytics/AnalyticsView.tsx` (ou `ChartCard.tsx`, dependendo de onde o usuário decidir aplicar o efeito após ver o `DitherPreview` da Task 2)
+- Modify: `WEB/components/Analytics/AnalyticsView.tsx` (header, ao lado/atrás do `Hero3D`)
 
 **Interfaces:**
-- Consumes: método de dither escolhido (`applyFloydSteinberg` | `applyBayer8x8` | `applyAsciiHalftone`) de `WEB/utils/ditherEffects.ts`
+- Consumes: `applyAsciiHalftone` de `WEB/utils/ditherEffects.ts`
 
-- [ ] **Passo 1: Aguardar decisão visual do usuário via `DitherPreview` (Task 2) antes de implementar** — este passo não tem código fixo porque depende de qual dos 3 métodos for escolhido e onde exatamente (ex: textura de fundo do `ChartCard` hero, ou um ícone decorativo no header da `AnalyticsView`).
+**Ponto de aplicação escolhido:** textura decorativa pequena (não dados reais) atrás/ao lado do `Hero3D` no header — um canvas discreto (~120x40px) com um gradiente sintético simples (mesma técnica do `DitherPreview`) processado por `applyAsciiHalftone`, cor de destaque seguindo o tema (`#00ff9d` midnight / preto yellow). Puramente ornamental, sem representar nenhum número real — não pode substituir nenhum dos charts existentes.
 
-- [ ] **Passo 2: Commit (mensagem final depende da escolha)**
+**Aguardando:** Task 10 (agente Motion, em background) termina de editar `AnalyticsView.tsx` antes desta task tocar o mesmo arquivo, pra não repetir a colisão de edição concorrente que já aconteceu com o agente do GSAP nesta sessão.
+
+- [ ] **Passo 1:** Criar um pequeno componente `WEB/components/Analytics/AsciiHeaderAccent.tsx` (canvas ~120x40px, desenha gradiente sintético + roda `applyAsciiHalftone` no mount, `aria-hidden`, `pointerEvents: none`, respeita `prefers-reduced-motion` só no sentido de não animar nada — é um render estático único, sem loop).
+- [ ] **Passo 2:** Montar `<AsciiHeaderAccent theme={theme} />` no header de `AnalyticsView.tsx`, ao lado do `Hero3D` (não sobrepondo).
+- [ ] **Passo 3:** Rodar `cd WEB && npm test -- --run` (regressão) e `npx tsc --noEmit` (zero erro novo).
+- [ ] **Passo 4:** Verificar visualmente nos dois temas (yellow/midnight) no Browser pane.
+- [ ] **Passo 5: Commit**
 
 ```bash
-git add WEB/components/Analytics/
-git commit -m "feat(web): aplica efeito de dither [METODO_ESCOLHIDO] como decoracao no card hero da Analytics"
+git add WEB/components/Analytics/AsciiHeaderAccent.tsx WEB/components/Analytics/AnalyticsView.tsx
+git commit -m "feat(web): aplica dither ASCII/Halftone como decoracao pontual no header da Analytics"
 ```
 
 ---
