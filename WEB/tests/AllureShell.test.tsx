@@ -69,6 +69,26 @@ describe('AllureShell', () => {
     expect(handleBack).toHaveBeenCalled();
   });
 
+  it('persists sidebar position toggle in localStorage', () => {
+    const { getByTitle } = render(
+      <AllureShell
+        title="Test Shell"
+        theme="midnight"
+        onBack={vi.fn()}
+        sections={mockSections}
+        activeSection="sec1"
+        onSelectSection={vi.fn()}
+      >
+        <div>Content</div>
+      </AllureShell>
+    );
+
+    const toggleBtn = getByTitle('Mover menu para direita');
+    expect(toggleBtn).toBeInTheDocument();
+    fireEvent.click(toggleBtn);
+    expect(localStorage.getItem('allure-sidebar-side')).toBe('right');
+  });
+
   it('renders expanded modal content and handles close', () => {
     const handleClose = vi.fn();
     const { getByText, getByLabelText } = render(

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, PanelRightClose, PanelRightOpen, X } from 'lucide-react';
+import { ArrowLeft, PanelLeft, PanelRight, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import AsciiHeaderAccent from '../Analytics/AsciiHeaderAccent';
 
 export interface AllureSection<K extends string> {
@@ -45,13 +45,36 @@ export function AllureShell<K extends string>({
   onCloseExpanded,
 }: AllureShellProps<K>) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarSide, setSidebarSide] = useState<'left' | 'right'>(() => {
+    try {
+      const saved = localStorage.getItem('allure-sidebar-side');
+      return saved === 'right' ? 'right' : 'left';
+    } catch {
+      return 'left';
+    }
+  });
+
   const isMidnight = theme === 'midnight';
+
+  const toggleSidebarSide = () => {
+    const next = sidebarSide === 'left' ? 'right' : 'left';
+    setSidebarSide(next);
+    try {
+      localStorage.setItem('allure-sidebar-side', next);
+    } catch {
+      // Ignora erro
+    }
+  };
+
+  const isRight = sidebarSide === 'right';
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className={`min-h-screen p-4 md:p-8 flex flex-col md:flex-row gap-6 ${
+      className={`min-h-screen p-4 md:p-8 flex flex-col ${
+        isRight ? 'md:flex-row-reverse' : 'md:flex-row'
+      } gap-6 ${
         isMidnight ? 'bg-volt-dark text-on-surface font-sans' : 'bg-volt-yellow text-black font-sans'
       }`}
     >
@@ -122,21 +145,38 @@ export function AllureShell<K extends string>({
             : 'bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
         }`}
       >
-        <div className="flex items-center justify-between px-2 py-1 mb-2">
+        <div className="flex items-center justify-between px-2 py-1 mb-2 gap-1">
           {!sidebarCollapsed && (
             <span className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
               Navegação
             </span>
           )}
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
-            className={`p-1 rounded-md transition-colors ${
-              isMidnight ? 'text-on-surface-variant hover:text-on-surface hover:bg-white/5' : 'text-black/60 hover:text-black hover:bg-black/5'
-            }`}
-          >
-            {sidebarCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
-          </button>
+          <div className="flex items-center gap-1 ml-auto">
+            <button
+              onClick={toggleSidebarSide}
+              aria-label={isRight ? 'Mover menu para esquerda' : 'Mover menu para direita'}
+              title={isRight ? 'Mover menu para esquerda' : 'Mover menu para direita'}
+              className={`p-1 rounded-md transition-colors ${
+                isMidnight ? 'text-on-surface-variant hover:text-on-surface hover:bg-white/5' : 'text-black/60 hover:text-black hover:bg-black/5'
+              }`}
+            >
+              {isRight ? <PanelLeft size={16} /> : <PanelRight size={16} />}
+            </button>
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+              title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+              className={`p-1 rounded-md transition-colors ${
+                isMidnight ? 'text-on-surface-variant hover:text-on-surface hover:bg-white/5' : 'text-black/60 hover:text-black hover:bg-black/5'
+              }`}
+            >
+              {isRight ? (
+                sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />
+              ) : (
+                sidebarCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />
+              )}
+            </button>
+          </div>
         </div>
 
         {sections.map(({ key, label, icon: Icon }) => {
