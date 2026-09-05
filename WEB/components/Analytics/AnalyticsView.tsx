@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { motion, AnimatePresence, Reorder, useReducedMotion } from 'motion/react';
 import { ArrowLeft, LayoutGrid, LayoutList, PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import DonutStatusCard from './DonutStatusCard';
 import CategoryBarCard from './CategoryBarCard';
@@ -64,12 +64,47 @@ const cardVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as const } },
 };
 
+/** Per-section card keys — each section keeps its own independent drag-to-reorder order. */
+type GeralCardKey = 'status' | 'meta';
+type DetalhesCardKey = 'categorias' | 'tendencia' | 'resumo';
+
+const DEFAULT_GERAL_ORDER: readonly GeralCardKey[] = ['status', 'meta'];
+const DEFAULT_DETALHES_ORDER: readonly DetalhesCardKey[] = ['categorias', 'tendencia', 'resumo'];
+
+/** Reads a persisted card order from localStorage, falling back to (and reconciling with) the default order. */
+function loadCardOrder<T extends string>(section: Section, defaultOrder: readonly T[]): T[] {
+  try {
+    const raw = window.localStorage.getItem(`analytics-card-order-${section}`);
+    if (!raw) return [...defaultOrder];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...defaultOrder];
+    const validKeys = new Set<string>(defaultOrder);
+    const kept = parsed.filter((k): k is T => typeof k === 'string' && validKeys.has(k));
+    const missing = defaultOrder.filter((k) => !kept.includes(k));
+    return kept.length > 0 ? [...kept, ...missing] : [...defaultOrder];
+  } catch {
+    return [...defaultOrder];
+  }
+}
+
 const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
   const isMidnight = theme === 'midnight';
   const prefersReducedMotion = useReducedMotion();
   const [activeSection, setActiveSection] = useState<Section>('geral');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedCard, setExpandedCard] = useState<ExpandableCard | null>(null);
+  const [geralOrder, setGeralOrder] = useState<GeralCardKey[]>(() => loadCardOrder('geral', DEFAULT_GERAL_ORDER));
+  const [detalhesOrder, setDetalhesOrder] = useState<DetalhesCardKey[]>(() => loadCardOrder('detalhes', DEFAULT_DETALHES_ORDER));
+  // Grid direction flips at the md breakpoint (single column on mobile -> single row of 2-3 cols on desktop),
+  // so the Reorder axis must flip with it: dragging vertically reorders a stacked column, horizontally reorders a row.
+  const [isDesktopGrid, setIsDesktopGrid] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const handleChange = (e: MediaQueryListEvent) => setIsDesktopGrid(e.matches);
+    mq.addEventListener('change', handleChange);
+    return () => mq.removeEventListener('change', handleChange);
+  }, []);
 
   const { entradas, saidas } = useMemo(() => {
     let e = 0;
@@ -137,49 +172,75 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
     };
   }, [transactions, saidas]);
 
-  const metaCard = (expand?: () => void) => (
-    <ChartCard title="Meta de gastos" theme={theme} onExpand={expand}>
+  const metaCard = (expand?: () => void, dragHandle?: boolean) => (
+    <ChartCard title="Meta de gastos" theme={theme} onExpand={expand} dragHandle={dragHandle}>
       <div className="flex flex-col gap-3">
         <ProgressBarRow label="Gasto do mes" current={saidas} max={2000} theme={theme} />
       </div>
     </ChartCard>
   );
 
+  const handleReorder = (newOrder: string[]) => {
+    if (activeSection === 'detalhes') {
+      const next = newOrder as DetalhesCardKey[];
+      setDetalhesOrder(next);
+      try {
+        window.localStorage.setItem('analytics-card-order-detalhes', JSON.stringify(next));
+      } catch {
+        /* localStorage unavailable (private mode, quota) — order just won't persist */
+      }
+    } else {
+      const next = newOrder as GeralCardKey[];
+      setGeralOrder(next);
+      try {
+        window.localStorage.setItem('analytics-card-order-geral', JSON.stringify(next));
+      } catch {
+        /* localStorage unavailable (private mode, quota) — order just won't persist */
+      }
+    }
+  };
+
   const renderSection = () => {
     const gridClass =
       activeSection === 'detalhes' ? 'grid grid-cols-1 md:grid-cols-3 gap-4 p-4 md:p-8 pt-0' : 'grid grid-cols-1 md:grid-cols-2 gap-4 p-4 md:p-8 pt-0';
-    const cards =
+    const activeOrder: string[] = activeSection === 'detalhes' ? detalhesOrder : geralOrder;
+    const cardsByKey: Record<string, React.ReactNode> =
       activeSection === 'detalhes'
-        ? [
-            <CategoryBarCard key="categorias" data={categoryData} theme={theme} onExpand={() => setExpandedCard('categorias')} />,
-            <TrendLineCard key="tendencia" data={trendData} theme={theme} onExpand={() => setExpandedCard('tendencia')} />,
-            <PeriodSummaryCard
-              key="resumo"
-              totalTransacoes={periodSummary.totalTransacoes}
-              ticketMedio={periodSummary.ticketMedio}
-              theme={theme}
-              onExpand={() => setExpandedCard('resumo')}
-            />,
-          ]
-        : [
-            <DonutStatusCard key="status" data={donutData} centerLabel={formatBRL(resultado)} theme={theme} onExpand={() => setExpandedCard('status')} />,
-            <React.Fragment key="meta">{metaCard(() => setExpandedCard('meta'))}</React.Fragment>,
-          ];
+        ? {
+            categorias: <CategoryBarCard data={categoryData} theme={theme} onExpand={() => setExpandedCard('categorias')} />,
+            tendencia: <TrendLineCard data={trendData} theme={theme} onExpand={() => setExpandedCard('tendencia')} />,
+            resumo: (
+              <PeriodSummaryCard
+                totalTransacoes={periodSummary.totalTransacoes}
+                ticketMedio={periodSummary.ticketMedio}
+                theme={theme}
+                onExpand={() => setExpandedCard('resumo')}
+              />
+            ),
+          }
+        : {
+            status: <DonutStatusCard data={donutData} centerLabel={formatBRL(resultado)} theme={theme} onExpand={() => setExpandedCard('status')} />,
+            meta: metaCard(() => setExpandedCard('meta'), true),
+          };
 
     return (
-      <motion.div
+      <Reorder.Group
+        as="div"
         key={activeSection}
+        axis={isDesktopGrid ? 'x' : 'y'}
+        values={activeOrder}
+        onReorder={handleReorder}
         className={gridClass}
         variants={prefersReducedMotion ? undefined : gridVariants}
         initial={prefersReducedMotion ? undefined : 'hidden'}
         animate={prefersReducedMotion ? undefined : 'show'}
       >
-        {cards.map((card, i) => (
-          <motion.div key={i} variants={prefersReducedMotion ? undefined : cardVariants}>
-            {card}
-          </motion.div>
+        {activeOrder.map((key) => (
+          <Reorder.Item as="div" key={key} value={key} variants={prefersReducedMotion ? undefined : cardVariants}>
+            {cardsByKey[key]}
+          </Reorder.Item>
         ))}
-      </motion.div>
+      </Reorder.Group>
     );
   };
 
@@ -281,7 +342,7 @@ const AnalyticsView: React.FC<Props> = ({ transactions, theme, onBack }) => {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-3xl max-h-[85vh] overflow-y-auto relative"
+              className="w-full max-w-5xl max-h-[90vh] overflow-y-auto relative"
             >
               <button
                 onClick={() => setExpandedCard(null)}

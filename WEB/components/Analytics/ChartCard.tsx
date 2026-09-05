@@ -1,5 +1,5 @@
 import React from 'react';
-import { Maximize2 } from 'lucide-react';
+import { GripVertical, Maximize2 } from 'lucide-react';
 
 interface Props {
   title: string;
@@ -7,11 +7,13 @@ interface Props {
   theme: 'yellow' | 'midnight';
   className?: string;
   onExpand?: () => void;
+  /** Shows a GripVertical drag-handle icon beside the title. Only pass true for cards inside a reorderable grid — omit it (e.g. inside the expanded modal) where dragging makes no sense. */
+  dragHandle?: boolean;
   children: React.ReactNode;
 }
 
 /** Card shell for the Analytics view. Follows DESIGN.md Elevation: hard-offset shadow in Yellow, tonal surface (no shadow) in Midnight. */
-const ChartCard: React.FC<Props> = ({ title, subtitle, theme, className = '', onExpand, children }) => {
+const ChartCard: React.FC<Props> = ({ title, subtitle, theme, className = '', onExpand, dragHandle, children }) => {
   const isMidnight = theme === 'midnight';
   return (
     <section
@@ -22,15 +24,26 @@ const ChartCard: React.FC<Props> = ({ title, subtitle, theme, className = '', on
       } ${className}`}
     >
       <div className="flex items-start justify-between">
-        <div>
-          <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-on-surface' : 'text-black'}`}>
-            {title}
-          </h3>
-          {subtitle && (
-            <p className={`text-[10px] font-bold ${isMidnight ? 'text-on-surface-variant' : 'text-gray-700'}`}>
-              {subtitle}
-            </p>
+        <div className="flex items-center gap-2">
+          {dragHandle && (
+            <GripVertical
+              size={14}
+              aria-hidden="true"
+              className={`shrink-0 cursor-grab active:cursor-grabbing ${
+                isMidnight ? 'text-on-surface-variant hover:text-volt-green' : 'text-black/50 hover:text-black'
+              }`}
+            />
           )}
+          <div>
+            <h3 className={`font-black text-xs uppercase tracking-wider ${isMidnight ? 'text-on-surface' : 'text-black'}`}>
+              {title}
+            </h3>
+            {subtitle && (
+              <p className={`text-[10px] font-bold ${isMidnight ? 'text-on-surface-variant' : 'text-gray-700'}`}>
+                {subtitle}
+              </p>
+            )}
+          </div>
         </div>
         {onExpand && (
           <button
