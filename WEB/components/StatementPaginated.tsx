@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Search } from 'lucide-react';
 import { Transaction, User } from '../types';
 import { getUserStatementPaginated } from '../services/api';
 import TransactionReceipt from './TransactionReceipt';
@@ -194,10 +195,10 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
 
             {/* Buscador */}
             <div className="relative">
-                <span className={`material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 ${isMidnight ? 'text-white/40' : 'text-black/40'}`}>search</span>
+                <Search size={18} className={`absolute left-4 top-1/2 -translate-y-1/2 ${isMidnight ? 'text-white/40' : 'text-black/40'}`} />
                 <input
                     type="text"
-                    placeholder="Buscar transação..."
+                    placeholder="Buscar transações..."
                     className={`w-full rounded-xl py-3 pl-12 pr-4 focus:outline-none transition-colors ${isMidnight ? 'bg-volt-surface border border-white/10 text-white placeholder-white/40 focus:border-volt-primary' : 'bg-white border-2 border-black text-black placeholder-black/40 focus:border-black'}`}
                     id="statement-search-input"
                     data-testid="statement-search-input"
