@@ -245,14 +245,16 @@ const Dashboard: React.FC = () => {
             setIsDepositModalOpen(true);
             return;
         }
-        if (newView === 'admin') {
-            setPreviousView(currentView);
-            setCurrentView('admin');
+        if (newView === ('admin' as any)) {
+            const isGhPages = typeof window !== 'undefined' && window.location.pathname.startsWith('/FintechBankApp');
+            const base = isGhPages ? '/FintechBankApp' : '';
+            window.open(`${base}/admin`, 'volt-admin');
             return;
         }
-        if (newView === 'shop') {
-            if (currentView !== 'shop') setPreviousView(currentView);
-            setCurrentView('shop');
+        if (newView === ('shop' as any)) {
+            const isGhPages = typeof window !== 'undefined' && window.location.pathname.startsWith('/FintechBankApp');
+            const base = isGhPages ? '/FintechBankApp' : '';
+            window.open(`${base}/shop`, 'volt-vitrine');
             return;
         }
 
@@ -680,10 +682,10 @@ const Dashboard: React.FC = () => {
                             </button>
                             <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Shopping Volt</h1>
                         </div>
-                        <ShopView 
-                            accountBalance={user.balance} 
-                            onPurchaseComplete={handleTransactionCompleteLimit} 
-                            theme={theme} 
+                        <ShopView
+                            accountBalance={user.balance}
+                            onPurchaseComplete={handleTransactionCompleteLimit}
+                            theme={theme}
                         />
                     </div>
                 );
@@ -771,11 +773,11 @@ const Dashboard: React.FC = () => {
             case 'admin':
                 return (
                     <div className={`min-h-full pb-20 ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
-                        <AdminDashboard 
+                        <AdminDashboard
                             onClose={() => {
                                 if (topLevelView === 'admin') navigateTo('dashboard');
                                 handleNavigate('home');
-                            }} 
+                            }}
                         />
                     </div>
                 );
