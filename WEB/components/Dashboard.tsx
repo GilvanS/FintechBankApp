@@ -593,16 +593,17 @@ const Dashboard: React.FC = () => {
         switch (currentView) {
             case 'home':
                 return (
-                    <HomeView
-                        user={user!}
-                        onNavigate={handleNavigate}
-                        theme={theme}
-                        setIsFinancialHealthOpen={setFinancialHealthOpen}
-                        setIsAiRecurringModalOpen={setAiRecurringModalOpen}
-                        setActiveDrawer={setActiveDrawer}
-                        openBoletoModal={() => setIsBoletoOpen(true)}
-                        openCardUnlockModal={() => setIsCardUnlockModalOpen(true)}
-                    />
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <HomeAllureView
+                            user={user}
+                            theme={theme}
+                            onBack={() => handleNavigate('home')}
+                            onNavigate={handleNavigate}
+                            openDepositModal={() => setIsDepositModalOpen(true)}
+                            openPixModal={() => setIsPixModalOpen(true)}
+                            openBoletoModal={() => setIsBoletoOpen(true)}
+                        />
+                    </div>
                 );
             case 'analytics':
                 return (
