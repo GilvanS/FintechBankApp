@@ -600,7 +600,7 @@ export default function LimitView({
           </div>
 
           {/* Withdrawal Limit Section (Bento Grid Style) */}
-          <section className="space-y-4 col-span-1 md:col-span-2">
+          <section className="space-y-4">
             <div className="flex items-center justify-between pl-1">
               <h3 className={`text-xs font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-400' : 'text-zinc-600'}`}>
                 Meus Limites
