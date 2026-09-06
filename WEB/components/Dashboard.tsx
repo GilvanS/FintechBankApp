@@ -10,6 +10,7 @@ import HomeAllureView from './Home/HomeAllureView';
 import InvoicesAllureView from './Invoices/InvoicesAllureView';
 import ProfileAllureView from './Profile/ProfileAllureView';
 import LimitsAllureView from './Limits/LimitsAllureView';
+import CardsAllureView from './Cards/CardsAllureView';
 import AnalyticsView from './Analytics/AnalyticsView';
 import Profile from './Profile';
 import PixView from './PixView';
@@ -644,10 +645,13 @@ const Dashboard: React.FC = () => {
                 );
             case 'cards':
                 return (
-                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar flex justify-center ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
-                        <div className="w-full max-w-6xl min-h-full flex flex-col">
-                            <CardDashboard onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />
-                        </div>
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <CardsAllureView
+                            user={user}
+                            theme={theme}
+                            onBack={() => handleNavigate('home')}
+                            onNavigate={handleNavigate}
+                        />
                     </div>
                 );
             case 'profile':
