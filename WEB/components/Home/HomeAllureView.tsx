@@ -338,22 +338,61 @@ export function HomeAllureView({
   );
 
   const headerKpiExtra = (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
-      <div className={`p-4 rounded-xl border relative ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
-        <div className="flex items-center justify-between">
-          <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Saldo Disponível</p>
-          <button onClick={() => setShowBalance(!showBalance)} className="opacity-60 hover:opacity-100">
-            {showBalance ? <Eye size={14} /> : <EyeOff size={14} />}
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
+      {/* Saldo em Conta Card com botões internos Enviar Pix, Depositar e Voz */}
+      <div className={`p-4 rounded-xl border flex flex-col justify-between gap-3 md:col-span-2 ${
+        isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'
+      }`}>
+        <div>
+          <div className="flex items-center justify-between">
+            <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
+              Saldo em Conta
+            </p>
+            <button onClick={() => setShowBalance(!showBalance)} className="opacity-60 hover:opacity-100">
+              {showBalance ? <Eye size={14} /> : <EyeOff size={14} />}
+            </button>
+          </div>
+          <p className="text-2xl font-black mt-1">
+            {showBalance ? formatBRL(user?.balance ?? 0) : '••••••••'}
+          </p>
+          <p className={`text-[10px] font-bold mt-1 ${isMidnight ? 'text-volt-green' : 'text-emerald-700'}`}>
+            📈 +2.5% este mês (Rendimento 110% CDI)
+          </p>
+        </div>
+
+        {/* 3 Botões Internos do Card de Saldo */}
+        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-black/10 dark:border-white/10">
+          <button
+            onClick={() => onNavigate('pix')}
+            className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+              isMidnight
+                ? 'bg-volt-green text-volt-dark hover:bg-volt-primary-dark'
+                : 'bg-[#A2FF00] text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+            }`}
+          >
+            <Send size={14} /> Enviar Pix
+          </button>
+          <button
+            onClick={openDepositModal || (() => onNavigate('deposit'))}
+            className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+              isMidnight
+                ? 'bg-volt-surface border border-white/10 text-on-surface hover:border-volt-green/50'
+                : 'bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+            }`}
+          >
+            <PlusCircle size={14} /> Depositar
+          </button>
+          <button
+            onClick={() => showDialog({ title: 'Comando por Voz', message: 'Fale o comando desejado (ex: "Enviar PIX R$ 50 para Maria").' })}
+            className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+              isMidnight
+                ? 'bg-volt-surface border border-white/10 text-volt-green hover:border-volt-green/50'
+                : 'bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+            }`}
+          >
+            <Mic size={14} /> Voz
           </button>
         </div>
-        <p className="text-xl font-black mt-1">
-          {showBalance ? formatBRL(user?.balance ?? 0) : '••••••••'}
-        </p>
-      </div>
-
-      <div className={`p-4 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
-        <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Gastos do Mês</p>
-        <p className="text-xl font-black mt-1">{formatBRL(saidas)}</p>
       </div>
 
       <div className={`p-4 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
@@ -388,31 +427,41 @@ export function HomeAllureView({
           <StoryHighlights stories={MOCK_STORIES} onSeeAll={() => setIsViewingStories(true)} />
         </div>
 
-        {/* Quick Action Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-          <button
-            onClick={openPixModal || (() => onNavigate('pix'))}
-            className={`p-4 rounded-xl border font-bold text-xs flex items-center gap-3 transition-all ${
-              isMidnight
-                ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
-                : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px]'
-            }`}
-          >
-            <QrCode size={18} className={isMidnight ? 'text-volt-green' : 'text-black'} /> Área PIX
-          </button>
+        {/* Acesso Rápido - 5 botões exatos */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <button
             onClick={() => onNavigate('pix')}
-            className={`p-4 rounded-xl border font-bold text-xs flex items-center gap-3 transition-all ${
+            className={`p-4 rounded-xl border font-bold text-xs flex items-center justify-center gap-3 transition-all ${
               isMidnight
                 ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
                 : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px]'
             }`}
           >
-            <Send size={18} className={isMidnight ? 'text-volt-green' : 'text-black'} /> Transferir
+            <QrCode size={18} className={isMidnight ? 'text-volt-green' : 'text-black'} /> PIX
+          </button>
+          <button
+            onClick={() => onNavigate('cards')}
+            className={`p-4 rounded-xl border font-bold text-xs flex items-center justify-center gap-3 transition-all ${
+              isMidnight
+                ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
+                : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px]'
+            }`}
+          >
+            <CreditCard size={18} className={isMidnight ? 'text-volt-green' : 'text-black'} /> Meus Cartões
+          </button>
+          <button
+            onClick={() => onNavigate('invoices')}
+            className={`p-4 rounded-xl border font-bold text-xs flex items-center justify-center gap-3 transition-all ${
+              isMidnight
+                ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
+                : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px]'
+            }`}
+          >
+            <FileText size={18} className={isMidnight ? 'text-volt-green' : 'text-black'} /> Faturas
           </button>
           <button
             onClick={openBoletoModal || (() => onNavigate('invoices'))}
-            className={`p-4 rounded-xl border font-bold text-xs flex items-center gap-3 transition-all ${
+            className={`p-4 rounded-xl border font-bold text-xs flex items-center justify-center gap-3 transition-all ${
               isMidnight
                 ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
                 : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px]'
@@ -421,34 +470,14 @@ export function HomeAllureView({
             <Barcode size={18} className={isMidnight ? 'text-volt-green' : 'text-black'} /> Pagar
           </button>
           <button
-            onClick={openDepositModal || (() => onNavigate('deposit'))}
-            className={`p-4 rounded-xl border font-bold text-xs flex items-center gap-3 transition-all ${
+            onClick={() => onNavigate('statement')}
+            className={`p-4 rounded-xl border font-bold text-xs flex items-center justify-center gap-3 transition-all ${
               isMidnight
                 ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
                 : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px]'
             }`}
           >
-            <PlusCircle size={18} className={isMidnight ? 'text-volt-green' : 'text-black'} /> Depositar
-          </button>
-          <button
-            onClick={() => setIsInvoiceSummaryOpen(true)}
-            className={`p-4 rounded-xl border font-bold text-xs flex items-center gap-3 transition-all ${
-              isMidnight
-                ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
-                : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px]'
-            }`}
-          >
-            <Receipt size={18} className={isMidnight ? 'text-volt-green' : 'text-black'} /> Fatura
-          </button>
-          <button
-            onClick={() => onNavigate('cards')}
-            className={`p-4 rounded-xl border font-bold text-xs flex items-center gap-3 transition-all ${
-              isMidnight
-                ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
-                : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px]'
-            }`}
-          >
-            <CreditCard size={18} className={isMidnight ? 'text-volt-green' : 'text-black'} /> Cartões
+            <Receipt size={18} className={isMidnight ? 'text-volt-green' : 'text-black'} /> Extrato
           </button>
         </div>
 
