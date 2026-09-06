@@ -11,6 +11,7 @@ import InvoicesAllureView from './Invoices/InvoicesAllureView';
 import ProfileAllureView from './Profile/ProfileAllureView';
 import LimitsAllureView from './Limits/LimitsAllureView';
 import CardsAllureView from './Cards/CardsAllureView';
+import PixAllureView from './Pix/PixAllureView';
 import AnalyticsView from './Analytics/AnalyticsView';
 import Profile from './Profile';
 import PixView from './PixView';
@@ -697,7 +698,14 @@ const Dashboard: React.FC = () => {
             case 'pix':
                 if (!user) return null;
                 return (
-                    <PixView onBack={handleBack} />
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <PixAllureView
+                            user={user}
+                            theme={theme}
+                            onBack={() => handleNavigate('home')}
+                            onNavigate={handleNavigate}
+                        />
+                    </div>
                 );
             case 'statement':
                 if (!user) return null;
