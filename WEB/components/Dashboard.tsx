@@ -602,6 +602,7 @@ const Dashboard: React.FC = () => {
                             openDepositModal={() => setIsDepositModalOpen(true)}
                             openPixModal={() => setIsPixModalOpen(true)}
                             openBoletoModal={() => setIsBoletoOpen(true)}
+                            toggleTheme={() => setTheme(theme === 'midnight' ? 'yellow' : 'midnight')}
                         />
                     </div>
                 );
