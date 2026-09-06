@@ -318,9 +318,11 @@ export default function CardsView({
   const selectedVirtualCard = virtualCards.find(c => c.id === activeVirtualCardId) || virtualCards[0];
 
   return (
-    <div className="space-y-6 pb-40 pt-4 px-4 max-w-md mx-auto">
-      {/* Physical / Virtual Card Selector */}
-      <div className="flex bg-volt-surface border border-white/5 rounded-xl p-1">
+    <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 items-start pb-12 pt-2 px-2">
+      {/* Left Column (50%): Card Visualizer */}
+      <div className="space-y-6 w-full">
+        {/* Physical / Virtual Card Selector */}
+        <div className="flex bg-volt-surface border border-white/5 rounded-xl p-1">
         <button
           onClick={() => setActiveType('physical')}
           className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all cursor-pointer ${
@@ -682,6 +684,10 @@ export default function CardsView({
           )}
         </AnimatePresence>
       </div>
+      </div>
+
+      {/* Right Column (50%): Controls, Delivery Tracking, Virtual Cards List & Actions */}
+      <div className="space-y-6 w-full">
 
       {/* --- PHYSICAL TRACKING & UNLOCK SUITE --- */}
       {activeType === 'physical' && !isPhysicalUnlocked && (
@@ -735,7 +741,7 @@ export default function CardsView({
                 onClick={() => setShowTrackingModal(false)}
               >
                 <motion.div
-                  className="w-full max-w-md bg-volt-surface rounded-t-3xl border-t border-white/10 p-5 pb-8 max-h-[85vh] overflow-y-auto"
+                  className="w-full max-w-3xl bg-volt-surface rounded-t-3xl border-t border-white/10 p-5 pb-8 max-h-[85vh] overflow-y-auto"
                   initial={{ y: '100%' }}
                   animate={{ y: 0 }}
                   exit={{ y: '100%' }}
@@ -1133,7 +1139,7 @@ export default function CardsView({
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 15 }}
               transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              className="bg-volt-surface border border-white/10 p-6 rounded-2xl w-full max-w-sm relative z-10 space-y-4"
+              className="bg-volt-surface border border-white/10 p-6 rounded-2xl w-full max-w-lg relative z-10 space-y-4"
             >
               <div className="text-center space-y-1">
                 <div className="w-12 h-12 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400 mx-auto mb-2">
@@ -1209,7 +1215,7 @@ export default function CardsView({
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-sm bg-volt-surface border border-white/10 p-6 rounded-2xl shadow-2xl"
+              className="relative w-full max-w-lg bg-volt-surface border border-white/10 p-6 rounded-2xl shadow-2xl"
             >
               <div className="flex justify-between items-center mb-6">
                 <h3 className="font-bold text-white text-lg">Vencimento</h3>
@@ -1280,7 +1286,7 @@ export default function CardsView({
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 15 }}
               transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              className="bg-volt-surface border border-white/10 p-6 rounded-2xl w-full max-w-sm relative z-10 text-center space-y-4"
+              className="bg-volt-surface border border-white/10 p-6 rounded-2xl w-full max-w-lg relative z-10 text-center space-y-4"
             >
               <div className="w-12 h-12 rounded-full bg-volt-green/10 flex items-center justify-center text-volt-green mx-auto">
                 <Key size={20} />
@@ -1322,7 +1328,7 @@ export default function CardsView({
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 15 }}
               transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              className="bg-volt-surface border border-white/10 p-6 rounded-2xl w-full max-w-sm relative z-10 text-center space-y-5"
+              className="bg-volt-surface border border-white/10 p-6 rounded-2xl w-full max-w-lg relative z-10 text-center space-y-5"
             >
               <div className="w-12 h-12 rounded-full bg-volt-green/10 flex items-center justify-center text-volt-green mx-auto">
                 <Sliders size={20} />
@@ -1373,16 +1379,17 @@ export default function CardsView({
         )}
       </AnimatePresence>
 
-      {/* PIN para revelar nÃºmero completo (auto-oculta em 20s) */}
+      {/* PIN para revelar número completo (auto-oculta em 20s) */}
       <PasswordModal
         isOpen={revealPinTarget !== null}
         onClose={() => { setRevealPinTarget(null); setRevealPinError(false); }}
         onConfirm={handleRevealPinConfirm}
-        title="Revelar Dados do CartÃ£o"
+        title="Revelar Dados do Cartão"
         description={revealPinError
-          ? 'PIN incorreto. Digite o PIN de 4 dÃ­gitos do seu cartÃ£o para revelar o nÃºmero completo.'
-          : 'Digite o PIN de 4 dÃ­gitos do seu cartÃ£o para revelar o nÃºmero completo por 20 segundos.'}
+          ? 'PIN incorreto. Digite o PIN de 4 dígitos do seu cartão para revelar o número completo.'
+          : 'Digite o PIN de 4 dígitos do seu cartão para revelar o número completo por 20 segundos.'}
       />
+      </div>
     </div>
   );
 }
