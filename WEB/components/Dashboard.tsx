@@ -9,6 +9,7 @@ import HomeView from './HomeView';
 import HomeAllureView from './Home/HomeAllureView';
 import InvoicesAllureView from './Invoices/InvoicesAllureView';
 import ProfileAllureView from './Profile/ProfileAllureView';
+import LimitsAllureView from './Limits/LimitsAllureView';
 import AnalyticsView from './Analytics/AnalyticsView';
 import Profile from './Profile';
 import PixView from './PixView';
@@ -750,24 +751,13 @@ const Dashboard: React.FC = () => {
                 );
             case 'limit':
                 return (
-                    <div className={`min-h-full pb-20 ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
-                        <div className={`flex items-center gap-3 p-4 border-b ${theme === 'midnight' ? 'border-white/5' : 'border-black/5'}`}>
-                            <button onClick={handleBack} className={`p-2 -ml-2 rounded-full transition-colors cursor-pointer ${theme === 'midnight' ? 'hover:bg-white/10 text-white' : 'hover:bg-black/10 text-black'}`}>
-                                <span className={`text-xl ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>←</span>
-                            </button>
-                            <div>
-                                <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Limites e Contas</h1>
-                                <p className={`text-xs uppercase tracking-widest ${theme === 'midnight' ? 'text-white/50' : 'text-black/50'}`}>Gestão de Limite</p>
-                            </div>
-                        </div>
-                        <div className="overflow-y-auto overflow-x-hidden">
-                            <LimitView
-                                accountBalance={user!.balance}
-                                userProfile={user! as any}
-                                onTransactionComplete={handleTransactionCompleteLimit}
-                                theme={theme}
-                            />
-                        </div>
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <LimitsAllureView
+                            user={user}
+                            theme={theme}
+                            onBack={() => handleNavigate('home')}
+                            onNavigate={handleNavigate}
+                        />
                     </div>
                 );
             case 'admin':
