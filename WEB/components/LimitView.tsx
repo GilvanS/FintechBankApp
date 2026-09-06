@@ -502,14 +502,14 @@ export default function LimitView({
   };
 
   return (
-    <div className={`w-full max-w-4xl mx-auto pb-12 pt-6 px-8 ${isMidnight ? 'text-white' : 'text-black'}`}>
-      
+    <div className={`w-full pb-12 pt-2 px-2 ${isMidnight ? 'text-white' : 'text-black'}`}>
+
       {/* SCREEN 1: HOME LIMIT SCREEN */}
       {screen === 'home' && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-6 animate-fade-in"
+          className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in"
         >
           {/* Header */}
           <section className="flex items-center justify-between">
