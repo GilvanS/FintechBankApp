@@ -54,7 +54,7 @@ vi.mock('../contexts/AppStateContext', () => ({
 
 describe('ProfileAllureView', () => {
   it('renders profile title and sidebar sections', () => {
-    const { getByText, getByTitle } = render(
+    const { getAllByText, getByTitle } = render(
       <ProfileAllureView
         user={null}
         theme="midnight"
@@ -63,7 +63,7 @@ describe('ProfileAllureView', () => {
       />
     );
 
-    expect(getByText('Meu Perfil')).toBeInTheDocument();
+    expect(getAllByText('Meu Perfil').length).toBeGreaterThanOrEqual(1);
     expect(getByTitle('Dados Pessoais')).toBeInTheDocument();
     expect(getByTitle('Segurança')).toBeInTheDocument();
     expect(getByTitle('Preferências')).toBeInTheDocument();

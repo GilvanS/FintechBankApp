@@ -103,8 +103,8 @@ describe('HomeAllureView', () => {
       />
     );
 
-    expect(getByTitle('Visão Geral')).toBeInTheDocument();
-    expect(getByTitle('Extrato')).toBeInTheDocument();
+    expect(getByTitle('Início')).toBeInTheDocument();
+    expect(getByTitle('Faturas')).toBeInTheDocument();
     expect(getByTitle('Limites')).toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { motion, Reorder, useReducedMotion } from 'motion/react';
+import { motion, AnimatePresence, Reorder, useReducedMotion } from 'motion/react';
 import {
   LayoutGrid,
   List,
@@ -26,6 +26,7 @@ import {
   FileText,
   Calendar,
   AlertCircle,
+  Brain,
 } from 'lucide-react';
 import { AllureShell, type AllureSection } from '../shared/AllureShell';
 import DonutStatusCard from '../Analytics/DonutStatusCard';
