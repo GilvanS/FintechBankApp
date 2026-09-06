@@ -298,7 +298,7 @@ export default function PixView({ onBack }: PixViewProps) {
       </div>
 
       <div className={`flex-1 overflow-y-auto no-scrollbar relative p-6 flex flex-col items-center pb-28 ${bodyBgClass}`}>
-        <div className="w-full max-w-md mx-auto">
+        <div className="w-full">
 
       {/* Navigation inside view */}
       {!success && subView !== 'confirmation' && (
@@ -310,92 +310,101 @@ export default function PixView({ onBack }: PixViewProps) {
       )}
 
       {subView === 'transfer' && !success && (
-        <form onSubmit={handleInitiateTransfer} className="space-y-4">
-          {/* Available Balance */}
-          <div className={`rounded-xl p-3 flex justify-between items-center ${surfaceClass}`}>
-            <span className={`text-xs ${labelClass}`}>Saldo Disponível:</span>
-            <span className="text-sm font-bold" style={{ color: accent }}>
-              R$ {user.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
+        <form onSubmit={handleInitiateTransfer} className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          {/* Card 1 (Esquerda - 50%): Dados da Transferência até o Valor */}
+          <div className={`p-5 rounded-2xl border space-y-4 ${surfaceBorderClass}`}>
+            <h3 className="text-xs font-black uppercase tracking-wider">1. Dados da Transferência</h3>
 
-          {/* Key Type Selection */}
-          <div>
-            <label className={`text-xs block mb-2 uppercase tracking-wider font-semibold ${labelClass}`}>
-              Tipo de Chave
-            </label>
-            <div className="grid grid-cols-4 gap-2">
-              {(['cpf', 'email', 'phone', 'random'] as const).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => { setPixKeyType(type); setPixKey(''); }}
-                  className={`py-2 text-[10px] rounded-lg font-black uppercase transition-all flex flex-col items-center justify-center gap-1 border ${
-                    pixKeyType === type
-                      ? isMidnight ? 'bg-white/10 border-white text-white' : 'bg-black text-volt-lime border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-                      : isMidnight ? 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10' : 'bg-black/5 border-black/10 text-black/50 hover:bg-black/10'
-                  }`}
-                >
-                  {type === 'cpf' && <UserIcon size={14} />}
-                  {type === 'email' && <Mail size={14} />}
-                  {type === 'phone' && <Smartphone size={14} />}
-                  {type === 'random' && <Key size={14} />}
-                  {type === 'cpf' ? 'CPF' : type === 'email' ? 'E-mail' : type === 'phone' ? 'Celular' : 'Aleatória'}
-                </button>
-              ))}
+            {/* Available Balance */}
+            <div className={`rounded-xl p-3 flex justify-between items-center ${surfaceClass}`}>
+              <span className={`text-xs ${labelClass}`}>Saldo Disponível:</span>
+              <span className="text-sm font-bold" style={{ color: accent }}>
+                R$ {user.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
             </div>
-          </div>
 
-          {/* Key Input */}
-          <div>
-            <label className={`text-xs block mb-1.5 uppercase tracking-wider font-semibold ${labelClass}`}>
-              {pixKeyType === 'cpf' ? 'Informe o CPF' :
-               pixKeyType === 'email' ? 'Informe o E-mail' :
-               pixKeyType === 'phone' ? 'Informe o Celular' : 'Informe a Chave Aleatória'}
-            </label>
-            <input
-              type="text"
-              value={pixKey}
-              onChange={(e) => setPixKey(e.target.value)}
-              placeholder={
-                pixKeyType === 'cpf' ? '000.000.000-00' :
-                pixKeyType === 'email' ? 'exemplo@email.com' :
-                pixKeyType === 'phone' ? '(11) 99999-9999' : 'Chave aleatória com hifens'
-              }
-              className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase transition-all outline-none ${inputClass}`}
-              required
-            />
-          </div>
+            {/* Key Type Selection */}
+            <div>
+              <label className={`text-xs block mb-2 uppercase tracking-wider font-semibold ${labelClass}`}>
+                Tipo de Chave
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {(['cpf', 'email', 'phone', 'random'] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => { setPixKeyType(type); setPixKey(''); }}
+                    className={`py-2 text-[10px] rounded-lg font-black uppercase transition-all flex flex-col items-center justify-center gap-1 border ${
+                      pixKeyType === type
+                        ? isMidnight ? 'bg-white/10 border-white text-white' : 'bg-black text-volt-lime border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                        : isMidnight ? 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10' : 'bg-black/5 border-black/10 text-black/50 hover:bg-black/10'
+                    }`}
+                  >
+                    {type === 'cpf' && <UserIcon size={14} />}
+                    {type === 'email' && <Mail size={14} />}
+                    {type === 'phone' && <Smartphone size={14} />}
+                    {type === 'random' && <Key size={14} />}
+                    {type === 'cpf' ? 'CPF' : type === 'email' ? 'E-mail' : type === 'phone' ? 'Celular' : 'Aleatória'}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-          {/* Amount Input */}
-          <div>
-            <label className={`text-xs block mb-1.5 uppercase tracking-wider font-semibold ${labelClass}`}>
-              Valor a Transferir
-            </label>
-            <div className="relative">
-              <span className={`absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black uppercase ${labelClass}`}>R$</span>
+            {/* Key Input */}
+            <div>
+              <label className={`text-xs block mb-1.5 uppercase tracking-wider font-semibold ${labelClass}`}>
+                {pixKeyType === 'cpf' ? 'Informe o CPF' :
+                 pixKeyType === 'email' ? 'Informe o E-mail' :
+                 pixKeyType === 'phone' ? 'Informe o Celular' : 'Informe a Chave Aleatória'}
+              </label>
               <input
                 type="text"
-                value={amount}
-                onChange={handleAmountChange}
-                placeholder="0,00"
-                className={`w-full pl-10 pr-4 py-3 rounded-xl text-sm font-bold transition-all outline-none ${inputClass}`}
+                value={pixKey}
+                onChange={(e) => setPixKey(e.target.value)}
+                placeholder={
+                  pixKeyType === 'cpf' ? '000.000.000-00' :
+                  pixKeyType === 'email' ? 'exemplo@email.com' :
+                  pixKeyType === 'phone' ? '(11) 99999-9999' : 'Chave aleatória com hifens'
+                }
+                className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase transition-all outline-none ${inputClass}`}
                 required
               />
             </div>
+
+            {/* Amount Input */}
+            <div>
+              <label className={`text-xs block mb-1.5 uppercase tracking-wider font-semibold ${labelClass}`}>
+                Valor a Transferir
+              </label>
+              <div className="relative">
+                <span className={`absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black uppercase ${labelClass}`}>R$</span>
+                <input
+                  type="text"
+                  value={amount}
+                  onChange={handleAmountChange}
+                  placeholder="0,00"
+                  className={`w-full pl-10 pr-4 py-3 rounded-xl text-sm font-bold transition-all outline-none ${inputClass}`}
+                  required
+                />
+              </div>
+            </div>
           </div>
 
-          {/* Use Credit Toggle */}
-          <div className={`rounded-xl p-4 border flex items-center justify-between transition-all ${
-            useCredit
-              ? isMidnight ? 'bg-volt-primary/5 border-volt-primary' : 'bg-volt-lime/10 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-              : isMidnight ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/10'
-          }`}>
+          {/* Card 2 (Direita - 50%): Pix Parcelado no Crédito até o Botão Prosseguir */}
+          <div className={`p-5 rounded-2xl border space-y-4 ${surfaceBorderClass}`}>
+            <h3 className="text-xs font-black uppercase tracking-wider">2. Pagamento & Confirmação</h3>
+
+            {/* Use Credit Toggle */}
+            <div className={`rounded-xl p-4 border flex items-center justify-between transition-all ${
+              useCredit
+                ? isMidnight ? 'bg-volt-primary/5 border-volt-primary' : 'bg-volt-lime/10 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                : isMidnight ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/10'
+            }`}>
               <div className="space-y-0.5">
-                  <span className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${titleTextClass}`}>
-                      Pix Parcelado no Crédito
-                  </span>
-                  <span className="text-[10px] block text-on-surface-variant/70 font-semibold">Use o limite do seu cartão de crédito</span>
+                <span className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${titleTextClass}`}>
+                  Pix Parcelado no Crédito
+                </span>
+                <span className="text-[10px] block text-on-surface-variant/70 font-semibold">Use o limite do seu cartão de crédito</span>
               </div>
               <button
                 type="button"
@@ -406,13 +415,13 @@ export default function PixView({ onBack }: PixViewProps) {
                     : isMidnight ? 'bg-zinc-800' : 'bg-zinc-300'
                 }`}
               >
-                  <div className={`w-4 h-4 rounded-full absolute top-1/2 -translate-y-1/2 transition-all ${
-                    useCredit
-                      ? 'right-1 bg-black'
-                      : isMidnight ? 'left-1 bg-zinc-500' : 'left-1 bg-white border border-zinc-400'
-                  }`} />
+                <div className={`w-4 h-4 rounded-full absolute top-1/2 -translate-y-1/2 transition-all ${
+                  useCredit
+                    ? 'right-1 bg-black'
+                    : isMidnight ? 'left-1 bg-zinc-500' : 'left-1 bg-white border border-zinc-400'
+                }`} />
               </button>
-          </div>
+            </div>
 
           {/* Description Input */}
           <div>
@@ -565,6 +574,7 @@ export default function PixView({ onBack }: PixViewProps) {
               </>
             )}
           </button>
+          </div>
         </form>
       )}
 
