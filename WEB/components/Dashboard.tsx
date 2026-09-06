@@ -12,6 +12,7 @@ import ProfileAllureView from './Profile/ProfileAllureView';
 import LimitsAllureView from './Limits/LimitsAllureView';
 import CardsAllureView from './Cards/CardsAllureView';
 import PixAllureView from './Pix/PixAllureView';
+import StatementAllureView from './Statement/StatementAllureView';
 import AnalyticsView from './Analytics/AnalyticsView';
 import Profile from './Profile';
 import PixView from './PixView';
@@ -710,20 +711,12 @@ const Dashboard: React.FC = () => {
             case 'statement':
                 if (!user) return null;
                 return (
-                    <div className={`min-h-full pb-20 w-full max-w-4xl mx-auto ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
-                        <div className={`flex items-center gap-3 p-4 border-b sticky top-0 z-50 ${theme === 'midnight' ? 'border-white/5 bg-[#0f0f0f]' : 'border-black/5 bg-volt-yellow'}`}>
-                            <button onClick={handleBack} className={`p-2 -ml-2 rounded-full transition-colors cursor-pointer ${theme === 'midnight' ? 'hover:bg-white/10 text-white' : 'hover:bg-black/10 text-black'}`}>
-                                <span className={`text-xl ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>←</span>
-                            </button>
-                            <h1 className={`text-lg font-bold ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>Extrato</h1>
-                        </div>
-                        <StatementPaginated
+                    <div className={`fixed inset-0 z-[100] w-full h-full overflow-y-auto no-scrollbar ${theme === 'midnight' ? 'bg-volt-dark' : 'bg-volt-yellow'}`}>
+                        <StatementAllureView
                             user={user}
-                            onNavigate={(view) => {
-                                if (view !== 'home' && view !== 'statement') handleNavigate(view as View);
-                                else handleBack();
-                            }}
-                            onBack={handleBack}
+                            theme={theme}
+                            onBack={() => handleNavigate('home')}
+                            onNavigate={handleNavigate}
                         />
                     </div>
                 );
