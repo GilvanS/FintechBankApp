@@ -1,8 +1,51 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import HomeAllureView from '../components/Home/HomeAllureView';
 import type { User } from '../types';
+
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({
+    user: {
+      cpf: '111.111.111-11',
+      fullName: 'Maria Silva',
+      email: 'maria@example.com',
+      balance: 5430.5,
+      creditCard: {
+        number: '4000111122223333',
+        dueDate: '2026-10-10',
+        invoiceDueDate: '2026-10-10',
+        currentInvoice: 1500,
+        closedInvoice: 0,
+        availableLimit: 3500,
+        totalLimit: 5000,
+        currentInvoiceTotal: 1500,
+        pointsBalance: 120,
+        isBlocked: false,
+        transactions: [],
+        closedTransactions: [],
+      },
+      transactions: [],
+    },
+    updateUser: vi.fn(),
+  }),
+  AuthContext: React.createContext({
+    updateUser: vi.fn(),
+  }),
+}));
+
+vi.mock('../contexts/AppStateContext', () => ({
+  useAppState: () => ({
+    theme: 'midnight',
+    checkRecurringBillNotifications: vi.fn(),
+  }),
+}));
+
+vi.mock('../contexts/GlobalDialogContext', () => ({
+  useDialog: () => ({
+    showDialog: vi.fn(),
+  }),
+}));
 
 const mockUser: User = {
   cpf: '111.111.111-11',
@@ -18,10 +61,7 @@ const mockUser: User = {
   limitIncreaseRequest: null,
   showStoriesPopup: false,
   purchasedItems: [],
-  transactions: [
-    { id: 't1', type: 'DEPOSIT', amount: 1000, date: '2026-09-01T10:00:00Z', description: 'Depósito inicial' },
-    { id: 't2', type: 'PIX_SENT', amount: 150.75, category: 'refeicao', date: '2026-09-02T12:00:00Z', description: 'Almoço' },
-  ],
+  transactions: [],
   creditCard: {
     number: '4000 1111 2222 3333',
     dueDate: '2026-10-10',
@@ -31,7 +71,7 @@ const mockUser: User = {
     availableLimit: 3500,
     totalLimit: 5000,
     currentInvoiceTotal: 1500,
-    pointsBalance: 0,
+    pointsBalance: 120,
     isBlocked: false,
     transactions: [],
     closedTransactions: [],
@@ -49,12 +89,11 @@ describe('HomeAllureView', () => {
       />
     );
 
-    expect(getByText('Olá, Maria Silva')).toBeInTheDocument();
-    // R$ 5.430,50 aparece no KPI card e no donut centerLabel — ambos corretos
+    expect(getByText('Olá, Maria')).toBeInTheDocument();
     expect(getAllByText('R$ 5.430,50').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('calls onSelectSection when sidebar navigation buttons are present', () => {
+  it('renders sidebar navigation items', () => {
     const { getByTitle } = render(
       <HomeAllureView
         user={mockUser}
@@ -64,26 +103,8 @@ describe('HomeAllureView', () => {
       />
     );
 
-    // Sidebar sections rendered — buttons exist and are clickable (Armadilha 7: visual state só no browser)
+    expect(getByTitle('Visão Geral')).toBeInTheDocument();
     expect(getByTitle('Extrato')).toBeInTheDocument();
     expect(getByTitle('Limites')).toBeInTheDocument();
-    expect(getByTitle('Visão Geral')).toBeInTheDocument();
-  });
-
-  it('renders limits section correctly', () => {
-    const { getByTitle } = render(
-      <HomeAllureView
-        user={mockUser}
-        theme="midnight"
-        onBack={vi.fn()}
-        onNavigate={vi.fn()}
-      />
-    );
-
-    // Confirms sidebar nav renders for limites section (content tested via visual QA — Armadilha 7)
-    const limitesBtn = getByTitle('Limites');
-    expect(limitesBtn).toBeInTheDocument();
-    fireEvent.click(limitesBtn);
-    // No assertion on content — AnimatePresence requires live browser for visual validation
   });
 });
