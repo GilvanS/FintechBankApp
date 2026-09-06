@@ -156,6 +156,7 @@ export function HomeAllureView({
   const [isCarouselInsightsOpen, setIsCarouselInsightsOpen] = useState(false);
   const [isOverdueAlertOpen, setIsOverdueAlertOpen] = useState(false);
   const [isBiometricOpen, setIsBiometricOpen] = useState(false);
+  const [isIntelligenceMenuOpen, setIsIntelligenceMenuOpen] = useState(false);
 
   const [visaoOrder, setVisaoOrder] = useCardOrder('home_visao', DEFAULT_VISAO_ORDER);
 
@@ -623,6 +624,74 @@ export function HomeAllureView({
           onSuccess={() => setIsBiometricOpen(false)}
         />
       )}
+
+      {/* Botão Flutuante de Inteligência Financeira IA (Brain) */}
+      <div className="fixed bottom-6 right-6 z-[150] flex flex-col items-end gap-3 pointer-events-none">
+        <AnimatePresence>
+          {isIntelligenceMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: 10 }}
+              className={`p-3 rounded-2xl border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] pointer-events-auto flex flex-col gap-2 min-w-[240px] ${
+                isMidnight ? 'bg-zinc-900 text-white' : 'bg-white text-black'
+              }`}
+            >
+              <div className="flex items-center gap-2 px-2 py-1 border-b border-black/10 dark:border-white/10">
+                <Sparkles size={16} className="text-volt-green" />
+                <span className="text-xs font-black uppercase tracking-wider">IA Volt Assistant</span>
+              </div>
+
+              <button
+                onClick={() => {
+                  setIsCarouselInsightsOpen(true);
+                  setIsIntelligenceMenuOpen(false);
+                }}
+                className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
+                  isMidnight ? 'bg-zinc-800 text-white' : 'bg-gray-50 text-black'
+                }`}
+              >
+                <span className="text-lg">📊</span>
+                <div>
+                  <h5 className="text-[11px] font-black uppercase">Insights da Carteira</h5>
+                  <p className="text-[9px] opacity-60 font-bold">Análise inteligente de gastos</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  onNavigate('analytics');
+                  setIsIntelligenceMenuOpen(false);
+                }}
+                className={`p-2.5 rounded-xl border-2 border-black flex items-center gap-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${
+                  isMidnight ? 'bg-zinc-800 text-white' : 'bg-gray-50 text-black'
+                }`}
+              >
+                <span className="text-lg">⚡</span>
+                <div>
+                  <h5 className="text-[11px] font-black uppercase">Analytics Completo</h5>
+                  <p className="text-[9px] opacity-60 font-bold">Painel preditivo Volt Forecast™</p>
+                </div>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <motion.button
+          onClick={() => setIsIntelligenceMenuOpen((prev) => !prev)}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          className="w-14 h-14 rounded-full border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer pointer-events-auto bg-volt-green text-black relative group"
+        >
+          <span className="absolute inset-0 rounded-full bg-volt-green opacity-20 group-hover:animate-ping pointer-events-none" />
+          <motion.div
+            animate={{ rotate: isIntelligenceMenuOpen ? 45 : 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+          >
+            {isIntelligenceMenuOpen ? <X size={22} className="stroke-[3]" /> : <Brain size={22} className="stroke-[2.5]" />}
+          </motion.div>
+        </motion.button>
+      </div>
     </AllureShell>
   );
 
