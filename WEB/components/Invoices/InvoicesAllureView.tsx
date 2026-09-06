@@ -1,11 +1,12 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Reorder, useReducedMotion } from 'motion/react';
-import { LayoutGrid, List, CreditCard, FileText, Calendar, AlertCircle } from 'lucide-react';
+import { LayoutGrid, List, CreditCard, FileText, Calendar } from 'lucide-react';
 import { AllureShell, type AllureSection } from '../shared/AllureShell';
 import DonutStatusCard from '../Analytics/DonutStatusCard';
 import TrendLineCard from '../Analytics/TrendLineCard';
 import ProgressBarRow from '../Analytics/ProgressBarRow';
 import ChartCard from '../Analytics/ChartCard';
+import InvoicesView from '../InvoicesView';
 import { useCardOrder } from '../../hooks/useCardOrder';
 import type { User } from '../../types';
 
@@ -53,21 +54,11 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
     return () => mq.removeEventListener('change', handleChange);
   }, []);
 
-  const transactions = useMemo(() => user?.transactions ?? [], [user?.transactions]);
-
-  const invoiceSpend = useMemo(() => {
-    let total = 0;
-    transactions.forEach((t) => {
-      if (!ENTRADA_TYPES.has(t.type)) total += Math.abs(t.amount);
-    });
-    return total;
-  }, [transactions]);
-
   const creditCard = user?.creditCard;
-  const currentInvoiceTotal = creditCard?.currentInvoiceTotal ?? 0;
-  const limit = creditCard?.totalLimit ?? 0;
+  const currentInvoiceTotal = creditCard?.currentInvoiceTotal ?? creditCard?.currentInvoice ?? 0;
+  const limit = creditCard?.totalLimit ?? 5000;
   const availableLimit = creditCard?.availableLimit ?? limit;
-  const usedLimit = limit - availableLimit;
+  const usedLimit = Math.max(0, limit - availableLimit);
 
   const donutData = useMemo(() => {
     if (limit === 0) return [{ label: 'Sem limite', value: 1, color: isMidnight ? '#353534' : '#e5e7eb' }];
@@ -162,7 +153,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
         })}
       </Reorder.Group>
 
-      {/* Ações */}
+      {/* Ações Rápidas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <button
           onClick={() => onNavigate('currentInvoice')}
@@ -175,7 +166,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
           <CreditCard size={20} /> Pagar Fatura Atual
         </button>
         <button
-          onClick={() => onNavigate('invoices')}
+          onClick={() => setActiveSection('faturas')}
           className={`p-5 rounded-xl border font-bold text-sm flex items-center gap-3 transition-all ${
             isMidnight
               ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
@@ -188,41 +179,17 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
     </div>
   );
 
-  const renderFaturas = () => {
-    const installments = transactions.filter((t) => t.installments || t.type === 'INSTALLMENT');
-    return (
-      <ChartCard title="Faturas e Cobranças" subtitle="Histórico de faturas do cartão" theme={theme}>
-        <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto pr-2">
-          {transactions.length === 0 ? (
-            <div className={`p-8 text-center ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
-              <AlertCircle size={32} className="mx-auto mb-3 opacity-40" />
-              <p className="text-sm font-bold">Nenhuma fatura registrada.</p>
-            </div>
-          ) : (
-            transactions
-              .filter((t) => !ENTRADA_TYPES.has(t.type))
-              .map((t) => (
-                <div
-                  key={t.id}
-                  className={`flex items-center justify-between p-4 rounded-xl border ${
-                    isMidnight ? 'bg-volt-dark/50 border-white/5' : 'bg-gray-50 border-black/10'
-                  }`}
-                >
-                  <div>
-                    <p className="text-xs font-bold">{t.description || t.type}</p>
-                    <p className={`text-[10px] ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
-                      {t.date ? new Date(t.date).toLocaleDateString('pt-BR') : 'Sem data'}
-                      {t.category ? ` · ${t.category}` : ''}
-                    </p>
-                  </div>
-                  <span className="text-xs font-black">{formatBRL(Math.abs(t.amount))}</span>
-                </div>
-              ))
-          )}
-        </div>
-      </ChartCard>
-    );
-  };
+  const renderFaturas = () => (
+    /* REGRA DE OURO: usa o InvoicesView real (completo, com pagamentos, filtros e modal) dentro do shell */
+    <div className="w-full">
+      <InvoicesView
+        onBack={onBack}
+        onNavigate={onNavigate}
+        openBoletoModal={openBoletoModal}
+        openPixModal={openPixModal}
+      />
+    </div>
+  );
 
   const renderParcelamentos = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
