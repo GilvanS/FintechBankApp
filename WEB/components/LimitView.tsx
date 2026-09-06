@@ -509,10 +509,10 @@ export default function LimitView({
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in"
+          className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start animate-fade-in"
         >
           {/* Header */}
-          <section className="flex items-center justify-between">
+          <section className="col-span-1 md:col-span-2 flex items-center justify-between">
             <div>
               <p className="text-[10px] uppercase tracking-wider font-extrabold text-on-surface-variant">Titular</p>
               <h2 className={`text-xl font-black ${isMidnight ? 'text-white' : 'text-black'}`}>{userProfile.fullName}</h2>
@@ -600,7 +600,7 @@ export default function LimitView({
           </div>
 
           {/* Withdrawal Limit Section (Bento Grid Style) */}
-          <section className="space-y-4">
+          <section className="space-y-4 col-span-1 md:col-span-2">
             <div className="flex items-center justify-between pl-1">
               <h3 className={`text-xs font-black uppercase tracking-wider ${isMidnight ? 'text-zinc-400' : 'text-zinc-600'}`}>
                 Meus Limites
