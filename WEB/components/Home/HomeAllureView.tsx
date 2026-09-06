@@ -27,6 +27,7 @@ import {
   Calendar,
   AlertCircle,
   Brain,
+  X,
 } from 'lucide-react';
 import { AllureShell, type AllureSection } from '../shared/AllureShell';
 import DonutStatusCard from '../Analytics/DonutStatusCard';
