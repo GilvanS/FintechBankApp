@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { Shield, Users, CreditCard, Receipt, FileText, ArrowLeft, Sparkles, X, LogIn, RefreshCw, Repeat, Send, ShieldCheck, Activity, Timer } from 'lucide-react';
+import { Shield, Users, CreditCard, Receipt, FileText, ArrowLeft, Sparkles, X, LogIn, RefreshCw, Repeat, Send, ShieldCheck, Activity, Timer, Palette, Moon, Sun } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { setAdminSessionToken, login } from '../../services/api';
 
@@ -22,7 +22,7 @@ interface AdminDashboardProps {
 type AdminTab = 'mass-creator' | 'users' | 'cards' | 'billing' | 'recurring' | 'requests' | 'telegram' | 'audit' | 'vitrine' | 'legacy';
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
-    const { theme } = useAppState();
+    const { theme, adminDefaultTheme, setAdminDefaultTheme } = useAppState();
     const isMidnight = theme === 'midnight';
     const [activeTab, setActiveTab] = useState<AdminTab>('users');
     const [legacySearchCpf, setLegacySearchCpf] = useState<string | null>(null);
@@ -363,6 +363,53 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                             })}
                         </div>
                     )}
+                </div>
+
+                {/* Card de Configuração do Tema Padrão do Sistema */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                    isMidnight
+                        ? 'bg-white/5 border-white/10 text-white'
+                        : 'bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-black'
+                }`}>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2.5 rounded-xl ${isMidnight ? 'bg-volt-green/20 text-volt-green' : 'bg-black text-white'}`}>
+                                <Palette size={20} />
+                            </div>
+                            <div>
+                                <h3 className="font-black text-sm uppercase tracking-wide">Tema Padrão do Sistema (Admin)</h3>
+                                <p className={`text-xs ${isMidnight ? 'text-white/60' : 'text-black/60'}`}>
+                                    Define o tema padrão de novos acessos no app
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <button
+                                type="button"
+                                onClick={() => setAdminDefaultTheme('yellow')}
+                                data-testid="admin-theme-yellow-btn"
+                                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                                    adminDefaultTheme === 'yellow'
+                                        ? 'bg-yellow-400 text-black border-2 border-black shadow-sm'
+                                        : isMidnight ? 'bg-white/10 text-white/70 hover:bg-white/20' : 'bg-gray-100 text-black/70 hover:bg-gray-200'
+                                }`}
+                            >
+                                <Sun size={14} /> Normal (Yellow)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAdminDefaultTheme('midnight')}
+                                data-testid="admin-theme-midnight-btn"
+                                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                                    adminDefaultTheme === 'midnight'
+                                        ? 'bg-volt-green text-black border-2 border-black shadow-sm'
+                                        : isMidnight ? 'bg-white/10 text-white/70 hover:bg-white/20' : 'bg-gray-100 text-black/70 hover:bg-gray-200'
+                                }`}
+                            >
+                                <Moon size={14} /> Dark (Midnight)
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <main>{renderContent()}</main>

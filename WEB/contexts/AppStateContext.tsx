@@ -13,6 +13,8 @@ export interface Alert {
 interface AppStateContextData {
     theme: 'midnight' | 'yellow';
     setTheme: (theme: 'midnight' | 'yellow') => void;
+    adminDefaultTheme: 'midnight' | 'yellow';
+    setAdminDefaultTheme: (theme: 'midnight' | 'yellow') => void;
     alerts: Alert[];
     addAlert: (alert: Omit<Alert, 'id'>) => void;
     removeAlert: (id: string) => void;
@@ -58,17 +60,25 @@ const DEFAULT_NOTIFICATIONS = [
 ];
 
 export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const [adminDefaultTheme, setAdminDefaultThemeState] = useState<'midnight' | 'yellow'>(() => {
+        return (localStorage.getItem('volt_admin_default_theme') as 'midnight' | 'yellow') || 'yellow';
+    });
+
     const [theme, setThemeState] = useState<'midnight' | 'yellow'>(() => {
-        return (localStorage.getItem('volt_theme') as 'midnight' | 'yellow') || 'yellow';
+        const userTheme = localStorage.getItem('volt_theme') as 'midnight' | 'yellow' | null;
+        if (userTheme) return userTheme;
+        const adminDefault = localStorage.getItem('volt_admin_default_theme') as 'midnight' | 'yellow' | null;
+        if (adminDefault) return adminDefault;
+        return 'yellow';
     });
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [toast, setToast] = useState<{ title: string; message: string } | null>(null);
-    
+
     const [isFinancialHealthOpen, setFinancialHealthOpen] = useState(false);
     const [isAiRecurringModalOpen, setAiRecurringModalOpen] = useState(false);
     const [isAiModalOpen, setAiModalOpen] = useState(false);
-    
+
     const [isCentralHubOpen, setCentralHubOpen] = useState(false);
     const [activeDrawer, setActiveDrawer] = useState<string | null>(null);
 
@@ -94,6 +104,14 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
     const setTheme = (newTheme: 'midnight' | 'yellow') => {
         setThemeState(newTheme);
         localStorage.setItem('volt_theme', newTheme);
+    };
+
+    const setAdminDefaultTheme = (newTheme: 'midnight' | 'yellow') => {
+        setAdminDefaultThemeState(newTheme);
+        localStorage.setItem('volt_admin_default_theme', newTheme);
+        if (!localStorage.getItem('volt_theme')) {
+            setThemeState(newTheme);
+        }
     };
 
     const addAlert = (alert: Omit<Alert, 'id'>) => {
@@ -294,6 +312,8 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
         <AppStateContext.Provider value={{
             theme,
             setTheme,
+            adminDefaultTheme,
+            setAdminDefaultTheme,
             alerts,
             addAlert,
             removeAlert,
