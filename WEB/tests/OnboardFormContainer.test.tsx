@@ -7,12 +7,9 @@ describe('OnboardFormContainer Component', () => {
   it('renders all 5 wizard sections and default form fields', () => {
     render(<OnboardFormContainer />);
 
-    // Check Section Titles
-    expect(screen.getByText('Dados Pessoais')).toBeInTheDocument();
-    expect(screen.getByText('Contato & Acesso')).toBeInTheDocument();
-    expect(screen.getByText('Endereço')).toBeInTheDocument();
-    expect(screen.getByText('Opções do Cartão')).toBeInTheDocument();
-    expect(screen.getByText('Plano da Conta & PIX')).toBeInTheDocument();
+    // Check Card Titles
+    expect(screen.getByText(/Identificação & Endereço/i)).toBeInTheDocument();
+    expect(screen.getByText(/Produto, Cartão & Plano/i)).toBeInTheDocument();
 
     // Check basic inputs
     expect(screen.getByLabelText(/Nome Completo/i)).toBeInTheDocument();
@@ -69,14 +66,14 @@ describe('OnboardFormContainer Component', () => {
     const brandSelect = screen.getByLabelText(/Bandeira/i);
     fireEvent.change(brandSelect, { target: { value: 'MASTERCARD' } });
 
-    const tierSelect = screen.getByLabelText(/Categoria\/Tier/i);
+    const tierSelect = screen.getByLabelText(/Categoria/i);
     fireEvent.change(tierSelect, { target: { value: 'BLACK' } });
 
-    const dueDaySelect = screen.getByLabelText(/Dia de Vencimento/i);
-    fireEvent.change(dueDaySelect, { target: { value: '15' } });
+    const dueDayBtn = screen.getByRole('button', { name: /Dia 15/i });
+    fireEvent.click(dueDayBtn);
 
-    const planSelect = screen.getByLabelText(/Plano da Conta/i);
-    fireEvent.change(planSelect, { target: { value: 'VIP_BLACK' } });
+    const planBtn = screen.getByRole('button', { name: /VIP Black/i });
+    fireEvent.click(planBtn);
 
     const lastCallArg = handleFormDataChange.mock.calls[handleFormDataChange.mock.calls.length - 1][0];
     expect(lastCallArg.cardBrand).toBe('MASTERCARD');
@@ -102,7 +99,7 @@ describe('OnboardFormContainer Component', () => {
     fireEvent.change(screen.getByLabelText(/Bairro/i), { target: { value: 'Centro' } });
     fireEvent.change(screen.getByLabelText(/Cidade/i), { target: { value: 'São Paulo' } });
 
-    const submitBtn = screen.getByRole('button', { name: /Concluir Cadastro/i });
+    const submitBtn = screen.getByRole('button', { name: /Finalizar Cadastro/i });
     fireEvent.submit(submitBtn.closest('form')!);
 
     expect(handleSubmit).toHaveBeenCalledTimes(1);

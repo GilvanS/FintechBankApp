@@ -30,7 +30,7 @@ describe('NewOnboardView Component', () => {
 
     // 50/50 Split layout elements: Left side (Form Container)
     expect(screen.getByTestId('onboard-left-panel')).toBeInTheDocument();
-    expect(screen.getByText('Dados Pessoais')).toBeInTheDocument();
+    expect(screen.getByText(/Identificação & Endereço/i)).toBeInTheDocument();
 
     // Right side (CardPreview3D container)
     expect(screen.getByTestId('onboard-right-panel')).toBeInTheDocument();
@@ -88,7 +88,7 @@ describe('NewOnboardView Component', () => {
     fireEvent.change(screen.getByLabelText(/Cidade/i), { target: { value: 'São Paulo' } });
 
     // Submit form
-    const submitBtn = screen.getByRole('button', { name: /Concluir Cadastro/i });
+    const submitBtn = screen.getByRole('button', { name: /Finalizar Cadastro/i });
     fireEvent.click(submitBtn);
 
     await waitFor(() => {

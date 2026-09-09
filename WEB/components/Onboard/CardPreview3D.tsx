@@ -5,6 +5,7 @@ import { Wifi, Lock, ShieldCheck, Sparkles } from 'lucide-react';
 export type CardBrand = 'VISA' | 'MASTERCARD' | 'ELO' | 'AMEX';
 export type CardTier = 'GOLD' | 'PLATINUM' | 'BLACK';
 export type OnboardPlan = 'FREE' | 'PRO' | 'VIP_BLACK';
+export type CardProductType = 'PHYSICAL' | 'VIRTUAL' | 'BUSINESS' | 'CASHBACK' | 'STUDENT';
 
 export interface CardPreview3DProps {
   brand: CardBrand;
@@ -12,6 +13,7 @@ export interface CardPreview3DProps {
   printedName: string;
   billingDueDay: number;
   plan: OnboardPlan;
+  productType?: CardProductType;
   estimatedLimit?: number;
 }
 
@@ -49,6 +51,7 @@ const formatBRL = (val: number): string => {
 export default function CardPreview3D({
   brand = 'VISA',
   tier = 'BLACK',
+  productType = 'PHYSICAL',
   printedName = 'NOME NO CARTÃO',
   billingDueDay = 10,
   plan = 'FREE',
@@ -99,7 +102,7 @@ export default function CardPreview3D({
       {/* 3D Card Container */}
       <div className="w-full perspective-1000 select-none">
         <motion.div
-          className={`relative w-full aspect-[1.586/1] rounded-2xl border shadow-2xl transition-all duration-200 cursor-pointer overflow-hidden backdrop-blur-md ${getTierGradient(
+          className={`relative w-full aspect-[1.586/1] rounded-2xl border shadow-2xl transition-all duration-200 cursor-pointer backdrop-blur-md ${getTierGradient(
             tier
           )}`}
           style={{
@@ -120,8 +123,11 @@ export default function CardPreview3D({
 
           {/* FRONT OF CARD */}
           <div
-            className="absolute inset-0 p-6 flex flex-col justify-between z-10"
-            style={{ backfaceVisibility: 'hidden' }}
+            className="absolute inset-0 p-6 flex flex-col justify-between z-10 rounded-2xl overflow-hidden"
+            style={{
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+            }}
           >
             {/* Header: Chip + Contactless + Brand/Tier */}
             <div className="flex justify-between items-start">
@@ -139,6 +145,11 @@ export default function CardPreview3D({
                 <span className="text-xs font-bold tracking-widest uppercase opacity-80">
                   {tier}
                 </span>
+                {productType && (
+                  <span className="text-[10px] font-medium opacity-70 uppercase tracking-wider">
+                    {productType}
+                  </span>
+                )}
                 <span className="text-lg font-black tracking-wider italic">
                   {brand}
                 </span>
@@ -174,9 +185,10 @@ export default function CardPreview3D({
 
           {/* BACK OF CARD */}
           <div
-            className="absolute inset-0 p-6 flex flex-col justify-between z-10"
+            className="absolute inset-0 p-6 flex flex-col justify-between z-10 rounded-2xl overflow-hidden"
             style={{
               backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
               transform: 'rotateY(180deg)',
             }}
           >

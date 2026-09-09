@@ -158,6 +158,7 @@ export default function NewOnboardView({
           <CardPreview3D
             brand={formData.cardBrand || 'VISA'}
             tier={formData.cardTier || 'GOLD'}
+            productType={formData.productType || 'PHYSICAL'}
             printedName={formData.cardPrintedName || formData.name || 'NOME NO CARTÃO'}
             billingDueDay={formData.cardDueDay || 10}
             plan={formData.plan || 'FREE'}
