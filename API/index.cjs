@@ -1425,7 +1425,22 @@ const signupValidationRules = [
     body('fullName').isString().notEmpty().withMessage('Nome completo é obrigatório.'),
     body('cpf').isString().isLength({ min: 11, max: 11 }).withMessage('CPF deve ter 11 dígitos.').isNumeric().withMessage('CPF deve conter apenas números.'),
     body('email').isEmail().withMessage('Formato de e-mail inválido.'),
-    body('password').isString().isLength({ min: 6, max: 12 }).withMessage('A senha deve ter entre 6 e 12 caracteres.')
+    body('password').isString().isLength({ min: 6, max: 12 }).withMessage('A senha deve ter entre 6 e 12 caracteres.'),
+    // Campos opcionais do Onboarding Allure 360° — não quebram clientes/testes antigos que só mandam os 4 campos acima.
+    body('cardBrand').optional().isIn(['VISA', 'MASTERCARD', 'ELO', 'AMEX', 'HIPERCARD']).withMessage('Bandeira inválida.'),
+    body('cardTier').optional().isIn(['BRONZE', 'GOLD', 'PLATINUM', 'BLACK']).withMessage('Tier de cartão inválido.'),
+    body('productType').optional().isIn(['PHYSICAL', 'VIRTUAL', 'BUSINESS', 'CASHBACK', 'STUDENT']).withMessage('Tipo de produto inválido.'),
+    body('cardDueDay').optional().isInt({ min: 1, max: 28 }).withMessage('Dia de vencimento deve ser entre 1 e 28.'),
+    body('plan').optional().isIn(['FREE', 'PRO', 'VIP_BLACK']).withMessage('Plano inválido.'),
+    body('pixKey').optional().isString(),
+    body('cep').optional().isString(),
+    body('street').optional().isString(),
+    body('number').optional().isString(),
+    body('neighborhood').optional().isString(),
+    body('city').optional().isString(),
+    body('state').optional().isString(),
+    body('tutorName').optional().isString(),
+    body('tutorCpf').optional().isString(),
 ];
 
 const loginValidationRules = [
@@ -1464,11 +1479,29 @@ const miscController = createMiscController({
 registerMiscRoutes({ apiRouter, bearerAuth, authenticateAdmin, pinGuard, body, handleValidationErrors, h: miscController });
 
 // --- Rotas de Autenticação ---
+// Tabelas de valor do onboarding — fonte da verdade é o servidor, nunca o valor que o cliente manda.
+// Espelham TIER_FEES/PLAN_FEES de WEB/components/Onboard/CardPreview3D.tsx.
+const ONBOARD_TIER_FEES = { BRONZE: 0.0, GOLD: 0.0, PLATINUM: 29.9, BLACK: 89.9 };
+const ONBOARD_PLAN_FEES = { FREE: 0.0, PRO: 19.9, VIP_BLACK: 49.9 };
+
+function inferPixKeyType(key) {
+    const digits = String(key).replace(/\D/g, '');
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) return 'EMAIL';
+    if (digits.length === 11 && digits === String(key).trim()) return 'CPF';
+    if (digits.length === 11) return 'PHONE';
+    return 'RANDOM';
+}
+
 apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, asyncHandler(async (req, res) => {
     console.log('🔵 [SIGNUP] Endpoint chamado');
     console.log('🔵 [SIGNUP] Body recebido:', JSON.stringify(req.body));
-    
-    const { fullName, cpf, email, password } = req.body;
+
+    const {
+        fullName, cpf, email, password,
+        cardBrand, cardTier, cardDueDay, cardPrintedName, productType, plan, pixKey,
+        birthDate, tutorName, tutorCpf, tutorRelationship, country,
+        cep, street, number, neighborhood, city, state,
+    } = req.body;
     
     console.log('🔵 [SIGNUP] Dados extraídos:', { fullName, cpf, email, passwordLength: password?.length });
     
@@ -1599,7 +1632,74 @@ apiRouter.post('/auth/signup', signupValidationRules, handleValidationErrors, as
             console.error('❌ [SIGNUP] Erro: Usuário não foi criado após INSERT');
             return res.status(500).json({ success: false, message: 'Erro ao criar conta. Tente novamente.' });
         }
-        
+
+        // Persistir campos do Onboarding Allure 360° (endereço, tutor, cartão, plano, PIX) —
+        // até aqui só fullName/cpf/email/password eram gravados; Massa 3.0 prova que as colunas
+        // de endereço/tutor/bandeira já existem (usersRepo.createMassUser), só o /auth/signup
+        // real nunca as usava. Tudo aqui é opcional e nunca derruba a criação da conta básica.
+        try {
+            const { esc } = repoContext;
+            const profileFields = [];
+            if (cardBrand) profileFields.push(`card_brand = ${esc(String(cardBrand).toUpperCase())}`);
+            if (cardTier) profileFields.push(`card_tier = ${esc(String(cardTier).toUpperCase())}`);
+            if (productType) profileFields.push(`card_product_type = ${esc(String(productType).toUpperCase())}`);
+            if (cardDueDay) profileFields.push(`card_due_day = ${esc(parseInt(cardDueDay, 10))}`);
+            if (plan) profileFields.push(`account_plan = ${esc(String(plan).toUpperCase())}`);
+            if (birthDate) profileFields.push(`birth_date = ${esc(birthDate)}`);
+            if (country) profileFields.push(`country_origin = ${esc(country)}`);
+            if (tutorName) profileFields.push(`tutor_name = ${esc(tutorName)}`, `has_tutor = true`);
+            if (tutorCpf) profileFields.push(`tutor_cpf = ${esc(String(tutorCpf).replace(/\D/g, ''))}`);
+            if (tutorRelationship) profileFields.push(`tutor_relationship = ${esc(tutorRelationship)}`);
+            if (cep) profileFields.push(`address_cep = ${esc(cep)}`);
+            if (street) profileFields.push(`address_street = ${esc(street)}`);
+            if (number) profileFields.push(`address_number = ${esc(number)}`);
+            if (neighborhood) profileFields.push(`address_neighborhood = ${esc(neighborhood)}`);
+            if (city) profileFields.push(`address_city = ${esc(city)}`);
+            if (state) profileFields.push(`address_state = ${esc(state)}`);
+
+            if (profileFields.length > 0) {
+                await dbService.executeQuery(`
+                    UPDATE ${dbService.fq('users')}
+                    SET ${profileFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+                    WHERE cpf = ${esc(cpf)}
+                `);
+            }
+
+            if (pixKey) {
+                await pixRepo.addKey({ cpf, type: inferPixKeyType(pixKey), key: pixKey });
+            }
+
+            const normalizedTier = String(cardTier || '').toUpperCase();
+            const tierFee = ONBOARD_TIER_FEES[normalizedTier] || 0;
+            if (tierFee > 0) {
+                await recurringBillsRepo.create({
+                    cpf,
+                    name: `Anuidade Cartão ${normalizedTier}`,
+                    amount: tierFee,
+                    dueDay: cardDueDay || defaultCreditCardDueDay,
+                    frequency: 'ANNUAL',
+                    paymentMethod: 'CREDIT_CARD',
+                    category: 'cartao',
+                });
+            }
+
+            const normalizedPlan = String(plan || '').toUpperCase();
+            const planFee = ONBOARD_PLAN_FEES[normalizedPlan] || 0;
+            if (planFee > 0) {
+                await recurringBillsRepo.create({
+                    cpf,
+                    name: `Assinatura ${normalizedPlan}`,
+                    amount: planFee,
+                    dueDay: cardDueDay || defaultCreditCardDueDay,
+                    frequency: 'MONTHLY',
+                    paymentMethod: 'ACCOUNT_DEBIT',
+                    category: 'assinatura',
+                });
+            }
+        } catch (onboardErr) {
+            console.error('⚠️ [SIGNUP] Erro ao persistir dados adicionais do onboarding:', onboardErr.message);
+        }
+
         console.log(`✅ [SIGNUP] Usuário ${cpf} criado com sucesso!`);
         telegramService.ensureTopic(cpf, fullName);
         const response = { success: true, message: 'Conta criada com sucesso!' };
@@ -2360,7 +2460,14 @@ apiRouter.post('/pix/contacts/:cpf', bearerAuth(), asyncHandler(async (req, res)
     if (req.user.cpf !== req.params.cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
     const { contactCpf, contactName } = req.body || {};
     if (!contactCpf || !contactName) return res.status(400).json({ success: false, message: 'Payload invalido.' });
-    await pixRepo.addContact({ cpf: req.params.cpf, contactKey: contactCpf, contactName });
+    try {
+        await pixRepo.addContact({ cpf: req.params.cpf, contactKey: contactCpf, contactName });
+    } catch (err) {
+        if (err.code === '23505') {
+            return res.status(409).json({ success: false, message: 'Contato com esta chave PIX ja existe (duplicado).' });
+        }
+        throw err;
+    }
     auditLog(req, 'pix_contact_add', 'info');
     res.status(201).json({ success: true, message: 'Contato adicionado' });
 }));
@@ -2519,12 +2626,13 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
     }
 
     const senderCpf = req.user.cpf;
-    
+
     // Determine key type
     const keyType = key.includes('@') ? 'EMAIL' : 'CPF';
-    
+    const normalizedKey = keyType === 'CPF' ? key.replace(/\D/g, '') : key;
+
     // Find recipient
-    const recipient = await pixRepo.findRecipientByKey(keyType, key);
+    const recipient = await pixRepo.findRecipientByKey(keyType, normalizedKey);
     if (!recipient) {
         return res.status(404).json({ success: false, message: 'Destinatário não encontrado.' });
     }
@@ -3340,7 +3448,7 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
         return res.status(400).json({ success: false, message: 'CVV e Validade são obrigatórios.' });
     }
 
-    const [dbUser] = await dbService.executeQuery(`SELECT card_cvv, card_expiry, card_is_activated FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
+    const [dbUser] = await dbService.executeQuery(`SELECT card_cvv, card_expiry, card_is_activated, card_brand, card_tier, card_product_type FROM ${dbService.fq('users')} WHERE cpf = '${cpf}'`);
     if (!dbUser) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
     if (dbUser.card_is_activated) return res.status(400).json({ success: false, message: 'Cartão já está ativado.' });
 
@@ -3353,11 +3461,13 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
         return res.status(401).json({ success: false, message: 'CVV ou Validade incorretos.' });
     }
 
-    // Gerar número de cartão físico com bandeira/BIN reais sorteados (Master/Visa/Elo)
+    // Gerar número de cartão físico honrando a bandeira escolhida no Onboarding (dbUser.card_brand);
+    // sem bandeira definida, generateCardNumber() sorteia (Master/Visa/Elo/Amex/Hipercard) como antes.
+    const requestedBrand = dbUser.card_brand ? String(dbUser.card_brand).toLowerCase() : undefined;
     let cardRaw, cardFormatted, cardBrand, cardBin;
     let attempts = 0;
     while (attempts < 10) {
-        const gen = generateCardNumber();
+        const gen = generateCardNumber(requestedBrand);
         // Verificar unicidade no banco
         const [existing] = await dbService.executeQuery(
             `SELECT id FROM fintech.cards WHERE card_number_raw = ${repoContext.esc(gen.raw)}`
@@ -3373,8 +3483,8 @@ apiRouter.post('/cards/physical/activate', bearerAuth(), asyncHandler(async (req
 
     // Salvar cartão na tabela fintech.cards
     await dbService.executeQuery(`
-        INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated)
-        VALUES (${esc(cpf)}, ${esc(cardFormatted)}, ${esc(cardRaw)}, 'physical', ${esc(cardBrand)}, ${esc(cardBin)}, ${esc(expiryFull)}, ${esc(dbUser.card_expiry)}, ${esc(cvv)}, ${esc(pin)}, true)
+        INSERT INTO fintech.cards (user_cpf, card_number, card_number_raw, card_type, card_brand, bin, expiry, expiry_short, cvv, pin, is_activated, card_tier, product_type)
+        VALUES (${esc(cpf)}, ${esc(cardFormatted)}, ${esc(cardRaw)}, 'physical', ${esc(cardBrand)}, ${esc(cardBin)}, ${esc(expiryFull)}, ${esc(dbUser.card_expiry)}, ${esc(cvv)}, ${esc(pin)}, true, ${esc(dbUser.card_tier || null)}, ${esc(dbUser.card_product_type || 'PHYSICAL')})
     `);
 
     // Atualizar status do usuário
@@ -5969,6 +6079,12 @@ async function bootstrap() {
                 await applyMassGeneratorMigrations();
             } catch (migErr) {
                 console.warn('⚠️ [Migration] Não foi possível executar migração de colunas:', migErr.message);
+            }
+            try {
+                const { applyOnboardTierPlanMigrations } = require('./scripts/add-onboard-tier-plan-schema.cjs');
+                await applyOnboardTierPlanMigrations();
+            } catch (migErr) {
+                console.warn('⚠️ [Migration] Não foi possível executar migração de tier/plano:', migErr.message);
             }
             console.log("🎯 Servidor pronto para uso com Postgres!");
             console.log("📋 Swagger disponível em: http://localhost:3001/api-docs");
