@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { User } from './types';
 import Login from './components/Login';
-import SignUp from './components/SignUp';
+import NewOnboardView from './components/Onboard/NewOnboardView';
 import PreLoginDashboard from './components/PreLoginDashboard';
 import ResetPassword from './components/ResetPassword';
 import ShopLanding from './components/ShopLanding';
@@ -244,7 +244,13 @@ function App() {
                                 />
                             } />
                             <Route path="/signup" element={
-                                <SignUp
+                                <NewOnboardView
+                                    onSignUpSuccess={() => navigate('/login')}
+                                    onNavigateToLogin={() => navigate('/login')}
+                                />
+                            } />
+                            <Route path="/new-onboard" element={
+                                <NewOnboardView
                                     onSignUpSuccess={() => navigate('/login')}
                                     onNavigateToLogin={() => navigate('/login')}
                                 />
