@@ -31,6 +31,7 @@ export interface OnboardFormData {
   cardTier: CardTier;
   cardDueDay: number;
   cardPrintedName: string;
+  instantEmbossing: boolean;
 
   // Section 5: Plano da Conta & PIX
   plan: OnboardPlan;
@@ -78,6 +79,7 @@ const defaultFormData: OnboardFormData = {
   cardTier: 'GOLD',
   cardDueDay: 10,
   cardPrintedName: '',
+  instantEmbossing: true,
   plan: 'FREE',
   pixKey: '',
 };
@@ -502,6 +504,7 @@ export default function OnboardFormContainer({
                   <option value="MASTERCARD">MASTERCARD</option>
                   <option value="ELO">ELO</option>
                   <option value="AMEX">AMEX</option>
+                  <option value="HIPERCARD">HIPERCARD 🔴🟦</option>
                 </select>
               </div>
 
@@ -516,11 +519,39 @@ export default function OnboardFormContainer({
                   onChange={handleChange}
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyan-500"
                 >
+                  <option value="BRONZE">BRONZE (Simples / Gratuito)</option>
                   <option value="GOLD">GOLD (Gratuito)</option>
                   <option value="PLATINUM">PLATINUM (R$ 15/mês)</option>
                   <option value="BLACK">VIP BLACK (R$ 39/mês)</option>
                 </select>
               </div>
+            </div>
+
+            {/* Ativação & Embossing Instantâneo */}
+            <div className="bg-slate-900/90 border border-cyan-500/30 p-3.5 rounded-xl flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> Embossing Digital Instantâneo
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  Ativação imediata com gravação de chip e cartão em tempo real
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = { ...formData, instantEmbossing: !formData.instantEmbossing };
+                  setFormData(updated);
+                  if (onFormDataChange) onFormDataChange(updated);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  formData.instantEmbossing
+                    ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.3)]'
+                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                }`}
+              >
+                {formData.instantEmbossing ? 'Ativado ✨' : 'Desativado'}
+              </button>
             </div>
 
             {/* Dia de Vencimento Pills */}

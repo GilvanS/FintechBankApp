@@ -163,6 +163,7 @@ export default function NewOnboardView({
             billingDueDay={formData.cardDueDay || 10}
             plan={formData.plan || 'FREE'}
             estimatedLimit={5000}
+            isEmbossing={formData.instantEmbossing}
           />
 
           <div className="w-full max-w-md bg-slate-900/70 border border-slate-800 rounded-xl p-4 text-xs text-slate-400 space-y-2">

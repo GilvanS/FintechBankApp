@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Wifi, Lock, ShieldCheck, Sparkles } from 'lucide-react';
 
-export type CardBrand = 'VISA' | 'MASTERCARD' | 'ELO' | 'AMEX';
-export type CardTier = 'GOLD' | 'PLATINUM' | 'BLACK';
+export type CardBrand = 'VISA' | 'MASTERCARD' | 'ELO' | 'AMEX' | 'HIPERCARD';
+export type CardTier = 'BRONZE' | 'GOLD' | 'PLATINUM' | 'BLACK';
 export type OnboardPlan = 'FREE' | 'PRO' | 'VIP_BLACK';
 export type CardProductType = 'PHYSICAL' | 'VIRTUAL' | 'BUSINESS' | 'CASHBACK' | 'STUDENT';
 
@@ -15,9 +15,11 @@ export interface CardPreview3DProps {
   plan: OnboardPlan;
   productType?: CardProductType;
   estimatedLimit?: number;
+  isEmbossing?: boolean;
 }
 
 export const TIER_FEES: Record<CardTier, number> = {
+  BRONZE: 0.0,
   GOLD: 0.0,
   PLATINUM: 29.9,
   BLACK: 89.9,
@@ -36,6 +38,7 @@ export const PLAN_NAMES: Record<OnboardPlan, string> = {
 };
 
 export const TIER_NAMES: Record<CardTier, string> = {
+  BRONZE: 'BRONZE (Simples)',
   GOLD: 'GOLD',
   PLATINUM: 'PLATINUM',
   BLACK: 'BLACK',
@@ -56,6 +59,7 @@ export default function CardPreview3D({
   billingDueDay = 10,
   plan = 'FREE',
   estimatedLimit = 5000,
+  isEmbossing = false,
 }: CardPreview3DProps) {
   const [rotateX, setRotateX] = useState(0);
   const [rotateY, setRotateY] = useState(0);
@@ -83,6 +87,8 @@ export default function CardPreview3D({
   // Card Background Gradients
   const getTierGradient = (t: CardTier) => {
     switch (t) {
+      case 'BRONZE':
+        return 'bg-gradient-to-br from-amber-700 via-orange-800 to-amber-950 text-amber-100 border-amber-600/40 shadow-orange-950/30';
       case 'GOLD':
         return 'bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-700 text-amber-950 border-amber-400/40 shadow-amber-500/20';
       case 'PLATINUM':
@@ -120,6 +126,15 @@ export default function CardPreview3D({
         >
           {/* Shine effect overlay */}
           <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent pointer-events-none rounded-2xl z-20" />
+
+          {/* Embossing Laser Line / Digital Printing Effect */}
+          {isEmbossing && (
+            <motion.div
+              className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_15px_#22d3ee] z-30 pointer-events-none"
+              animate={{ y: [0, 200, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'linear' }}
+            />
+          )}
 
           {/* FRONT OF CARD */}
           <div
