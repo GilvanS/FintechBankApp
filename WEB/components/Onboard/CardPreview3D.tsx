@@ -104,16 +104,20 @@ export default function CardPreview3D({
   const totalMonthlyCost = cardFee + planFee;
 
   return (
-    <div className="w-full max-w-md mx-auto flex flex-col items-center gap-6 p-4">
-      {/* 3D Card Container */}
-      <div className="w-full perspective-1000 select-none">
+    <div className="w-full max-w-lg mx-auto flex flex-col items-center gap-6 p-4">
+      {/* 3D Card Container. `perspective-1000` não é uma classe Tailwind válida (sem
+          colchetes/unidade) — sem perspective de verdade, o rotateY(180) "achatava" o
+          giro num espelhamento 2D em vez de uma virada 3D, com as duas faces se
+          sobrepondo. `perspective` precisa ficar no PAI (aqui), nunca no próprio
+          elemento que gira — senão a perspectiva gira junto e perde o efeito. */}
+      <div className="w-full select-none" style={{ perspective: '1500px' }}>
         <motion.div
           className={`relative w-full aspect-[1.586/1] rounded-2xl border shadow-2xl transition-all duration-200 cursor-pointer backdrop-blur-md ${getTierGradient(
             tier
           )}`}
           style={{
             transformStyle: 'preserve-3d',
-            perspective: 1000,
+            WebkitTransformStyle: 'preserve-3d',
           }}
           animate={{
             rotateX: rotateX,
@@ -130,7 +134,7 @@ export default function CardPreview3D({
           {/* Embossing Laser Line / Digital Printing Effect */}
           {isEmbossing && (
             <motion.div
-              className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_15px_#22d3ee] z-30 pointer-events-none"
+              className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-volt-green to-transparent shadow-[0_0_15px_#22d3ee] z-30 pointer-events-none"
               animate={{ y: [0, 200, 0] }}
               transition={{ duration: 1.8, repeat: Infinity, ease: 'linear' }}
             />
@@ -237,51 +241,59 @@ export default function CardPreview3D({
           </div>
         </motion.div>
 
-        <p className="text-center text-xs text-neutral-400 mt-2">
+        <p className="text-center text-xs text-volt-muted mt-2">
           Clique no cartão para girar (frente/verso)
         </p>
       </div>
 
-      {/* Order & Cost Summary Panel */}
-      <div className="w-full bg-neutral-900/90 border border-neutral-800 rounded-xl p-5 text-neutral-200 shadow-lg backdrop-blur-md">
-        <div className="flex items-center justify-between border-b border-neutral-800 pb-3 mb-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            <h3 className="font-semibold text-sm text-neutral-100">
-              Resumo do Pedido
-            </h3>
-          </div>
-          {estimatedLimit ? (
-            <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Limite Estimado: {formatBRL(estimatedLimit)}
-            </span>
-          ) : null}
+      {/* Order & Cost Summary Panel — "stat tiles" (número grande + label maiúscula
+          numa caixa com borda), mesmo padrão de dashboards de operação (nº total,
+          crítico, saudável em cards lado a lado) em vez de uma lista simples. */}
+      <div className="modal-card w-full p-5">
+        <div className="flex items-center gap-2 border-b border-volt-surface-high pb-3 mb-4">
+          <Sparkles className="w-4 h-4 text-volt-green" />
+          <h3 className="font-semibold text-sm">
+            Resumo do Pedido
+          </h3>
         </div>
 
-        <div className="space-y-3 text-sm">
-          <div className="flex justify-between items-center">
-            <span className="text-neutral-400">Anuidade Card ({tier}):</span>
-            <span className="font-medium">
-              {cardFee === 0 ? 'Isento' : `${formatBRL(cardFee)}/mês`}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-volt-green border-2 border-black rounded-lg p-3">
+            <span className="block text-[10px] uppercase tracking-wide font-bold leading-tight">
+              Limite Estimado
             </span>
+            <p className="text-sm sm:text-base font-black mt-1 flex items-center gap-1 whitespace-nowrap">
+              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+              <span>{estimatedLimit ? formatBRL(estimatedLimit) : '—'}</span>
+            </p>
           </div>
 
+          <div className="bg-volt-surface-high border-2 border-black rounded-lg p-3">
+            <span className="block text-[10px] uppercase tracking-wide font-bold leading-tight">
+              Anuidade ({tier})
+            </span>
+            <p className="text-base sm:text-lg font-black mt-1">
+              {cardFee === 0 ? 'Isento' : formatBRL(cardFee)}
+            </p>
+          </div>
+
+          <div className="bg-volt-green border-2 border-black rounded-lg p-3">
+            <span className="block text-[10px] uppercase tracking-wide font-bold leading-tight">
+              Total Mensal
+            </span>
+            <p className="text-base sm:text-lg font-black mt-1">
+              {totalMonthlyCost === 0 ? 'Gratuito' : formatBRL(totalMonthlyCost)}
+            </p>
+          </div>
+        </div>
+
+        <div className="text-sm border-t border-volt-surface-high pt-3">
           <div className="flex justify-between items-center">
-            <span className="text-neutral-400">
+            <span>
               Plano ({PLAN_NAMES[plan] || plan}):
             </span>
             <span className="font-medium">
               {planFee === 0 ? 'Gratuito' : `${formatBRL(planFee)}/mês`}
-            </span>
-          </div>
-
-          <div className="border-t border-neutral-800 pt-3 flex justify-between items-center text-base font-bold">
-            <span className="text-neutral-200">Total Mensal:</span>
-            <span className="text-emerald-400">
-              {totalMonthlyCost === 0
-                ? 'Gratuito'
-                : `${formatBRL(totalMonthlyCost)}/mês`}
             </span>
           </div>
         </div>

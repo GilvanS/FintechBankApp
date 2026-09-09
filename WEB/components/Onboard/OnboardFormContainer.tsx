@@ -84,6 +84,29 @@ const defaultFormData: OnboardFormData = {
   pixKey: '',
 };
 
+/** Formata progressivamente enquanto digita, travando no nº real de dígitos (11 pro
+ *  CPF) — maxLength sozinho no input não basta, pois sem máscara dava pra digitar
+ *  11 dígitos + pontuação e passar de 11 dígitos reais. */
+function formatCpf(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 11);
+  return digits
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
+
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 11);
+  return digits
+    .replace(/(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d{1,4})$/, '$1-$2');
+}
+
+function formatCep(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  return digits.replace(/(\d{5})(\d{1,3})$/, '$1-$2');
+}
+
 export default function OnboardFormContainer({
   initialData,
   onFormDataChange,
@@ -101,6 +124,12 @@ export default function OnboardFormContainer({
     let newValue: any = value;
     if (name === 'cardDueDay') {
       newValue = Number(value);
+    } else if (name === 'cpf' || name === 'tutorCpf') {
+      newValue = formatCpf(value);
+    } else if (name === 'phone') {
+      newValue = formatPhone(value);
+    } else if (name === 'cep') {
+      newValue = formatCep(value);
     }
 
     const updatedData = {
@@ -131,23 +160,24 @@ export default function OnboardFormContainer({
   return (
     <form
       onSubmit={handleSubmit}
-      className="w-full space-y-6 max-h-[85vh] overflow-y-auto pr-1 select-none"
+      className="w-full space-y-6 select-none"
     >
-      {/* Grid com 2 Modais/Cards Lado a Lado (Estilo PIX Allure 50%/50%) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+      {/* 2 cards empilhados (1 coluna) — lado a lado deixava cada campo espremido
+          numa faixa estreita, difícil de ler/preencher. */}
+      <div className="flex flex-col gap-6">
 
         {/* CARD MODAL 1: DADOS PESSOAIS, CONTATO E ENDEREÇO */}
-        <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-6 space-y-6 shadow-2xl backdrop-blur-md">
+        <div className="modal-card p-6 space-y-6">
           {/* Header Card 1 */}
-          <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-            <span className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 font-black flex items-center justify-center text-sm border border-cyan-500/30">
+          <div className="flex items-center gap-3 border-b border-volt-surface-high pb-3">
+            <span className="w-9 h-9 rounded-xl bg-volt-green/20 text-volt-green font-black flex items-center justify-center text-sm border border-volt-green/30">
               1
             </span>
             <div>
-              <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-cyan-400" /> Identificação &amp; Endereço
+              <h2 className="text-lg font-bold text-volt-white flex items-center gap-2">
+                <UserCheck className="w-5 h-5 text-volt-green" /> Identificação &amp; Endereço
               </h2>
-              <p className="text-xs text-slate-400">Seus dados básicos e localização residencial</p>
+              <p className="text-xs text-volt-muted">Seus dados básicos e localização residencial</p>
             </div>
           </div>
 
@@ -155,7 +185,7 @@ export default function OnboardFormContainer({
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="onboard-name" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-name" className="block text-xs font-medium text-volt-muted mb-1">
                   Nome Completo
                 </label>
                 <input
@@ -166,12 +196,12 @@ export default function OnboardFormContainer({
                   onChange={handleChange}
                   placeholder="Nome e Sobrenome"
                   required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white placeholder-volt-muted focus:outline-none focus:border-volt-green focus:ring-1 focus:ring-volt-green"
                 />
               </div>
 
               <div>
-                <label htmlFor="onboard-cpf" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-cpf" className="block text-xs font-medium text-volt-muted mb-1">
                   CPF
                 </label>
                 <input
@@ -181,14 +211,15 @@ export default function OnboardFormContainer({
                   value={formData.cpf}
                   onChange={handleChange}
                   placeholder="000.000.000-00"
+                  maxLength={14}
                   required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white placeholder-volt-muted focus:outline-none focus:border-volt-green focus:ring-1 focus:ring-volt-green"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="onboard-birthDate" className="block text-xs font-medium text-slate-300 mb-1">
+              <label htmlFor="onboard-birthDate" className="block text-xs font-medium text-volt-muted mb-1">
                 Data de Nascimento
               </label>
               <input
@@ -198,7 +229,7 @@ export default function OnboardFormContainer({
                 value={formData.birthDate}
                 onChange={handleChange}
                 required
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white focus:outline-none focus:border-volt-green focus:ring-1 focus:ring-volt-green"
               />
             </div>
 
@@ -221,7 +252,7 @@ export default function OnboardFormContainer({
                       onChange={handleChange}
                       placeholder="Nome do Responsável"
                       required={requiresTutor}
-                      className="w-full bg-slate-900 border border-amber-600/50 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      className="w-full bg-volt-surface border border-amber-600/50 rounded-lg px-3 py-2 text-sm text-volt-white placeholder-volt-muted focus:outline-none focus:border-amber-400"
                     />
                   </div>
                   <div>
@@ -235,8 +266,9 @@ export default function OnboardFormContainer({
                       value={formData.tutorCpf || ''}
                       onChange={handleChange}
                       placeholder="000.000.000-00"
+                      maxLength={14}
                       required={requiresTutor}
-                      className="w-full bg-slate-900 border border-amber-600/50 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      className="w-full bg-volt-surface border border-amber-600/50 rounded-lg px-3 py-2 text-sm text-volt-white placeholder-volt-muted focus:outline-none focus:border-amber-400"
                     />
                   </div>
                 </div>
@@ -245,11 +277,11 @@ export default function OnboardFormContainer({
           </div>
 
           {/* Section 2: Contato & Acesso */}
-          <div className="space-y-4 pt-2 border-t border-slate-800/80">
-            <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Contato &amp; Acesso</h3>
+          <div className="space-y-4 pt-2 border-t border-volt-surface-high/80">
+            <h3 className="text-sm font-bold text-volt-white uppercase tracking-wider">Contato &amp; Acesso</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="onboard-email" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-email" className="block text-xs font-medium text-volt-muted mb-1">
                   E-mail
                 </label>
                 <input
@@ -260,12 +292,12 @@ export default function OnboardFormContainer({
                   onChange={handleChange}
                   placeholder="voce@exemplo.com"
                   required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white placeholder-volt-muted focus:outline-none focus:border-volt-green focus:ring-1 focus:ring-volt-green"
                 />
               </div>
 
               <div>
-                <label htmlFor="onboard-phone" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-phone" className="block text-xs font-medium text-volt-muted mb-1">
                   Celular
                 </label>
                 <input
@@ -275,13 +307,14 @@ export default function OnboardFormContainer({
                   value={formData.phone}
                   onChange={handleChange}
                   placeholder="(11) 99999-9999"
+                  maxLength={16}
                   required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white placeholder-volt-muted focus:outline-none focus:border-volt-green focus:ring-1 focus:ring-volt-green"
                 />
               </div>
 
               <div>
-                <label htmlFor="onboard-password" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-password" className="block text-xs font-medium text-volt-muted mb-1">
                   Senha
                 </label>
                 <input
@@ -291,13 +324,14 @@ export default function OnboardFormContainer({
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="6 a 12 caracteres"
+                  maxLength={12}
                   required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white placeholder-volt-muted focus:outline-none focus:border-volt-green focus:ring-1 focus:ring-volt-green"
                 />
               </div>
 
               <div>
-                <label htmlFor="onboard-confirmPassword" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-confirmPassword" className="block text-xs font-medium text-volt-muted mb-1">
                   Confirmar Senha
                 </label>
                 <input
@@ -307,21 +341,22 @@ export default function OnboardFormContainer({
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   placeholder="Repita a senha"
+                  maxLength={12}
                   required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white placeholder-volt-muted focus:outline-none focus:border-volt-green focus:ring-1 focus:ring-volt-green"
                 />
               </div>
             </div>
           </div>
 
           {/* Section 3: Endereço Global */}
-          <div className="space-y-4 pt-2 border-t border-slate-800/80">
-            <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-              <Globe className="w-4 h-4 text-cyan-400" /> Endereço Residencial
+          <div className="space-y-4 pt-2 border-t border-volt-surface-high/80">
+            <h3 className="text-sm font-bold text-volt-white uppercase tracking-wider flex items-center gap-2">
+              <Globe className="w-4 h-4 text-volt-green" /> Endereço Residencial
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="md:col-span-1">
-                <label htmlFor="onboard-country" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-country" className="block text-xs font-medium text-volt-muted mb-1">
                   País
                 </label>
                 <select
@@ -329,7 +364,7 @@ export default function OnboardFormContainer({
                   name="country"
                   value={formData.country}
                   onChange={handleChange}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white focus:outline-none focus:border-volt-green"
                 >
                   <option value="Brasil">Brasil 🇧🇷</option>
                   <option value="Estados Unidos">Estados Unidos 🇺🇸</option>
@@ -340,7 +375,7 @@ export default function OnboardFormContainer({
               </div>
 
               <div className="md:col-span-2">
-                <label htmlFor="onboard-cep" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-cep" className="block text-xs font-medium text-volt-muted mb-1">
                   CEP / ZipCode
                 </label>
                 <input
@@ -350,15 +385,16 @@ export default function OnboardFormContainer({
                   value={formData.cep}
                   onChange={handleChange}
                   placeholder="00000-000"
+                  maxLength={9}
                   required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white placeholder-volt-muted focus:outline-none focus:border-volt-green"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <label htmlFor="onboard-street" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-street" className="block text-xs font-medium text-volt-muted mb-1">
                   Logradouro
                 </label>
                 <input
@@ -369,11 +405,11 @@ export default function OnboardFormContainer({
                   onChange={handleChange}
                   placeholder="Rua / Avenida"
                   required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white focus:outline-none focus:border-volt-green"
                 />
               </div>
               <div className="col-span-1">
-                <label htmlFor="onboard-number" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-number" className="block text-xs font-medium text-volt-muted mb-1">
                   Número
                 </label>
                 <input
@@ -384,14 +420,14 @@ export default function OnboardFormContainer({
                   onChange={handleChange}
                   placeholder="123"
                   required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white focus:outline-none focus:border-volt-green"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-1">
-                <label htmlFor="onboard-city" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-city" className="block text-xs font-medium text-volt-muted mb-1">
                   Cidade
                 </label>
                 <input
@@ -402,11 +438,11 @@ export default function OnboardFormContainer({
                   onChange={handleChange}
                   placeholder="Cidade"
                   required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white focus:outline-none focus:border-volt-green"
                 />
               </div>
               <div className="col-span-1">
-                <label htmlFor="onboard-neighborhood" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-neighborhood" className="block text-xs font-medium text-volt-muted mb-1">
                   Bairro
                 </label>
                 <input
@@ -416,11 +452,11 @@ export default function OnboardFormContainer({
                   value={formData.neighborhood}
                   onChange={handleChange}
                   placeholder="Bairro"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white focus:outline-none focus:border-volt-green"
                 />
               </div>
               <div className="col-span-1">
-                <label htmlFor="onboard-state" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-state" className="block text-xs font-medium text-volt-muted mb-1">
                   UF
                 </label>
                 <input
@@ -431,7 +467,7 @@ export default function OnboardFormContainer({
                   onChange={handleChange}
                   maxLength={2}
                   required
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 uppercase focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white uppercase focus:outline-none focus:border-volt-green"
                 />
               </div>
             </div>
@@ -439,23 +475,23 @@ export default function OnboardFormContainer({
         </div>
 
         {/* CARD MODAL 2: SELEÇÃO DE PRODUTOS DE CARTÃO & PLANOS DA CONTA */}
-        <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-6 space-y-6 shadow-2xl backdrop-blur-md flex flex-col justify-between">
+        <div className="modal-card p-6 space-y-6 flex flex-col justify-between">
           {/* Header Card 2 */}
-          <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-3 border-b border-volt-surface-high pb-3">
             <span className="w-9 h-9 rounded-xl bg-volt-green/20 text-volt-green font-black flex items-center justify-center text-sm border border-volt-green/30">
               2
             </span>
             <div>
-              <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+              <h2 className="text-lg font-bold text-volt-white flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-volt-green" /> Produto, Cartão &amp; Plano
               </h2>
-              <p className="text-xs text-slate-400">Escolha o produto ideal para o seu perfil</p>
+              <p className="text-xs text-volt-muted">Escolha o produto ideal para o seu perfil</p>
             </div>
           </div>
 
           {/* Section 4: Produtos de Cartão */}
           <div className="space-y-4">
-            <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Tipo de Produto</h3>
+            <h3 className="text-sm font-bold text-volt-white uppercase tracking-wider">Tipo de Produto</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {[
                 { id: 'PHYSICAL', label: 'Físico', icon: '💳', desc: 'Internacional' },
@@ -475,7 +511,7 @@ export default function OnboardFormContainer({
                   className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
                     formData.productType === p.id
                       ? 'bg-volt-green/10 border-volt-green text-volt-green shadow-[0_0_12px_rgba(162,255,0,0.2)]'
-                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                      : 'bg-volt-surface border-volt-surface-high text-volt-muted hover:border-volt-surface-high'
                   }`}
                 >
                   <span className="text-xl">{p.icon}</span>
@@ -490,7 +526,7 @@ export default function OnboardFormContainer({
             {/* Bandeira & Tier */}
             <div className="grid grid-cols-2 gap-3 pt-2">
               <div>
-                <label htmlFor="onboard-cardBrand" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-cardBrand" className="block text-xs font-medium text-volt-muted mb-1">
                   Bandeira
                 </label>
                 <select
@@ -498,7 +534,7 @@ export default function OnboardFormContainer({
                   name="cardBrand"
                   value={formData.cardBrand}
                   onChange={handleChange}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white focus:outline-none focus:border-volt-green"
                 >
                   <option value="VISA">VISA</option>
                   <option value="MASTERCARD">MASTERCARD</option>
@@ -509,7 +545,7 @@ export default function OnboardFormContainer({
               </div>
 
               <div>
-                <label htmlFor="onboard-cardTier" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="onboard-cardTier" className="block text-xs font-medium text-volt-muted mb-1">
                   Categoria (Tier)
                 </label>
                 <select
@@ -517,7 +553,7 @@ export default function OnboardFormContainer({
                   name="cardTier"
                   value={formData.cardTier}
                   onChange={handleChange}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white focus:outline-none focus:border-volt-green"
                 >
                   <option value="BRONZE">BRONZE (Simples / Gratuito)</option>
                   <option value="GOLD">GOLD (Gratuito)</option>
@@ -528,12 +564,12 @@ export default function OnboardFormContainer({
             </div>
 
             {/* Ativação & Embossing Instantâneo */}
-            <div className="bg-slate-900/90 border border-cyan-500/30 p-3.5 rounded-xl flex items-center justify-between gap-3">
+            <div className="bg-volt-surface-high border border-volt-green/30 p-3.5 rounded-xl flex items-center justify-between gap-3">
               <div>
-                <div className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> Embossing Digital Instantâneo
+                <div className="text-xs font-bold text-volt-green flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-volt-green" /> Embossing Digital Instantâneo
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
+                <div className="text-[10px] text-volt-muted mt-0.5">
                   Ativação imediata com gravação de chip e cartão em tempo real
                 </div>
               </div>
@@ -546,8 +582,8 @@ export default function OnboardFormContainer({
                 }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                   formData.instantEmbossing
-                    ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.3)]'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                    ? 'bg-volt-green text-black border-volt-green shadow-[0_0_10px_rgba(6,182,212,0.3)]'
+                    : 'bg-volt-dark border-volt-surface-high text-volt-muted'
                 }`}
               >
                 {formData.instantEmbossing ? 'Ativado ✨' : 'Desativado'}
@@ -556,7 +592,7 @@ export default function OnboardFormContainer({
 
             {/* Dia de Vencimento Pills */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-2">
+              <label className="block text-xs font-medium text-volt-muted mb-2">
                 Dia de Vencimento da Fatura
               </label>
               <div className="flex gap-2">
@@ -571,8 +607,8 @@ export default function OnboardFormContainer({
                     }}
                     className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${
                       formData.cardDueDay === day
-                        ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.3)]'
-                        : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                        ? 'bg-volt-green text-black border-volt-green shadow-[0_0_10px_rgba(6,182,212,0.3)]'
+                        : 'bg-volt-surface border-volt-surface-high text-volt-muted hover:border-volt-surface-high'
                     }`}
                   >
                     Dia {day}
@@ -582,7 +618,7 @@ export default function OnboardFormContainer({
             </div>
 
             <div>
-              <label htmlFor="onboard-cardPrintedName" className="block text-xs font-medium text-slate-300 mb-1">
+              <label htmlFor="onboard-cardPrintedName" className="block text-xs font-medium text-volt-muted mb-1">
                 Nome Impresso no Cartão
               </label>
               <input
@@ -592,14 +628,14 @@ export default function OnboardFormContainer({
                 value={formData.cardPrintedName}
                 onChange={handleChange}
                 placeholder="NOME COMO NO CARTÃO"
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 uppercase focus:outline-none focus:border-cyan-500"
+                className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white uppercase focus:outline-none focus:border-volt-green"
               />
             </div>
           </div>
 
           {/* Section 5: Plano da Conta & PIX */}
-          <div className="space-y-4 pt-2 border-t border-slate-800/80">
-            <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+          <div className="space-y-4 pt-2 border-t border-volt-surface-high/80">
+            <h3 className="text-sm font-bold text-volt-white uppercase tracking-wider flex items-center gap-2">
               <Award className="w-4 h-4 text-amber-400" /> Plano da Conta
             </h3>
 
@@ -620,7 +656,7 @@ export default function OnboardFormContainer({
                   className={`p-3 rounded-xl border text-center transition-all ${
                     formData.plan === p.id
                       ? 'bg-amber-500/10 border-amber-400 text-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.2)]'
-                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                      : 'bg-volt-surface border-volt-surface-high text-volt-muted hover:border-volt-surface-high'
                   }`}
                 >
                   <div className="font-bold text-xs">{p.label}</div>
@@ -630,7 +666,7 @@ export default function OnboardFormContainer({
             </div>
 
             <div>
-              <label htmlFor="onboard-pixKey" className="block text-xs font-medium text-slate-300 mb-1">
+              <label htmlFor="onboard-pixKey" className="block text-xs font-medium text-volt-muted mb-1">
                 Chave PIX Inicial (Opcional)
               </label>
               <input
@@ -640,7 +676,7 @@ export default function OnboardFormContainer({
                 value={formData.pixKey}
                 onChange={handleChange}
                 placeholder="CPF ou Celular"
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white placeholder-volt-muted focus:outline-none focus:border-volt-green"
               />
             </div>
           </div>

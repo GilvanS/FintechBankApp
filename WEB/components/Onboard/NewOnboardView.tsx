@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Sparkles, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import OnboardFormContainer, { OnboardFormData } from './OnboardFormContainer';
 import CardPreview3D from './CardPreview3D';
 import { signUp } from '../../services/api';
@@ -94,44 +94,35 @@ export default function NewOnboardView({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col w-full font-sans overflow-x-hidden">
+    // h-screen + overflow-y-auto AQUI: #root/body/html deste app não propagam scroll pra
+    // fora de si (ficam travados em 100vh mesmo com filho mais alto — ver outras telas do
+    // app, mesmo padrão). Por isso a página INTEIRA precisa ser o único container de
+    // scroll — nada de scroll aninhado dentro dela (por isso os painéis internos não têm
+    // mais overflow-y-auto próprio).
+    <div className="h-screen overflow-y-auto bg-volt-dark text-volt-white flex flex-col w-full font-sans overflow-x-hidden">
       {/* Toast Notification Container */}
       <ToastContainer toast={toast} onClose={hide} />
 
-      {/* Header Bar */}
-      <header className="w-full border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-30">
+      {/* Header Bar — só o botão Voltar, sem logo/título/badge, pra maximizar espaço
+          vertical da página. */}
+      <header className="w-full px-6 py-4 sticky top-0 z-30">
         <button
           onClick={onNavigateToLogin}
           type="button"
-          className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-100 transition-colors"
+          className="flex items-center gap-2 text-sm font-medium text-volt-muted hover:text-volt-white transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Voltar</span>
         </button>
-
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-cyan-500/20">
-            V
-          </div>
-          <span className="font-bold text-lg tracking-tight text-white">Volt Bank</span>
-          <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-            Nova Conta Allure 360°
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 text-xs text-slate-400 font-medium bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700/50">
-          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden md:inline">Experiência Allure VIP</span>
-          <span className="md:hidden">Allure</span>
-        </div>
       </header>
 
-      {/* Main 50/50 Split Screen Content */}
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-2 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 gap-8 items-start">
-        {/* Left Panel: Form Wizard Container (Scrollable) */}
+      {/* Main 50/50 Split Screen Content — largura TOTAL da página (sem max-width
+          artificial), scroll é da PÁGINA inteira, não de uma caixa interna. */}
+      <main className="flex-1 grid grid-cols-1 lg:grid-cols-2 w-full px-6 sm:px-8 lg:px-12 pb-8 gap-8 items-start">
+        {/* Left Panel: Form Wizard Container */}
         <div
           data-testid="onboard-left-panel"
-          className="w-full bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 shadow-xl backdrop-blur-sm overflow-y-auto max-h-[calc(100vh-7rem)]"
+          className="modal-card w-full p-6"
         >
           <OnboardFormContainer
             initialData={formData}
@@ -143,14 +134,14 @@ export default function NewOnboardView({
         {/* Right Panel: Card & Plan 3D Preview (Sticky & Reactive) */}
         <div
           data-testid="onboard-right-panel"
-          className="w-full lg:sticky lg:top-24 space-y-6 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-slate-900/60 to-slate-950/80 border border-slate-800/80 rounded-2xl shadow-xl backdrop-blur-sm"
+          className="modal-card w-full lg:sticky lg:top-24 space-y-6 flex flex-col items-center justify-center p-6"
         >
           <div className="text-center space-y-1 mb-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-cyan-400 flex items-center justify-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-cyan-400" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-volt-green flex items-center justify-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-volt-green" />
               Pré-visualização em Tempo Real
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-volt-muted">
               Interaja com o formulário ao lado para personalizar seu cartão e conta
             </p>
           </div>
@@ -166,12 +157,12 @@ export default function NewOnboardView({
             isEmbossing={formData.instantEmbossing}
           />
 
-          <div className="w-full max-w-md bg-slate-900/70 border border-slate-800 rounded-xl p-4 text-xs text-slate-400 space-y-2">
-            <div className="flex items-center justify-between text-slate-300 font-medium">
+          <div className="modal-card w-full max-w-lg p-4 text-xs space-y-2">
+            <div className="flex items-center justify-between text-volt-white font-medium">
               <span>Benefícios do Plano Selecionado ({formData.plan}):</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <CheckCircle2 className="w-4 h-4 text-volt-green" />
             </div>
-            <ul className="list-disc list-inside space-y-1 text-slate-400">
+            <ul className="list-disc list-inside space-y-1 text-volt-muted">
               <li>Cartão Físico & Virtual sem anuidade oculta</li>
               <li>Acesso instantâneo à Área Pix 24/7</li>
               <li>Integração total com ecossistema Volt Allure</li>
