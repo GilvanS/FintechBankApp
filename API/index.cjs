@@ -199,6 +199,8 @@ const createAdminUsersController = require('./src/controllers/adminUsersControll
 const registerAdminUsersRoutes = require('./src/routes/admin/users.routes');
 const createAdminNotificationsController = require('./src/controllers/adminNotificationsController');
 const registerAdminNotificationsRoutes = require('./src/routes/admin/notifications.routes');
+const registerTestPlanningRoutes = require('./src/routes/admin/testPlanning.routes');
+const createTestPlanningController = require('./src/controllers/testPlanningController');
 
 // --- Configurações ---
 const PORT = process.env.PORT || 3001;
@@ -2818,6 +2820,10 @@ const adminUsersController = createAdminUsersController({
     setTempPassword,
 });
 registerAdminUsersRoutes({ apiRouter, bearerAuth, authenticateAdmin, asyncHandler, controller: adminUsersController });
+
+// --- Rotas de Admin: planejamento de testes (cruza TBL_CENARIOS x tbl_de_massas) ---
+const testPlanningController = createTestPlanningController({ auditLog });
+registerTestPlanningRoutes({ apiRouter, bearerAuth, authenticateAdmin, asyncHandler, controller: testPlanningController });
 
 // --- Telegram: gestão dos tópicos por massa ---
 apiRouter.get('/admin/telegram/status', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
