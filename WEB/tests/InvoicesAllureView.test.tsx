@@ -103,8 +103,7 @@ describe('InvoicesAllureView', () => {
       />
     );
 
-    expect(getByTitle('Resumo')).toBeInTheDocument();
-    expect(getByTitle('Lançamentos')).toBeInTheDocument();
+    expect(getByTitle('Fatura')).toBeInTheDocument();
     expect(getByTitle('Parcelamentos')).toBeInTheDocument();
   });
 });

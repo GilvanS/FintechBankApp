@@ -8,15 +8,11 @@ import {
   Calendar,
   AlertCircle,
   Search,
-  CheckCircle2,
-  Lock,
-  ArrowUpRight,
-  ArrowDownLeft,
-  ChevronRight,
   Barcode,
   QrCode,
-  DollarSign,
-  Filter,
+  X,
+  Info,
+  ChevronRight,
 } from 'lucide-react';
 import { AllureShell, type AllureSection } from '../shared/AllureShell';
 import DonutStatusCard from '../Analytics/DonutStatusCard';
@@ -28,7 +24,7 @@ import PasswordModal from '../PasswordModal';
 import { useCardOrder } from '../../hooks/useCardOrder';
 import { useAuth } from '../../context/AuthContext';
 import { payCreditCardInvoice } from '../../services/api';
-import type { User, CardTransaction } from '../../types';
+import type { User } from '../../types';
 
 interface Props {
   user: User | null;
@@ -40,15 +36,12 @@ interface Props {
 }
 
 type MainNavKey = 'home' | 'invoices' | 'limit' | 'shop' | 'profile' | 'analytics' | 'admin';
-type SubSectionKey = 'resumo' | 'faturas' | 'parcelamentos';
+type SubSectionKey = 'fatura' | 'parcelamentos';
 
 const SECTIONS: readonly AllureSection<SubSectionKey>[] = [
-  { key: 'resumo', label: 'Resumo', icon: LayoutGrid },
-  { key: 'faturas', label: 'Lançamentos', icon: FileText },
+  { key: 'fatura', label: 'Fatura', icon: FileText },
   { key: 'parcelamentos', label: 'Parcelamentos', icon: Calendar },
 ];
-
-const ENTRADA_TYPES = new Set(['DEPOSIT', 'PIX_RECEIVED', 'CASHBACK_CREDIT', 'POINTS_EARNED']);
 
 type ResumoCardKey = 'donut' | 'trend';
 const DEFAULT_RESUMO_ORDER: readonly ResumoCardKey[] = ['donut', 'trend'];
@@ -62,16 +55,24 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   const prefersReducedMotion = useReducedMotion();
   const { updateUser } = useAuth();
 
-  const [activeSection, setActiveSection] = useState<SubSectionKey>('resumo');
+  const [activeSection, setActiveSection] = useState<SubSectionKey>('fatura');
   const [faturaTab, setFaturaTab] = useState<'aberta' | 'fechada' | 'historico'>('aberta');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
 
   // Pagamento de fatura
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [pendingPaymentAmount, setPendingPaymentAmount] = useState<number | null>(null);
   const [isPaying, setIsPaying] = useState(false);
   const [showSummarySheet, setShowSummarySheet] = useState(false);
+
+  // Seletor de valor de pagamento (Total / Mínimo / Personalizado — sem teto, permite virar credor)
+  const [isPaymentPickerOpen, setIsPaymentPickerOpen] = useState(false);
+  const [paymentPickerBaseAmount, setPaymentPickerBaseAmount] = useState(0);
+  const [payMode, setPayMode] = useState<'total' | 'min' | 'custom'>('total');
+  const [customAmount, setCustomAmount] = useState('');
+  const [customError, setCustomError] = useState('');
 
   const [resumoOrder, setResumoOrder] = useCardOrder('invoices_resumo', DEFAULT_RESUMO_ORDER);
 
@@ -93,6 +94,9 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   const availableLimit = creditCard?.availableLimit ?? limit;
   const usedLimit = Math.max(0, limit - availableLimit);
 
+  // Valor da fatura efetivamente selecionada nas subtabs (Aberta/Fechada) — usado no card de valor e nas ações
+  const selectedInvoiceTotal = faturaTab === 'fechada' ? closedInvoiceTotal : currentInvoiceTotal;
+
   const mainNavSections: AllureSection<MainNavKey>[] = useMemo(() => {
     const list: AllureSection<MainNavKey>[] = [
       { key: 'home', label: 'Início', icon: LayoutGrid },
@@ -107,7 +111,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
 
   const handleSelectSidebar = (key: string) => {
     if (key === 'invoices') {
-      setActiveSection('resumo');
+      setActiveSection('fatura');
     } else {
       onNavigate(key);
     }
@@ -149,8 +153,34 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
     }));
   }, [limit, currentInvoiceTotal]);
 
-  const handleStartPayment = (amount: number) => {
-    setPendingPaymentAmount(amount);
+  // Base para o cálculo do pagamento mínimo é sempre a fatura sendo paga (aberta ou fechada)
+  const minPaymentFor = (baseAmount: number) => (baseAmount > 0 ? Math.max(baseAmount * 0.10, 10) : 0);
+
+  const openPaymentPicker = (amount: number) => {
+    setPaymentPickerBaseAmount(amount);
+    setPayMode('total');
+    setCustomAmount('');
+    setCustomError('');
+    setIsPaymentPickerOpen(true);
+  };
+
+  const handleConfirmPaymentPicker = () => {
+    let amt = paymentPickerBaseAmount;
+    if (payMode === 'min') {
+      const minPayment = minPaymentFor(paymentPickerBaseAmount);
+      amt = user?.balance != null && user.balance > 0 ? Math.min(user.balance, minPayment) : minPayment;
+    } else if (payMode === 'custom') {
+      const parsed = parseFloat(String(customAmount).replace(',', '.'));
+      if (isNaN(parsed) || parsed <= 0) {
+        setCustomError('Informe um valor válido.');
+        return;
+      }
+      // Sem teto: valor acima da fatura é aceito e o excedente vira saldo credor (regra de negócio da fatura).
+      amt = parsed;
+    }
+    setCustomError('');
+    setIsPaymentPickerOpen(false);
+    setPendingPaymentAmount(amt);
     setIsPasswordModalOpen(true);
   };
 
@@ -177,38 +207,85 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
     show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as const } },
   };
 
-  const renderResumo = () => (
+  // Ação simples/leve — texto + ícone pequeno, sem o visual "neobrutalista" pesado das telas de resumo
+  const quickActionClass = `px-4 py-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+    isMidnight
+      ? 'bg-volt-dark/60 border-white/10 text-on-surface hover:border-volt-green/50'
+      : 'bg-volt-yellow-pastel border-2 border-black text-black hover:brightness-95'
+  }`;
+
+  const renderFatura = () => (
     <div className="flex flex-col gap-6">
-      {/* KPI Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Subtabs: qual fatura está selecionada (define todo o conteúdo abaixo) */}
+      <div className="flex items-center gap-2 border-b pb-4 border-black/10 dark:border-white/10">
         {[
-          { label: 'Fatura Atual (Aberta)', value: formatBRL(currentInvoiceTotal), accent: true },
-          { label: 'Fatura Fechada', value: formatBRL(closedInvoiceTotal), accent: false },
-          { label: 'Limite Disponível', value: formatBRL(availableLimit), accent: false },
-        ].map(({ label, value, accent }) => (
-          <div
-            key={label}
-            className={`p-5 rounded-xl border ${
-              accent
-                ? isMidnight
-                  ? 'bg-rose-500/10 border-rose-500/30'
-                  : 'bg-black text-volt-yellow border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]'
-                : isMidnight
-                  ? 'bg-volt-surface border-white/10'
-                  : 'bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <p className={`text-[10px] font-black uppercase tracking-wider ${accent && !isMidnight ? 'text-volt-yellow/80' : isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
-              {label}
-            </p>
-            <p className={`text-xl font-black mt-1 ${accent ? (isMidnight ? 'text-rose-400' : 'text-volt-yellow') : ''}`}>
-              {value}
-            </p>
-          </div>
-        ))}
+          { key: 'aberta', label: 'Fatura Aberta', amount: currentInvoiceTotal },
+          { key: 'fechada', label: 'Fatura Fechada', amount: closedInvoiceTotal },
+          { key: 'historico', label: 'Histórico Completo' },
+        ].map((tab) => {
+          const active = faturaTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setFaturaTab(tab.key as any)}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                active
+                  ? isMidnight
+                    ? 'bg-volt-surface text-volt-green border border-volt-green/40'
+                    : 'bg-black text-volt-yellow border-2 border-black'
+                  : isMidnight
+                    ? 'bg-volt-dark/60 text-on-surface-variant hover:text-on-surface'
+                    : 'bg-gray-100 text-black/60 hover:text-black'
+              }`}
+            >
+              <span>{tab.label}</span>
+              {tab.amount !== undefined && (
+                <span className="text-[10px] opacity-75 font-black">({formatBRL(tab.amount)})</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Draggable Charts */}
+      {/* Dados da fatura selecionada */}
+      <div className={`p-5 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
+        <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
+          {faturaTab === 'aberta' ? 'Valor Atual da Fatura' : faturaTab === 'fechada' ? 'Valor Total da Fatura Fechada' : 'Histórico Completo de Lançamentos'}
+        </p>
+        <p className="text-3xl font-black mt-1">
+          {faturaTab === 'historico' ? formatBRL(currentInvoiceTotal + closedInvoiceTotal) : formatBRL(selectedInvoiceTotal)}
+        </p>
+        {faturaTab === 'aberta' && (
+          <p className={`text-xs mt-1 font-bold ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
+            Vencimento em {creditCard?.invoiceDueDate || '10/10'}
+          </p>
+        )}
+      </div>
+
+      {/* Ações — formato simples, sem sombra pesada */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <button onClick={() => openPaymentPicker(selectedInvoiceTotal)} className={quickActionClass}>
+          <CreditCard size={16} /> Pagar Fatura
+        </button>
+        {openPixModal && (
+          <button onClick={openPixModal} className={quickActionClass}>
+            <QrCode size={16} /> Pagar com PIX
+          </button>
+        )}
+        {openBoletoModal && (
+          <button onClick={openBoletoModal} className={quickActionClass}>
+            <Barcode size={16} /> Gerar Boleto
+          </button>
+        )}
+        <button onClick={() => onNavigate('installmentOptions')} className={quickActionClass}>
+          <Calendar size={16} /> Parcelar
+        </button>
+        <button onClick={() => setShowSummarySheet(true)} className={quickActionClass}>
+          <FileText size={16} /> Resumo PDF
+        </button>
+      </div>
+
+      {/* Gráficos (proporção do limite + tendência de 6 meses) */}
       <Reorder.Group
         axis={isDesktopGrid ? 'x' : 'y'}
         values={resumoOrder}
@@ -247,128 +324,9 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
         })}
       </Reorder.Group>
 
-      {/* Ações Rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <button
-          onClick={() => handleStartPayment(currentInvoiceTotal)}
-          className={`p-5 rounded-xl border font-bold text-sm flex items-center justify-center gap-3 transition-all ${
-            isMidnight
-              ? 'bg-volt-green/10 border-volt-green/30 text-volt-green hover:bg-volt-green/20'
-              : 'bg-black text-volt-yellow border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] hover:translate-x-[-2px]'
-          }`}
-        >
-          <CreditCard size={20} /> Pagar Fatura Atual
-        </button>
-        <button
-          onClick={() => setActiveSection('faturas')}
-          className={`p-5 rounded-xl border font-bold text-sm flex items-center justify-center gap-3 transition-all ${
-            isMidnight
-              ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
-              : 'bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px]'
-          }`}
-        >
-          <FileText size={20} /> Ver Lançamentos
-        </button>
-        <button
-          onClick={() => onNavigate('installmentOptions')}
-          className={`p-5 rounded-xl border font-bold text-sm flex items-center justify-center gap-3 transition-all ${
-            isMidnight
-              ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
-              : 'bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px]'
-          }`}
-        >
-          <Calendar size={20} /> Simular Parcelamento
-        </button>
-      </div>
-    </div>
-  );
-
-  const renderFaturas = () => (
-    <div className="flex flex-col gap-6">
-      {/* Subtabs de Fatura (Aberta / Fechada / Histórico) */}
-      <div className="flex items-center gap-2 border-b pb-4 border-black/10 dark:border-white/10">
-        {[
-          { key: 'aberta', label: 'Fatura Aberta', amount: currentInvoiceTotal },
-          { key: 'fechada', label: 'Fatura Fechada', amount: closedInvoiceTotal },
-          { key: 'historico', label: 'Histórico Completo' },
-        ].map((tab) => {
-          const active = faturaTab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setFaturaTab(tab.key as any)}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-                active
-                  ? isMidnight
-                    ? 'bg-volt-surface text-volt-green border border-volt-green/40 shadow-lg'
-                    : 'bg-black text-volt-yellow border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-                  : isMidnight
-                    ? 'bg-volt-dark/60 text-on-surface-variant hover:text-on-surface'
-                    : 'bg-gray-100 text-black/60 hover:text-black'
-              }`}
-            >
-              <span>{tab.label}</span>
-              {tab.amount !== undefined && (
-                <span className="text-[10px] opacity-75 font-black">({formatBRL(tab.amount)})</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Card Principal da Fatura Selecionada */}
-      <ChartCard
-        title={faturaTab === 'aberta' ? 'Fatura Aberta' : faturaTab === 'fechada' ? 'Fatura Fechada' : 'Histórico de Faturas'}
-        subtitle={faturaTab === 'aberta' ? `Vencimento em ${creditCard?.invoiceDueDate || '10/10'}` : 'Lançamentos do cartão de crédito'}
-        theme={theme}
-      >
-        <div className="p-4 flex flex-col gap-6">
-          {/* Header com Valor e Ações Rápidas */}
-          <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5">
-            <div>
-              <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
-                {faturaTab === 'aberta' ? 'Valor Atual da Fatura' : 'Valor Total da Fatura Fechada'}
-              </p>
-              <p className="text-3xl font-black mt-1">
-                {formatBRL(faturaTab === 'aberta' ? currentInvoiceTotal : closedInvoiceTotal)}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => handleStartPayment(faturaTab === 'aberta' ? currentInvoiceTotal : closedInvoiceTotal)}
-                className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
-                  isMidnight
-                    ? 'bg-volt-green text-volt-dark hover:bg-volt-primary-dark'
-                    : 'bg-black text-volt-yellow border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)] hover:translate-x-[-1px]'
-                }`}
-              >
-                <CreditCard size={16} /> Pagar Fatura
-              </button>
-              <button
-                onClick={() => onNavigate('installmentOptions')}
-                className={`px-4 py-2.5 rounded-xl font-bold text-xs border transition-all ${
-                  isMidnight
-                    ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
-                    : 'bg-white border-2 border-black text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px]'
-                }`}
-              >
-                Parcelar em 12x
-              </button>
-              <button
-                onClick={() => setShowSummarySheet(true)}
-                className={`px-3 py-2.5 rounded-xl font-bold text-xs border transition-all ${
-                  isMidnight
-                    ? 'bg-volt-surface border-white/10 text-on-surface hover:border-volt-green/50'
-                    : 'bg-white border-2 border-black text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px]'
-                }`}
-              >
-                Resumo PDF
-              </button>
-            </div>
-          </div>
-
-          {/* Campo de Busca e Filtro de Transações */}
+      {/* Lançamentos — mais abaixo, dentro da mesma tela */}
+      <ChartCard title="Lançamentos" subtitle="Compras e movimentações do cartão de crédito" theme={theme}>
+        <div className="p-4 flex flex-col gap-4">
           <div className="relative">
             <Search size={16} className="absolute left-3 top-3 opacity-50" />
             <input
@@ -382,7 +340,6 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
             />
           </div>
 
-          {/* Tabela de Lançamentos da Fatura */}
           <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto pr-1">
             {filteredTransactions.length === 0 ? (
               <div className="p-8 text-center opacity-60">
@@ -390,34 +347,80 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
                 <p className="text-xs font-bold">Nenhum lançamento encontrado nesta fatura.</p>
               </div>
             ) : (
-              filteredTransactions.map((t: any) => (
-                <div
-                  key={t.id || t.authorizationCode}
-                  className={`flex items-center justify-between p-3.5 rounded-xl border transition-colors ${
-                    isMidnight ? 'bg-volt-dark/50 border-white/5 hover:border-white/20' : 'bg-gray-50 border-black/10 hover:border-black/30'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${isMidnight ? 'bg-volt-surface text-volt-green' : 'bg-black text-volt-yellow'}`}>
-                      <CreditCard size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold">{t.merchant || t.description || 'Compra no Cartão'}</p>
-                      <p className={`text-[10px] ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
-                        {t.date ? new Date(t.date).toLocaleDateString('pt-BR') : 'Data não informada'}
-                        {t.installments ? ` · Parcela ${t.installments}` : ''}
-                        {t.category ? ` · ${t.category}` : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-black">{formatBRL(Math.abs(t.amount))}</p>
-                    {t.installments && (
-                      <p className={`text-[10px] ${isMidnight ? 'text-volt-green' : 'text-black/60'}`}>Parcelado</p>
+              filteredTransactions.map((t: any) => {
+                const txKey = t.id || t.authorizationCode;
+                const isExpanded = expandedTxId === txKey;
+                return (
+                  <div
+                    key={txKey}
+                    className={`rounded-xl border transition-colors overflow-hidden ${
+                      isMidnight ? 'bg-volt-dark/50 border-white/5 hover:border-white/20' : 'bg-gray-50 border-black/10 hover:border-black/30'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setExpandedTxId(isExpanded ? null : txKey)}
+                      className="w-full flex items-center justify-between p-3.5 text-left"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`p-2 rounded-lg shrink-0 ${isMidnight ? 'bg-volt-surface text-volt-green' : 'bg-black text-volt-yellow'}`}>
+                          <CreditCard size={16} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold truncate">{t.merchant || t.description || 'Compra no Cartão'}</p>
+                          <p className={`text-[10px] ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
+                            {t.date ? new Date(t.date).toLocaleDateString('pt-BR') : 'Data não informada'}
+                            {t.installments ? ` · Parcela ${t.installments}` : ''}
+                            {t.category ? ` · ${t.category}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right">
+                          <p className="text-xs font-black">{formatBRL(Math.abs(t.amount))}</p>
+                          {t.installments && (
+                            <p className={`text-[10px] ${isMidnight ? 'text-volt-green' : 'text-black/60'}`}>Parcelado</p>
+                          )}
+                        </div>
+                        <ChevronRight size={14} className={`transition-transform ${isExpanded ? 'rotate-90' : ''} opacity-50`} />
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className={`px-3.5 pb-3.5 pt-1 border-t text-[11px] space-y-1.5 ${isMidnight ? 'border-white/5' : 'border-black/10'}`}>
+                        <div className="flex justify-between">
+                          <span className={isMidnight ? 'text-on-surface-variant' : 'text-black/60'}>Valor da compra</span>
+                          <span className="font-bold">{formatBRL(Math.abs(t.totalAmount ?? t.amount))}</span>
+                        </div>
+                        {t.currentInstallment && t.totalInstallments && (
+                          <div className="flex justify-between">
+                            <span className={isMidnight ? 'text-on-surface-variant' : 'text-black/60'}>Parcela</span>
+                            <span className="font-bold">{t.currentInstallment}/{t.totalInstallments}</span>
+                          </div>
+                        )}
+                        {t.category && (
+                          <div className="flex justify-between">
+                            <span className={isMidnight ? 'text-on-surface-variant' : 'text-black/60'}>Categoria</span>
+                            <span className="font-bold capitalize">{t.category}</span>
+                          </div>
+                        )}
+                        {t.cardLast4 && (
+                          <div className="flex justify-between">
+                            <span className={isMidnight ? 'text-on-surface-variant' : 'text-black/60'}>Cartão</span>
+                            <span className="font-bold">•••• {t.cardLast4}</span>
+                          </div>
+                        )}
+                        {t.authorizationCode && (
+                          <div className="flex justify-between">
+                            <span className={isMidnight ? 'text-on-surface-variant' : 'text-black/60'}>Autorização</span>
+                            <span className="font-bold">{t.authorizationCode}</span>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -425,41 +428,88 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
     </div>
   );
 
-  const renderParcelamentos = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <ChartCard title="Limite do Cartão" subtitle="Utilização do limite de crédito" theme={theme}>
-        <div className="p-4 flex flex-col gap-4">
-          <ProgressBarRow label="Limite Utilizado" current={usedLimit} max={limit} theme={theme} />
-          <ProgressBarRow label="Fatura Aberta" current={currentInvoiceTotal} max={limit} theme={theme} />
-          <div className={`text-[10px] font-bold pt-2 ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
-            Limite total: {formatBRL(limit)}
+  const renderParcelamentos = () => {
+    const futureInstallments = creditCard?.futureInstallments ?? {};
+    const installmentKeys = Object.keys(futureInstallments).sort();
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const currentYear = new Date().getFullYear();
+    const yearGroups: Record<string, { monthName: string; amount: number }[]> = {};
+    installmentKeys.forEach((key) => {
+      const [yearStr, monthStr] = key.split('-');
+      const yearNum = parseInt(yearStr, 10);
+      const monthName = monthNames[parseInt(monthStr, 10) - 1] || monthStr;
+      const groupHeader = yearNum === currentYear ? 'Este ano' : String(yearNum);
+      if (!yearGroups[groupHeader]) yearGroups[groupHeader] = [];
+      yearGroups[groupHeader].push({ monthName, amount: futureInstallments[key] });
+    });
+    const sortedYearEntries = Object.entries(yearGroups).sort(([a], [b]) => {
+      if (a === 'Este ano') return -1;
+      if (b === 'Este ano') return 1;
+      return parseInt(a, 10) - parseInt(b, 10);
+    });
+
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <ChartCard title="Limite do Cartão" subtitle="Utilização do limite de crédito" theme={theme}>
+            <div className="p-4 flex flex-col gap-4">
+              <ProgressBarRow label="Limite Utilizado" current={usedLimit} max={limit} theme={theme} />
+              <ProgressBarRow label="Fatura Aberta" current={currentInvoiceTotal} max={limit} theme={theme} />
+              <div className={`text-[10px] font-bold pt-2 ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
+                Limite total: {formatBRL(limit)}
+              </div>
+            </div>
+          </ChartCard>
+          <ChartCard title="Parcelar Fatura" subtitle="Divida em até 12x" theme={theme}>
+            <div className="p-4 flex flex-col gap-4">
+              <p className={`text-xs ${isMidnight ? 'text-on-surface-variant' : 'text-black/70'}`}>
+                Parcele a fatura atual de <strong>{formatBRL(currentInvoiceTotal)}</strong> em até 12 vezes com juros.
+              </p>
+              <button onClick={() => onNavigate('installmentOptions')} className={quickActionClass}>
+                Simular Parcelamento
+              </button>
+            </div>
+          </ChartCard>
+        </div>
+
+        {/* Histórico de Parcelas Futuras já contratadas */}
+        <ChartCard title="Histórico de Parcelas Futuras" subtitle="Compras parceladas que ainda vão aparecer nas próximas faturas" theme={theme}>
+          <div className="p-4">
+            {sortedYearEntries.length === 0 ? (
+              <div className="p-8 text-center opacity-60">
+                <AlertCircle size={32} className="mx-auto mb-2 opacity-50" />
+                <p className="text-xs font-bold">Você não possui parcelas futuras.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {sortedYearEntries.map(([headerLabel, monthList]) => (
+                  <div key={headerLabel} className="flex flex-col gap-2">
+                    <h4 className={`text-[10px] font-black uppercase tracking-wider px-1 ${isMidnight ? 'text-rose-400' : 'text-rose-700'}`}>
+                      {headerLabel}
+                    </h4>
+                    <div className={`rounded-xl border divide-y ${isMidnight ? 'bg-volt-dark/50 border-white/10 divide-white/5' : 'bg-white border-2 border-black divide-black/10'}`}>
+                      {monthList.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center py-3 px-4">
+                          <span className="text-xs font-bold capitalize">{item.monthName}</span>
+                          <span className={`text-xs font-black ${isMidnight ? 'text-volt-green' : 'text-black'}`}>
+                            {formatBRL(item.amount)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      </ChartCard>
-      <ChartCard title="Parcelar Fatura" subtitle="Divida em até 12x" theme={theme}>
-        <div className="p-4 flex flex-col gap-4">
-          <p className={`text-xs ${isMidnight ? 'text-on-surface-variant' : 'text-black/70'}`}>
-            Parcele a fatura atual de <strong>{formatBRL(currentInvoiceTotal)}</strong> em até 12 vezes com juros.
-          </p>
-          <button
-            onClick={() => onNavigate('installmentOptions')}
-            className={`mt-2 px-4 py-3 rounded-xl font-bold text-xs transition-all ${
-              isMidnight
-                ? 'bg-volt-green text-volt-dark hover:bg-volt-primary-dark'
-                : 'bg-black text-volt-yellow border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)] hover:translate-x-[-1px]'
-            }`}
-          >
-            Simular Parcelamento
-          </button>
-        </div>
-      </ChartCard>
-    </div>
-  );
+        </ChartCard>
+      </div>
+    );
+  };
 
   const renderSectionContent = () => {
     switch (activeSection) {
-      case 'resumo': return renderResumo();
-      case 'faturas': return renderFaturas();
+      case 'fatura': return renderFatura();
       case 'parcelamentos': return renderParcelamentos();
       default: return null;
     }
@@ -510,6 +560,86 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
           type={faturaTab === 'fechada' ? 'fechada' : 'aberta'}
           user={user}
         />
+      )}
+
+      {/* Modal simples de escolha de valor de pagamento */}
+      {isPaymentPickerOpen && (
+        <div
+          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setIsPaymentPickerOpen(false)}
+        >
+          <div
+            className={`w-full max-w-sm rounded-xl border p-5 space-y-4 ${
+              isMidnight ? 'bg-volt-surface border-white/10 text-on-surface' : 'bg-white border border-black/10 shadow-xl text-black'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black">Como deseja pagar?</h3>
+              <button onClick={() => setIsPaymentPickerOpen(false)} aria-label="Fechar" className="opacity-50 hover:opacity-100">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {([
+                { key: 'total' as const, label: 'Pagar Total', value: formatBRL(paymentPickerBaseAmount) },
+                { key: 'min' as const, label: 'Pagar Mínimo (10%)', value: formatBRL(minPaymentFor(paymentPickerBaseAmount)) },
+                { key: 'custom' as const, label: 'Valor Personalizado', value: null },
+              ]).map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setPayMode(opt.key)}
+                  className={`p-3 rounded-lg border text-left flex items-center justify-between transition-all ${
+                    payMode === opt.key
+                      ? isMidnight
+                        ? 'border-volt-green bg-volt-green/10'
+                        : 'border-black bg-volt-yellow-pastel'
+                      : isMidnight
+                        ? 'border-white/10 hover:border-white/30'
+                        : 'border-black/10 hover:border-black/30'
+                  }`}
+                >
+                  <span className="text-xs font-bold">{opt.label}</span>
+                  {opt.value && <span className="text-xs font-black">{opt.value}</span>}
+                </button>
+              ))}
+            </div>
+
+            {payMode === 'custom' && (
+              <div className="space-y-1.5">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-black opacity-50">R$</span>
+                  <input
+                    type="number"
+                    autoFocus
+                    value={customAmount}
+                    onChange={(e) => setCustomAmount(e.target.value)}
+                    placeholder="Ex: 150,00"
+                    className={`w-full pl-8 pr-3 py-2.5 rounded-lg border text-xs font-bold outline-none ${
+                      isMidnight ? 'bg-volt-dark border-white/10 focus:border-volt-green' : 'bg-gray-50 border-black/20 focus:border-black'
+                    }`}
+                  />
+                </div>
+                {customError && <p className="text-[11px] font-bold text-rose-500">{customError}</p>}
+                <p className={`text-[10px] flex items-start gap-1.5 leading-relaxed ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
+                  <Info size={11} className="shrink-0 mt-0.5" />
+                  Valores acima do total são aceitos — o excedente vira saldo credor e abate a próxima fatura.
+                </p>
+              </div>
+            )}
+
+            <button
+              onClick={handleConfirmPaymentPicker}
+              className={`w-full py-3 rounded-lg font-black text-xs transition-all ${
+                isMidnight ? 'bg-volt-green text-volt-dark hover:bg-volt-primary-dark' : 'bg-black text-volt-yellow hover:opacity-90'
+              }`}
+            >
+              Continuar
+            </button>
+          </div>
+        </div>
       )}
 
       {isPasswordModalOpen && (
