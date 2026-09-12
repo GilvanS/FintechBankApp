@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, HelpCircle, Info, Settings, Palette, Check, Edit2, Sun, Moon, Fingerprint, Bell, AlertTriangle, ArrowLeft, Sliders, Zap, Clock, CreditCard, Calendar, FileText } from 'lucide-react';
+import { Shield, HelpCircle, Info, Settings, Palette, Check, Edit2, Sun, Moon, Fingerprint, Bell, AlertTriangle, Sliders, Zap, Clock, CreditCard, Calendar, FileText, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { AppVersion } from '../utils/AppVersion';
 import { useDialog } from '../contexts/GlobalDialogContext';
@@ -9,10 +9,17 @@ import properties from '../properties.json';
 
 interface ProfileProps {
     onNavigate: (view: string) => void;
+    scrollTargetId?: 'dados' | 'seguranca' | 'preferencias';
 }
 
-export default function Profile({ onNavigate }: ProfileProps) {
+export default function Profile({ onNavigate, scrollTargetId }: ProfileProps) {
   const { user, logout, updateUser } = useAuth();
+
+  useEffect(() => {
+    if (!scrollTargetId) return;
+    const el = document.getElementById(scrollTargetId);
+    el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [scrollTargetId]);
   const { showDialog } = useDialog();
   const { theme, setTheme } = useAppState();
 
@@ -184,13 +191,13 @@ export default function Profile({ onNavigate }: ProfileProps) {
   ];
 
   return (
-    <div className="h-full flex flex-col bg-volt-yellow dark:bg-black max-w-md mx-auto w-full relative overflow-y-auto no-scrollbar">
+    <div className="h-full flex flex-col bg-volt-yellow dark:bg-black w-full relative overflow-y-auto no-scrollbar">
       {/* Version Popup */}
       {showVersionPopup && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowVersionPopup(false)}>
               <div className="bg-white p-8 max-w-sm w-full text-center rounded-3xl border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]" onClick={e => e.stopPropagation()}>
                   <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center mx-auto mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                      <span className="material-symbols-outlined text-3xl text-volt-green">info</span>
+                      <Info className="w-8 h-8 text-volt-green" />
                   </div>
                   <h3 className="text-xl font-black text-black mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Informações do App</h3>
                   <div className="bg-gray-100 border-2 border-black rounded-xl p-4 mb-6 text-left space-y-2">
@@ -210,24 +217,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
           </div>
       )}
 
-      <header className="px-4 pt-6 pb-2 flex items-center gap-3 shrink-0">
-          <button
-              onClick={() => onNavigate('home')}
-              className="w-10 h-10 rounded-full bg-black flex items-center justify-center border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:opacity-80 transition-opacity"
-              aria-label="Voltar"
-              type="button"
-          >
-              <ArrowLeft className="text-volt-yellow w-5 h-5" />
-          </button>
-      </header>
-
-      <div className="space-y-6 pb-28 pt-4 px-4 max-w-md w-full mx-auto flex-grow">
-        {/* Title */}
-        <section className="space-y-1">
-          <h2 className="text-2xl font-black text-black dark:text-white">Meu Perfil</h2>
-          <p className="text-xs text-black/60 dark:text-white/60 font-medium">Configure seus dados de cadastro e segurança do Volt.</p>
-        </section>
-
+      <div className="space-y-6 pb-28 pt-4 px-4 max-w-3xl w-full mx-auto flex-grow">
         {/* Profile Info Header */}
         <div className="bg-white dark:bg-zinc-900 border-4 border-black dark:border-zinc-800 rounded-3xl p-5 flex flex-col items-center text-center space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="relative">
@@ -337,7 +327,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
         </section>
 
         {/* Real-Time Name Customizer Input */}
-        <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <section id="dados" className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] scroll-mt-4">
           <div className="flex items-center gap-2 text-black dark:text-white">
             <Edit2 size={15} className="text-volt-green" />
             <h4 className="text-xs font-black uppercase tracking-wider">Editar Nome do Titular</h4>
@@ -357,7 +347,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
         </section>
 
         {/* Theme Toggle Section */}
-        <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <section id="preferencias" className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] scroll-mt-4">
           <div className="flex items-center gap-2 text-black dark:text-white">
             <Palette size={15} className="text-volt-green shrink-0" />
             <h4 className="text-xs font-black uppercase tracking-wider">Aparência do Aplicativo</h4>
@@ -855,7 +845,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
         </section>
 
         {/* Security & Biometrics Section */}
-        <section className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <section id="seguranca" className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-zinc-800 rounded-2xl p-4 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] scroll-mt-4">
           <div className="flex items-center gap-2 text-black dark:text-white">
             <Shield size={15} className="text-volt-green shrink-0" />
             <h4 className="text-xs font-black uppercase tracking-wider">Segurança e Biometria</h4>
@@ -923,7 +913,7 @@ export default function Profile({ onNavigate }: ProfileProps) {
                     }
                     type="button"
                 >
-                    <span className="material-symbols-outlined text-black">admin_panel_settings</span>
+                    <ShieldCheck className="w-5 h-5 text-black" />
                     Painel do Administrador
                 </button>
             </div>
