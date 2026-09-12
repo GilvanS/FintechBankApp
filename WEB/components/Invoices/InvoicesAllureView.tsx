@@ -21,6 +21,7 @@ import ProgressBarRow from '../Analytics/ProgressBarRow';
 import ChartCard from '../Analytics/ChartCard';
 import InvoiceSummarySheet from '../InvoiceSummarySheet';
 import PasswordModal from '../PasswordModal';
+import PaymentTypeFilter, { type PaymentFilterValue } from '../PaymentTypeFilter';
 import { useCardOrder } from '../../hooks/useCardOrder';
 import { useAuth } from '../../context/AuthContext';
 import { payCreditCardInvoice } from '../../services/api';
@@ -36,10 +37,11 @@ interface Props {
 }
 
 type MainNavKey = 'home' | 'invoices' | 'limit' | 'shop' | 'profile' | 'analytics' | 'admin';
-type SubSectionKey = 'fatura' | 'parcelamentos';
+type SubSectionKey = 'fatura' | 'lancamentos' | 'parcelamentos';
 
 const SECTIONS: readonly AllureSection<SubSectionKey>[] = [
   { key: 'fatura', label: 'Fatura', icon: FileText },
+  { key: 'lancamentos', label: 'Lançamentos', icon: List },
   { key: 'parcelamentos', label: 'Parcelamentos', icon: Calendar },
 ];
 
@@ -60,6 +62,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState<PaymentFilterValue>('ALL');
 
   // Pagamento de fatura
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -127,14 +130,28 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   }, [faturaTab, closedTransactions, currentTransactions]);
 
   const filteredTransactions = useMemo(() => {
-    if (!searchQuery.trim()) return activeTransactions;
+    let list = activeTransactions;
+    if (paymentTypeFilter !== 'ALL') {
+      list = list.filter((t: any) => t.paymentType === paymentTypeFilter);
+    }
+    if (!searchQuery.trim()) return list;
     const term = searchQuery.toLowerCase();
-    return activeTransactions.filter(
+    return list.filter(
       (t) =>
         (t.merchant || t.description || '').toLowerCase().includes(term) ||
         (t.category || '').toLowerCase().includes(term)
     );
-  }, [activeTransactions, searchQuery]);
+  }, [activeTransactions, searchQuery, paymentTypeFilter]);
+
+  const paymentTypeCounts = useMemo(() => {
+    const counts = { TOTAL: 0, MINIMO: 0, PARCIAL: 0 };
+    activeTransactions.forEach((t: any) => {
+      if (t.paymentType === 'TOTAL') counts.TOTAL++;
+      else if (t.paymentType === 'MINIMO') counts.MINIMO++;
+      else if (t.paymentType === 'PARCIAL') counts.PARCIAL++;
+    });
+    return counts;
+  }, [activeTransactions]);
 
   const donutData = useMemo(() => {
     if (limit === 0) return [{ label: 'Sem limite', value: 1, color: isMidnight ? '#353534' : '#e5e7eb' }];
@@ -277,6 +294,9 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
             <Barcode size={16} /> Gerar Boleto
           </button>
         )}
+        <button onClick={() => setActiveSection('lancamentos')} className={quickActionClass}>
+          <List size={16} /> Ver Lançamentos
+        </button>
         <button onClick={() => onNavigate('installmentOptions')} className={quickActionClass}>
           <Calendar size={16} /> Parcelar
         </button>
@@ -323,10 +343,54 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
           );
         })}
       </Reorder.Group>
+    </div>
+  );
 
-      {/* Lançamentos — mais abaixo, dentro da mesma tela */}
-      <ChartCard title="Lançamentos" subtitle="Compras e movimentações do cartão de crédito" theme={theme}>
+  const renderLancamentos = () => (
+    <div className="flex flex-col gap-6">
+      {/* Subtabs: qual fatura está sendo consultada */}
+      <div className="flex items-center gap-2 border-b pb-4 border-black/10 dark:border-white/10">
+        {[
+          { key: 'aberta', label: 'Fatura Aberta', amount: currentInvoiceTotal },
+          { key: 'fechada', label: 'Fatura Fechada', amount: closedInvoiceTotal },
+          { key: 'historico', label: 'Histórico Completo' },
+        ].map((tab) => {
+          const active = faturaTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setFaturaTab(tab.key as any)}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                active
+                  ? isMidnight
+                    ? 'bg-volt-surface text-volt-green border border-volt-green/40'
+                    : 'bg-black text-volt-yellow border-2 border-black'
+                  : isMidnight
+                    ? 'bg-volt-dark/60 text-on-surface-variant hover:text-on-surface'
+                    : 'bg-gray-100 text-black/60 hover:text-black'
+              }`}
+            >
+              <span>{tab.label}</span>
+              {tab.amount !== undefined && (
+                <span className="text-[10px] opacity-75 font-black">({formatBRL(tab.amount)})</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <ChartCard title="Lançamentos" subtitle="Compras, pagamentos e movimentações do cartão de crédito" theme={theme}>
         <div className="p-4 flex flex-col gap-4">
+          {/* Filtro por tipo de pagamento — mostra se um lançamento de pagamento foi Total/Mínimo/Parcial */}
+          <PaymentTypeFilter
+            activeFilter={paymentTypeFilter}
+            onFilterChange={setPaymentTypeFilter}
+            isMidnight={isMidnight}
+            counts={paymentTypeCounts}
+            totalCount={activeTransactions.length}
+            showDots
+          />
+
           <div className="relative">
             <Search size={16} className="absolute left-3 top-3 opacity-50" />
             <input
@@ -340,7 +404,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
             />
           </div>
 
-          <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto pr-1">
+          <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
             {filteredTransactions.length === 0 ? (
               <div className="p-8 text-center opacity-60">
                 <AlertCircle size={32} className="mx-auto mb-2 opacity-50" />
@@ -350,6 +414,14 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
               filteredTransactions.map((t: any) => {
                 const txKey = t.id || t.authorizationCode;
                 const isExpanded = expandedTxId === txKey;
+                const isPaymentEntry = t.type === 'PAYMENT' || t.type === 'INVOICE_PAYMENT';
+                const paymentBadge = isPaymentEntry && t.paymentType
+                  ? {
+                      TOTAL: { label: 'Pago Total', cls: isMidnight ? 'bg-emerald-500/15 text-emerald-400' : 'bg-emerald-100 text-emerald-700' },
+                      MINIMO: { label: 'Pago Mínimo', cls: isMidnight ? 'bg-amber-500/15 text-amber-400' : 'bg-amber-100 text-amber-700' },
+                      PARCIAL: { label: 'Pago Parcial', cls: isMidnight ? 'bg-blue-500/15 text-blue-400' : 'bg-blue-100 text-blue-700' },
+                    }[t.paymentType as 'TOTAL' | 'MINIMO' | 'PARCIAL']
+                  : null;
                 return (
                   <div
                     key={txKey}
@@ -367,7 +439,14 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
                           <CreditCard size={16} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold truncate">{t.merchant || t.description || 'Compra no Cartão'}</p>
+                          <p className="text-xs font-bold truncate flex items-center gap-2">
+                            {t.merchant || t.description || 'Compra no Cartão'}
+                            {paymentBadge && (
+                              <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0 ${paymentBadge.cls}`}>
+                                {paymentBadge.label}
+                              </span>
+                            )}
+                          </p>
                           <p className={`text-[10px] ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
                             {t.date ? new Date(t.date).toLocaleDateString('pt-BR') : 'Data não informada'}
                             {t.installments ? ` · Parcela ${t.installments}` : ''}
@@ -510,6 +589,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   const renderSectionContent = () => {
     switch (activeSection) {
       case 'fatura': return renderFatura();
+      case 'lancamentos': return renderLancamentos();
       case 'parcelamentos': return renderParcelamentos();
       default: return null;
     }
