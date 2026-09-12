@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2 } from 'lucide-react';
+import {
+    CheckCircle2, ArrowLeft, Eye, EyeOff, Clock, AlertTriangle, List, BarChart3,
+    QrCode, CreditCard, ChevronRight, ChevronDown, Receipt, ShoppingCart,
+    UtensilsCrossed, Store, ArrowLeftRight, type LucideIcon,
+} from 'lucide-react';
 import { User, CardTransaction } from '../types';
 import { useAppState } from '../contexts/AppStateContext';
 import { isPaymentTx } from './TransactionRow';
@@ -19,20 +23,20 @@ const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', curren
 
 type InvoiceTab = 'fechada' | 'aberta' | 'historico' | 'proximas';
 
-function categoryIcon(tx: CardTransaction): string {
+function categoryIcon(tx: CardTransaction): LucideIcon {
     const m = tx.merchant?.toLowerCase() ?? '';
-    if (m.includes('mercado') || m.includes('supermercado')) return 'shopping_cart';
-    if (m.includes('restaurante') || m.includes('lanchonete')) return 'restaurant';
-    if (m.includes('loja')) return 'storefront';
-    if (m.includes('pix')) return 'currency_exchange';
-    if (tx.type === 'PAYMENT' || tx.type === 'INVOICE_INSTALLMENT') return 'check_circle';
-    return 'receipt_long';
+    if (m.includes('mercado') || m.includes('supermercado')) return ShoppingCart;
+    if (m.includes('restaurante') || m.includes('lanchonete')) return UtensilsCrossed;
+    if (m.includes('loja')) return Store;
+    if (m.includes('pix')) return ArrowLeftRight;
+    if (tx.type === 'PAYMENT' || tx.type === 'INVOICE_INSTALLMENT') return CheckCircle2;
+    return Receipt;
 }
 
 const statusConfig = {
-    fechada:      { label: 'A fatura está fechada',        icon: 'check_circle', color: 'text-green-400',  bg: 'bg-green-400/10 border border-green-400/20' },
-    vencida:      { label: 'Fatura vencida — pague agora', icon: 'schedule',     color: 'text-yellow-400', bg: 'bg-yellow-400/10 border border-yellow-400/20' },
-    inadimplente: { label: 'Conta inadimplente',           icon: 'warning',      color: 'text-red-400',    bg: 'bg-red-400/10 border border-red-400/20' },
+    fechada:      { label: 'A fatura está fechada',        icon: CheckCircle2, color: 'text-green-400',  bg: 'bg-green-400/10 border border-green-400/20' },
+    vencida:      { label: 'Fatura vencida — pague agora', icon: Clock,        color: 'text-yellow-400', bg: 'bg-yellow-400/10 border border-yellow-400/20' },
+    inadimplente: { label: 'Conta inadimplente',           icon: AlertTriangle, color: 'text-red-400',    bg: 'bg-red-400/10 border border-red-400/20' },
 };
 
 function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, theme: customTheme }: ClosedInvoiceProps) {
@@ -157,7 +161,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
       <header className={`sticky top-0 z-20 ${isMidnight ? 'bg-volt-surface border-b border-white/5' : 'bg-volt-primary'}`}>
         <div className="flex items-center px-4 pt-4 pb-2">
           <button onClick={onBack} className="p-2 -ml-2 rounded-full transition-colors hover:bg-black/10" data-testid="invoice-back">
-            <span className="material-symbols-outlined text-black">arrow_back</span>
+            <ArrowLeft size={20} className="text-black" />
           </button>
           <h2 className="flex-1 text-center text-lg font-bold pr-8 text-black">Fatura</h2>
         </div>
@@ -207,7 +211,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                 className={`p-1 rounded-full transition-colors ${isMidnight ? 'text-white/40 hover:text-white' : 'text-black/40 hover:text-black'}`}
                 aria-label={hideValue ? 'Mostrar valor' : 'Ocultar valor'}
               >
-                <span className="material-symbols-outlined text-xl">{hideValue ? 'visibility_off' : 'visibility'}</span>
+                {hideValue ? <EyeOff size={24} /> : <Eye size={24} />}
               </button>
             </div>
             {/* Valor — mostra valor ORIGINAL se paga, residual se não */}
@@ -243,7 +247,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                   ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
                   : 'bg-emerald-50 text-emerald-700 border border-emerald-300'
               }`}>
-                <span className="material-symbols-outlined text-sm">check_circle</span>
+                <CheckCircle2 size={16} />
                 Fatura paga em {new Date(creditCard.closedInvoicePaidAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
               </div>
             )}
@@ -256,7 +260,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                     ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
                     : isMidnight ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-green-100 text-green-700 border border-green-200'
               }`}>
-                <span className="material-symbols-outlined text-sm">{status.icon}</span>
+                <status.icon size={16} />
                 {status.label}
               </div>
             )}
@@ -268,7 +272,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                   isMidnight ? 'border-white/15 text-white bg-white/5' : 'border-black/20 text-black bg-black/5'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">format_list_bulleted</span>
+                <List size={16} />
                 Resumo da fatura
               </button>
               {!isCredit && invoiceAmount > 0 && (
@@ -278,7 +282,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                     isMidnight ? 'border-white/15 text-white bg-white/5' : 'border-black/20 text-black bg-black/5'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-sm">bar_chart</span>
+                  <BarChart3 size={16} />
                   Pagar fatura
                 </button>
               )}
@@ -296,7 +300,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
             {/* Label + seta */}
             <div className="flex items-center justify-between">
               <p className={`text-sm font-medium ${isMidnight ? 'text-white/60' : 'text-black/60'}`}>Fatura aberta</p>
-              <span className={`material-symbols-outlined text-sm ${isMidnight ? 'text-white/40' : 'text-black/30'}`}>chevron_right</span>
+              <ChevronRight size={16} className={isMidnight ? 'text-white/40' : 'text-black/30'} />
             </div>
             {/* Valor + eye */}
             <div className="flex items-center gap-3">
@@ -311,7 +315,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                 className={`p-1 rounded-full transition-colors ${isMidnight ? 'text-white/40 hover:text-white' : 'text-black/40 hover:text-black'}`}
                 aria-label={hideValue ? 'Mostrar valor' : 'Ocultar valor'}
               >
-                <span className="material-symbols-outlined text-xl">{hideValue ? 'visibility_off' : 'visibility'}</span>
+                {hideValue ? <EyeOff size={24} /> : <Eye size={24} />}
               </button>
             </div>
             {/* Vencimento + Melhor dia */}
@@ -331,7 +335,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                   isMidnight ? 'border-white/15 text-white bg-white/5' : 'border-black/20 text-black bg-black/5'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">bar_chart</span>
+                <BarChart3 size={16} />
                 Pagar fatura
               </button>
               <button
@@ -340,7 +344,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                   isMidnight ? 'border-white/15 text-white bg-white/5' : 'border-black/20 text-black bg-black/5'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">credit_card</span>
+                <CreditCard size={16} />
                 Meus cartões
               </button>
               <button
@@ -349,7 +353,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                   isMidnight ? 'border-white/15 text-white bg-white/5' : 'border-black/20 text-black bg-black/5'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">format_list_bulleted</span>
+                <List size={16} />
                 Resumo da fatura
               </button>
             </div>
@@ -381,14 +385,12 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                 className="w-full flex items-center justify-between gap-2 text-left group"
               >
                 <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-red-400 text-sm" aria-hidden="true">warning</span>
+                  <AlertTriangle size={16} className="text-red-400" aria-hidden="true" />
                   <span className="text-xs text-red-400 font-medium">
                     Encargos por atraso — {fmt(user.pendingCharges)}
                   </span>
                 </div>
-                <span className={`material-symbols-outlined text-red-400/70 text-sm transition-transform duration-200 ${showCharges ? 'rotate-180' : ''}`}>
-                  expand_more
-                </span>
+                <ChevronDown size={16} className={`text-red-400/70 transition-transform duration-200 ${showCharges ? 'rotate-180' : ''}`} />
               </button>
 
               {showCharges && (
@@ -438,7 +440,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                     Parcelar fatura
                   </button>
                   <button onClick={openPixModal} className={`w-full py-3 font-semibold bg-transparent border rounded-lg transition-colors flex items-center justify-center gap-2 ${isMidnight ? 'text-black border-[#A2FF00] bg-[#A2FF00] hover:bg-[#8ee500]' : 'text-black border-[#A2FF00] bg-[#A2FF00] hover:bg-[#8ee500]'}`}>
-                    <span className="material-symbols-outlined text-sm">qr_code_scanner</span>
+                    <QrCode size={16} />
                     Pagar com PIX
                   </button>
                   {balance > 0 && balance < minPayment && (
@@ -564,11 +566,10 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
                             }`}>
                               {isPayment
                                 ? <CheckCircle2 size={20} className="text-emerald-500" />
-                                : (
-                                  <span className={`material-symbols-outlined text-lg ${isRefund ? 'text-green-400' : 'text-volt-primary'}`}>
-                                    {categoryIcon(tx)}
-                                  </span>
-                                )}
+                                : (() => {
+                                    const TxIcon = categoryIcon(tx);
+                                    return <TxIcon size={20} className={isRefund ? 'text-green-400' : 'text-volt-primary'} />;
+                                  })()}
                             </div>
                             <div className="flex-grow min-w-0">
                               <div className="flex items-center gap-1.5">
@@ -648,7 +649,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
             if (historyData.length === 0) {
               return (
                 <div className={`rounded-2xl p-5 text-center space-y-2 mt-2 ${isMidnight ? 'bg-volt-surface border border-white/5' : 'bg-white border-2 border-black'}`} data-testid="historico-empty">
-                  <span className="material-symbols-outlined text-gray-500 text-3xl">receipt_long</span>
+                  <Receipt size={30} className="text-gray-500" />
                   <p className={`text-sm ${isMidnight ? 'text-white/60' : 'text-black/60'}`}>Nenhuma fatura disponível.</p>
                 </div>
               );
@@ -692,7 +693,7 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
             if (months.length === 0) {
               return (
                 <div className={`rounded-2xl p-5 text-center space-y-2 mt-2 ${isMidnight ? 'bg-volt-surface border border-white/5' : 'bg-white border-2 border-black'}`} data-testid="proximas-empty">
-                  <span className="material-symbols-outlined text-green-500 text-3xl">check_circle</span>
+                  <CheckCircle2 size={30} className="text-green-500" />
                   <p className={`text-sm ${isMidnight ? 'text-white/60' : 'text-black/60'}`}>Nenhuma parcela futura registrada.</p>
                 </div>
               );

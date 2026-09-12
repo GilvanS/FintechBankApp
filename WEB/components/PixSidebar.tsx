@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { ArrowLeftRight, IdCard, KeyRound, type LucideIcon } from 'lucide-react';
 
 // FIX: Updated the onNavigate prop type to align with the state values used in the parent Pix component.
 interface PixSidebarProps {
@@ -9,16 +10,16 @@ interface PixSidebarProps {
 
 const SidebarButton: React.FC<{
     label: string;
-    icon: string;
+    icon: LucideIcon;
     isActive: boolean;
     onClick: () => void;
     testId: string;
     viewName: string;
     buttonId: string;
-}> = ({ label, icon, isActive, onClick, testId, viewName, buttonId }) => {
+}> = ({ label, icon: Icon, isActive, onClick, testId, viewName, buttonId }) => {
     return (
-        <button 
-            onClick={onClick} 
+        <button
+            onClick={onClick}
             className={`w-full flex items-center space-x-3 p-3 rounded-lg text-left transition-colors test-pix-sidebar-button ${isActive ? 'bg-primary/20 text-primary' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}
             id={buttonId}
             name={`pix-sidebar-${viewName}`}
@@ -31,15 +32,13 @@ const SidebarButton: React.FC<{
             type="button"
             tabIndex={0}
         >
-            <span 
-                className="material-symbols-outlined" 
+            <Icon
+                size={20}
                 aria-hidden="true"
                 id={`${buttonId}-icon`}
                 data-testid={`${testId}-icon`}
-            >
-                {icon}
-            </span>
-            <span 
+            />
+            <span
                 className="font-semibold test-pix-sidebar-label" 
                 id={`${buttonId}-label`}
                 data-testid={`${testId}-label`}
@@ -63,29 +62,29 @@ const PixSidebar: React.FC<PixSidebarProps> = ({ onNavigate, currentView }) => {
             aria-label="Menu de navegação PIX"
         >
             {/* FIX: Changed 'main' to 'transfer' to match the parent component's state. */}
-            <SidebarButton 
-                label="Transferir" 
-                icon="currency_exchange" 
-                isActive={currentView === 'transfer'} 
+            <SidebarButton
+                label="Transferir"
+                icon={ArrowLeftRight}
+                isActive={currentView === 'transfer'}
                 onClick={() => onNavigate('transfer')}
                 testId="pix-sidebar-transfer"
                 viewName="transfer"
                 buttonId="btn-pix-sidebar-transfer"
             />
-            <SidebarButton 
-                label="Meus Contatos" 
-                icon="contact_page" 
-                isActive={currentView === 'contacts'} 
+            <SidebarButton
+                label="Meus Contatos"
+                icon={IdCard}
+                isActive={currentView === 'contacts'}
                 onClick={() => onNavigate('contacts')}
                 testId="pix-sidebar-contacts"
                 viewName="contacts"
                 buttonId="btn-pix-sidebar-contacts"
             />
             {/* FIX: Changed 'keys' to 'keyManagement' to match the parent component's state. */}
-            <SidebarButton 
-                label="Minhas Chaves" 
-                icon="vpn_key" 
-                isActive={currentView === 'keyManagement'} 
+            <SidebarButton
+                label="Minhas Chaves"
+                icon={KeyRound}
+                isActive={currentView === 'keyManagement'}
                 onClick={() => onNavigate('keyManagement')}
                 testId="pix-sidebar-keys"
                 viewName="keyManagement"

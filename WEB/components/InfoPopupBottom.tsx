@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { X } from 'lucide-react';
 
 interface InfoPopupBottomProps {
   isOpen: boolean;
@@ -26,7 +27,7 @@ const InfoPopupBottom: React.FC<InfoPopupBottomProps> = ({ isOpen, onClose, titl
             <h3 id="popup-title" className="font-bold text-xl">{title}</h3>
             {showCloseIcon && (
                 <button onClick={onClose} className="p-1 rounded-full text-gray-400 hover:bg-white/10 hover:text-white">
-                    <span className="material-symbols-outlined">close</span>
+                    <X size={20} />
                 </button>
             )}
         </div>

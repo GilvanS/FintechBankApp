@@ -1,4 +1,5 @@
 import React from 'react';
+import { X, Trophy, Ticket } from 'lucide-react';
 
 interface PromotionalPopupProps {
     isOpen: boolean;
@@ -24,7 +25,7 @@ const PromotionalPopup: React.FC<PromotionalPopupProps> = ({ isOpen, onClose }) 
                     style={{ color: TEAL }}
                     aria-label="Fechar"
                 >
-                    <span className="material-symbols-outlined text-3xl">close</span>
+                    <X size={30} />
                 </button>
 
                 {/* Hero verde-amarela */}
@@ -44,9 +45,7 @@ const PromotionalPopup: React.FC<PromotionalPopupProps> = ({ isOpen, onClose }) 
                             className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg"
                             style={{ backgroundColor: '#F2C744' }}
                         >
-                            <span className="material-symbols-outlined text-4xl" style={{ color: TEAL }}>
-                                trophy
-                            </span>
+                            <Trophy size={36} style={{ color: TEAL }} />
                         </div>
                         <span
                             className="text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full"
@@ -73,9 +72,7 @@ const PromotionalPopup: React.FC<PromotionalPopupProps> = ({ isOpen, onClose }) 
                             className="flex-1 rounded-2xl border-2 border-dashed flex items-center justify-center gap-2 py-4 px-3"
                             style={{ backgroundColor: '#FBEFC4', borderColor: '#E0B93B' }}
                         >
-                            <span className="material-symbols-outlined text-xl" style={{ color: '#B8860B' }}>
-                                confirmation_number
-                            </span>
+                            <Ticket size={24} style={{ color: '#B8860B' }} />
                             <span className="text-2xl font-black tracking-[0.15em]" style={{ color: TEAL }}>
                                 HEXA25
                             </span>

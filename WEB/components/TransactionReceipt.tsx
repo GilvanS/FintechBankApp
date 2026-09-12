@@ -1,4 +1,9 @@
 import React, { useState } from 'react';
+import {
+    ArrowLeft, Share2, ArrowLeftRight, PiggyBank, Receipt, Nfc, CreditCard,
+    CalendarClock, CheckCircle2, FastForward, Gift, Check, Copy, MessageSquare, ChevronRight,
+    type LucideIcon,
+} from 'lucide-react';
 import { Transaction } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useToast, ToastContainer } from './Toast';
@@ -23,11 +28,11 @@ const typeLabel: Record<string, string> = {
     INVOICE_PAYMENT: 'Pagamento de Fatura', INVOICE_ANTICIPATION: 'Antecipação de Parcelas',
     CASHBACK_CREDIT: 'Cashback', POINTS_EARNED: 'Pontos Ganhos',
 };
-const typeIcon: Record<string, string> = {
-    PIX_SENT: 'currency_exchange', PIX_RECEIVED: 'currency_exchange', PIX_CREDIT_SENT: 'currency_exchange',
-    DEPOSIT: 'savings', PAYMENT: 'receipt_long', SHOP_DEBIT: 'contactless', SHOP_CREDIT: 'credit_card',
-    INVOICE_INSTALLMENT: 'event_repeat', INVOICE_PAYMENT: 'check_circle',
-    INVOICE_ANTICIPATION: 'fast_forward', CASHBACK_CREDIT: 'redeem',
+const typeIcon: Record<string, LucideIcon> = {
+    PIX_SENT: ArrowLeftRight, PIX_RECEIVED: ArrowLeftRight, PIX_CREDIT_SENT: ArrowLeftRight,
+    DEPOSIT: PiggyBank, PAYMENT: Receipt, SHOP_DEBIT: Nfc, SHOP_CREDIT: CreditCard,
+    INVOICE_INSTALLMENT: CalendarClock, INVOICE_PAYMENT: CheckCircle2,
+    INVOICE_ANTICIPATION: FastForward, CASHBACK_CREDIT: Gift,
 };
 
 const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, onBack }) => {
@@ -40,7 +45,7 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
     const isDebit = transaction.amount < 0;
     const isPix = ['PIX_SENT','PIX_RECEIVED','PIX_CREDIT_SENT'].includes(transaction.type);
     const label = typeLabel[transaction.type] || 'Transação';
-    const icon = typeIcon[transaction.type] || 'receipt_long';
+    const Icon = typeIcon[transaction.type] || Receipt;
 
     const formattedAmount = amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const fmtBRL = (n: number) => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -82,25 +87,25 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
         <div className="h-full bg-[#0a0a0a] text-white flex flex-col w-full max-w-md mx-auto" data-testid="transaction-receipt">
             <header className="flex items-center justify-between p-4 border-b border-white/10">
                 <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10" data-testid="receipt-back">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={20} />
                 </button>
                 <h1 className="text-lg font-bold">Comprovante</h1>
                 <button onClick={handleShare} className="p-2 rounded-full hover:bg-white/10" data-testid="receipt-share">
-                    <span className="material-symbols-outlined">share</span>
+                    <Share2 size={20} />
                 </button>
             </header>
 
             <main className="flex-1 overflow-y-auto no-scrollbar px-4 pb-6 space-y-4">
                 <div className="flex flex-col items-center py-6 space-y-3">
                     <div className={`rounded-full p-4 ${isDebit ? 'bg-orange-500/20' : 'bg-green-500/20'}`}>
-                        <span className={`material-symbols-outlined text-3xl ${isDebit ? 'text-orange-400' : 'text-green-400'}`}>{icon}</span>
+                        <Icon size={30} className={isDebit ? 'text-orange-400' : 'text-green-400'} />
                     </div>
                     <p className="text-sm text-white/60">{label}</p>
                     <p className={`text-4xl font-bold ${isDebit ? 'text-white' : 'text-green-400'}`} data-testid="receipt-amount">
                         {isDebit ? '- ' : '+ '}{formattedAmount}
                     </p>
                     <div className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 rounded-full px-3 py-1">
-                        <span className="material-symbols-outlined text-green-400 text-sm">check_circle</span>
+                        <CheckCircle2 size={16} className="text-green-400" />
                         <span className="text-green-400 text-xs font-medium">Transação concluída</span>
                     </div>
                     <p className="text-xs text-white/40">{dateStr} às {timeStr}</p>
@@ -163,7 +168,7 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                             <p className="font-mono text-xs text-white/70 break-all" data-testid="receipt-tx-id">{shortId}</p>
                         </div>
                         <button onClick={copyId} className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/20 text-primary text-xs font-medium" data-testid="receipt-copy-id">
-                            <span className="material-symbols-outlined text-sm">{idCopied ? 'check' : 'content_copy'}</span>
+                            {idCopied ? <Check size={16} /> : <Copy size={16} />}
                             {idCopied ? 'Copiado' : 'Copiar'}
                         </button>
                     </div>
@@ -171,9 +176,9 @@ const TransactionReceipt: React.FC<TransactionReceiptProps> = ({ transaction, on
                 </div>
 
                 <button className="w-full flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-colors" data-testid="receipt-help">
-                    <span className="material-symbols-outlined text-white/50">forum</span>
+                    <MessageSquare size={20} className="text-white/50" />
                     <span className="text-sm text-white/70 flex-1 text-left">Problema com esta transação?</span>
-                    <span className="material-symbols-outlined text-white/30">chevron_right</span>
+                    <ChevronRight size={20} className="text-white/30" />
                 </button>
             </main>
 

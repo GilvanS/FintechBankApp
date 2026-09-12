@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { X, XCircle, CheckCircle2, Info } from 'lucide-react';
 
 interface PixConfirmationProps {
     details: {
@@ -43,7 +44,8 @@ const PixConfirmation: React.FC<PixConfirmationProps> = ({ details, onConfirm, o
     };
 
     const displayMessage = message || infoMessage;
-    const alertClass = messageType === 'error' 
+    const MessageIcon = messageType === 'error' ? XCircle : messageType === 'success' ? CheckCircle2 : Info;
+    const alertClass = messageType === 'error'
         ? 'bg-red-500/10 border-red-500/20 text-red-400' 
         : messageType === 'success'
         ? 'bg-green-500/10 border-green-500/20 text-green-400'
@@ -92,13 +94,11 @@ const PixConfirmation: React.FC<PixConfirmationProps> = ({ details, onConfirm, o
                         type="button"
                         role="button"
                     >
-                        <span 
-                            className="material-symbols-outlined"
+                        <X
+                            size={20}
                             aria-hidden="true"
                             data-testid="pix-confirmation-close-icon"
-                        >
-                            close
-                        </span>
+                        />
                     </button>
                 </div>
                 
@@ -113,13 +113,11 @@ const PixConfirmation: React.FC<PixConfirmationProps> = ({ details, onConfirm, o
                         aria-live="polite"
                         aria-atomic="true"
                     >
-                        <span 
-                            className="material-symbols-outlined text-sm"
+                        <MessageIcon
+                            size={16}
                             aria-hidden="true"
                             data-testid="pix-confirmation-message-icon"
-                        >
-                            {messageType === 'error' ? 'error' : messageType === 'success' ? 'check_circle' : 'info'}
-                        </span>
+                        />
                         <span data-testid="pix-confirmation-message-text">{displayMessage}</span>
                     </div>
                 )}

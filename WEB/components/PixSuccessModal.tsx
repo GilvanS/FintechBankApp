@@ -1,4 +1,5 @@
 import React from 'react';
+import { CheckCircle2 } from 'lucide-react';
 
 interface PixSuccessModalProps {
     isOpen: boolean;
@@ -40,13 +41,12 @@ const PixSuccessModal: React.FC<PixSuccessModalProps> = ({ isOpen, onClose, deta
                         className="mx-auto w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4 test-pix-success-icon-container"
                         data-testid="pix-success-icon-container"
                     >
-                        <span 
-                            className="material-symbols-outlined text-green-400 text-4xl"
+                        <CheckCircle2
+                            size={36}
+                            className="text-green-400"
                             aria-hidden="true"
                             data-testid="pix-success-icon"
-                        >
-                            check_circle
-                        </span>
+                        />
                     </div>
                     <h2 
                         className="text-white text-2xl font-bold mb-2 test-pix-success-title"
@@ -69,13 +69,11 @@ const PixSuccessModal: React.FC<PixSuccessModalProps> = ({ isOpen, onClose, deta
                         aria-live="polite"
                         aria-atomic="true"
                     >
-                        <span 
-                            className="material-symbols-outlined text-sm"
+                        <CheckCircle2
+                            size={16}
                             aria-hidden="true"
                             data-testid="pix-success-message-icon"
-                        >
-                            check_circle
-                        </span>
+                        />
                         <span data-testid="pix-success-message-text">Transferencia concluida com sucesso</span>
                     </div>
                 </div>

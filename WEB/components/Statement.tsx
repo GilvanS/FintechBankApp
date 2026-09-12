@@ -1,4 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import {
+    ArrowLeft, Eye, Search, UtensilsCrossed, Car, ShoppingCart, ArrowLeftRight,
+    Receipt, PiggyBank, Gift, Star, type LucideIcon,
+} from 'lucide-react';
 import { Transaction, User } from '../types';
 import { getUserStatement } from '../services/api';
 import TransactionReceipt from './TransactionReceipt';
@@ -67,24 +71,24 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
             (tx.senderName && tx.senderName.toLowerCase().includes(searchTerm.toLowerCase()))
         );
 
-    const getIconForType = (type: Transaction['type'], category?: string) => {
+    const getIconForType = (type: Transaction['type'], category?: string): LucideIcon => {
         if (category) {
             switch (category) {
-                case 'food': return 'restaurant';
-                case 'transport': return 'directions_car';
-                case 'shopping': return 'shopping_cart';
+                case 'food': return UtensilsCrossed;
+                case 'transport': return Car;
+                case 'shopping': return ShoppingCart;
             }
         }
         switch (type) {
             case 'PIX_SENT':
             case 'PIX_RECEIVED':
-            case 'PIX_CREDIT_SENT': return 'currency_exchange';
-            case 'PAYMENT': return 'receipt_long';
-            case 'DEPOSIT': return 'savings';
-            case 'SHOP_DEBIT': return 'shopping_cart';
-            case 'CASHBACK_CREDIT': return 'redeem';
-            case 'POINTS_EARNED': return 'star';
-            default: return 'receipt_long';
+            case 'PIX_CREDIT_SENT': return ArrowLeftRight;
+            case 'PAYMENT': return Receipt;
+            case 'DEPOSIT': return PiggyBank;
+            case 'SHOP_DEBIT': return ShoppingCart;
+            case 'CASHBACK_CREDIT': return Gift;
+            case 'POINTS_EARNED': return Star;
+            default: return Receipt;
         }
     };
 
@@ -119,7 +123,7 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
                     aria-label="Voltar"
                     type="button"
                 >
-                    <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                    <ArrowLeft size={20} aria-hidden="true" />
                 </button>
                 <h1
                     className="text-white text-4xl font-black leading-tight tracking-[-0.033em] test-statement-title"
@@ -131,7 +135,7 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
                 <div className="flex items-center justify-between">
                     <p className="text-white/70 text-base font-normal leading-normal">Saldo atual</p>
                     <button className="text-white/70 hover:text-white">
-                        <span className="material-symbols-outlined">visibility</span>
+                        <Eye size={20} />
                     </button>
                 </div>
                 <p
@@ -149,7 +153,7 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
                         <label className="flex flex-col min-w-40 h-12 w-full">
                             <div className="flex w-full flex-1 items-stretch rounded-lg h-full">
                                 <div className="text-primary/70 flex border-none bg-primary/10 items-center justify-center pl-4 rounded-l-lg border-r-0">
-                                    <span className="material-symbols-outlined">search</span>
+                                    <Search size={20} />
                                 </div>
                                 <input
                                     className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-lg text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border-none bg-primary/10 h-full placeholder:text-primary/70 px-4 pl-2 text-base font-normal leading-normal test-statement-search-input"
@@ -259,7 +263,10 @@ function Statement({ user, onNavigate, onBack }: StatementProps) {
                         role="listitem"
                     >
                         <div className="text-white flex items-center justify-center rounded-full bg-primary/10 shrink-0 size-10">
-                            <span className="material-symbols-outlined text-primary" aria-hidden="true">{getIconForType(tx.type, (tx as any).category)}</span>
+                            {(() => {
+                                const TxIcon = getIconForType(tx.type, (tx as any).category);
+                                return <TxIcon size={20} className="text-primary" aria-hidden="true" />;
+                            })()}
                         </div>
                         <div className="flex-1">
                             <p className="text-white text-base font-medium leading-normal test-statement-item-description" data-testid="statement-item-description">{tx.description}</p>

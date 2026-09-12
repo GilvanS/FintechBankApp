@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Check, CheckCircle2, Copy } from 'lucide-react';
 import { formatDateTimeBR } from '../utils/formatters';
 import { InstallmentReceipt as InstallmentReceiptDetails } from '../services/api';
 
@@ -47,12 +48,12 @@ const InstallmentReceipt: React.FC<InstallmentReceiptProps> = ({ details, onClos
         {/* Hero */}
         <div className="flex flex-col items-center space-y-3 py-4">
           <div className="w-16 h-16 bg-volt-green border-2 border-volt-primary shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-full flex items-center justify-center">
-            <span className="material-symbols-outlined text-black text-4xl">check</span>
+            <Check size={36} className="text-black" />
           </div>
           <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mt-2">Parcelamento de Fatura</p>
           <p className="text-4xl font-black text-volt-primary" data-testid="receipt-installments">{details.installments}x de {fmt(details.installmentValue)}</p>
           <div className="flex items-center gap-1.5 bg-volt-green/20 border-2 border-volt-primary rounded-full px-4 py-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-            <span className="material-symbols-outlined text-volt-green text-sm">check_circle</span>
+            <CheckCircle2 size={16} className="text-volt-green" />
             <span className="text-volt-green text-xs font-black uppercase tracking-wider">Parcelamento concluído</span>
           </div>
         </div>
@@ -77,7 +78,7 @@ const InstallmentReceipt: React.FC<InstallmentReceiptProps> = ({ details, onClos
             <button onClick={copyId}
               className="shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-volt-surface border-2 border-white/20 text-white text-[10px] font-black uppercase tracking-wider hover:bg-white/10 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
               data-testid="receipt-copy-id">
-              <span className="material-symbols-outlined text-sm">{idCopied ? 'check' : 'content_copy'}</span>
+              {idCopied ? <Check size={16} /> : <Copy size={16} />}
               {idCopied ? 'Copiado' : 'Copiar'}
             </button>
           </div>

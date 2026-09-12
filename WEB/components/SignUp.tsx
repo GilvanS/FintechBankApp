@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { signUp } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useToast, ToastContainer } from './Toast';
@@ -102,7 +103,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                     aria-label="Voltar para login"
                     type="button"
                  >
-                    <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                    <ArrowLeft size={20} aria-hidden="true" />
                  </button>
                 <h1 
                     className="text-3xl font-bold text-white test-signup-title" 

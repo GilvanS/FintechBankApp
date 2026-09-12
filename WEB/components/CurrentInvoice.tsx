@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, ShoppingCart, UtensilsCrossed, Store, ArrowLeftRight, Receipt, Eye, EyeOff } from 'lucide-react';
 import { User, CardTransaction } from '../types';
 import { useAppState } from '../contexts/AppStateContext';
 import { isPaymentTx } from './TransactionRow';
 import PaymentTypeFilter from './PaymentTypeFilter';
 
 const statusConfig = {
-    aberta: { label: 'Fatura em aberto', icon: 'pending', color: 'text-blue-400', bg: 'bg-blue-400/10 border border-blue-400/20' },
-    fechada: { label: 'A fatura está fechada', icon: 'check_circle', color: 'text-green-400', bg: 'bg-green-400/10 border border-green-400/20' },
-    vencida: { label: 'Fatura vencida — pague para evitar inadimplência', icon: 'schedule', color: 'text-yellow-400', bg: 'bg-yellow-400/10 border border-yellow-400/20' },
-    inadimplente: { label: 'Conta inadimplente', icon: 'warning', color: 'text-red-400', bg: 'bg-red-400/10 border border-red-400/20' },
+    aberta: { label: 'Fatura em aberto', icon: Clock, color: 'text-blue-400', bg: 'bg-blue-400/10 border border-blue-400/20' },
+    fechada: { label: 'A fatura está fechada', icon: CheckCircle2, color: 'text-green-400', bg: 'bg-green-400/10 border border-green-400/20' },
+    vencida: { label: 'Fatura vencida — pague para evitar inadimplência', icon: Clock, color: 'text-yellow-400', bg: 'bg-yellow-400/10 border border-yellow-400/20' },
+    inadimplente: { label: 'Conta inadimplente', icon: AlertTriangle, color: 'text-red-400', bg: 'bg-red-400/10 border border-red-400/20' },
 };
 
 interface CurrentInvoiceProps {
@@ -22,12 +22,12 @@ const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', curren
 
 const getIconForTx = (merchant: string) => {
     const lowerMerchant = merchant.toLowerCase();
-    if (lowerMerchant.includes('supermercado')) return 'shopping_cart';
-    if (lowerMerchant.includes('restaurante')) return 'restaurant';
-    if (lowerMerchant.includes('loja')) return 'storefront';
-    if (lowerMerchant.includes('pix')) return 'currency_exchange';
-    if (lowerMerchant.includes('pagamento') || lowerMerchant.includes('antecipação') || lowerMerchant.includes('parcelamento')) return 'check_circle';
-    return 'receipt_long';
+    if (lowerMerchant.includes('supermercado')) return ShoppingCart;
+    if (lowerMerchant.includes('restaurante')) return UtensilsCrossed;
+    if (lowerMerchant.includes('loja')) return Store;
+    if (lowerMerchant.includes('pix')) return ArrowLeftRight;
+    if (lowerMerchant.includes('pagamento') || lowerMerchant.includes('antecipação') || lowerMerchant.includes('parcelamento')) return CheckCircle2;
+    return Receipt;
 };
 
 const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: customTheme }) => {
@@ -88,7 +88,7 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: cu
         <div className={`${isMidnight ? 'bg-volt-surface border border-white/5' : 'bg-white border-2 border-black'} rounded-2xl p-6 shadow-md space-y-4`}>
           {/* Status tag */}
           <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${status.bg} ${status.color}`}>
-            <span className="material-symbols-outlined text-sm" aria-hidden="true">{status.icon}</span>
+            <status.icon size={16} aria-hidden="true" />
             {isCredit ? 'Não há fatura para pagar neste mês' : status.label}
           </div>
 
@@ -104,9 +104,7 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: cu
                 className={`p-1 rounded-full transition-colors ${isMidnight ? 'hover:bg-white/10 text-white/50 hover:text-white' : 'hover:bg-black/10 text-black/50 hover:text-black'}`}
                 aria-label={hideValue ? 'Mostrar valor' : 'Ocultar valor'}
               >
-                <span className="material-symbols-outlined text-xl">
-                  {hideValue ? 'visibility_off' : 'visibility'}
-                </span>
+                {hideValue ? <EyeOff size={24} /> : <Eye size={24} />}
               </button>
             </div>
           </div>
@@ -126,7 +124,7 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: cu
           {/* Encargos se inadimplente */}
           {user.accountStatus === 'inadimplente' && user.pendingCharges && user.pendingCharges > 0 && (
             <div className="flex items-center gap-2 pt-2 border-t border-red-400/20">
-              <span className="material-symbols-outlined text-red-400 text-sm" aria-hidden="true">warning</span>
+              <AlertTriangle size={16} className="text-red-400" aria-hidden="true" />
               <p className="text-xs text-red-400">
                 {user.daysOverdue ? `${user.daysOverdue} dia${user.daysOverdue !== 1 ? 's' : ''} em atraso` : 'Em atraso'} •{' '}
                 Encargos: {user.pendingCharges.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
@@ -187,11 +185,10 @@ const CurrentInvoice: React.FC<CurrentInvoiceProps> = ({ user, onBack, theme: cu
                             }`}>
                               {isPayment
                                 ? <CheckCircle2 size={20} className="text-emerald-500" />
-                                : (
-                                  <span className={`material-symbols-outlined text-lg ${isRefund ? 'text-green-400' : 'text-volt-primary'}`}>
-                                    {getIconForTx(tx.merchant)}
-                                  </span>
-                                )}
+                                : (() => {
+                                    const TxIcon = getIconForTx(tx.merchant);
+                                    return <TxIcon size={20} className={isRefund ? 'text-green-400' : 'text-volt-primary'} />;
+                                  })()}
                             </div>
                             <div className="flex-grow min-w-0">
                               <div className="flex items-center gap-1.5">

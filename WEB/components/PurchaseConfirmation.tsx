@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Check } from 'lucide-react';
 import { PurchasedItem, Transaction } from '../types';
 
 interface PurchaseConfirmationProps {
@@ -46,7 +47,7 @@ const PurchaseConfirmation: React.FC<PurchaseConfirmationProps> = ({ details, on
     >
         <div className="bg-volt-surface border-2 border-volt-primary rounded-3xl p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm text-center relative overflow-hidden">
             <div className="w-16 h-16 bg-volt-green border-2 border-volt-primary shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-full flex items-center justify-center mx-auto mb-6">
-                <span className="material-symbols-outlined text-4xl text-black">check</span>
+                <Check size={36} className="text-black" />
             </div>
             <h2 className="text-2xl font-black uppercase tracking-wider mb-2 text-white">Compra Confirmada!</h2>
             <p className="text-on-surface-variant font-bold text-sm mb-6">{message}</p>

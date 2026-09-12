@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, CheckCircle2, AlertTriangle, ArrowDownLeft, Landmark, QrCode, Clipboard } from 'lucide-react';
+import { X, CheckCircle2, AlertTriangle, ArrowDownLeft, Landmark, QrCode, Clipboard, Wallet } from 'lucide-react';
 import { Transaction } from '../types';
 
 interface DepositModalProps {
@@ -119,7 +119,7 @@ export default function DepositModal({ isOpen, onClose, onDepositComplete }: Dep
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02] shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-white/80">account_balance_wallet</span>
+                        <Wallet size={20} className="text-white/80" />
                     </div>
                     <div>
                         <h2 className="text-xl font-black text-white uppercase tracking-wider flex items-center gap-2">

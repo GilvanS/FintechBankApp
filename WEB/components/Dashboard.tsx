@@ -28,7 +28,7 @@ import PixPaymentModal from './PixPaymentModal';
 import InstallmentModal from './InstallmentModal';
 import PurchaseConfirmation from './PurchaseConfirmation';
 import BottomNavBar from './BottomNavBar';
-import AdminDashboard from './Admin/AdminDashboard';
+import AdminAllureView from './Admin/AdminAllureView';
 import Investments from './Investments';
 import Wallet from './Wallet';
 import Loans from './Loans';
@@ -52,7 +52,7 @@ import AiRecurringBillModal from './AiRecurringBillModal';
 import AiAssistantModal from './AiAssistantModal';
 import SmartAlerts from './SmartAlerts';
 import { AnimatePresence, motion } from 'motion/react';
-import { LayoutGrid } from 'lucide-react';
+import { LayoutGrid, Landmark, X } from 'lucide-react';
 
 const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; onClose: () => void; }> = ({ isOpen, onGoToPayment, onClose }) => {
     if (!isOpen) return null;
@@ -767,14 +767,12 @@ const Dashboard: React.FC = () => {
                 );
             case 'admin':
                 return (
-                    <div className={`min-h-full pb-20 ${theme === 'midnight' ? 'bg-[#0f0f0f]' : 'bg-volt-yellow'}`}>
-                        <AdminDashboard
-                            onClose={() => {
-                                if (topLevelView === 'admin') navigateTo('dashboard');
-                                handleNavigate('home');
-                            }}
-                        />
-                    </div>
+                    <AdminAllureView
+                        onClose={() => {
+                            if (topLevelView === 'admin') navigateTo('dashboard');
+                            handleNavigate('home');
+                        }}
+                    />
                 );
         }
     };
@@ -939,7 +937,7 @@ const Dashboard: React.FC = () => {
                             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
-                                        <span className="material-symbols-outlined text-white/80">account_balance</span>
+                                        <Landmark size={20} className="text-white/80" />
                                     </div>
                                     <div>
                                         <h2 className="text-xl font-black text-white uppercase tracking-wider">Limites e Contas</h2>
@@ -950,7 +948,7 @@ const Dashboard: React.FC = () => {
                                     onClick={() => setIsLimitModalOpen(false)}
                                     className="p-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
                                 >
-                                    <span className="material-symbols-outlined text-xl">close</span>
+                                    <X size={24} />
                                 </button>
                             </div>
                             {/* Modal Content Scroll Area */}

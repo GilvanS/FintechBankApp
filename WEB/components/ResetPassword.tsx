@@ -1,6 +1,7 @@
 
 // Dentro do componente ResetPassword
 import React, { useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { resetPassword } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useToast, ToastContainer } from './Toast';
@@ -55,7 +56,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onResetSuccess, onNavigat
         <div className="bg-background-dark text-text-dark h-full flex flex-col p-6 sm:p-8">
             <header className="mb-8">
                  <button onClick={onNavigateToLogin} className="flex items-center space-x-2 text-subtle-dark hover:text-text-dark mb-4">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={20} />
                  </button>
                 <h1 className="text-3xl font-bold text-white">Redefinir Senha</h1>
                 <p className="text-gray-400">Crie uma nova senha de acesso.</p>

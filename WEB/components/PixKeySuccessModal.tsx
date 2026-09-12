@@ -1,4 +1,5 @@
 import React from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import { useAppState } from '../contexts/AppStateContext';
 
 interface PixKeySuccessModalProps {
@@ -50,13 +51,12 @@ const PixKeySuccessModal: React.FC<PixKeySuccessModalProps> = ({ isOpen, onClose
                         className="mx-auto w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4 test-pix-key-success-icon-container"
                         data-testid="pix-key-success-icon-container"
                     >
-                        <span
-                            className="material-symbols-outlined text-green-500 text-4xl"
+                        <CheckCircle2
+                            size={36}
+                            className="text-green-500"
                             aria-hidden="true"
                             data-testid="pix-key-success-icon"
-                        >
-                            check_circle
-                        </span>
+                        />
                     </div>
                     <h2
                         className={`text-2xl font-bold mb-2 test-pix-key-success-title ${isMidnight ? 'text-white' : 'text-black'}`}
@@ -79,13 +79,11 @@ const PixKeySuccessModal: React.FC<PixKeySuccessModalProps> = ({ isOpen, onClose
                         aria-live="polite"
                         aria-atomic="true"
                     >
-                        <span
-                            className="material-symbols-outlined text-sm"
+                        <CheckCircle2
+                            size={16}
                             aria-hidden="true"
                             data-testid="pix-key-success-message-icon"
-                        >
-                            check_circle
-                        </span>
+                        />
                         <span data-testid="pix-key-success-message-text">Sua chave PIX foi cadastrada com sucesso e ja esta disponivel para uso.</span>
                     </div>
                 </div>

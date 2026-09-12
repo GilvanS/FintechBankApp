@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { ArrowLeft, CalendarClock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { CardTransaction } from '../types';
 
@@ -42,7 +43,7 @@ const AnticipateInstallments: React.FC<AnticipateInstallmentsProps> = ({ onBack,
         <div className="bg-background-dark text-white min-h-full flex flex-col w-full max-w-md mx-auto pb-28">
             <header className="flex items-center p-4">
                 <button onClick={onBack} className="mr-2 p-2 -ml-2 rounded-full hover:bg-white/10">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={20} />
                 </button>
                 <h2 className="text-xl font-bold text-white">Antecipar Parcelas</h2>
             </header>
@@ -93,7 +94,7 @@ const AnticipateInstallments: React.FC<AnticipateInstallmentsProps> = ({ onBack,
                 </>
             ) : (
                 <main className="flex-grow flex flex-col items-center justify-center text-center p-4">
-                    <span className="material-symbols-outlined text-6xl text-gray-600 mb-4">event_repeat</span>
+                    <CalendarClock size={48} className="text-gray-600 mb-4" />
                     <h3 className="text-lg font-semibold text-white">Nenhuma parcela futura</h3>
                     <p className="text-gray-400">Você não tem compras parceladas na sua fatura atual.</p>
                 </main>
