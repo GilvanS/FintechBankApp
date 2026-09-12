@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { User as UserIcon, Shield, Sliders, LogOut, Info } from 'lucide-react';
+import { User as UserIcon, Shield, LogOut, Info, FileText, Palette, Bell, Zap, LayoutGrid, HelpCircle } from 'lucide-react';
 import { AllureShell, type AllureSection } from '../shared/AllureShell';
-import Profile from '../Profile';
+import Profile, { type ProfileSection } from '../Profile';
 import { useAuth } from '../../context/AuthContext';
 import { AppVersion } from '../../utils/AppVersion';
 
@@ -12,12 +12,17 @@ interface Props {
   onNavigate: (view: any) => void;
 }
 
-type SectionKey = 'dados' | 'seguranca' | 'preferencias';
+type SectionKey = ProfileSection;
 
 const SECTIONS: readonly AllureSection<SectionKey>[] = [
-  { key: 'dados', label: 'Dados Pessoais', icon: UserIcon },
-  { key: 'seguranca', label: 'Segurança', icon: Shield },
-  { key: 'preferencias', label: 'Preferências', icon: Sliders },
+  { key: 'dados', label: 'Dados Pessoais', subtitle: 'Nome, CPF e avatar', icon: UserIcon, group: 'Conta' },
+  { key: 'faturas', label: 'Faturas', subtitle: 'Ciclo de faturamento', icon: FileText, group: 'Conta' },
+  { key: 'seguranca', label: 'Segurança', subtitle: 'Biometria e autenticação', icon: Shield, group: 'Conta' },
+  { key: 'aparencia', label: 'Aparência', subtitle: 'Tema do aplicativo', icon: Palette, group: 'Preferências' },
+  { key: 'notificacoes', label: 'Notificações', subtitle: 'Alertas de compra e limite', icon: Bell, group: 'Preferências' },
+  { key: 'alertas', label: 'Alertas Inteligentes', subtitle: 'Filtros avançados (Premium)', icon: Zap, group: 'Preferências' },
+  { key: 'inicio', label: 'Tela Inicial', subtitle: 'Onboarding e widgets do Home', icon: LayoutGrid, group: 'Preferências' },
+  { key: 'ajuda', label: 'Central de Ajuda', subtitle: 'Suporte e mais opções', icon: HelpCircle, group: 'Suporte' },
 ];
 
 export function ProfileAllureView({ theme, onBack, onNavigate }: Props) {

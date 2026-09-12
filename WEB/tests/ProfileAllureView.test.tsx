@@ -66,7 +66,7 @@ describe('ProfileAllureView', () => {
     expect(getAllByText('Meu Perfil').length).toBeGreaterThanOrEqual(1);
     expect(getByTitle('Dados Pessoais')).toBeInTheDocument();
     expect(getByTitle('Segurança')).toBeInTheDocument();
-    expect(getByTitle('Preferências')).toBeInTheDocument();
+    expect(getByTitle('Aparência')).toBeInTheDocument();
   });
 
   it('renders logout button in header actions', () => {

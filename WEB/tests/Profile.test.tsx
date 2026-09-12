@@ -56,7 +56,7 @@ function renderProfile(onNavigate = vi.fn()) {
             view: 'profile',
             navigateTo: vi.fn(),
         }}>
-            <Profile onNavigate={onNavigate} activeSection="preferencias" />
+            <Profile onNavigate={onNavigate} activeSection="inicio" />
         </AuthContext.Provider>
     );
 }

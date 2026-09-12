@@ -8,6 +8,14 @@ export interface AllureSection<K extends string> {
   key: K;
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
+  /** Agrupa itens na sidebar desktop sob um separador com este rótulo — telas
+   *  sem `group` continuam como lista simples (retrocompatível). A nav mobile
+   *  em pills ignora `group` e mantém a lista linear. */
+  group?: string;
+  /** Segunda linha pequena/muted sob o label na sidebar desktop (ex.: "Tema e layout").
+   *  Opcional e retrocompatível — telas sem `subtitle` continuam com item de uma linha só.
+   *  Ignorado na nav mobile (pills) por espaço. */
+  subtitle?: string;
 }
 
 export interface AllureShellProps<K extends string> {
@@ -24,6 +32,11 @@ export interface AllureShellProps<K extends string> {
   expandedContent?: React.ReactNode;
   onCloseExpanded?: () => void;
   backdrop?: boolean;
+  /** Sobrescreve o fundo full-bleed padrão (volt-yellow/volt-dark) — usado por
+   *  telas que precisam de um fundo neutro por exceção consciente ao padrão
+   *  (ex.: Admin, que fica sóbrio/técnico de propósito). Omitir mantém o
+   *  fundo padrão das telas Allure. */
+  bgClassName?: string;
 }
 
 const sectionVariants = {
@@ -46,27 +59,15 @@ export function AllureShell<K extends string>({
   expandedContent,
   onCloseExpanded,
   backdrop = false,
+  bgClassName,
 }: AllureShellProps<K>) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidebarSide, setSidebarSide] = useState<'left' | 'right'>(() => {
-    try {
-      const saved = localStorage.getItem('allure-sidebar-side');
-      return saved === 'right' ? 'right' : 'left';
-    } catch {
-      return 'left';
-    }
-  });
+  const [sidebarSide, setSidebarSide] = useState<'left' | 'right'>('left');
 
   const isMidnight = theme === 'midnight';
 
   const toggleSidebarSide = () => {
-    const next = sidebarSide === 'left' ? 'right' : 'left';
-    setSidebarSide(next);
-    try {
-      localStorage.setItem('allure-sidebar-side', next);
-    } catch {
-      // Ignora erro
-    }
+    setSidebarSide((prev) => (prev === 'left' ? 'right' : 'left'));
   };
 
   const isRight = sidebarSide === 'right';
@@ -76,9 +77,13 @@ export function AllureShell<K extends string>({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className={`relative min-h-screen p-4 md:p-8 flex flex-col ${
-        isRight ? 'md:flex-row-reverse' : 'md:flex-row'
+        isRight ? 'md:flex-row' : 'md:flex-row-reverse'
       } gap-6 ${
-        isMidnight ? 'bg-volt-dark text-on-surface font-sans' : 'bg-volt-yellow text-black font-sans'
+        bgClassName
+          ? `${bgClassName} ${isMidnight ? 'text-on-surface' : 'text-black'} font-sans`
+          : isMidnight
+            ? 'bg-volt-dark text-on-surface font-sans'
+            : 'bg-volt-yellow text-black font-sans'
       }`}
     >
       {backdrop && <AsciiBackdrop theme={theme} opacity={0.05} />}
@@ -123,6 +128,31 @@ export function AllureShell<K extends string>({
 
           {headerExtra && <div className="mt-6 relative z-10">{headerExtra}</div>}
         </header>
+
+        {/* Mobile Section Nav (pills horizontais - substitui a sidebar que some abaixo de md) */}
+        <nav className="flex md:hidden gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+          {sections.map(({ key, label, icon: Icon }) => {
+            const active = activeSection === key;
+            return (
+              <button
+                key={key}
+                onClick={() => onSelectSection(key)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all ${
+                  active
+                    ? isMidnight
+                      ? 'bg-volt-surface text-volt-green border border-volt-green/30'
+                      : 'bg-black text-volt-yellow border-2 border-black'
+                    : isMidnight
+                      ? 'bg-volt-surface/60 text-on-surface-variant border border-white/10'
+                      : 'bg-white text-black/60 border-2 border-black'
+                }`}
+              >
+                <Icon size={14} className="shrink-0" />
+                {label}
+              </button>
+            );
+          })}
+        </nav>
 
         {/* Section Content with Animation */}
         <AnimatePresence mode="wait">
@@ -183,26 +213,55 @@ export function AllureShell<K extends string>({
           </div>
         </div>
 
-        {sections.map(({ key, label, icon: Icon }) => {
+        {sections.map(({ key, label, icon: Icon, group, subtitle }, idx) => {
           const active = activeSection === key;
+          const prevGroup = idx > 0 ? sections[idx - 1].group : undefined;
+          const showGroupLabel = !!group && group !== prevGroup;
           return (
-            <button
-              key={key}
-              onClick={() => onSelectSection(key)}
-              title={label}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-left transition-all ${
-                active
-                  ? isMidnight
-                    ? 'bg-volt-surface text-volt-green border border-volt-green/30'
-                    : 'bg-black text-volt-yellow border-2 border-black'
-                  : isMidnight
-                    ? 'text-on-surface-variant hover:bg-white/5 hover:text-on-surface'
-                    : 'text-black/60 hover:bg-black/5 hover:text-black'
-              }`}
-            >
-              <Icon size={16} className="shrink-0" />
-              {!sidebarCollapsed && <span className="truncate">{label}</span>}
-            </button>
+            <React.Fragment key={key}>
+              {showGroupLabel && (
+                <span
+                  className={`px-3 pt-2 pb-0.5 text-[9px] font-black uppercase tracking-wider truncate ${
+                    idx > 0 ? 'mt-1 border-t' : ''
+                  } ${
+                    isMidnight ? 'text-on-surface-variant/70 border-white/5' : 'text-black/40 border-black/10'
+                  }`}
+                >
+                  {sidebarCollapsed ? '·' : group}
+                </span>
+              )}
+              <button
+                onClick={() => onSelectSection(key)}
+                title={label}
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-left transition-all ${
+                  active
+                    ? isMidnight
+                      ? 'bg-volt-surface text-volt-green border border-volt-green/30'
+                      : 'bg-black text-volt-yellow border-2 border-black'
+                    : isMidnight
+                      ? 'text-on-surface-variant hover:bg-white/5 hover:text-on-surface'
+                      : 'text-black/60 hover:bg-black/5 hover:text-black'
+                }`}
+              >
+                <Icon size={16} className="shrink-0" />
+                {!sidebarCollapsed && (
+                  <span className="min-w-0 flex-1">
+                    <span className="truncate block">{label}</span>
+                    {subtitle && (
+                      <span
+                        className={`block text-[10px] font-medium truncate normal-case ${
+                          active
+                            ? isMidnight ? 'text-volt-green/70' : 'text-volt-yellow/70'
+                            : isMidnight ? 'text-on-surface-variant/60' : 'text-black/40'
+                        }`}
+                      >
+                        {subtitle}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </button>
+            </React.Fragment>
           );
         })}
       </aside>
@@ -222,7 +281,7 @@ export function AllureShell<K extends string>({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-5xl max-h-[90vh] overflow-y-auto overflow-x-hidden relative"
+              className="w-full max-w-5xl max-h-[90vh] relative"
             >
               {onCloseExpanded && (
                 <button
@@ -237,7 +296,9 @@ export function AllureShell<K extends string>({
                   <X size={16} />
                 </button>
               )}
-              {expandedContent}
+              <div className="max-h-[90vh] overflow-y-auto overflow-x-hidden">
+                {expandedContent}
+              </div>
             </motion.div>
           </motion.div>
         )}
