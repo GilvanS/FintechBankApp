@@ -78,3 +78,4 @@ DESKTOP/**/bin/
 DESKTOP/**/obj/
 DESKTOP/**/wwwroot/
 
+.worktrees/
