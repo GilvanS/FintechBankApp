@@ -217,7 +217,7 @@ export default function Profile({ onNavigate, scrollTargetId }: ProfileProps) {
           </div>
       )}
 
-      <div className="space-y-6 pb-28 pt-4 px-4 max-w-3xl w-full mx-auto flex-grow">
+      <div className="space-y-6 pb-28 pt-4 px-4 max-w-5xl w-full flex-grow">
         {/* Profile Info Header */}
         <div className="bg-white dark:bg-zinc-900 border-4 border-black dark:border-zinc-800 rounded-3xl p-5 flex flex-col items-center text-center space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="relative">

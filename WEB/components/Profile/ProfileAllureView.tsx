@@ -55,10 +55,8 @@ export function ProfileAllureView({ theme, onBack, onNavigate }: Props) {
       headerActions={headerActions}
     >
       {/* Componente real do Profile com todas as suas 959 linhas e 6 popups mantidos íntegros */}
-      <div className="w-full flex justify-center">
-        <div className="w-full max-w-2xl">
-          <Profile onNavigate={onNavigate} />
-        </div>
+      <div className="w-full">
+        <Profile onNavigate={onNavigate} scrollTargetId={activeSection} />
       </div>
     </AllureShell>
   );
