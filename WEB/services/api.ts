@@ -1667,3 +1667,56 @@ export const adminTelegramLog = async (filters?: { cpf?: string; category?: stri
         return [];
     }
 };
+
+// --- TEST PLANNING (Planejamento de Testes) ---
+export interface TestPlanningCenario {
+    SEQ?: number;
+    ID_CENARIO: string;
+    NOME?: string;
+    FEATURE?: string;
+    ID_MASSA?: string;
+    CPF?: string;
+    SENHA?: string;
+    saldo_conta?: number;
+    fatura_fechada?: number;
+    fatura_aberta?: number;
+    dias_atraso?: number;
+    PIN?: string | number;
+}
+
+export interface TestPlanningMassa {
+    id_massa: string;
+    cpf: string;
+    status: string;
+    saldo_conta: number;
+    fatura_fechada: number;
+    fatura_aberta: number;
+    dias_atraso: number;
+    nome_completo?: string;
+}
+
+export const getTestPlanningData = async (): Promise<{
+    success: boolean;
+    data?: { cenarios: TestPlanningCenario[]; massas: TestPlanningMassa[] };
+    message?: string;
+}> => {
+    try {
+        return await apiCall('/admin/test-planning', { method: 'GET' });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao carregar planejamento de testes.' };
+    }
+};
+
+export const saveTestPlanningAssignment = async (
+    idCenario: string,
+    massa: { idMassa: string; cpf: string; saldoConta: number; faturaFechada: number; faturaAberta: number; diasAtraso: number; pin: string }
+): Promise<{ success: boolean; data?: TestPlanningCenario; message?: string }> => {
+    try {
+        return await apiCall('/admin/test-planning/save', {
+            method: 'POST',
+            body: JSON.stringify({ idCenario, massa }),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao salvar planejamento de testes.' };
+    }
+};
