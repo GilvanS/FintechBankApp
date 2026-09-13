@@ -38,8 +38,11 @@ if (-not $SkipBuild -and -not $Check) {
     if (-not $dotnet) { throw 'dotnet não encontrado. Instale o SDK do .NET.' }
 
     Escrever '==> Compilando...' 'Cyan'
-    & $dotnet build (Join-Path $raiz 'FintechBankApp.Desktop.slnx') --nologo | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Falha na compilação.' }
+    # NUNCA suprimir a saída aqui: o erro real (ex.: exports JS duplicados, npm
+    # falhando dentro do MSB3073) só aparece nessas linhas. Esconder com
+    # Out-Null já causou "Falha na compilação" sem pista nenhuma mais de uma vez.
+    & $dotnet build (Join-Path $raiz 'FintechBankApp.Desktop.slnx') --nologo
+    if ($LASTEXITCODE -ne 0) { throw 'Falha na compilação (saída do dotnet build acima tem o motivo real).' }
 }
 
 if (-not (Test-Path $binDir)) { throw "Nada compilado em $binDir. Rode sem -SkipBuild." }
