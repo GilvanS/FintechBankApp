@@ -66,7 +66,7 @@ const TestPlanningSection: React.FC = () => {
             if (filtroStatus !== 'TODOS' && massa.status !== filtroStatus) return false;
             if (filtroFaturaFechada && !(Number(massa.fatura_fechada) > 0)) return false;
             if (filtroFaturaAberta && !(Number(massa.fatura_aberta) > 0)) return false;
-            if (busca.trim() && !massa.cpf.includes(busca.trim())) return false;
+            if (busca.trim() && !(massa.cpf || '').includes(busca.trim())) return false;
             return true;
         });
     }, [massas, filtroStatus, filtroFaturaFechada, filtroFaturaAberta, busca]);
