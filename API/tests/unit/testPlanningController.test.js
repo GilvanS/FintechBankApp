@@ -1,5 +1,7 @@
 jest.mock('../../utils/testPlanningXlsx.cjs');
+jest.mock('../../utils/testPlanningRules.cjs');
 const { readPlanningData, saveCenarioAssignment } = require('../../utils/testPlanningXlsx.cjs');
+const { validarMassaParaCenario } = require('../../utils/testPlanningRules.cjs');
 const createTestPlanningController = require('../../src/controllers/testPlanningController');
 
 function mockRes() {
@@ -58,6 +60,7 @@ describe('testPlanningController', () => {
 
     test('saveAssignment mapeia os campos e chama saveCenarioAssignment', async () => {
         saveCenarioAssignment.mockReturnValue({ ID_CENARIO: 'CT03.2', CPF: '26700822386' });
+        validarMassaParaCenario.mockReturnValue({ valido: true, motivo: null });
         const req = {
             body: {
                 idCenario: 'CT03.2',
@@ -76,7 +79,7 @@ describe('testPlanningController', () => {
 
         await controller.saveAssignment(req, res);
 
-        expect(saveCenarioAssignment).toHaveBeenCalledWith('CT03.2', {
+        const camposEsperados = {
             ID_MASSA: '0045',
             CPF: '26700822386',
             saldo_conta: 4678.70,
@@ -84,9 +87,49 @@ describe('testPlanningController', () => {
             fatura_aberta: 5900.02,
             dias_atraso: 12,
             PIN: '9898',
+        };
+        expect(saveCenarioAssignment).toHaveBeenCalledWith('CT03.2', camposEsperados);
+        expect(validarMassaParaCenario).toHaveBeenCalledWith('CT03.2', camposEsperados);
+        expect(auditLog).toHaveBeenCalledWith(req, 'admin_test_planning_save', 'info', {
+            idCenario: 'CT03.2',
+            cpf: '26700822386',
+            validacao: { valido: true, motivo: null },
         });
-        expect(auditLog).toHaveBeenCalledWith(req, 'admin_test_planning_save', 'info', { idCenario: 'CT03.2', cpf: '26700822386' });
         expect(res.json).toHaveBeenCalledWith({ success: true, data: { ID_CENARIO: 'CT03.2', CPF: '26700822386' } });
+    });
+
+    test('saveAssignment salva com success:true mesmo quando a massa não atende ao pré-requisito do cenário (não-bloqueante)', async () => {
+        saveCenarioAssignment.mockReturnValue({ ID_CENARIO: 'CT03.1', CPF: '11122233344' });
+        validarMassaParaCenario.mockReturnValue({
+            valido: false,
+            motivo: 'Essa massa não atende ao pré-requisito do cenário CT03.1.',
+        });
+        const req = {
+            body: {
+                idCenario: 'CT03.1',
+                massa: {
+                    idMassa: '0099',
+                    cpf: '11122233344',
+                    saldoConta: 100,
+                    faturaFechada: 0,
+                    faturaAberta: 0,
+                    diasAtraso: 0,
+                    pin: '1234',
+                },
+            },
+        };
+        const res = mockRes();
+
+        await controller.saveAssignment(req, res);
+
+        expect(saveCenarioAssignment).toHaveBeenCalled();
+        expect(res.status).not.toHaveBeenCalled();
+        expect(res.json).toHaveBeenCalledWith({ success: true, data: { ID_CENARIO: 'CT03.1', CPF: '11122233344' } });
+        expect(auditLog).toHaveBeenCalledWith(req, 'admin_test_planning_save', 'info', {
+            idCenario: 'CT03.1',
+            cpf: '11122233344',
+            validacao: { valido: false, motivo: 'Essa massa não atende ao pré-requisito do cenário CT03.1.' },
+        });
     });
 
     test('saveAssignment retorna 503 se o xlsx estiver travado no Excel (EBUSY)', async () => {

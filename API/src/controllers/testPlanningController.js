@@ -3,6 +3,7 @@
  * (cruza TBL_CENARIOS x tbl_de_massas de MassaDados.xlsx).
  */
 const { readPlanningData, saveCenarioAssignment } = require('../../utils/testPlanningXlsx.cjs');
+const { validarMassaParaCenario } = require('../../utils/testPlanningRules.cjs');
 
 module.exports = function createTestPlanningController(deps) {
     const { auditLog } = deps;
@@ -37,8 +38,11 @@ module.exports = function createTestPlanningController(deps) {
             PIN: massa.pin,
         };
         try {
+            // Não-bloqueante de propósito: o resultado só vai pro audit log,
+            // a massa é salva independente de `valido`.
+            const resultadoValidacao = validarMassaParaCenario(idCenario, campos);
             const linhaAtualizada = saveCenarioAssignment(idCenario, campos);
-            auditLog(req, 'admin_test_planning_save', 'info', { idCenario, cpf: massa.cpf });
+            auditLog(req, 'admin_test_planning_save', 'info', { idCenario, cpf: massa.cpf, validacao: resultadoValidacao });
             res.json({ success: true, data: linhaAtualizada });
         } catch (err) {
             if (err.code === 'EBUSY' || err.code === 'EPERM') {
