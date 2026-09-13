@@ -402,15 +402,23 @@ async function runNegativeBalanceAudit(db) {
             }
         }
 
-        // Corrigir limite negativo
+        // Corrigir limite negativo — RECALCULA com a fórmula canônica (limite_total -
+        // currentInvoiceTotal, mesma fonte do "Próxima Fatura") em vez de zerar
+        // cosmeticamente. O resultado PODE continuar negativo — significa que a
+        // dívida real excede o limite total (estado válido, não escondido mais).
+        // recalcularEmLote vem de recalcular_limite_disponivel.cjs (fonte única,
+        // compartilhada com o botão "Recalcular Limite Disponível" do painel).
+        const { recalcularEmLote } = require('./recalcular_limite_disponivel.cjs');
         const negLimUsers = await db.executeQuery(`
             SELECT cpf, full_name, credit_card_available_limit FROM ${fq('users')} WHERE credit_card_available_limit < 0
         `);
         for (const u of negLimUsers) {
             try {
-                await db.executeQuery(`UPDATE ${fq('users')} SET credit_card_available_limit = 0, updated_at = CURRENT_TIMESTAMP WHERE cpf = ${esc(u.cpf)}`);
+                const [r] = await recalcularEmLote({ cpf: u.cpf, persist: true });
+                if (r && r.erro) throw new Error(r.erro);
                 report.fixed++;
-                console.log(`  ✅ ${u.full_name} (${u.cpf}): limite ${fmt(parseFloat(u.credit_card_available_limit))} → R$ 0.00`);
+                const tag = r && r.estourado ? ' (limite estourado — dívida real acima do total, estado válido)' : '';
+                console.log(`  ✅ ${u.full_name} (${u.cpf}): limite ${fmt(parseFloat(u.credit_card_available_limit))} → ${fmt(r ? r.limiteNovo : 0)}${tag}`);
             } catch (err) {
                 report.errors++;
                 console.log(`  ❌ Erro: ${err.message}`);

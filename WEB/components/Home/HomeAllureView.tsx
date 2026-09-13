@@ -30,6 +30,7 @@ import {
   X,
 } from 'lucide-react';
 import { AllureShell, type AllureSection } from '../shared/AllureShell';
+import DismissibleBanner from '../shared/DismissibleBanner';
 import DonutStatusCard from '../Analytics/DonutStatusCard';
 import TrendLineCard from '../Analytics/TrendLineCard';
 import CategoryBarCard from '../Analytics/CategoryBarCard';
@@ -221,7 +222,7 @@ export function HomeAllureView({
 
   const donutData = useMemo(() => {
     const total = entradas + saidas;
-    if (total === 0) return [{ label: 'Sem movimentação', value: 1, color: isMidnight ? '#353534' : '#e5e7eb' }];
+    if (total === 0) return [{ label: 'Sem movimentação', value: 1, color: isMidnight ? '#5a5a57' : '#9ca3af' }];
     return [
       { label: 'Entradas', value: entradas, color: isMidnight ? '#00ff9d' : '#000000' },
       { label: 'Saídas', value: saidas, color: isMidnight ? '#FF5C8D' : '#FFD700' },
@@ -263,22 +264,95 @@ export function HomeAllureView({
   const totalLimit = creditCard?.totalLimit ?? 0;
   const usedLimit = Math.max(0, totalLimit - availableLimit);
 
-  const mockWeeks = [
-    {
-      id: 1,
-      name: 'Semana Atual',
-      label: 'Meta Semanal',
-      underLimit: true,
-      hasBudgets: true,
-      totalWeeklySpent: saidas,
-      totalWeeklyLimit: 2500,
-      details: [
-        { category: 'refeicao', spent: 320, limit: 500, ok: true },
-        { category: 'mobilidade', spent: 180, limit: 300, ok: true },
-        { category: 'cultura', spent: 90, limit: 200, ok: true },
-      ],
-    },
-  ];
+  const [budgets] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('volt_category_budgets');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // ignore
+      }
+    }
+    return { refeicao: 500, mobilidade: 300, cultura: 200, saude: 150, outros: 400 };
+  });
+
+  const weeklyStreakCalculation = useMemo(() => {
+    const _ref = new Date();
+    const _y = _ref.getFullYear();
+    const _m = _ref.getMonth();
+    const _pad = (n: number) => String(n).padStart(2, '0');
+    const weeksList = [1, 2, 3, 4].map((id) => {
+      const startDay = (id - 1) * 7 + 1;
+      const endDay = id * 7;
+      return {
+        id,
+        name: `Semana ${id}`,
+        start: new Date(_y, _m, startDay, 0, 0, 0, 0),
+        end: new Date(_y, _m, endDay, 23, 59, 59, 999),
+        label: `${_pad(startDay)}/${_pad(_m + 1)} - ${_pad(endDay)}/${_pad(_m + 1)}`,
+      };
+    });
+
+    const results = weeksList.map((wk) => {
+      const spending: Record<string, number> = {
+        refeicao: 0,
+        mobilidade: 0,
+        cultura: 0,
+        saude: 0,
+        outros: 0,
+      };
+
+      transactions.forEach((tx: Transaction) => {
+        const txDate = new Date(tx.date);
+        if (txDate >= wk.start && txDate <= wk.end && (tx as any).amount < 0) {
+          const rawCat = (tx as any).category || 'outros';
+          const cat = rawCat in spending ? rawCat : 'outros';
+          spending[cat] = (spending[cat] || 0) + Math.abs((tx as any).amount);
+        }
+      });
+
+      let underLimit = true;
+      let totalWeeklyLimit = 0;
+      let totalWeeklySpent = 0;
+      const details: Array<{ category: string; spent: number; limit: number; ok: boolean }> = [];
+
+      Object.keys(budgets).forEach((cat) => {
+        const limit = budgets[cat] || 0;
+        const spent = spending[cat] || 0;
+        const weeklyLimit = limit / 4;
+        totalWeeklySpent += spent;
+        totalWeeklyLimit += weeklyLimit;
+
+        if (limit > 0) {
+          const isOk = spent <= weeklyLimit;
+          if (!isOk) underLimit = false;
+          details.push({ category: cat, spent, limit: weeklyLimit, ok: isOk });
+        }
+      });
+
+      const hasBudgets = details.length > 0;
+
+      return {
+        ...wk,
+        underLimit: hasBudgets ? underLimit : true,
+        hasBudgets,
+        totalWeeklySpent,
+        totalWeeklyLimit,
+        details,
+      };
+    });
+
+    let streakCount = 0;
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].underLimit) {
+        streakCount++;
+      } else {
+        break;
+      }
+    }
+
+    return { weeks: results, streakCount };
+  }, [transactions, budgets]);
 
   const gridVariants = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
   const cardVariants = {
@@ -422,6 +496,18 @@ export function HomeAllureView({
       onCloseExpanded={() => setExpandedCard(null)}
     >
       <div className="flex flex-col gap-8 pb-12">
+        {/* Banner Dispensável - divulga o modo Analytics */}
+        <DismissibleBanner
+          id="analytics-promo"
+          icon={<TrendingUp size={18} className="text-blue-500" />}
+          title="Conheça o modo Analytics"
+          description="Gráficos avançados de gastos, tendências e status das suas faturas em um painel dedicado."
+          actionLabel="Ver Analytics"
+          onAction={() => onNavigate('analytics')}
+          accent="blue"
+          theme={theme}
+        />
+
         {/* Carrossel de Stories (Cards que ficam passando) */}
         <div className="w-full">
           <StoryHighlights stories={MOCK_STORIES} onSeeAll={() => setIsViewingStories(true)} />
@@ -522,7 +608,7 @@ export function HomeAllureView({
 
         {/* Ofensiva Semanal / Metas de Orçamento */}
         <div className="w-full">
-          <WeeklyStreak streakCount={3} weeks={mockWeeks} theme={theme} />
+          <WeeklyStreak streakCount={weeklyStreakCalculation.streakCount} weeks={weeklyStreakCalculation.weeks} theme={theme} />
         </div>
 
         {/* Banners Promocionais & Ofertas */}
@@ -636,6 +722,7 @@ export function HomeAllureView({
         <FinancialInsightsCarouselModal
           isOpen={isCarouselInsightsOpen}
           onClose={() => setIsCarouselInsightsOpen(false)}
+          onNavigate={onNavigate}
           theme={theme}
         />
       )}
@@ -653,6 +740,7 @@ export function HomeAllureView({
           isOpen={isBiometricOpen}
           onClose={() => setIsBiometricOpen(false)}
           onSuccess={() => setIsBiometricOpen(false)}
+          theme={theme}
         />
       )}
 

@@ -15,6 +15,7 @@ module.exports = function registerAdminUsersRoutes({ apiRouter, bearerAuth, auth
     apiRouter.post('/admin/users/:cpf/unblock', bearerAuth(), authenticateAdmin, asyncHandler(controller.adminUnblockUser));
     apiRouter.put('/admin/users/:cpf/pix-limit', bearerAuth(), authenticateAdmin, asyncHandler(controller.adminUpdatePixLimit));
     apiRouter.put('/admin/users/:cpf/credit-limit', bearerAuth(), authenticateAdmin, asyncHandler(controller.adminUpdateCreditLimit));
+    apiRouter.put('/admin/system-config', bearerAuth(), authenticateAdmin, asyncHandler(controller.adminUpdateSystemConfig));
     apiRouter.post('/admin/users/:cpf/reset-password', bearerAuth(), authenticateAdmin, asyncHandler(controller.adminResetPassword));
     apiRouter.post('/admin/users/:cpf/fix', bearerAuth(), authenticateAdmin, asyncHandler(controller.adminFixUser));
     apiRouter.post('/admin/users/:cpf/generate-temp-password', bearerAuth(), authenticateAdmin, asyncHandler(controller.adminGenerateTempPassword));

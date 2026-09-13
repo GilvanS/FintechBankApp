@@ -330,6 +330,40 @@ export const performPix = async (cpf: string, key: string, amount: number, descr
   }
 };
 
+export const getPixKeys = async (cpf: string): Promise<PixKey[]> => {
+  try {
+    const result = await apiCall<{ success: boolean; keys: PixKey[] }>(`/pix/keys`, {
+      method: 'GET',
+    });
+    return result.keys || [];
+  } catch (error) {
+    return [];
+  }
+};
+
+export const registerPixKey = async (cpf: string, type: 'CPF' | 'EMAIL', key: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    const result = await apiCall<{ success: boolean; message: string }>(`/pix/keys`, {
+      method: 'POST',
+      body: JSON.stringify({ type, key }),
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao cadastrar chave PIX' };
+  }
+};
+
+export const deletePixKey = async (cpf: string, key: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    const result = await apiCall<{ success: boolean; message: string }>(`/pix/keys/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao remover chave PIX' };
+  }
+};
+
 export const getPixContacts = async (cpf: string): Promise<PixContact[]> => {
   try {
       const result = await apiCall<{ contacts: PixContact[] }>(`/pix/contacts/${cpf}`, {
@@ -926,7 +960,28 @@ export const adminUpdateCardDetails = async (cpf: string, details: { dueDate?: s
   }
 };
 
-export const adminGetStats = async (): Promise<{ 
+// Público (sem auth) — tema padrão do sistema, aplicado a quem ainda não
+// escolheu um tema pessoal. Precisa carregar antes do login.
+export const getSystemConfig = async (): Promise<{ success: boolean; defaultTheme: 'yellow' | 'midnight' }> => {
+  try {
+    return await apiCall(`/system-config`, { method: 'GET' });
+  } catch {
+    return { success: false, defaultTheme: 'yellow' };
+  }
+};
+
+export const adminUpdateSystemConfig = async (defaultTheme: 'yellow' | 'midnight'): Promise<{ success: boolean; message: string }> => {
+  try {
+    return await apiCall(`/admin/system-config`, {
+      method: 'PUT',
+      body: JSON.stringify({ defaultTheme }),
+    });
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao atualizar tema padrão do sistema.' };
+  }
+};
+
+export const adminGetStats = async (): Promise<{
     success: boolean; 
     stats?: { 
         totalClients: number; 
@@ -1441,6 +1496,91 @@ export const adminUpdateUserPassword = async (cpf: string, newPassword: string):
     }
 };
 
+// --- Scripts & Massas (painel Admin) ---
+export const adminAuditFix = async (cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/audit-fix`, {
+            method: 'POST',
+            body: JSON.stringify(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao corrigir discrepâncias.' };
+    }
+};
+
+export const adminSyncOverdueDays = async (cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/sync-overdue-days`, {
+            method: 'POST',
+            body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') }),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao ressincronizar dias de atraso.' };
+    }
+};
+
+export const adminInvoicePdfPreview = async (cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/invoice-pdf-preview`, {
+            method: 'POST',
+            body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') }),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao gerar prévia da fatura.' };
+    }
+};
+
+export const adminMassaReport = async (cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/massa-report`, {
+            method: 'POST',
+            body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') }),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao gerar relatório de massa.' };
+    }
+};
+
+export const adminGetPendingCards = async (cpf?: string): Promise<{ success: boolean; users?: { cpf: string; full_name: string; card_brand: string; card_tier: string }[]; message?: string }> => {
+    try {
+        const qs = cpf ? `?cpf=${cpf.replace(/\D/g, '')}` : '';
+        return await apiCall(`/admin/scripts/pending-cards${qs}`, { method: 'GET' });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao buscar cartões pendentes.' };
+    }
+};
+
+export const adminActivatePendingCards = async (cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/activate-pending-cards`, {
+            method: 'POST',
+            body: JSON.stringify(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao ativar cartões pendentes.' };
+    }
+};
+
+export const adminRecalcularLimiteDisponivel = async (cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/recalcular-limite`, {
+            method: 'POST',
+            body: JSON.stringify(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao recalcular limite disponível.' };
+    }
+};
+
+export const adminExportMassasCsv = async (cpf?: string): Promise<{ success: boolean; data?: { csv: string; count: number }; message?: string }> => {
+    try {
+        const qs = cpf ? `?cpf=${cpf.replace(/\D/g, '')}` : '';
+        return await apiCall(`/admin/scripts/export-massas-csv${qs}`, { method: 'GET' });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao exportar CSV de massas.' };
+    }
+};
+
 export const adminUpdateCreditLimit = async (cpf: string, creditLimit: number): Promise<{ success: boolean; message: string }> => {
     const cleanCpf = cpf.replace(/\D/g, '');
     try {
@@ -1449,11 +1589,29 @@ export const adminUpdateCreditLimit = async (cpf: string, creditLimit: number): 
             // Contrato do backend (/admin/users/:cpf/credit-limit): totalLimit e/ou
             // availableLimit. Um único valor informado pelo admin define AMBOS — mesmo
             // comportamento do mockApi (creditLimit => totalLimit E availableLimit).
+            // Isso RESETA o cartão: uso comprometido (fatura aberta etc) é ignorado.
             body: JSON.stringify({ totalLimit: creditLimit, availableLimit: creditLimit }),
         });
         return { success: true, message: result.message };
     } catch (error: any) {
         return { success: false, message: error.message || 'Erro ao atualizar limite de crÃƒÂ©dito.' };
+    }
+};
+
+// Diferente de adminUpdateCreditLimit: manda só totalLimit, sem availableLimit.
+// O backend recalcula o disponível proporcionalmente ao que já está
+// comprometido (oldTotalLimit - oldAvailableLimit), preservando o uso atual
+// em vez de resetar o cartão como se fosse novo.
+export const adminAdjustCreditLimit = async (cpf: string, totalLimit: number): Promise<{ success: boolean; message: string }> => {
+    const cleanCpf = cpf.replace(/\D/g, '');
+    try {
+        const result = await apiCall<{ success: boolean; message: string }>(`/admin/users/${cleanCpf}/credit-limit`, {
+            method: 'PUT',
+            body: JSON.stringify({ totalLimit }),
+        });
+        return { success: true, message: result.message };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao atualizar limite de crédito.' };
     }
 };
 

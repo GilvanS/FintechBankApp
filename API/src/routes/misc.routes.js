@@ -17,6 +17,8 @@ module.exports = function registerMiscRoutes({
     h,
 }) {
     apiRouter.get('/health', asyncHandlerRoute(h.health));
+    apiRouter.get('/system-config', asyncHandlerRoute(h.getSystemConfig));
+    apiRouter.get('/system-theme.js', asyncHandlerRoute(h.getSystemThemeScript));
     apiRouter.get('/debug/tables', bearerAuth(), authenticateAdmin, asyncHandlerRoute(h.debugTables));
     apiRouter.get('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandlerRoute(h.debugUserGet));
     apiRouter.delete('/debug/user/:cpf', bearerAuth(), authenticateAdmin, asyncHandlerRoute(h.debugUserDelete));

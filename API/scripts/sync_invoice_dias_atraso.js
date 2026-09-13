@@ -118,9 +118,9 @@ async function run() {
 
             // Verificar resultado
             const verify = await db.executeQuery(`
-                SELECT COUNT(*) AS total, 
+                SELECT COUNT(*) AS total,
                        SUM(CASE WHEN COALESCE(dias_atraso, 0) = GREATEST(0, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - due_date))::INT / 86400) THEN 1 ELSE 0 END) AS corretas
-                FROM ${config.schema}.invoices
+                FROM ${config.schema}.invoices i
                 WHERE status = 'FECHADA' AND data_pagamento IS NULL AND due_date < CURRENT_TIMESTAMP
                 ${cpfClause}
             `);

@@ -14,17 +14,41 @@
 #   .\scripts\start-docker.ps1                 # encerra o Desktop, liga o docker do WSL, sobe Postgres + Redis
 #   .\scripts\start-docker.ps1 -Full           # tambem sobe pgadmin e portainer
 #   .\scripts\start-docker.ps1 -Kafka          # tambem sobe zookeeper + kafka (profile opcional)
+#   .\scripts\start-docker.ps1 -Plane          # tambem sobe o stack do Plane (infra+api+workers)
 #   .\scripts\start-docker.ps1 -Stop           # para containers e o dockerd do WSL
 #   .\scripts\start-docker.ps1 -KeepDesktop    # nao mexe no Docker Desktop
 #   .\scripts\start-docker.ps1 -Distro Ubuntu  # forca a distro (default: Ubuntu)
+#   .\scripts\start-docker.ps1 -Ask            # pergunta interativamente quais projetos subir
 
 param(
     [string]$Distro = "Ubuntu",
     [switch]$Full,
     [switch]$Kafka,
+    [switch]$Plane,
+    [switch]$Ask,
     [switch]$Stop,
     [switch]$KeepDesktop
 )
+
+$planePath = "/mnt/a/Workspace/plane"
+$planeYml  = "docker-compose-local.yml"
+
+# --- Modo interativo: pergunta quais projetos subir ---
+if ($Ask) {
+    Write-Host ""
+    Write-Host "=== Selecione o que deseja subir ===" -ForegroundColor Cyan
+    Write-Host "  [F] FintechBankApp  (Postgres + Redis)  <- sempre incluido"
+    Write-Host "  [K] Kafka           (zookeeper + kafka)"
+    Write-Host "  [X] Full extras     (pgadmin + portainer)"
+    Write-Host "  [P] Plane           (db, redis, minio, mq, api, workers)"
+    Write-Host ""
+    $resp = Read-Host "Digite as letras desejadas (ex: KP, FX, P, todos = FKXP)"
+    $resp = $resp.ToUpper()
+    if ($resp -match "K") { $Kafka = $true }
+    if ($resp -match "X") { $Full  = $true }
+    if ($resp -match "P") { $Plane = $true }
+    Write-Host ""
+}
 
 $proj = "/mnt/f/GITHUB/FintechBankApp"
 $yml  = "API/docker-compose.wsl.yml"
@@ -122,6 +146,34 @@ if ($Kafka) {
     }
 }
 
+if ($Plane) {
+    Write-Host "==> Subindo Plane (infra: db, redis, mq, minio)..." -ForegroundColor Cyan
+    $dc = "if docker compose version >/dev/null 2>&1; then docker compose; else /usr/libexec/docker/cli-plugins/docker-compose; fi"
+    $upPlaneInfra = "cd '$planePath' && $dc -f $planeYml up -d plane-db plane-redis plane-mq plane-minio"
+    wsl -d $Distro -e sh -c $upPlaneInfra
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Falha ao subir infra do Plane." -ForegroundColor Red
+    } else {
+        # Espera o postgres do Plane estar pronto antes de rodar migracoes
+        Write-Host "    Aguardando banco do Plane..."
+        $waitPlane = 'i=0; while [ $i -lt 30 ]; do docker exec plane-db pg_isready -U plane >/dev/null 2>&1 && break; sleep 1; i=$((i+1)); done'
+        wsl -d $Distro -e sh -c $waitPlane
+
+        Write-Host "==> Rodando migracoes do Plane..."
+        $migrate = "cd '$planePath' && $dc -f $planeYml run --rm migrator"
+        wsl -d $Distro -e sh -c $migrate
+
+        Write-Host "==> Subindo API + workers do Plane..."
+        $upPlaneApp = "cd '$planePath' && $dc -f $planeYml up -d api worker beat-worker"
+        wsl -d $Distro -e sh -c $upPlaneApp
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Falha ao subir API/workers do Plane." -ForegroundColor Red
+        } else {
+            Write-Host "Plane no ar." -ForegroundColor Green
+        }
+    }
+}
+
 Write-Host "==> Verificando o banco..."
 $wait = 'i=0; while [ $i -lt 30 ]; do docker exec pgdb pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; i=$((i+1)); done'
 wsl -d $Distro -e sh -c $wait
@@ -147,3 +199,8 @@ if ($Kafka) {
     Write-Host "Kafka:     localhost:9092"
 }
 Write-Host "Para subir a API:  cd F:\GITHUB\FintechBankApp\API ; npm run dev"
+if ($Plane) {
+    Write-Host "Plane API:         http://localhost:8000"
+    Write-Host "Plane MinIO:       http://localhost:9090"
+    Write-Host "Para subir web:    cd /mnt/a/Workspace/plane ; yarn dev"
+}

@@ -17,7 +17,7 @@ const UserManagement: React.FC = () => {
     // Modal State
     const [modalState, setModalState] = useState<{
         isOpen: boolean;
-        action: 'block' | 'unblock' | 'deposit' | 'password' | 'creditLimit' | 'pixLimit' | null;
+        action: 'block' | 'unblock' | 'deposit' | 'password' | 'creditLimit' | 'creditLimitAdjust' | 'pixLimit' | null;
         data: any;
     }>({ isOpen: false, action: null, data: null });
     const [inputValue, setInputValue] = useState('');
@@ -43,6 +43,7 @@ const UserManagement: React.FC = () => {
     const openModal = (action: typeof modalState.action, data: any) => {
         setModalState({ isOpen: true, action, data });
         if (action === 'creditLimit') setInputValue(data.creditCard?.limit?.toString() || '0');
+        else if (action === 'creditLimitAdjust') setInputValue(data.creditCard?.totalLimit?.toString() || data.creditCard?.limit?.toString() || '0');
         else if (action === 'pixLimit') setInputValue(data.dailyPixLimit?.toString() || '0');
         else setInputValue('');
     };
@@ -90,7 +91,18 @@ const UserManagement: React.FC = () => {
                         setIsLoadingAction(false);
                         return;
                     }
-                    result = await adminUpdateCreditLimit(modalState.data.cpf, { totalLimit: creditAmt });
+                    // Reseta o cartão: total e disponível ficam iguais, ignorando o uso atual.
+                    result = await adminUpdateCreditLimit(modalState.data.cpf, { totalLimit: creditAmt, availableLimit: creditAmt });
+                    break;
+                case 'creditLimitAdjust':
+                    const adjustAmt = parseFloat(inputValue.replace(',', '.'));
+                    if (isNaN(adjustAmt) || adjustAmt < 0) {
+                        showToast('Valor de limite inválido.', 'error');
+                        setIsLoadingAction(false);
+                        return;
+                    }
+                    // Só totalLimit: backend recalcula o disponível mantendo o uso atual.
+                    result = await adminUpdateCreditLimit(modalState.data.cpf, { totalLimit: adjustAmt });
                     break;
                 case 'pixLimit':
                     const pixAmt = parseFloat(inputValue.replace(',', '.'));
@@ -170,8 +182,14 @@ const UserManagement: React.FC = () => {
                                     <p className="text-xl font-bold">R$ {Number(searchedUser.balance).toFixed(2).replace('.', ',')}</p>
                                 </div>
                                 <div>
-                                    <p className="text-[10px] opacity-70 font-bold uppercase mb-1">Limite Crédito</p>
-                                    <p className="text-xl font-bold">R$ {Number(searchedUser.creditCard?.limit || 0).toFixed(2).replace('.', ',')}</p>
+                                    <p className="text-[10px] opacity-70 font-bold uppercase mb-1">Limite Crédito (Total)</p>
+                                    <p className="text-xl font-bold">R$ {Number(searchedUser.creditCard?.totalLimit || searchedUser.creditCard?.limit || 0).toFixed(2).replace('.', ',')}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] opacity-70 font-bold uppercase mb-1">Limite Disponível</p>
+                                    <p className={`text-xl font-bold ${(searchedUser.creditCard?.availableLimit ?? 0) < 0 ? 'text-red-500' : ''}`}>
+                                        {(searchedUser.creditCard?.availableLimit ?? 0) < 0 ? '-' : ''}R$ {Math.abs(searchedUser.creditCard?.availableLimit ?? 0).toFixed(2).replace('.', ',')}
+                                    </p>
                                 </div>
                                 <div>
                                     <p className="text-[10px] opacity-70 font-bold uppercase mb-1">Limite Diário PIX</p>
@@ -206,8 +224,12 @@ const UserManagement: React.FC = () => {
                                     <Key size={18} /> Resetar Senha
                                 </button>
 
-                                <button onClick={() => openModal('creditLimit', searchedUser)} className={`${btnClass} ${outlineBtnClass}`}>
-                                    <CreditCard size={18} /> Limite Crédito
+                                <button onClick={() => openModal('creditLimit', searchedUser)} className={`${btnClass} ${outlineBtnClass}`} title="Reseta o cartão: define total e disponível com o mesmo valor novo">
+                                    <CreditCard size={18} /> Inserir Limite Crédito
+                                </button>
+
+                                <button onClick={() => openModal('creditLimitAdjust', searchedUser)} className={`${btnClass} ${outlineBtnClass}`} title="Ajusta o limite total mantendo o que já está em uso (recalcula o disponível)">
+                                    <CreditCard size={18} /> Atualizar Limite Crédito
                                 </button>
 
                                 <button onClick={() => openModal('pixLimit', searchedUser)} className={`${btnClass} ${outlineBtnClass}`}>
@@ -244,6 +266,15 @@ const UserManagement: React.FC = () => {
                             {modalState.action === 'creditLimit' && (
                                 <div className="space-y-4">
                                     <p className="text-sm font-bold opacity-70">Novo Limite de Crédito para {modalState.data?.fullName}:</p>
+                                    <p className="text-xs opacity-60">Reseta o cartão — total e disponível ficam iguais a este valor, ignorando o uso atual.</p>
+                                    <input type="number" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="0.00" step="0.01" className={`w-full px-4 py-4 rounded-xl outline-none font-mono text-xl ${inputClass}`} />
+                                </div>
+                            )}
+
+                            {modalState.action === 'creditLimitAdjust' && (
+                                <div className="space-y-4">
+                                    <p className="text-sm font-bold opacity-70">Atualizar Limite Total de Crédito para {modalState.data?.fullName}:</p>
+                                    <p className="text-xs opacity-60">Mantém o que já está em uso — o disponível é recalculado proporcionalmente ao novo total.</p>
                                     <input type="number" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="0.00" step="0.01" className={`w-full px-4 py-4 rounded-xl outline-none font-mono text-xl ${inputClass}`} />
                                 </div>
                             )}

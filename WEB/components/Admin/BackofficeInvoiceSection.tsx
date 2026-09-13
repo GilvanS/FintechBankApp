@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../../types';
 import { calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcAllCharges } from '../../utils/invoiceMath.js';
-import { FileSpreadsheet, CheckCheck, Send, FileText } from 'lucide-react';
+import { FileSpreadsheet, CheckCheck, Send, FileText, TrendingUp, TrendingDown } from 'lucide-react';
 import { adminTelegramSendTable, adminTelegramSendPdf } from '../../services/api';
 import { showToast } from '../../utils/toast';
 
@@ -175,8 +175,38 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
     const totalOpenConsolidated = searchedUser.creditCard?.currentInvoiceTotal ?? NaN;
     const minOpenConsolidated = searchedUser.creditCard?.currentInvoiceMinimo ?? NaN;
 
+    const dueDay = searchedUser.creditCard?.dueDay || 15;
+    const availableLimit = searchedUser.creditCard?.availableLimit ?? 0;
+
     return (
         <div className={`mt-4 p-4 rounded-xl border space-y-3 ${isMidnight ? 'bg-zinc-900/80 border-white/10' : 'bg-white border-black/20 shadow-sm'}`}>
+            {/* Sumário Rápido — Dados Principais (igual ao home) */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 text-xs mb-3 p-3 rounded-lg bg-black/5 dark:bg-white/5">
+                <div className="text-center">
+                    <p className={`text-[10px] uppercase font-bold opacity-70 ${isMidnight ? 'text-white/60' : 'text-black/60'}`}>Vencimento</p>
+                    <p className={`font-black text-sm mt-0.5 ${isMidnight ? 'text-volt-green' : 'text-black'}`}>Dia {dueDay}</p>
+                </div>
+                <div className="text-center">
+                    <p className={`text-[10px] uppercase font-bold opacity-70 ${isMidnight ? 'text-white/60' : 'text-black/60'}`}>Fatura Aberta</p>
+                    <p className={`font-black text-sm mt-0.5 ${isMidnight ? 'text-blue-400' : 'text-blue-600'}`}>R$ {openAmount.toFixed(2)}</p>
+                </div>
+                <div className="text-center">
+                    <p className={`text-[10px] uppercase font-bold opacity-70 ${isMidnight ? 'text-white/60' : 'text-black/60'}`}>Fatura Fechada</p>
+                    <p className={`font-black text-sm mt-0.5 ${originalClosedAmount > 0 ? (isMidnight ? 'text-rose-400' : 'text-rose-600') : (isMidnight ? 'text-emerald-400' : 'text-emerald-600')}`}>R$ {originalClosedAmount.toFixed(2)}</p>
+                </div>
+                <div className="text-center">
+                    <p className={`text-[10px] uppercase font-bold opacity-70 ${isMidnight ? 'text-white/60' : 'text-black/60'}`}>Próxima Fatura</p>
+                    <p className={`font-black text-sm mt-0.5 ${isMidnight ? 'text-purple-400' : 'text-purple-600'}`}>R$ {totalOpenConsolidated.toFixed(2)}</p>
+                </div>
+                <div className="text-center">
+                    <p className={`text-[10px] uppercase font-bold opacity-70 ${isMidnight ? 'text-white/60' : 'text-black/60'}`}>Limite Disponível</p>
+                    <p className={`font-black text-sm mt-0.5 flex items-center justify-center gap-1 ${availableLimit < 0 ? (isMidnight ? 'text-red-400' : 'text-red-600') : (isMidnight ? 'text-emerald-400' : 'text-emerald-600')}`}>
+                        {availableLimit < 0 ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
+                        R$ {availableLimit.toFixed(2)}
+                    </p>
+                </div>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 dark:border-white/10 pb-2">
                 <h4 className="text-xs font-black uppercase tracking-wider text-amber-500 flex items-center gap-2">
                     <span>Diagnóstico Backoffice (Últimas 3 Faturas Visíveis)</span>

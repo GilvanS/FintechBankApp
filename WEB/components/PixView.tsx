@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Send, CheckCircle2, AlertTriangle, Smartphone, Mail, Hash, User as UserIcon, Key, Utensils, Car, Tv, Heart, MoreHorizontal, Sparkles, Brain, Loader2 } from 'lucide-react';
+import { X, Send, CheckCircle2, AlertTriangle, Smartphone, Mail, Hash, User as UserIcon, Key, Utensils, Car, Tv, Heart, MoreHorizontal, Sparkles, Brain, Loader2, QrCode } from 'lucide-react';
 import { getPixRecipientInfo, performPix, performPixCreditInstallment, getUserByCpf, getUserStatement, addPixContact } from '../services/api';
 import { PixContact, Transaction } from '../types';
 import { parseCurrency, formatCurrency } from '../utils/formatters';
@@ -10,18 +10,29 @@ import PasswordModal from './PasswordModal';
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../contexts/AppStateContext';
 
-type PixSubView = 'transfer' | 'keyManagement' | 'contacts' | 'confirmation';
+export type PixSubView = 'transfer' | 'keyManagement' | 'contacts' | 'confirmation';
 
 interface PixViewProps {
   onBack: () => void;
+  /** Quando embutido num shell externo (Allure) que já tem seu próprio header/tabs de navegação. */
+  hideChrome?: boolean;
+  /** Sincroniza a subview com a seção ativa do shell externo. */
+  activeSubView?: PixSubView;
 }
 
-export default function PixView({ onBack }: PixViewProps) {
+export default function PixView({ onBack, hideChrome = false, activeSubView }: PixViewProps) {
   const { user, updateUser } = useAuth();
   const { triggerSmartAlertCheck, theme } = useAppState();
   const isMidnight = theme === 'midnight';
   const accent = isMidnight ? '#00E38B' : '#A2FF00';
   const [subView, setSubView] = useState<PixSubView>('transfer');
+
+  useEffect(() => {
+    if (activeSubView && activeSubView !== subView) {
+      setSubView(activeSubView);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSubView]);
   const [pixKeyType, setPixKeyType] = useState<'cpf' | 'email' | 'phone' | 'random'>('cpf');
   const [pixKey, setPixKey] = useState('');
   const [amount, setAmount] = useState('');
@@ -158,7 +169,7 @@ export default function PixView({ onBack }: PixViewProps) {
     setLoading(true);
     const recipientResult = await getPixRecipientInfo(pixKey, user.cpf);
     if (recipientResult.success && recipientResult.name && recipientResult.cpf) {
-        setTransferDetails({ key: pixKey, amount: numericAmount, description, useCredit, category: selectedCategory });
+        setTransferDetails({ key: recipientResult.cpf, amount: numericAmount, description, useCredit, category: selectedCategory });
         setRecipientInfo({ name: recipientResult.name, cpf: recipientResult.cpf });
         setSubView('confirmation');
     } else {
@@ -274,34 +285,36 @@ export default function PixView({ onBack }: PixViewProps) {
   return (
     <div className={`flex flex-col relative w-full h-full min-h-[calc(100vh-80px)] ${bodyBgClass}`}>
       {/* View Header */}
-      <div className={`flex items-center justify-between px-6 py-4 shrink-0 ${headerClass}`}>
-          <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${iconBubbleClass}`}>
-                  <span className={`material-symbols-outlined ${isMidnight ? 'text-white/80' : 'text-black'}`}>pix</span>
-              </div>
-              <div>
-                  <h2 className={`text-xl font-black uppercase tracking-wider flex items-center gap-2 ${titleTextClass}`}>
-                      {subView === 'transfer' && !success && <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: accent }}></span>}
-                      {subView === 'transfer' ? (success ? 'Sucesso' : 'Enviar Pix') :
-                       subView === 'confirmation' ? 'Confirmar Pix' :
-                       subView === 'contacts' ? 'Contatos' : 'Minhas Chaves'}
-                  </h2>
-                  <p className={`text-xs uppercase tracking-widest ${subTextClass}`}>Área Pix</p>
-              </div>
-          </div>
-          <button
-              onClick={handleBackAction}
-              className={`p-2 rounded-full transition-colors ${closeBtnClass}`}
-          >
-              <X size={24} />
-          </button>
-      </div>
+      {!hideChrome && (
+        <div className={`flex items-center justify-between px-6 py-4 shrink-0 ${headerClass}`}>
+            <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${iconBubbleClass}`}>
+                    <QrCode size={20} className={isMidnight ? 'text-white/80' : 'text-black'} />
+                </div>
+                <div>
+                    <h2 className={`text-xl font-black uppercase tracking-wider flex items-center gap-2 ${titleTextClass}`}>
+                        {subView === 'transfer' && !success && <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: accent }}></span>}
+                        {subView === 'transfer' ? (success ? 'Sucesso' : 'Enviar Pix') :
+                         subView === 'confirmation' ? 'Confirmar Pix' :
+                         subView === 'contacts' ? 'Contatos' : 'Minhas Chaves'}
+                    </h2>
+                    <p className={`text-xs uppercase tracking-widest ${subTextClass}`}>Área Pix</p>
+                </div>
+            </div>
+            <button
+                onClick={handleBackAction}
+                className={`p-2 rounded-full transition-colors ${closeBtnClass}`}
+            >
+                <X size={24} />
+            </button>
+        </div>
+      )}
 
       <div className={`flex-1 overflow-y-auto no-scrollbar relative p-6 flex flex-col items-center pb-28 ${bodyBgClass}`}>
         <div className="w-full">
 
       {/* Navigation inside view */}
-      {!success && subView !== 'confirmation' && (
+      {!hideChrome && !success && subView !== 'confirmation' && (
           <div className={`flex gap-2 mb-6 pb-4 ${tabRowClass}`}>
               <button onClick={() => setSubView('transfer')} className={`flex-1 text-xs py-2 rounded-lg font-bold transition-colors ${subView === 'transfer' ? tabActiveClass : tabInactiveClass}`}>Enviar</button>
               <button onClick={() => setSubView('contacts')} className={`flex-1 text-xs py-2 rounded-lg font-bold transition-colors ${subView === 'contacts' ? tabActiveClass : tabInactiveClass}`}>Contatos</button>
@@ -360,11 +373,23 @@ export default function PixView({ onBack }: PixViewProps) {
               <input
                 type="text"
                 value={pixKey}
-                onChange={(e) => setPixKey(e.target.value)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (pixKeyType === 'cpf' || pixKeyType === 'phone') {
+                    setPixKey(raw.replace(/\D/g, '').slice(0, 11));
+                  } else {
+                    setPixKey(raw);
+                  }
+                }}
                 placeholder={
                   pixKeyType === 'cpf' ? '000.000.000-00' :
                   pixKeyType === 'email' ? 'exemplo@email.com' :
                   pixKeyType === 'phone' ? '(11) 99999-9999' : 'Chave aleatória com hifens'
+                }
+                maxLength={
+                  pixKeyType === 'cpf' ? 11 :
+                  pixKeyType === 'phone' ? 11 :
+                  pixKeyType === 'email' ? 254 : 64
                 }
                 className={`w-full px-4 py-3 rounded-xl text-sm font-bold uppercase transition-all outline-none ${inputClass}`}
                 required

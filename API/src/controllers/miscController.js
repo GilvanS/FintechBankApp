@@ -56,6 +56,48 @@ module.exports = function createMiscController(deps) {
     res.json({ success: true, data: health });
     };
 
+    // Público (sem auth), servido como <script src> BLOQUEANTE no <head> do
+    // index.html — roda e aplica a classe de tema ANTES do bundle React
+    // montar, sem depender de localStorage/cookie. Resolve o race condition
+    // onde o fetch assíncrono (getSystemConfig) só corrigia o tema depois do
+    // primeiro paint: navegador limpo (testes Playwright, aba anônima) sempre
+    // via fetch em runtime via primeiro paint incorreto.
+    // Cache-Control: no-cache garante que sempre reflete a config atual do
+    // admin, nunca uma versão antiga cacheada pelo navegador.
+    const getSystemThemeScript = async (req, res) => {
+    let defaultTheme = 'yellow';
+    try {
+        const systemConfigRepo = require('../../repositories/systemConfigRepo');
+        const config = await systemConfigRepo.getConfig();
+        defaultTheme = config?.default_theme || 'yellow';
+    } catch (err) {
+        console.error('[getSystemThemeScript] Erro ao buscar config:', err.message);
+    }
+    const safeTheme = defaultTheme === 'midnight' ? 'midnight' : 'yellow';
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.send(`(function(){try{
+        var personal=localStorage.getItem('volt_theme');
+        var theme=personal||${JSON.stringify(safeTheme)};
+        if(theme==='midnight'){document.documentElement.classList.add('theme-midnight');document.body&&document.body.classList.add('theme-midnight');}
+        window.__voltAdminDefaultTheme=${JSON.stringify(safeTheme)};
+    }catch(e){}})();`);
+    };
+
+    // Público (sem auth) — o tema padrão precisa carregar antes do login,
+    // na tela de pré-login. Fallback 'yellow' se a tabela ainda não existir
+    // (banco não migrado) para não quebrar o boot do app.
+    const getSystemConfig = async (req, res) => {
+    try {
+        const systemConfigRepo = require('../../repositories/systemConfigRepo');
+        const config = await systemConfigRepo.getConfig();
+        res.json({ success: true, defaultTheme: config?.default_theme || 'yellow' });
+    } catch (err) {
+        console.error('[getSystemConfig] Erro ao buscar config:', err.message);
+        res.json({ success: true, defaultTheme: 'yellow' });
+    }
+    };
+
     const debugTables = async (req, res) => {
     console.log('🔍 Verificação de tabelas solicitada');
     
@@ -418,6 +460,8 @@ module.exports = function createMiscController(deps) {
 
     return {
         health: health,
+        getSystemThemeScript: getSystemThemeScript,
+        getSystemConfig: getSystemConfig,
         debugTables: debugTables,
         debugUserGet: debugUserGet,
         debugUserDelete: debugUserDelete,

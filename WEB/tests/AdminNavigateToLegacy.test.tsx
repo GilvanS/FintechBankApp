@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import Admin from '../components/Admin';
-import AdminDashboard from '../components/Admin/AdminDashboard';
+import AdminAllureView from '../components/Admin/AdminAllureView';
 import RequestsManagement from '../components/Admin/RequestsManagement';
 
 // ── Mock de Contextos ───────────────────────────────────────────────────────
@@ -17,6 +17,8 @@ vi.mock('../contexts/AppStateContext', () => ({
     useAppState: () => ({
         theme: 'dark',
         setTheme: vi.fn(),
+        adminDefaultTheme: 'yellow',
+        setAdminDefaultTheme: vi.fn(),
     })
 }));
 
@@ -155,9 +157,9 @@ describe('Admin - Navegação Massa Inadimplente → Legado/Gerenciar Cliente', 
         dispatchSpy.mockRestore();
     });
 
-    it('2. AdminDashboard deve capturar evento e renderizar AdminLegacy com initialSearchCpf', async () => {
+    it('2. AdminAllureView deve capturar evento e renderizar AdminLegacy com initialSearchCpf', async () => {
         const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
-        render(<AdminDashboard onClose={vi.fn()} />);
+        render(<AdminAllureView onClose={vi.fn()} />);
 
         // Dispara o evento simulando clique no nome da massa
         act(() => {
@@ -208,8 +210,8 @@ describe('Admin - Navegação Massa Inadimplente → Legado/Gerenciar Cliente', 
         expect(toastMsg).toBeDefined();
     });
 
-    it('5. Fluxo completo: evento → AdminDashboard → AdminLegacy com auto-busca (integração)', async () => {
-        render(<AdminDashboard onClose={vi.fn()} />);
+    it('5. Fluxo completo: evento → AdminAllureView → AdminLegacy com auto-busca (integração)', async () => {
+        render(<AdminAllureView onClose={vi.fn()} />);
 
         // Dispara o evento como se o usuário tivesse clicado no nome da massa
         act(() => {
@@ -222,9 +224,15 @@ describe('Admin - Navegação Massa Inadimplente → Legado/Gerenciar Cliente', 
         // "Painel do Administrador" é o título do AdminLegacy
         await screen.findByText(/Painel do Administrador/i, {}, { timeout: 10000 });
 
-        // Verifica se o campo de busca foi preenchido com o CPF
-        const input = screen.getByPlaceholderText(/Buscar por CPF/i) as HTMLInputElement;
-        expect(input.value).toBe('111.111.111-11');
+        // Verifica se o campo de busca foi preenchido com o CPF. O AllureShell
+        // anima a troca de seção (AnimatePresence) — a seção anterior
+        // (UserManagement, que também tem um campo "Buscar por CPF") pode levar
+        // um tick extra para desmontar em jsdom, então aguarda em vez de checar
+        // sincronamente logo após o findByText.
+        await waitFor(() => {
+            const input = screen.getByPlaceholderText(/Buscar por CPF/i) as HTMLInputElement;
+            expect(input.value).toBe('111.111.111-11');
+        }, { timeout: 10000 });
 
         // Aguarda os dados do cliente carregarem via fallback mockApi
         // "Diagnóstico Backoffice" é um elemento único do AdminLegacy

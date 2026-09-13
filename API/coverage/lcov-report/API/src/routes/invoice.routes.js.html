@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>12/12</span>
+                <span class='fraction'>0/12</span>
             </div>
         
             
@@ -37,16 +37,16 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>1/1</span>
+                <span class='fraction'>0/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>12/12</span>
+                <span class='fraction'>0/12</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line high'></div>
+    <div class='status-line low'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -105,33 +105,33 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
  * invoice.routes.js — Registro das rotas de fatura/pagamento.
@@ -140,33 +140,33 @@
  * middlewares e o controller (DI) e registra as 11 rotas na MESMA ordem
  * original — sem alterar comportamento de roteamento.
  */
-module.exports = function registerInvoiceRoutes({ apiRouter, bearerAuth, asyncHandler, controller }) {
+<span class="cstat-no" title="statement not covered" >module.exports = function <span class="fstat-no" title="function not covered" >registerInvoiceRoutes(</span>{ apiRouter, bearerAuth, asyncHandler, controller }) {</span>
 // --- Motor de Geração de Boleto e PIX por Fatura ---
-    apiRouter.post('/invoices/generate-payment-codes', bearerAuth(), asyncHandler(controller.generatePaymentCodes));
-    apiRouter.post('/invoices/:cpf/:invoiceId/boleto', bearerAuth(), asyncHandler(controller.boleto));
-    apiRouter.post('/invoices/:cpf/:invoiceId/pix', bearerAuth(), asyncHandler(controller.pix));
+<span class="cstat-no" title="statement not covered" >    apiRouter.post('/invoices/generate-payment-codes', bearerAuth(), asyncHandler(controller.generatePaymentCodes));</span>
+<span class="cstat-no" title="statement not covered" >    apiRouter.post('/invoices/:cpf/:invoiceId/boleto', bearerAuth(), asyncHandler(controller.boleto));</span>
+<span class="cstat-no" title="statement not covered" >    apiRouter.post('/invoices/:cpf/:invoiceId/pix', bearerAuth(), asyncHandler(controller.pix));</span>
 &nbsp;
     // GET /billing/invoice-status — status da fatura do usuário logado (mobile)
-    apiRouter.get('/billing/invoice-status', bearerAuth(), asyncHandler(controller.invoiceStatus));
+<span class="cstat-no" title="statement not covered" >    apiRouter.get('/billing/invoice-status', bearerAuth(), asyncHandler(controller.invoiceStatus));</span>
 &nbsp;
     // Opções de parcelamento (2x-12x) para a fatura FECHADA não paga
-    apiRouter.get('/cards/invoice/installment-options', bearerAuth(), asyncHandler(controller.installmentOptions));
-    apiRouter.post('/cards/invoice/parcel', bearerAuth(), asyncHandler(controller.parcel));
+<span class="cstat-no" title="statement not covered" >    apiRouter.get('/cards/invoice/installment-options', bearerAuth(), asyncHandler(controller.installmentOptions));</span>
+<span class="cstat-no" title="statement not covered" >    apiRouter.post('/cards/invoice/parcel', bearerAuth(), asyncHandler(controller.parcel));</span>
 &nbsp;
     // Pagamento de fatura (total / mínimo / parcial)
-    apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(controller.pay));
+<span class="cstat-no" title="statement not covered" >    apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(controller.pay));</span>
 &nbsp;
     // Resumo detalhado da fatura (fechada ou aberta) com encargos itemizados
-    apiRouter.get('/credit/invoices/summary/:type', bearerAuth(), asyncHandler(controller.summary));
+<span class="cstat-no" title="statement not covered" >    apiRouter.get('/credit/invoices/summary/:type', bearerAuth(), asyncHandler(controller.summary));</span>
 &nbsp;
     // Histórico das últimas faturas (fechadas + ciclo aberto)
-    apiRouter.get('/credit/invoices/history', bearerAuth(), asyncHandler(controller.history));
+<span class="cstat-no" title="statement not covered" >    apiRouter.get('/credit/invoices/history', bearerAuth(), asyncHandler(controller.history));</span>
 &nbsp;
     // Fatura aberta do cartão de crédito
-    apiRouter.get('/credit/invoices/open', bearerAuth(), asyncHandler(controller.open));
+<span class="cstat-no" title="statement not covered" >    apiRouter.get('/credit/invoices/open', bearerAuth(), asyncHandler(controller.open));</span>
 &nbsp;
     // Antecipação de parcelas
-    apiRouter.post('/cards/invoice/anticipate', bearerAuth(), asyncHandler(controller.anticipate));
+<span class="cstat-no" title="statement not covered" >    apiRouter.post('/cards/invoice/anticipate', bearerAuth(), asyncHandler(controller.anticipate));</span>
 };
 &nbsp;</pre></td></tr></table></pre>
 
@@ -175,7 +175,7 @@ module.exports = function registerInvoiceRoutes({ apiRouter, bearerAuth, asyncHa
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-01T02:30:21.792Z
+                at 2026-08-20T05:42:15.531Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

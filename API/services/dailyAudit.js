@@ -2,7 +2,7 @@ const telegramService = require('./telegramService');
 const { nowDb } = require('../utils/timezone');
 const { toDateOnly } = require('../utils/dateUtils');
 
-async function runDailyAudit(dbService, auditLog) {
+async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = null) {
     console.log('[Audit] Iniciando auditoria diária de anomalias...');
     const db = dbService;
     const errors = [];
@@ -52,21 +52,53 @@ async function runDailyAudit(dbService, auditLog) {
             });
         }
 
-        // Anomalia 3: Limite de crédito excedido em aberto
-        // Se o limite disponível é negativo (disponível < 0), significa que o limite foi estourado em aberto.
-        const estourados = await db.executeQuery(`
-            SELECT cpf, full_name, credit_card_available_limit
-            FROM ${db.fq('users')}
-            WHERE credit_card_available_limit < 0
-        `);
-
-        for (const u of estourados) {
-            errors.push({
-                cpf: u.cpf,
-                name: u.full_name,
-                type: 'LIMITE_EXCEDIDO',
-                details: `Limite de crédito estourado. Limite disponível negativo: R$ ${parseFloat(u.credit_card_available_limit).toFixed(2)}.`
-            });
+        // Anomalia 3: Limite de crédito DIVERGENTE da dívida real.
+        // Limite disponível negativo NÃO é mais tratado como erro em si — é o estado
+        // correto de uma massa que estourou o limite de verdade (limite_total < dívida
+        // real), desde que o motor diário (00h) passou a reconciliar
+        // credit_card_available_limit com a fórmula canônica (recalcularLimiteDisponivel,
+        // mesma fonte do "Próxima Fatura"). A anomalia real agora é DIVERGÊNCIA: o valor
+        // gravado não bate com o que a fórmula diz que deveria ser — sinal de que algum
+        // dos ~15 pontos que escrevem esse campo (compra/pagamento/estorno) o deixou
+        // dessincronizado durante o dia. Quando recalcularLimiteDisponivel é injetado,
+        // a auditoria já corrige na hora (mesma ação do botão "Recalcular Limite
+        // Disponível" do painel); sem ele (chamada legada/testes), cai no fallback
+        // antigo só para não quebrar quem ainda não passou a dependência.
+        if (typeof recalcularLimiteDisponivel === 'function') {
+            const candidatos = await db.executeQuery(`
+                SELECT cpf, full_name, credit_card_available_limit
+                FROM ${db.fq('users')}
+                WHERE role != 'admin' AND credit_card_available_limit IS NOT NULL
+            `);
+            for (const u of candidatos) {
+                try {
+                    const r = await recalcularLimiteDisponivel(u.cpf);
+                    if (r && r.alterado) {
+                        errors.push({
+                            cpf: u.cpf,
+                            name: u.full_name,
+                            type: 'LIMITE_DIVERGENTE',
+                            details: `Limite disponível estava R$ ${r.limiteAnterior.toFixed(2)} mas deveria ser R$ ${r.limiteNovo.toFixed(2)} pela fórmula canônica — corrigido automaticamente pela auditoria.${r.estourado ? ' Limite de crédito estourado (dívida real acima do limite total) — estado válido, não é bug.' : ''}`
+                        });
+                    }
+                } catch (limErr) {
+                    console.warn(`[Audit] Erro ao verificar limite do CPF ${u.cpf}:`, limErr.message);
+                }
+            }
+        } else {
+            const estourados = await db.executeQuery(`
+                SELECT cpf, full_name, credit_card_available_limit
+                FROM ${db.fq('users')}
+                WHERE credit_card_available_limit < 0
+            `);
+            for (const u of estourados) {
+                errors.push({
+                    cpf: u.cpf,
+                    name: u.full_name,
+                    type: 'LIMITE_EXCEDIDO',
+                    details: `Limite de crédito estourado. Limite disponível negativo: R$ ${parseFloat(u.credit_card_available_limit).toFixed(2)}.`
+                });
+            }
         }
 
         // Anomalia 4: Encargos zerados com saldo devedor positivo

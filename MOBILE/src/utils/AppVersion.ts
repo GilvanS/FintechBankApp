@@ -1,6 +1,6 @@
 export class AppVersion {
-    private static readonly _version = "4.0.4-20260827-1252";
-    private static readonly _build = "20260827-1252";
+    private static readonly _version = "4.0.4-20260829-2015";
+    private static readonly _build = "20260829-2015";
     private static readonly _environment = "HotFix";
 
     static get current(): string {

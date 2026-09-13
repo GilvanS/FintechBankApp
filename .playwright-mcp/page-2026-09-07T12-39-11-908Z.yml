@@ -1,0 +1,12 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - heading "VOLT" [level=1] [ref=e7]
+    - paragraph [ref=e8]: O banco digital que acelera sua vida.
+  - generic [ref=e9]:
+    - generic [ref=e10]: PIX instantâneo
+    - generic [ref=e14]: Segurança total
+    - generic [ref=e18]: Rendimento CDI
+    - generic [ref=e23]: Cartão sem anuidade
+  - generic [ref=e27]:
+    - button "ENTRAR" [ref=e28]
+    - button "CRIAR CONTA" [ref=e29]

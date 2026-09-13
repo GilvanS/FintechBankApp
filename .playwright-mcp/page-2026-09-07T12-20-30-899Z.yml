@@ -1,0 +1,29 @@
+- main [ref=e30]:
+  - generic [ref=e31]:
+    - button "Voltar para login" [ref=e32]:
+      - generic [ref=e33]: arrow_back
+    - heading "Crie sua conta" [level=1] [ref=e34]
+    - paragraph [ref=e35]: É rápido, fácil e seguro.
+  - main [ref=e36]:
+    - form "Formulário de cadastro" [ref=e37]:
+      - generic [ref=e38]:
+        - generic [ref=e39]: Nome Completo
+        - textbox "Nome completo" [ref=e40]:
+          - /placeholder: Digite seu nome completo
+      - generic [ref=e41]:
+        - generic [ref=e42]: E-mail
+        - textbox "E-mail" [ref=e43]:
+          - /placeholder: seu.email@exemplo.com
+      - generic [ref=e44]:
+        - generic [ref=e45]: CPF
+        - textbox "CPF" [ref=e46]:
+          - /placeholder: 000.000.000-00
+      - generic [ref=e47]:
+        - generic [ref=e48]: Senha
+        - textbox "Senha" [ref=e49]:
+          - /placeholder: Mínimo 6 caracteres
+      - generic [ref=e50]:
+        - generic [ref=e51]: Confirme a Senha
+        - textbox "Confirme a senha" [ref=e52]:
+          - /placeholder: Digite a senha novamente
+      - button "Criar conta" [ref=e54]: Criar Conta

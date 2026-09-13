@@ -174,7 +174,6 @@ Every modal in the app — invoice summary, delivery tracking, promotional popup
 
 ### Don't:
 - **Don't** use any blur-based `box-shadow` in either theme — Yellow is hard-offset-only, Midnight is shadow-free.
-- **Don't** use purple-blue gradients, gradient-clipped text, or the SaaS hero-metric template — this is explicitly generic fintech AI-slop VOLT rejects.
 - **Don't** default to navy-serious, bureaucratic, form-dense corporate-bank styling — VOLT is a challenger bank, not a legacy institution.
 - **Don't** render a Yellow-theme card without its 3–4px black border — an unbordered white card on yellow reads as broken, not minimal.
 - **Don't** introduce a second bright accent color competing with `volt-green` in Midnight screens.

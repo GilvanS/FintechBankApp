@@ -76,7 +76,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
 
   return (
     <div
-        className={`absolute inset-0 z-50 flex flex-col p-4 select-none animate-fade-in overflow-hidden ${
+        className={`fixed inset-0 z-50 flex flex-col p-4 select-none animate-fade-in overflow-hidden ${
           hasImage 
             ? 'bg-black' 
             : isMidnight 
@@ -98,7 +98,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
       )}
 
       {/* Main Container */}
-      <div className="relative z-10 flex flex-col h-full">
+      <div className="relative z-10 flex flex-col h-full pointer-events-none">
         {/* Progress Bars */}
         <div className="flex w-full space-x-1.5 mt-2">
           {stories.map((_, index) => (
@@ -138,7 +138,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); onClose(); }}
-            className={`relative z-30 w-9 h-9 flex items-center justify-center text-2xl font-black leading-none transition-colors border ${
+            className={`relative z-30 pointer-events-auto w-9 h-9 flex items-center justify-center text-2xl font-black leading-none transition-colors border ${
               isMidnight 
                 ? 'bg-zinc-900 text-white border-zinc-800 hover:bg-zinc-800' 
                 : 'bg-white text-black border-2 border-black hover:bg-black hover:text-white'
@@ -488,7 +488,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ stories, onClose }) => {
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()} // Prevent story navigation
-              className={`relative z-30 block mt-4 text-center px-5 py-2.5 text-sm font-black uppercase border transition-all ${
+              className={`relative z-30 pointer-events-auto block mt-4 text-center px-5 py-2.5 text-sm font-black uppercase border transition-all ${
                 isMidnight 
                   ? 'bg-volt-green text-black border-volt-green hover:opacity-90' 
                   : 'bg-volt-lime text-black border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none'

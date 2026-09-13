@@ -1,0 +1,24 @@
+- main [ref=f3e30]:
+  - button "Voltar" [ref=f3e32]
+  - main [ref=f3e35]:
+    - generic [ref=f3e36]:
+      - generic [ref=f3e37]:
+        - heading "VOLT" [level=1] [ref=f3e42] [cursor=pointer]
+        - heading "Acesse sua conta" [level=2] [ref=f3e43]
+      - form "Formulário de login" [ref=f3e44]:
+        - generic [ref=f3e45]:
+          - generic [ref=f3e46]: CPF
+          - textbox "CPF" [ref=f3e47]:
+            - /placeholder: 000.000.000-00
+        - generic [ref=f3e48]:
+          - generic [ref=f3e49]:
+            - generic [ref=f3e50]: Senha
+            - button "Esqueci minha senha" [ref=f3e51]
+          - textbox "Senha" [ref=f3e52]:
+            - /placeholder: Digite sua senha
+        - button "Entrar" [ref=f3e54]
+  - generic [ref=f3e55]:
+    - paragraph [ref=f3e56]:
+      - text: Não tem uma conta?
+      - button "Cadastre-se" [ref=f3e57]
+    - generic [ref=f3e58]: Sua segurança em primeiro lugar.

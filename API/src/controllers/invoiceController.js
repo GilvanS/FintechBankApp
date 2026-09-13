@@ -756,7 +756,16 @@ module.exports = function createInvoiceController(deps) {
                     timestamp: new Date().toISOString(),
                 });
             } catch (_sseErr) { /* SSE é fire-and-forget */ }
-            return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining });
+            // user fresco (mesmo bloco canônico de enrichUserCreditCardData): sem isso o
+            // frontend não tinha como saber que a fatura mudou — InvoicesAllureView.
+            // handleConfirmPassword só chama updateUser(res.user) quando `user` vem na
+            // resposta. Faltando, a tela ficava "congelada" no estado pré-pagamento
+            // (valor, ícone de PAGA e o lançamento do pagamento em Lançamentos, todos
+            // stale) até um reload manual ou navegação que refizesse o fetch.
+            const freshRowParcial = await usersRepo.findByCpf(cpf);
+            const freshUserParcial = normalizeUser(freshRowParcial);
+            await enrichUserCreditCardData(freshUserParcial, cpf);
+            return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining, user: freshUserParcial });
         }
     
         // Pagamento total: registrar o valor REALMENTE pago (payAmount, não o devido),
@@ -862,7 +871,12 @@ module.exports = function createInvoiceController(deps) {
                 timestamp: new Date().toISOString(),
             });
         } catch (_sseErr) { /* SSE é fire-and-forget */ }
-        res.json({ success: true, message: 'Fatura paga com sucesso.' });
+        // user fresco — mesmo motivo do branch parcial acima: sem isso o frontend não
+        // atualiza (valor, ícone de PAGA, lançamento em Lançamentos ficam stale).
+        const freshRowTotal = await usersRepo.findByCpf(cpf);
+        const freshUserTotal = normalizeUser(freshRowTotal);
+        await enrichUserCreditCardData(freshUserTotal, cpf);
+        res.json({ success: true, message: 'Fatura paga com sucesso.', user: freshUserTotal });
     };
     
     const summary = async (req, res) => {

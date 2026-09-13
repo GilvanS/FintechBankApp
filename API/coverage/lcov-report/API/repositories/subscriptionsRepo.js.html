@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">10.34% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>3/29</span>
+                <span class='fraction'>0/30</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">10.71% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>3/28</span>
+                <span class='fraction'>0/29</span>
             </div>
         
             
@@ -140,8 +140,10 @@
 <a name='L75'></a><a href='#L75'>75</a>
 <a name='L76'></a><a href='#L76'>76</a>
 <a name='L77'></a><a href='#L77'>77</a>
-<a name='L78'></a><a href='#L78'>78</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -216,9 +218,10 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { getDb, esc } = require('./context');
-const { computeNextBillingDate } = require('../utils/subscriptions');
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { getDb, esc } = <span class="cstat-no" title="statement not covered" >require('./context');</span>
+const { nowDb } = <span class="cstat-no" title="statement not covered" >require('../utils/timezone');</span>
+const { computeNextBillingDate } = <span class="cstat-no" title="statement not covered" >require('../utils/subscriptions');</span>
 &nbsp;
 // Persistência de assinaturas (cobrança recorrente). Toda query usa esc() —
 // nunca interpolar valores crus (anti SQL injection).
@@ -226,12 +229,12 @@ const { computeNextBillingDate } = require('../utils/subscriptions');
 async function <span class="fstat-no" title="function not covered" >create(</span>{ cpf, name, amount, frequency, payment_method }) {
     const db = <span class="cstat-no" title="statement not covered" >getDb();</span>
     const id = <span class="cstat-no" title="statement not covered" >db.generateUUID();</span>
-    const now = <span class="cstat-no" title="statement not covered" >new Date();</span>
+    const now = <span class="cstat-no" title="statement not covered" >nowDb();</span>
     const nextBilling = <span class="cstat-no" title="statement not covered" >computeNextBillingDate(frequency, now).toISOString();</span>
 <span class="cstat-no" title="statement not covered" >    await db.executeQuery(`</span>
         INSERT INTO ${db.fq('subscriptions')}
         (id, cpf, name, amount, frequency, payment_method, status, next_billing_date, created_at, updated_at)
-        VALUES (${esc(id)}, ${esc(cpf)}, ${esc(name)}, ${esc(Number(amount).toFixed(2))}, ${esc(frequency)}, ${esc(payment_method)}, 'active', ${esc(nextBilling)}, ${esc(now.toISOString())}, ${esc(now.toISOString())})
+        VALUES (${esc(id)}, ${esc(cpf)}, ${esc(name)}, ${esc(Number(amount).toFixed(2))}, ${esc(frequency)}, ${esc(payment_method)}, 'active', ${esc(nextBilling)}, ${esc(now)}, ${esc(now)})
     `);
 <span class="cstat-no" title="statement not covered" >    return findById(id);</span>
 }
@@ -262,7 +265,7 @@ async function <span class="fstat-no" title="function not covered" >cancel(</spa
 <span class="cstat-no" title="statement not covered" >    if (!sub || sub.cpf !== cpf) <span class="cstat-no" title="statement not covered" >return { cancelled: false, notFound: !sub, forbidden: !!sub &amp;&amp; sub.cpf !== cpf };</span></span>
 <span class="cstat-no" title="statement not covered" >    await db.executeQuery(`</span>
         UPDATE ${db.fq('subscriptions')}
-        SET status = 'cancelled', updated_at = ${esc(new Date().toISOString())}
+        SET status = 'cancelled', updated_at = ${esc(nowDb())}
         WHERE id = ${esc(id)} AND cpf = ${esc(cpf)}
     `);
 <span class="cstat-no" title="statement not covered" >    return { cancelled: true };</span>
@@ -281,19 +284,19 @@ async function <span class="fstat-no" title="function not covered" >findDue(</sp
 // Após cobrar: registra last_billing_date e agenda a próxima.
 async function <span class="fstat-no" title="function not covered" >markBilled(</span>{ id, frequency }) {
     const db = <span class="cstat-no" title="statement not covered" >getDb();</span>
-    const now = <span class="cstat-no" title="statement not covered" >new Date();</span>
+    const now = <span class="cstat-no" title="statement not covered" >nowDb();</span>
     const next = <span class="cstat-no" title="statement not covered" >computeNextBillingDate(frequency, now).toISOString();</span>
 <span class="cstat-no" title="statement not covered" >    await db.executeQuery(`</span>
         UPDATE ${db.fq('subscriptions')}
-        SET last_billing_date = ${esc(now.toISOString())},
+        SET last_billing_date = ${esc(now)},
             next_billing_date = ${esc(next)},
-            updated_at = ${esc(now.toISOString())}
+            updated_at = ${esc(now)}
         WHERE id = ${esc(id)}
     `);
 <span class="cstat-no" title="statement not covered" >    return { nextBillingDate: next };</span>
 }
 &nbsp;
-module.exports = { create, findById, listByCpf, cancel, findDue, markBilled };
+<span class="cstat-no" title="statement not covered" >module.exports = { create, findById, listByCpf, cancel, findDue, markBilled };</span>
 &nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -301,7 +304,7 @@ module.exports = { create, findById, listByCpf, cancel, findDue, markBilled };
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-01T02:30:21.792Z
+                at 2026-08-20T05:42:15.531Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

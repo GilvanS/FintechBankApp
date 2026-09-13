@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Plus, Trash2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PixContact } from '../types';
 import { getPixContacts, addPixContact, deletePixContact, getPixRecipientInfo } from '../services/api';
@@ -35,7 +36,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
         if (user) {
             setIsLoading(true);
             const res = await getPixContacts(user.cpf);
-            setContacts(res?.contacts ?? []);
+            setContacts(res ?? []);
             setIsLoading(false);
         }
     };
@@ -157,7 +158,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
                 <h2 className={`text-xl font-bold ${titleClass}`}>Meus Contatos</h2>
                 {onBack && (
                      <button onClick={onBack} className={`p-2 rounded-full ${backBtnClass} ${titleClass}`}>
-                        <span className="material-symbols-outlined">arrow_back</span>
+                        <ArrowLeft size={20} />
                     </button>
                 )}
             </div>
@@ -171,14 +172,14 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
                             <p className={`text-xs font-normal leading-normal truncate ${contactKeyClass}`}>{contact.key}</p>
                         </div>
                         <button onClick={(e) => { e.stopPropagation(); handleDeleteContact(contact.key); }} className={`absolute top-1 right-1 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity ${deleteBtnClass}`}>
-                            <span className="material-symbols-outlined text-sm">delete</span>
+                            <Trash2 size={14} />
                         </button>
                     </button>
                 ))}
 
                 <button onClick={() => setShowBenefitsPopup(true)} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${newContactBtnClass}`}>
-                    <div className={`size-10 flex items-center justify-center rounded-full ${newContactIconBubbleClass}`}>
-                        <span className="material-symbols-outlined">add</span>
+                    <div className={`size-10 flex items-center justify-center rounded-full shrink-0 ${newContactIconBubbleClass}`}>
+                        <Plus size={18} />
                     </div>
                     <p className="text-sm font-medium leading-normal">Novo Contato</p>
                 </button>

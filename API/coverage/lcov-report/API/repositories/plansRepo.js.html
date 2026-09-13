@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">23.52% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>4/17</span>
+                <span class='fraction'>0/18</span>
             </div>
         
             
@@ -37,16 +37,16 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">25% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>1/4</span>
+                <span class='fraction'>0/4</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">23.52% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>4/17</span>
+                <span class='fraction'>0/18</span>
             </div>
         
             
@@ -123,14 +123,12 @@
 <a name='L58'></a><a href='#L58'>58</a>
 <a name='L59'></a><a href='#L59'>59</a>
 <a name='L60'></a><a href='#L60'>60</a>
-<a name='L61'></a><a href='#L61'>61</a>
-<a name='L62'></a><a href='#L62'>62</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<a name='L61'></a><a href='#L61'>61</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -179,19 +177,18 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">'use strict';
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { getDb, esc } = <span class="cstat-no" title="statement not covered" >require('./context');</span>
+const { nowDb } = <span class="cstat-no" title="statement not covered" >require('../utils/timezone');</span>
 &nbsp;
-const { getDb, esc } = require('./context');
-&nbsp;
-async function ensureTable() {
-    const db = getDb();
-    await db.executeQuery(`
+async function <span class="fstat-no" title="function not covered" >ensureTable(</span>) {
+    const db = <span class="cstat-no" title="statement not covered" >getDb();</span>
+<span class="cstat-no" title="statement not covered" >    await db.executeQuery(`</span>
         CREATE TABLE IF NOT EXISTS ${db.fq('plans')} (
             id VARCHAR(255) PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
@@ -220,7 +217,7 @@ async function <span class="fstat-no" title="function not covered" >create(</spa
     const db = <span class="cstat-no" title="statement not covered" >getDb();</span>
 <span class="cstat-no" title="statement not covered" >    await ensureTable();</span>
     const id = <span class="cstat-no" title="statement not covered" >db.generateUUID();</span>
-    const now = <span class="cstat-no" title="statement not covered" >new Date().toISOString();</span>
+    const now = <span class="cstat-no" title="statement not covered" >nowDb();</span>
 <span class="cstat-no" title="statement not covered" >    await db.executeQuery(`</span>
         INSERT INTO ${db.fq('plans')}
         (id, name, amount, frequency, description, status, created_at, updated_at)
@@ -240,7 +237,7 @@ async function <span class="fstat-no" title="function not covered" >findById(</s
 <span class="cstat-no" title="statement not covered" >    return rows &amp;&amp; rows.length &gt; 0 ? rows[0] : null;</span>
 }
 &nbsp;
-module.exports = {
+<span class="cstat-no" title="statement not covered" >module.exports = {</span>
     ensureTable,
     list,
     create,
@@ -253,7 +250,7 @@ module.exports = {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-01T02:30:21.792Z
+                at 2026-08-20T05:42:15.531Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

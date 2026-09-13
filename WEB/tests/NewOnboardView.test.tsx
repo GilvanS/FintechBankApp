@@ -24,8 +24,8 @@ describe('NewOnboardView Component', () => {
       />
     );
 
-    // Header elements
-    expect(screen.getByText('Volt Bank')).toBeInTheDocument();
+    // Header elements — simplificado de propósito (só o botão Voltar, sem
+    // logo/título/badge, pra maximizar espaço; ver comentário em NewOnboardView.tsx).
     expect(screen.getByText(/Voltar/i)).toBeInTheDocument();
 
     // 50/50 Split layout elements: Left side (Form Container)

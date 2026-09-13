@@ -13,6 +13,7 @@ import {
   X,
   Info,
   ChevronRight,
+  CheckCircle2,
 } from 'lucide-react';
 import { AllureShell, type AllureSection } from '../shared/AllureShell';
 import DonutStatusCard from '../Analytics/DonutStatusCard';
@@ -22,6 +23,8 @@ import ChartCard from '../Analytics/ChartCard';
 import InvoiceSummarySheet from '../InvoiceSummarySheet';
 import PasswordModal from '../PasswordModal';
 import PaymentTypeFilter, { type PaymentFilterValue } from '../PaymentTypeFilter';
+import { useToast, ToastContainer } from '../Toast';
+import PaymentSuccessModal from './PaymentSuccessModal';
 import { useCardOrder } from '../../hooks/useCardOrder';
 import { useAuth } from '../../context/AuthContext';
 import { payCreditCardInvoice } from '../../services/api';
@@ -56,6 +59,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   const isMidnight = theme === 'midnight';
   const prefersReducedMotion = useReducedMotion();
   const { updateUser } = useAuth();
+  const { toast, showError, hide } = useToast();
 
   const [activeSection, setActiveSection] = useState<SubSectionKey>('fatura');
   const [faturaTab, setFaturaTab] = useState<'aberta' | 'fechada' | 'historico'>('aberta');
@@ -68,6 +72,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [pendingPaymentAmount, setPendingPaymentAmount] = useState<number | null>(null);
   const [isPaying, setIsPaying] = useState(false);
+  const [paymentSuccessAmount, setPaymentSuccessAmount] = useState<number | null>(null);
   const [showSummarySheet, setShowSummarySheet] = useState(false);
 
   // Seletor de valor de pagamento (Total / Mínimo / Personalizado — sem teto, permite virar credor)
@@ -206,15 +211,18 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
     setIsPaying(true);
     try {
       const res = await payCreditCardInvoice(user.cpf, pin, pendingPaymentAmount);
-      if (res && res.success && res.user) {
-        updateUser(res.user);
+      if (res && res.success) {
+        if (res.user) updateUser(res.user);
+        setPaymentSuccessAmount(pendingPaymentAmount);
+        setIsPasswordModalOpen(false);
+        setPendingPaymentAmount(null);
+      } else {
+        showError(res?.message || 'Não foi possível concluir o pagamento.');
       }
-    } catch {
-      // Handled
+    } catch (err: any) {
+      showError(err?.message || 'Não foi possível concluir o pagamento.');
     } finally {
       setIsPaying(false);
-      setIsPasswordModalOpen(false);
-      setPendingPaymentAmount(null);
     }
   };
 
@@ -236,9 +244,9 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
       {/* Subtabs: qual fatura está selecionada (define todo o conteúdo abaixo) */}
       <div className="flex items-center gap-2 border-b pb-4 border-black/10 dark:border-white/10">
         {[
-          { key: 'aberta', label: 'Fatura Aberta', amount: currentInvoiceTotal },
-          { key: 'fechada', label: 'Fatura Fechada', amount: closedInvoiceTotal },
-          { key: 'historico', label: 'Histórico Completo' },
+          { key: 'aberta', label: 'Fatura Aberta', paid: false },
+          { key: 'fechada', label: 'Fatura Fechada', paid: !!creditCard?.closedInvoiceIsPaid },
+          { key: 'historico', label: 'Histórico Completo', paid: false },
         ].map((tab) => {
           const active = faturaTab === tab.key;
           return (
@@ -256,16 +264,23 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
               }`}
             >
               <span>{tab.label}</span>
-              {tab.amount !== undefined && (
-                <span className="text-[10px] opacity-75 font-black">({formatBRL(tab.amount)})</span>
-              )}
+              {tab.paid && <CheckCircle2 size={13} className="text-emerald-500" />}
             </button>
           );
         })}
       </div>
 
-      {/* Dados da fatura selecionada */}
-      <div className={`p-5 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
+      {/* Dados da fatura selecionada — quando a fechada está paga, usa o mesmo
+          verde translúcido do painel admin (bg-emerald-500/10 border-emerald-500/20). */}
+      <div
+        className={`p-5 rounded-xl border ${
+          faturaTab === 'fechada' && creditCard?.closedInvoiceIsPaid
+            ? 'bg-emerald-500/10 border-emerald-500/30'
+            : isMidnight
+              ? 'bg-volt-dark/60 border-white/10'
+              : 'bg-volt-yellow-pastel border-2 border-black'
+        }`}
+      >
         <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
           {faturaTab === 'aberta' ? 'Valor Atual da Fatura' : faturaTab === 'fechada' ? 'Valor Total da Fatura Fechada' : 'Histórico Completo de Lançamentos'}
         </p>
@@ -275,6 +290,13 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
         {faturaTab === 'aberta' && (
           <p className={`text-xs mt-1 font-bold ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
             Vencimento em {creditCard?.invoiceDueDate || '10/10'}
+          </p>
+        )}
+        {faturaTab === 'fechada' && creditCard?.closedInvoiceIsPaid && (
+          <p className="mt-2">
+            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full bg-emerald-600 text-white">
+              <CheckCircle2 size={12} /> Paga
+            </span>
           </p>
         )}
       </div>
@@ -351,9 +373,9 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
       {/* Subtabs: qual fatura está sendo consultada */}
       <div className="flex items-center gap-2 border-b pb-4 border-black/10 dark:border-white/10">
         {[
-          { key: 'aberta', label: 'Fatura Aberta', amount: currentInvoiceTotal },
-          { key: 'fechada', label: 'Fatura Fechada', amount: closedInvoiceTotal },
-          { key: 'historico', label: 'Histórico Completo' },
+          { key: 'aberta', label: 'Fatura Aberta', paid: false },
+          { key: 'fechada', label: 'Fatura Fechada', paid: !!creditCard?.closedInvoiceIsPaid },
+          { key: 'historico', label: 'Histórico Completo', paid: false },
         ].map((tab) => {
           const active = faturaTab === tab.key;
           return (
@@ -371,9 +393,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
               }`}
             >
               <span>{tab.label}</span>
-              {tab.amount !== undefined && (
-                <span className="text-[10px] opacity-75 font-black">({formatBRL(tab.amount)})</span>
-              )}
+              {tab.paid && <CheckCircle2 size={13} className="text-emerald-500" />}
             </button>
           );
         })}
@@ -426,7 +446,11 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
                   <div
                     key={txKey}
                     className={`rounded-xl border transition-colors overflow-hidden ${
-                      isMidnight ? 'bg-volt-dark/50 border-white/5 hover:border-white/20' : 'bg-gray-50 border-black/10 hover:border-black/30'
+                      isPaymentEntry
+                        ? 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/50'
+                        : isMidnight
+                          ? 'bg-volt-dark/50 border-white/5 hover:border-white/20'
+                          : 'bg-gray-50 border-black/10 hover:border-black/30'
                     }`}
                   >
                     <button
@@ -729,8 +753,18 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
           onConfirm={handleConfirmPassword}
           title="Confirmar Pagamento da Fatura"
           description={`Digite seu PIN transacional para confirmar o pagamento de ${formatBRL(pendingPaymentAmount ?? 0)}.`}
+          isLoading={isPaying}
         />
       )}
+
+      <PaymentSuccessModal
+        isOpen={paymentSuccessAmount !== null}
+        onClose={() => setPaymentSuccessAmount(null)}
+        amount={paymentSuccessAmount ?? 0}
+        isMidnight={isMidnight}
+      />
+
+      <ToastContainer toast={toast} onClose={hide} />
     </AllureShell>
   );
 }

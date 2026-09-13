@@ -199,6 +199,8 @@ const createAdminUsersController = require('./src/controllers/adminUsersControll
 const registerAdminUsersRoutes = require('./src/routes/admin/users.routes');
 const createAdminNotificationsController = require('./src/controllers/adminNotificationsController');
 const registerAdminNotificationsRoutes = require('./src/routes/admin/notifications.routes');
+const createAdminScriptsController = require('./src/controllers/adminScriptsController');
+const registerAdminScriptsRoutes = require('./src/routes/admin/scripts.routes');
 
 // --- Configurações ---
 const PORT = process.env.PORT || 3001;
@@ -305,6 +307,36 @@ scheduleCron('0 0 * * *', async () => {
         telegramService.alertGroup('ERRO ao sincronizar dias_atraso: ' + e.message, 'system_error');
     }
 
+    // Reconciliar credit_card_available_limit de TODAS as massas com a dívida real
+    // (recalcularLimiteDisponivel). O campo é escrito incrementalmente em ~15 pontos
+    // do código (compra, pagamento, estorno...) e drifta silenciosamente quando
+    // algum desses pontos erra ou é pulado — sem este passo diário, o desvio nunca
+    // se corrige sozinho (só era "corrigido" cosmeticamente zerando o negativo no
+    // audit-fix manual, escondendo o estouro real em vez de refletir a dívida).
+    console.log('[Cron] Reconciliando limite disponível de crédito...');
+    try {
+        const usuarios = await usersRepo.listUsers();
+        let corrigidos = 0;
+        let estourados = 0;
+        for (const u of usuarios) {
+            if (u.role === 'admin') continue;
+            try {
+                const r = await recalcularLimiteDisponivel(u.cpf);
+                if (r && r.alterado) corrigidos++;
+                if (r && r.estourado) estourados++;
+            } catch (userErr) {
+                console.error(`[Cron] Falha ao recalcular limite do CPF ${u.cpf}:`, userErr.message);
+            }
+        }
+        console.log(`[Cron] Limite disponível reconciliado: ${corrigidos} massa(s) corrigida(s), ${estourados} com limite estourado (negativo real).`);
+        if (corrigidos > 0) {
+            telegramService.alertGroup(`🔧 Reconciliação de limite: ${corrigidos} massa(s) tinham credit_card_available_limit divergente da dívida real e foram corrigidas (${estourados} continuam com limite estourado — dívida real acima do limite total).`, 'system_done');
+        }
+    } catch (e) {
+        console.error('[Cron] Erro ao reconciliar limite disponível:', e);
+        telegramService.alertGroup('ERRO ao reconciliar limite disponível: ' + e.message, 'system_error');
+    }
+
     // T6: registra o horario desta execucao para o catch-up de boot saber se o
     // motor ja rodou hoje.
     try {
@@ -320,7 +352,7 @@ scheduleCron('0 2 * * *', async () => {
     telegramService.alertGroup('⚠️ Job de auditoria diária iniciando: varredura de anomalias...', 'system_start');
     try {
         await assertTimezone(dbService);
-        const result = await runDailyAudit(dbService, auditLog);
+        const result = await runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel);
         telegramService.alertGroup(`✅ Job de auditoria concluído: ${result.count} anomalias detectadas.`, 'system_done');
     } catch (e) {
         console.error('[Cron-Audit] Erro na auditoria:', e);
@@ -2819,6 +2851,15 @@ const adminUsersController = createAdminUsersController({
 });
 registerAdminUsersRoutes({ apiRouter, bearerAuth, authenticateAdmin, asyncHandler, controller: adminUsersController });
 
+// --- Rotas de Admin: scripts & massas (ativa scripts de API/scripts/ como botões do painel) ---
+const adminScriptsController = createAdminScriptsController({
+    dbService,
+    repoContext,
+    cardEngine,
+    auditLog,
+});
+registerAdminScriptsRoutes({ apiRouter, bearerAuth, authenticateAdmin, asyncHandler, controller: adminScriptsController });
+
 // --- Telegram: gestão dos tópicos por massa ---
 apiRouter.get('/admin/telegram/status', bearerAuth(), authenticateAdmin, asyncHandler(async(req, res) => {
     const status = await telegramService.getStatus();
@@ -3375,7 +3416,7 @@ const invoiceController = createInvoiceController({
     enrichUserCreditCardData,
     fetchUnpaidClosedInvoices,
     auditLog,
-    paymentGeneratorScriptPath: path.join(__dirname, '..', 'scripts', 'invoice_payment_generator.py'),
+    paymentGeneratorScriptPath: path.join(__dirname, 'scripts', 'invoice_payment_generator.py'),
 });
 registerInvoiceRoutes({ apiRouter, bearerAuth, asyncHandler, controller: invoiceController });
 
@@ -4207,7 +4248,17 @@ apiRouter.post('/admin/invoices/engine/force-cycle', bearerAuth(), authenticateA
     // Puxa o engine (import inline para evitar loops, ou usamos global)
     const { runEngine } = require('./services/invoiceEngine');
     const result = await runEngine(cpf);
-    res.json(result);
+    // Fechar/rolar fatura muda a dívida da massa — reconcilia o limite disponível
+    // na hora em vez de esperar o cron de meia-noite (mesma fonte única do cron).
+    let limiteRecalculado = null;
+    if (cpf) {
+        try {
+            limiteRecalculado = await recalcularLimiteDisponivel(cpf);
+        } catch (limErr) {
+            console.error(`[force-cycle] Erro ao reconciliar limite do CPF ${cpf}:`, limErr.message);
+        }
+    }
+    res.json({ ...result, limiteRecalculado });
 }));
 
 apiRouter.post('/admin/subscriptions/engine/force-cycle', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
@@ -7566,6 +7617,54 @@ if (!IS_TEST) {
 });
 }
 
+/**
+ * FONTE ÚNICA de recálculo de credit_card_available_limit. O campo é escrito de
+ * forma incremental em ~15 pontos do código (compra, pagamento, estorno, ativação
+ * de cartão...) — qualquer um que esqueça de atualizar (ou atualize com fórmula
+ * levemente diferente) faz o valor divergir da dívida real e nunca mais se
+ * corrige sozinho. Esta função reconcilia com a verdade: usa a MESMA
+ * enrichUserCreditCardData que já é fonte única do "Próxima Fatura" (Web/Admin).
+ *
+ * Fórmula: disponível = limite_total - currentInvoiceTotal (compras abertas +
+ * fatura fechada residual + encargos herdados). PODE dar negativo de propósito —
+ * significa limite estourado de verdade, não um erro a esconder (a UI do
+ * Backoffice já trata availableLimit<0 como estado válido, com ícone/cor
+ * próprios — ver BackofficeInvoiceSection.tsx).
+ */
+async function recalcularLimiteDisponivel(cpf) {
+    const { esc } = repoContext;
+    const userRow = await usersRepo.findByCpf(cpf);
+    if (!userRow) return null;
+
+    const tempUser = normalizeUser(userRow);
+    await enrichUserCreditCardData(tempUser, cpf);
+
+    const totalLimit = parseFloat(userRow.credit_card_total_limit || 0);
+    const currentInvoiceTotal = tempUser.creditCard?.currentInvoiceTotal ?? 0;
+    const limiteAnterior = parseFloat(userRow.credit_card_available_limit || 0);
+    const limiteNovo = round2(totalLimit - currentInvoiceTotal);
+    const alterado = Math.abs(limiteNovo - limiteAnterior) > 0.005;
+
+    if (alterado) {
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')}
+            SET credit_card_available_limit = ${limiteNovo.toFixed(2)}, updated_at = CURRENT_TIMESTAMP
+            WHERE cpf = ${esc(cpf)}
+        `);
+    }
+
+    return {
+        cpf,
+        fullName: userRow.full_name,
+        totalLimit,
+        currentInvoiceTotal,
+        limiteAnterior,
+        limiteNovo,
+        alterado,
+        estourado: limiteNovo < 0,
+    };
+}
+
 module.exports = {
     enrichUserCreditCardData,
     normalizeUser,
@@ -7573,5 +7672,7 @@ module.exports = {
     fetchUnpaidClosedInvoices,
     app,
     bootstrap,
-    runBillingValidation
+    runBillingValidation,
+    recalcularLimiteDisponivel,
+    dbService
 };

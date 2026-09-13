@@ -1,0 +1,181 @@
+{
+  "meta": {
+    "name": "Volt Analytics Tab — Allure-inspired data density on Volt brand",
+    "description": "Design DNA for a new 'Analytics' view inside FintechBankApp's WEB dashboard, fusing Allure Report's dark, data-dense reporting layout with the existing Volt brand (yellow/black, rounded cards, mobile-first bottom nav).",
+    "source_references": [
+      "http://127.0.0.1:56784 (Allure Report - Overview, Graphs sections, screenshots captured live)",
+      "http://localhost:3000/dashboard (current Volt HomeView, screenshots captured live)"
+    ],
+    "created_at": "2026-09-05"
+  },
+  "design_system": {
+    "color": {
+      "palette_type": "complementary",
+      "primary": { "hex": "#D4FF3D", "role": "brand accent, primary CTA, chart highlight (borrowed from Volt bottom-nav/buttons)" },
+      "secondary": { "hex": "#1A1D29", "role": "Allure-style dark surface background for the Analytics view only" },
+      "accent": { "hex": "#8B5CF6", "role": "secondary chart series (purple, matches Allure's 'Unknown' status slice)" },
+      "neutral": {
+        "scale": ["#0F1117", "#1A1D29", "#262A38", "#3A3F52", "#6B7280", "#9CA3AF", "#E5E7EB", "#FFFFFF"],
+        "usage": "Neutral scale reserved for Analytics tab chrome (cards, dividers, sidebar); rest of app keeps existing light/yellow neutrals"
+      },
+      "semantic": {
+        "success": "#22C55E",
+        "warning": "#F59E0B",
+        "error": "#EF4444",
+        "info": "#3B82F6"
+      },
+      "surface": {
+        "background": "#1A1D29",
+        "card": "#20232F",
+        "elevated": "#262A38"
+      },
+      "contrast_strategy": "dark-on-light dominant inverted to light-on-dark inside Analytics; white/95% text on near-black cards, semantic colors carry all status meaning so it stays scannable at a glance"
+    },
+    "typography": {
+      "type_scale": {
+        "display": { "size": "32px", "weight": "800", "line_height": "1.1", "tracking": "-0.02em" },
+        "heading_1": { "size": "24px", "weight": "700", "line_height": "1.2", "tracking": "-0.01em" },
+        "heading_2": { "size": "18px", "weight": "700", "line_height": "1.3", "tracking": "normal" },
+        "heading_3": { "size": "15px", "weight": "600", "line_height": "1.4", "tracking": "normal" },
+        "body": { "size": "14px", "weight": "400", "line_height": "1.5", "tracking": "normal" },
+        "body_small": { "size": "13px", "weight": "400", "line_height": "1.4", "tracking": "normal" },
+        "caption": { "size": "11px", "weight": "500", "line_height": "1.3", "tracking": "0.03em" },
+        "overline": { "size": "10px", "weight": "700", "line_height": "1.2", "tracking": "0.08em" }
+      },
+      "font_families": {
+        "heading": "existing app font (Inter/system-ui, unchanged)",
+        "body": "existing app font (Inter/system-ui, unchanged)",
+        "mono": "ui-monospace, SFMono-Regular (for numeric KPIs, matches Allure's tabular figures)"
+      },
+      "font_style_notes": "Keep Volt's existing geometric sans everywhere; do not introduce a new font family just for this tab"
+    },
+    "spacing": {
+      "base_unit": "4px",
+      "scale": [4, 8, 12, 16, 20, 24, 32, 40],
+      "content_density": "compact",
+      "section_rhythm": "16px gap between cards, 24px between major sections — denser than Volt's current 20-24px card rhythm, matching Allure's tighter grid"
+    },
+    "layout": {
+      "grid_system": "2-column card grid on desktop (matches Allure's Overview grid), collapses to 1-column stack under 768px",
+      "max_content_width": "1200px",
+      "columns": 2,
+      "gutter": "16px",
+      "breakpoints": { "mobile": "0-767px", "tablet": "768-1023px", "desktop": "1024px+" },
+      "alignment_tendency": "strict grid"
+    },
+    "shape": {
+      "border_radius": { "small": "8px", "medium": "12px", "large": "16px", "pill": "999px" },
+      "border_usage": "subtle 1px (rgba(255,255,255,0.06)) separating cards from dark background instead of shadow",
+      "divider_style": "hairline, low-opacity, no color"
+    },
+    "elevation": {
+      "shadow_style": "soft diffused, low-intensity (dark theme relies on surface-color steps, not shadow, exactly like Allure)",
+      "levels": { "low": "0 1px 2px rgba(0,0,0,0.3)", "medium": "0 4px 12px rgba(0,0,0,0.4)", "high": "0 8px 24px rgba(0,0,0,0.5)" },
+      "depth_cues": "color intensity (surface steps from #1A1D29 to #3A3F52) over heavy shadows"
+    },
+    "iconography": {
+      "style": "line icons, already Lucide in this codebase (per commit ef1ce7f8) — reuse, do not add a second icon set",
+      "stroke_weight": "1.5px-2px",
+      "size_scale": ["16px", "20px", "24px"],
+      "preferred_set": "lucide-react (existing dependency)"
+    },
+    "motion": {
+      "easing": "ease-out for entrances, ease-in-out for hover",
+      "duration_scale": { "micro": "120ms", "normal": "220ms", "macro": "400ms" },
+      "entrance_pattern": "fade + 8px slide-up per card, staggered ~40ms (matches motion/react already used in Dashboard.tsx)",
+      "exit_pattern": "fade only, no slide",
+      "philosophy": "minimal functional — motion signals state change (tab switch, data refresh), never decorative"
+    },
+    "components": {
+      "button_style": "reuse existing Volt pill buttons for actions inside this tab (e.g. 'Exportar', 'Periodo'); do not invent a new button style",
+      "input_style": "reuse existing Volt input style for filters/date-range picker",
+      "card_style": "dark surface card, 12-16px radius, 1px hairline border, no drop shadow, 16-20px internal padding — new pattern specific to this tab",
+      "navigation_pattern": "secondary in-tab sub-nav (pills or underline tabs: Visao Geral / Categorias / Tendencia / Faturas) sitting below the existing BottomNavBar — does not replace it",
+      "modal_style": "reuse existing Volt modal component for any drill-down detail view",
+      "component_notes": "New primitives needed: DonutStatusCard, TrendLineCard, CategoryBarCard, HistogramCard, ProgressBarRow — all dark-surface, all consuming a shared `ChartCard` shell wrapper"
+    }
+  },
+  "design_style": {
+    "aesthetic": {
+      "mood": ["analytical", "trustworthy", "focused", "modern"],
+      "visual_metaphor": "a control room panel — glanceable status at a glance, drill down on demand",
+      "era_influence": "2020s dark-mode SaaS analytics (Allure, Grafana, Vercel dashboard)",
+      "genre": "financial analytics / reporting dashboard",
+      "personality_traits": ["precise", "calm", "confident", "unshowy"],
+      "adjectives": ["dense", "legible", "structured", "quiet"]
+    },
+    "visual_language": {
+      "complexity": "moderate",
+      "ornamentation": "none",
+      "whitespace_usage": "tight but not cramped — breathing room comes from consistent 16px gaps, not empty space",
+      "visual_weight_distribution": "even grid weight, one hero KPI card (balance/health donut) gets 2x visual size like Allure's Status card",
+      "focal_strategy": "single hero element (top-left status/health donut) + distributed supporting cards",
+      "contrast_level": "high (light text/charts on near-black surfaces, semantic colors pop hard)",
+      "texture_usage": "flat color only, no gradients or noise"
+    },
+    "composition": {
+      "hierarchy_method": "scale contrast + color weight (hero card larger + brand-yellow accent draws eye first)",
+      "balance_type": "asymmetric (2-col grid, hero card spans differently than Allure's since mobile-first reflow is required)",
+      "flow_direction": "top-to-bottom, left-to-right reading of cards, same as Allure Overview",
+      "grouping_strategy": "related metrics clustered in one card (e.g. entradas/saidas/resultado together, like current FinancialHealthModal already does)",
+      "negative_space_role": "separates card clusters, not used for drama"
+    },
+    "imagery": {
+      "photo_treatment": "none — this is a data view, no photography",
+      "illustration_style": "none",
+      "graphic_elements": "charts only (donut, line, bar, histogram, progress bar) — no decorative shapes",
+      "pattern_usage": "none",
+      "image_shape": "n/a"
+    },
+    "interaction_feel": {
+      "feedback_style": "immediate hover highlight on chart segments/bars with tooltip, matching Allure's chart hover behavior",
+      "hover_behavior": "desktop: tooltip + slight brightness increase on hover; mobile: tap-to-reveal tooltip (no hover-only info, per mobile-principles)",
+      "transition_personality": "snappy, smooth glide — never bouncy (this is a finance app, not a game)",
+      "loading_style": "skeleton cards matching final card shapes, not spinners (keeps layout stable)",
+      "microinteraction_density": "low — this view is for scanning data quickly, not for delight-driven exploration"
+    },
+    "brand_voice_in_ui": {
+      "tone": "matter-of-fact, precise, numbers-first",
+      "formality": "semi-formal (keeps Volt's friendly copy tone in labels, but numbers/charts stay clinical)",
+      "cta_style": "subtle suggestion (e.g. 'Ver detalhes' link, not a loud button, since this is a read-mostly view)",
+      "empty_state_approach": "same pattern as Allure's 'There is nothing to show' — plain centered text, no illustration, no dead space drama",
+      "error_tone": "calm and actionable, consistent with existing Volt error states"
+    }
+  },
+  "visual_effects": {
+    "overview": {
+      "effect_intensity": "subtle-accent",
+      "performance_tier": "lightweight",
+      "fallback_strategy": "reduce to CSS — charts degrade to plain numbers/table if a chart lib fails to load, never block the tab",
+      "primary_technology": "SVG/Canvas via lightweight chart lib (recharts or visx — both already compatible with React 19 + Vite stack)"
+    },
+    "background_effects": { "type": "none", "description": "flat dark surface, no animated background", "technology": "CSS only", "params": { "color_palette": ["#1A1D29"], "speed": "n/a", "density": "n/a", "opacity": "1", "blend_mode": "normal" } },
+    "particle_systems": { "enabled": false, "type": "none", "description": "not applicable to a finance reporting view", "technology": "n/a", "params": { "count": "0", "shape": "n/a", "size_range": "n/a", "movement_pattern": "n/a", "color_behavior": "n/a", "interaction": "none", "spawn_area": "n/a" } },
+    "3d_elements": { "enabled": false, "type": "none", "description": "not applicable", "technology": "n/a", "params": { "renderer": "n/a", "lighting": "n/a", "camera": "n/a", "materials": "n/a", "geometry": "n/a", "post_processing": [], "interaction_model": "n/a" } },
+    "shader_effects": { "enabled": false, "type": "none", "description": "not applicable", "technology": "n/a", "params": { "uniforms": "n/a", "vertex_manipulation": "n/a", "fragment_output": "n/a", "noise_type": "n/a", "distortion": "n/a" } },
+    "scroll_effects": {
+      "parallax": { "enabled": false, "layers": "0", "depth_range": "n/a", "speed_curve": "n/a" },
+      "scroll_triggered_animations": { "enabled": true, "trigger_points": ["card enters viewport"], "animation_type": "fade-up", "scrub_behavior": "none, one-shot on entry" },
+      "scroll_morphing": { "enabled": false, "description": "not used" }
+    },
+    "text_effects": { "type": "none", "description": "numbers animate via count-up on first load (e.g. balance ticking to final value), text itself is static", "technology": "CSS/JS count-up utility", "params": { "split_strategy": "n/a", "animation_per_unit": "n/a", "stagger": "n/a", "effect_style": "count-up numeric only" } },
+    "cursor_effects": { "enabled": false, "type": "none", "description": "standard cursor, no custom effects (finance app, not showcase site)", "params": { "shape": "n/a", "size": "n/a", "blend_mode": "n/a", "trail": "n/a", "interaction_zone": "n/a" } },
+    "image_effects": { "type": "none", "description": "no imagery in this view", "technology": "n/a", "params": { "filter_pipeline": "n/a", "hover_transform": "n/a", "reveal_animation": "n/a", "distortion_type": "n/a" } },
+    "glassmorphism_neumorphism": { "enabled": false, "style": "none", "params": { "blur_radius": "n/a", "transparency": "n/a", "border_treatment": "n/a", "shadow_type": "n/a", "light_source_angle": "n/a" } },
+    "canvas_drawings": {
+      "enabled": true,
+      "type": "data-visualization",
+      "description": "donut chart (status/health), line/area chart (trend over time), horizontal bar chart (spend by category, mirrors Allure's Severity chart), histogram (transaction size distribution), horizontal progress bars (budget vs actual, mirrors Allure's Suite progress bars)",
+      "technology": "recharts (SVG-based, tree-shakeable, React-idiomatic) — recommended over visx for faster implementation given no existing chart lib in WEB/package.json",
+      "params": {
+        "draw_method": "declarative SVG via recharts components",
+        "animation_loop": "one-shot entrance animation only, no continuous loop",
+        "color_scheme": "semantic colors from design_system.color.semantic mapped to categories consistently across all charts",
+        "responsiveness": "ResponsiveContainer, reflows to single column under 768px",
+        "interaction": "hover tooltip + click to filter/drill down"
+      }
+    },
+    "svg_animations": { "enabled": true, "type": "path-draw", "description": "donut/line chart stroke draws in on mount (recharts default animation)", "params": { "animation_method": "recharts built-in stroke-dashoffset animation", "path_morphing": false, "stroke_animation": true, "filter_effects": "none" } },
+    "composite_notes": "This DNA intentionally scopes the Allure-dark aesthetic to the NEW Analytics tab only — the rest of the Volt app (yellow, light, mobile-card style) is untouched, per the user's decision to add this as an additional view rather than replace the existing dashboard. The two must still feel like the same product: Volt's yellow (#D4FF3D-class) accent color and existing Lucide icons carry across into the dark tab as the bridge, everything else (background, card surfaces, chart darkness) is new to this view only. No heavy visual effects (3D/shaders/particles) are appropriate for a financial reporting screen — the 'wow factor' Allure has comes from information density and color-coded clarity, not decoration, and that is what this DNA reproduces."
+  }
+}

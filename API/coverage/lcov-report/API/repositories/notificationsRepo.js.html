@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">11.11% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>2/18</span>
+                <span class='fraction'>0/22</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/8</span>
+                <span class='fraction'>0/10</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">11.76% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>2/17</span>
+                <span class='fraction'>0/21</span>
             </div>
         
             
@@ -122,7 +122,18 @@
 <a name='L57'></a><a href='#L57'>57</a>
 <a name='L58'></a><a href='#L58'>58</a>
 <a name='L59'></a><a href='#L59'>59</a>
-<a name='L60'></a><a href='#L60'>60</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -181,7 +192,15 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span></td><td class="text"><pre class="prettyprint lang-js">const { getDb, esc } = require('./context');
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { getDb, esc } = <span class="cstat-no" title="statement not covered" >require('./context');</span>
+const { nowDb } = <span class="cstat-no" title="statement not covered" >require('../utils/timezone');</span>
+// require no topo: lazy dentro da função quebra sob Jest (import após teardown)
+const telegramService = <span class="cstat-no" title="statement not covered" >require('../services/telegramService');</span>
 &nbsp;
 async function <span class="fstat-no" title="function not covered" >listByCpf(</span>cpf) {
     const db = <span class="cstat-no" title="statement not covered" >getDb();</span>
@@ -214,7 +233,7 @@ async function <span class="fstat-no" title="function not covered" >markRead(</s
 async function <span class="fstat-no" title="function not covered" >ensureSeed(</span>cpf) {
     const db = <span class="cstat-no" title="statement not covered" >getDb();</span>
     const id = <span class="cstat-no" title="statement not covered" >db.generateUUID();</span>
-    const now = <span class="cstat-no" title="statement not covered" >new Date().toISOString();</span>
+    const now = <span class="cstat-no" title="statement not covered" >nowDb();</span>
     const exists = <span class="cstat-no" title="statement not covered" >await db.executeQuery(`</span>
         SELECT id FROM ${db.fq('notifications')}
         WHERE cpf = ${esc(cpf)} LIMIT 1
@@ -232,22 +251,27 @@ async function <span class="fstat-no" title="function not covered" >ensureSeed(<
 async function <span class="fstat-no" title="function not covered" >addNotification(</span>{ cpf, title, message, actionUrl }) {
     const db = <span class="cstat-no" title="statement not covered" >getDb();</span>
     const id = <span class="cstat-no" title="statement not covered" >db.generateUUID();</span>
-    const now = <span class="cstat-no" title="statement not covered" >new Date().toISOString();</span>
+    const now = <span class="cstat-no" title="statement not covered" >nowDb();</span>
 <span class="cstat-no" title="statement not covered" >    await db.executeQuery(`</span>
         INSERT INTO ${db.fq('notifications')}
         (id, cpf, title, message, action_url, is_read, created_at)
         VALUES (${esc(id)}, ${esc(cpf)}, ${esc(title)}, ${esc(message)}, ${esc(actionUrl || null)}, false, ${esc(now)})
     `);
+    // Espelha toda notificação in-app no tópico Telegram do CPF.
+    // Comprovantes já trazem o próprio cabeçalho — repetir o title vira "🔔 X" + "💵 X".
+    // Cobre emojis usados como cabeçalho de seção em comprovantes/avisos (💵⚠️✅💰📄📋).
+    const jaTemCabecalho = <span class="cstat-no" title="statement not covered" >/^\s*(💵|⚠️|✅|💰|📄|📋|🔔)/.test(message);</span>
+<span class="cstat-no" title="statement not covered" >    telegramService.alertUser(cpf, jaTemCabecalho ? message : `🔔 ${title}\n${message}`, null, 'notification');</span>
 }
 &nbsp;
-module.exports = { listByCpf, markRead, ensureSeed, addNotification };</pre></td></tr></table></pre>
+<span class="cstat-no" title="statement not covered" >module.exports = { listByCpf, markRead, ensureSeed, addNotification };</span></pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-01T02:30:21.792Z
+                at 2026-08-20T05:42:15.531Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

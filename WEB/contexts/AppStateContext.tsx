@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AppNotification } from '../types';
+import { getSystemConfig, adminUpdateSystemConfig } from '../services/api';
 
 export type AlertType = 'info' | 'success' | 'warning' | 'error';
 
@@ -60,13 +61,21 @@ const DEFAULT_NOTIFICATIONS = [
 ];
 
 export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    // window.__voltAdminDefaultTheme é setado pelo script bloqueante em
+    // /api/system-theme.js (carregado no <head> do index.html, antes deste
+    // bundle rodar) — já buscou a config real do backend nesse momento, sem
+    // depender de localStorage/cookie. Fonte de verdade mais confiável que o
+    // cache local, que pode nunca ter sido escrito (navegador limpo).
+    const scriptDefaultTheme = (typeof window !== 'undefined' ? (window as any).__voltAdminDefaultTheme : undefined) as 'midnight' | 'yellow' | undefined;
+
     const [adminDefaultTheme, setAdminDefaultThemeState] = useState<'midnight' | 'yellow'>(() => {
-        return (localStorage.getItem('volt_admin_default_theme') as 'midnight' | 'yellow') || 'yellow';
+        return scriptDefaultTheme || (localStorage.getItem('volt_admin_default_theme') as 'midnight' | 'yellow') || 'yellow';
     });
 
     const [theme, setThemeState] = useState<'midnight' | 'yellow'>(() => {
         const userTheme = localStorage.getItem('volt_theme') as 'midnight' | 'yellow' | null;
         if (userTheme) return userTheme;
+        if (scriptDefaultTheme) return scriptDefaultTheme;
         const adminDefault = localStorage.getItem('volt_admin_default_theme') as 'midnight' | 'yellow' | null;
         if (adminDefault) return adminDefault;
         return 'yellow';
@@ -91,6 +100,23 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
     }, [theme]);
 
+    // Busca o tema padrão do sistema no backend (fonte real, configurada pelo
+    // admin) — o localStorage sozinho só reflete a config no navegador de quem
+    // clicou, então DESKTOP/WEB/outro dispositivo nunca viam a mudança. Só
+    // sobrescreve se o usuário atual ainda não tiver escolhido um tema próprio.
+    useEffect(() => {
+        let cancelled = false;
+        getSystemConfig().then(({ defaultTheme }) => {
+            if (cancelled || !defaultTheme) return;
+            localStorage.setItem('volt_admin_default_theme', defaultTheme);
+            setAdminDefaultThemeState(defaultTheme);
+            if (!localStorage.getItem('volt_theme')) {
+                setThemeState(defaultTheme);
+            }
+        });
+        return () => { cancelled = true; };
+    }, []);
+
     // Timer para limpar o toast flutuante
     useEffect(() => {
         if (toast) {
@@ -112,6 +138,11 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
         if (!localStorage.getItem('volt_theme')) {
             setThemeState(newTheme);
         }
+        // Persiste no backend — é isso que faz outros dispositivos/origens
+        // (DESKTOP, outro navegador) enxergarem a mudança no próprio boot deles.
+        adminUpdateSystemConfig(newTheme).catch(err => {
+            console.error('[setAdminDefaultTheme] Falha ao persistir no backend:', err);
+        });
     };
 
     const addAlert = (alert: Omit<Alert, 'id'>) => {

@@ -1,0 +1,5 @@
+- generic [active] [ref=f2e1]:
+  - text: The server is configured with a public base URL of /FintechBankApp/ - did you mean to visit
+  - link "/FintechBankApp/dashboard" [ref=f2e2] [cursor=pointer]:
+    - /url: /FintechBankApp/dashboard
+  - text: instead?

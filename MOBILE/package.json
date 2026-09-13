@@ -1,18 +1,20 @@
 {
   "name": "fintech-bank-app",
   "private": true,
-  "version": "4.0.4-20260827-1252",
+  "version": "4.0.4-20260829-2015",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:mobile": "vite --port 3002 --host 0.0.0.0",
     "build": "vite build",
+    "build:mobile": "node set-ip.js && vite build",
+    "build:apk": "powershell -File .\\scripts\\build-apk.ps1",
+    "build:apk:release": "powershell -File .\\scripts\\build-apk.ps1 -Release",
+    "adb:reverse": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\adb-keep-reverse.ps1",
+    "adb:wifi": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\adb-keep-reverse.ps1 -Device",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:no-mock": "node scripts\\verify-no-mock.js",
-    "build:mobile": "node set-ip.js && vite build",
-    "adb:reverse": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\adb-keep-reverse.ps1",
-    "adb:wifi": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\adb-keep-reverse.ps1 -Device"
+    "test:no-mock": "node scripts\\verify-no-mock.js"
   },
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^10.0.0",

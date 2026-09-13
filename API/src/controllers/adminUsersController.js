@@ -474,12 +474,19 @@ module.exports = function createAdminUsersController(deps) {
     // Se totalLimit foi informado, atualizar
     if (totalLimit != null) {
         sets.push(`credit_card_total_limit = ${Number(totalLimit).toFixed(2)}`);
-        // Se availableLimit não foi informado e o limite total está sendo reduzido,
-        // ajustar o availableLimit para não ficar maior que o totalLimit
+        // Se availableLimit não foi informado, não mexe nele — este é o contrato
+        // do botão "Atualizar Limite Crédito": muda só o total, o disponível fica
+        // como estava e é ajustado manualmente (via availableLimit explícito ou
+        // pelo botão "Inserir Limite Crédito", que reseta os dois juntos) se
+        // precisar. Única exceção: reduzir o total abaixo do disponível atual
+        // deixaria disponível > total (estado sem sentido de negócio) — nesse
+        // caso trava o disponível no novo total, só pra baixo, nunca recalcula
+        // pra cima.
         if (availableLimit == null) {
             const currentAvailable = parseFloat(user.credit_card_available_limit || 0);
-            const newAvailable = Math.min(currentAvailable, totalLimit);
-            sets.push(`credit_card_available_limit = ${newAvailable.toFixed(2)}`);
+            if (currentAvailable > totalLimit) {
+                sets.push(`credit_card_available_limit = ${Number(totalLimit).toFixed(2)}`);
+            }
         }
     }
     
@@ -514,6 +521,20 @@ module.exports = function createAdminUsersController(deps) {
         user: normalizeUser(updatedUser)
     });
 
+    };
+
+    const adminUpdateSystemConfig = async (req, res) => {
+    const { defaultTheme } = req.body || {};
+    if (defaultTheme !== 'yellow' && defaultTheme !== 'midnight') {
+        return res.status(400).json({ success: false, message: "defaultTheme deve ser 'yellow' ou 'midnight'." });
+    }
+
+    const systemConfigRepo = require('../../repositories/systemConfigRepo');
+    await systemConfigRepo.setDefaultTheme(defaultTheme, req.user?.cpf);
+
+    auditLog(req, 'admin_system_config_update', 'info', { defaultTheme });
+
+    res.json({ success: true, message: 'Tema padrão do sistema atualizado', defaultTheme });
     };
 
     const adminResetPassword = async (req, res) => {
@@ -768,5 +789,5 @@ module.exports = function createAdminUsersController(deps) {
 
     };
 
-    return { getAdminUsers, getOverdueMassesDashboard, getAdminUserByCpf, adminDeposit, adminBlockUser, adminUnblockUser, adminUpdatePixLimit, adminUpdateCreditLimit, adminResetPassword, adminFixUser, adminGenerateTempPassword, adminUpdateCardDetails, adminCardPurchaseOpen, adminCardPurchaseClosed };
+    return { getAdminUsers, getOverdueMassesDashboard, getAdminUserByCpf, adminDeposit, adminBlockUser, adminUnblockUser, adminUpdatePixLimit, adminUpdateCreditLimit, adminUpdateSystemConfig, adminResetPassword, adminFixUser, adminGenerateTempPassword, adminUpdateCardDetails, adminCardPurchaseOpen, adminCardPurchaseClosed };
 };

@@ -46,6 +46,15 @@ public class AppSchemeHandlerFactory : ISchemeHandlerFactory
             handler.Headers.Add("Content-Type", res.ContentType);
         }
 
+        // O index.html não tem hash no nome (diferente dos assets versionados em
+        // wwwroot/assets/*), então o cache em disco do CEF podia servir uma versão
+        // antiga dele indefinidamente após um rebuild — a UI parecia travada em
+        // código velho mesmo com o wwwroot atualizado.
+        if (cleanMime.Contains("text/html"))
+        {
+            handler.Headers.Add("Cache-Control", "no-cache, no-store, must-revalidate");
+        }
+
         return handler;
     }
 }

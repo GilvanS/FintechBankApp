@@ -1,0 +1,745 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for API/services/invoiceImmutabilityHealth.js</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">API/services</a> invoiceImmutabilityHealth.js</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>0/52</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>0/32</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>0/2</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>0/48</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line low'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a>
+<a name='L69'></a><a href='#L69'>69</a>
+<a name='L70'></a><a href='#L70'>70</a>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a>
+<a name='L74'></a><a href='#L74'>74</a>
+<a name='L75'></a><a href='#L75'>75</a>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a>
+<a name='L80'></a><a href='#L80'>80</a>
+<a name='L81'></a><a href='#L81'>81</a>
+<a name='L82'></a><a href='#L82'>82</a>
+<a name='L83'></a><a href='#L83'>83</a>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a>
+<a name='L99'></a><a href='#L99'>99</a>
+<a name='L100'></a><a href='#L100'>100</a>
+<a name='L101'></a><a href='#L101'>101</a>
+<a name='L102'></a><a href='#L102'>102</a>
+<a name='L103'></a><a href='#L103'>103</a>
+<a name='L104'></a><a href='#L104'>104</a>
+<a name='L105'></a><a href='#L105'>105</a>
+<a name='L106'></a><a href='#L106'>106</a>
+<a name='L107'></a><a href='#L107'>107</a>
+<a name='L108'></a><a href='#L108'>108</a>
+<a name='L109'></a><a href='#L109'>109</a>
+<a name='L110'></a><a href='#L110'>110</a>
+<a name='L111'></a><a href='#L111'>111</a>
+<a name='L112'></a><a href='#L112'>112</a>
+<a name='L113'></a><a href='#L113'>113</a>
+<a name='L114'></a><a href='#L114'>114</a>
+<a name='L115'></a><a href='#L115'>115</a>
+<a name='L116'></a><a href='#L116'>116</a>
+<a name='L117'></a><a href='#L117'>117</a>
+<a name='L118'></a><a href='#L118'>118</a>
+<a name='L119'></a><a href='#L119'>119</a>
+<a name='L120'></a><a href='#L120'>120</a>
+<a name='L121'></a><a href='#L121'>121</a>
+<a name='L122'></a><a href='#L122'>122</a>
+<a name='L123'></a><a href='#L123'>123</a>
+<a name='L124'></a><a href='#L124'>124</a>
+<a name='L125'></a><a href='#L125'>125</a>
+<a name='L126'></a><a href='#L126'>126</a>
+<a name='L127'></a><a href='#L127'>127</a>
+<a name='L128'></a><a href='#L128'>128</a>
+<a name='L129'></a><a href='#L129'>129</a>
+<a name='L130'></a><a href='#L130'>130</a>
+<a name='L131'></a><a href='#L131'>131</a>
+<a name='L132'></a><a href='#L132'>132</a>
+<a name='L133'></a><a href='#L133'>133</a>
+<a name='L134'></a><a href='#L134'>134</a>
+<a name='L135'></a><a href='#L135'>135</a>
+<a name='L136'></a><a href='#L136'>136</a>
+<a name='L137'></a><a href='#L137'>137</a>
+<a name='L138'></a><a href='#L138'>138</a>
+<a name='L139'></a><a href='#L139'>139</a>
+<a name='L140'></a><a href='#L140'>140</a>
+<a name='L141'></a><a href='#L141'>141</a>
+<a name='L142'></a><a href='#L142'>142</a>
+<a name='L143'></a><a href='#L143'>143</a>
+<a name='L144'></a><a href='#L144'>144</a>
+<a name='L145'></a><a href='#L145'>145</a>
+<a name='L146'></a><a href='#L146'>146</a>
+<a name='L147'></a><a href='#L147'>147</a>
+<a name='L148'></a><a href='#L148'>148</a>
+<a name='L149'></a><a href='#L149'>149</a>
+<a name='L150'></a><a href='#L150'>150</a>
+<a name='L151'></a><a href='#L151'>151</a>
+<a name='L152'></a><a href='#L152'>152</a>
+<a name='L153'></a><a href='#L153'>153</a>
+<a name='L154'></a><a href='#L154'>154</a>
+<a name='L155'></a><a href='#L155'>155</a>
+<a name='L156'></a><a href='#L156'>156</a>
+<a name='L157'></a><a href='#L157'>157</a>
+<a name='L158'></a><a href='#L158'>158</a>
+<a name='L159'></a><a href='#L159'>159</a>
+<a name='L160'></a><a href='#L160'>160</a>
+<a name='L161'></a><a href='#L161'>161</a>
+<a name='L162'></a><a href='#L162'>162</a>
+<a name='L163'></a><a href='#L163'>163</a>
+<a name='L164'></a><a href='#L164'>164</a>
+<a name='L165'></a><a href='#L165'>165</a>
+<a name='L166'></a><a href='#L166'>166</a>
+<a name='L167'></a><a href='#L167'>167</a>
+<a name='L168'></a><a href='#L168'>168</a>
+<a name='L169'></a><a href='#L169'>169</a>
+<a name='L170'></a><a href='#L170'>170</a>
+<a name='L171'></a><a href='#L171'>171</a>
+<a name='L172'></a><a href='#L172'>172</a>
+<a name='L173'></a><a href='#L173'>173</a>
+<a name='L174'></a><a href='#L174'>174</a>
+<a name='L175'></a><a href='#L175'>175</a>
+<a name='L176'></a><a href='#L176'>176</a>
+<a name='L177'></a><a href='#L177'>177</a>
+<a name='L178'></a><a href='#L178'>178</a>
+<a name='L179'></a><a href='#L179'>179</a>
+<a name='L180'></a><a href='#L180'>180</a>
+<a name='L181'></a><a href='#L181'>181</a>
+<a name='L182'></a><a href='#L182'>182</a>
+<a name='L183'></a><a href='#L183'>183</a>
+<a name='L184'></a><a href='#L184'>184</a>
+<a name='L185'></a><a href='#L185'>185</a>
+<a name='L186'></a><a href='#L186'>186</a>
+<a name='L187'></a><a href='#L187'>187</a>
+<a name='L188'></a><a href='#L188'>188</a>
+<a name='L189'></a><a href='#L189'>189</a>
+<a name='L190'></a><a href='#L190'>190</a>
+<a name='L191'></a><a href='#L191'>191</a>
+<a name='L192'></a><a href='#L192'>192</a>
+<a name='L193'></a><a href='#L193'>193</a>
+<a name='L194'></a><a href='#L194'>194</a>
+<a name='L195'></a><a href='#L195'>195</a>
+<a name='L196'></a><a href='#L196'>196</a>
+<a name='L197'></a><a href='#L197'>197</a>
+<a name='L198'></a><a href='#L198'>198</a>
+<a name='L199'></a><a href='#L199'>199</a>
+<a name='L200'></a><a href='#L200'>200</a>
+<a name='L201'></a><a href='#L201'>201</a>
+<a name='L202'></a><a href='#L202'>202</a>
+<a name='L203'></a><a href='#L203'>203</a>
+<a name='L204'></a><a href='#L204'>204</a>
+<a name='L205'></a><a href='#L205'>205</a>
+<a name='L206'></a><a href='#L206'>206</a>
+<a name='L207'></a><a href='#L207'>207</a>
+<a name='L208'></a><a href='#L208'>208</a>
+<a name='L209'></a><a href='#L209'>209</a>
+<a name='L210'></a><a href='#L210'>210</a>
+<a name='L211'></a><a href='#L211'>211</a>
+<a name='L212'></a><a href='#L212'>212</a>
+<a name='L213'></a><a href='#L213'>213</a>
+<a name='L214'></a><a href='#L214'>214</a>
+<a name='L215'></a><a href='#L215'>215</a>
+<a name='L216'></a><a href='#L216'>216</a>
+<a name='L217'></a><a href='#L217'>217</a>
+<a name='L218'></a><a href='#L218'>218</a>
+<a name='L219'></a><a href='#L219'>219</a>
+<a name='L220'></a><a href='#L220'>220</a>
+<a name='L221'></a><a href='#L221'>221</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">// Health check diário da imutabilidade de fatura FECHADA.
+//
+// docs/REGRAS-NEGOCIO-FATURA.md §19 — fatura fechada é imutável; pagamento e
+// saldo credor pertencem à fatura ABERTA. A trigger PG garante o bloqueio; este
+// job detecta três classes de violação que a trigger NÃO pega:
+//
+//   A. INVOICE_PAYMENT gravado SEM invoice_id depois da migration 005 (passo 2).
+//      Pagamento órfão: quitação não pode ser derivada. Histórico pré-005 é
+//      aceito (cobre com valor_pago legado); pós-005 precisa ser reprocessado.
+//
+//   B. Soma de pagamentos vinculados &gt; valor_total (pagou mais do que a fatura
+//      vale). Excedente deveria ter virado creditoExcedente na fatura ABERTA;
+//      se bateu aqui, pode indicar pagamento com valor errado na origem.
+//
+//   C. Pagamentos de ciclos antigos (invoice_id NULL) ainda usando valor_pago
+//      legado na fatura — quando a migration 005 rodou, valor_pago dessas faturas
+//      congelou com o valor histórico; se foi editado depois, leitura híbrida vê.
+//
+// Qualquer achado vai pro Telegram com categoria 'daily_anomaly' e loga no
+// audit_log. Sem auto-correção: o ajuste precisa de análise humana.
+&nbsp;
+const telegramService = <span class="cstat-no" title="statement not covered" >require('./telegramService');</span>
+&nbsp;
+// Cutoff padrão da migration 005 (último recurso). Normalmente a data é lida
+// dinamicamente do knex_migrations; este fallback só é usado se o banco não
+// estiver acessível para a leitura ou a migration não estiver registrada.
+const DEFAULT_MIGRATION_005_CUTOFF = <span class="cstat-no" title="statement not covered" >'2026-08-06T17:20:04.557Z';</span>
+&nbsp;
+/**
+ * Resolve o cutoff (limite inferior) da query (A) — pagamentos órfãos.
+ *
+ * Ordem de precedência:
+ *   1. options.cutoffDate        — override explícito (ex.: chamada sob demanda)
+ *   2. env IMMUTABILITY_CUTOFF   — configuração de deploy
+ *   3. knex_migrations (005)     — data real de criação da migration 005 no banco
+ *   4. DEFAULT_MIGRATION_005_CUTOFF — último recurso (log de aviso)
+ */
+async function <span class="fstat-no" title="function not covered" >resolveOrphanCutoff(</span>db, options = <span class="branch-0 cbranch-no" title="branch not covered" >{})</span> {
+<span class="cstat-no" title="statement not covered" >    if (options.cutoffDate) {</span>
+        const d = <span class="cstat-no" title="statement not covered" >new Date(options.cutoffDate);</span>
+<span class="cstat-no" title="statement not covered" >        if (!isNaN(d.getTime())) <span class="cstat-no" title="statement not covered" >return d.toISOString();</span></span>
+    }
+&nbsp;
+<span class="cstat-no" title="statement not covered" >    if (process.env.IMMUTABILITY_CUTOFF) {</span>
+        const d = <span class="cstat-no" title="statement not covered" >new Date(process.env.IMMUTABILITY_CUTOFF);</span>
+<span class="cstat-no" title="statement not covered" >        if (!isNaN(d.getTime())) <span class="cstat-no" title="statement not covered" >return d.toISOString();</span></span>
+    }
+&nbsp;
+<span class="cstat-no" title="statement not covered" >    try {</span>
+        const rows = <span class="cstat-no" title="statement not covered" >await db.executeQuery(`</span>
+            SELECT migration_time
+            FROM ${db.fq('knex_migrations')}
+            WHERE name LIKE '005_%'
+            ORDER BY migration_time DESC
+            LIMIT 1
+        `);
+<span class="cstat-no" title="statement not covered" >        if (rows &amp;&amp; rows.length &amp;&amp; rows[0] &amp;&amp; rows[0].migration_time) {</span>
+            const t = <span class="cstat-no" title="statement not covered" >new Date(rows[0].migration_time);</span>
+<span class="cstat-no" title="statement not covered" >            if (!isNaN(t.getTime())) <span class="cstat-no" title="statement not covered" >return t.toISOString();</span></span>
+        }
+    } catch (e) {
+<span class="cstat-no" title="statement not covered" >        console.warn('[InvoiceImmutability] Falha ao ler knex_migrations — usando DEFAULT_MIGRATION_005_CUTOFF:', e.message);</span>
+    }
+&nbsp;
+<span class="cstat-no" title="statement not covered" >    return new Date(DEFAULT_MIGRATION_005_CUTOFF).toISOString();</span>
+}
+&nbsp;
+/**
+ * Health check diário da imutabilidade de fatura FECHADA.
+ *
+ * @param {object} dbService  provider de banco (executeQuery/fq)
+ * @param {Function} auditLog         logger de auditoria
+ * @param {object} [options]
+ * @param {string} [options.cutoffDate]  override do cutoff da query (A) (ISO)
+ * @param {number} [options.windowDays]  janela opcional: olhar só os últimos N
+ *   dias a partir de agora, nunca antes do cutoff da migration 005 (para
+ *   varreduras sob demanda). Omitido → janela completa desde a migration 005.
+ */
+async function <span class="fstat-no" title="function not covered" >runInvoiceImmutabilityHealth(</span>dbService, auditLog, options = <span class="branch-0 cbranch-no" title="branch not covered" >{})</span> {
+<span class="cstat-no" title="statement not covered" >    console.log('[InvoiceImmutability] Iniciando health check...');</span>
+    const db = <span class="cstat-no" title="statement not covered" >dbService;</span>
+    const findings = <span class="cstat-no" title="statement not covered" >[];</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >    try {</span>
+        // ── Cutoff dinâmico + janela opcional ──
+        const cutoffIso = <span class="cstat-no" title="statement not covered" >await resolveOrphanCutoff(db, options);</span>
+        let lowerBound = <span class="cstat-no" title="statement not covered" >cutoffIso;</span>
+<span class="cstat-no" title="statement not covered" >        if (options.windowDays &amp;&amp; options.windowDays &gt; 0) {</span>
+            const windowStart = <span class="cstat-no" title="statement not covered" >new Date(Date.now() - options.windowDays * 86400000);</span>
+            const cutoffDt = <span class="cstat-no" title="statement not covered" >new Date(cutoffIso);</span>
+<span class="cstat-no" title="statement not covered" >            if (windowStart &gt; cutoffDt) <span class="cstat-no" title="statement not covered" >lowerBound = windowStart.toISOString();</span></span>
+        }
+<span class="cstat-no" title="statement not covered" >        console.log(`[InvoiceImmutability] Query A — cutoff: ${lowerBound} (janela: ${options.windowDays ? options.windowDays + 'd' : 'desde migration 005'})`);</span>
+&nbsp;
+        // (A) Pagamentos pós-005 sem invoice_id — a referência da migration é a
+        // contagem por (cpf, invoice_id) na query de quitação. Pagamento órfão
+        // não conta pra quitação, então a fatura fica "não paga" mesmo após pagar.
+        // O cutoff (limite inferior) é dinâmico: data real da migration 005 lida
+        // do knex_migrations (ou override via options/env).
+        //
+        // Filtro de contas de serviço: exclui usuários inexistentes (u.cpf NULL,
+        // ex.: 99999999999 — registros de estorno de auditoria) e role='admin'
+        // (ex.: 11111111111 — pagamentos de teste do admin). Órfãos de massas
+        // reais (role customer/user) continuam sendo reportados.
+        const orphans = <span class="cstat-no" title="statement not covered" >await db.executeQuery(`</span>
+            SELECT t.id, t.cpf, t.amount, t.date, t.description,
+                   u.full_name
+            FROM ${db.fq('transactions')} t
+            LEFT JOIN ${db.fq('users')} u ON u.cpf = t.cpf
+            WHERE t.type = 'INVOICE_PAYMENT'
+              AND t.invoice_id IS NULL
+              AND t.date &gt;= '${lowerBound}'::timestamptz
+              AND u.cpf IS NOT NULL
+              AND u.role IS DISTINCT FROM 'admin'
+            ORDER BY t.date DESC
+        `);
+&nbsp;
+<span class="cstat-no" title="statement not covered" >        for (const tx of orphans) {</span>
+<span class="cstat-no" title="statement not covered" >            findings.push({</span>
+                cpf: tx.cpf,
+                name: tx.full_name,
+                type: 'PAYMENT_SEM_INVOICE_ID',
+                severity: 'high',
+                details: `INVOICE_PAYMENT de R$ ${Math.abs(parseFloat(tx.amount || 0)).toFixed(2)} em ${tx.date} (${tx.description}) sem invoice_id — quitação não pode ser derivada.`
+            });
+        }
+&nbsp;
+        // (B) Soma de pagamentos vinculados &gt; valor_total — pagou a mais e a
+        // lógica de creditoExcedente pode ter falhado em detectar.
+        // Filtro de contas de serviço (mesmo padrão da query A): exclui usuários
+        // inexistentes e role='admin' — o relatório foca só em massas reais.
+        const overpaid = <span class="cstat-no" title="statement not covered" >await db.executeQuery(`</span>
+            SELECT i.cpf, i.id AS invoice_id, i.valor_total, i.due_date, u.full_name,
+                   COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) AS pago
+            FROM ${db.fq('invoices')} i
+            JOIN ${db.fq('users')} u ON u.cpf = i.cpf
+            LEFT JOIN ${db.fq('transactions')} t
+                   ON t.invoice_id = i.id AND t.type = 'INVOICE_PAYMENT'
+            WHERE i.status = 'FECHADA'
+              AND u.cpf IS NOT NULL
+              AND u.role IS DISTINCT FROM 'admin'
+            GROUP BY i.cpf, i.id, i.valor_total, i.due_date, u.full_name
+            HAVING COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) &gt; CAST(i.valor_total AS DECIMAL(15,2)) + 0.02
+        `);
+&nbsp;
+<span class="cstat-no" title="statement not covered" >        for (const inv of overpaid) {</span>
+            const excess = <span class="cstat-no" title="statement not covered" >parseFloat(inv.pago) - parseFloat(inv.valor_total);</span>
+<span class="cstat-no" title="statement not covered" >            findings.push({</span>
+                cpf: inv.cpf,
+                name: inv.full_name,
+                type: 'PAGAMENTO_ACIMA_DO_VALOR',
+                severity: 'medium',
+                details: `Fatura ${inv.invoice_id} (vencida ${inv.due_date}): pago R$ ${parseFloat(inv.pago).toFixed(2)}, devido R$ ${parseFloat(inv.valor_total).toFixed(2)}, excedente R$ ${excess.toFixed(2)}.`
+            });
+        }
+&nbsp;
+        // (C) Faturas FECHADA cujo valor_pago foi EDITADO APÓS o fechamento e
+        // ainda diverge do SUM(payments). O filtro updated_at &gt; created_at + 1min
+        // isola a EDIÇÃO pós-criação: faturas criadas JÁ com valor_pago (seed,
+        // updated_at == created_at) não são resíduo de edição e ficam de fora.
+        // Como a trigger rejeita UPDATE monetário em FECHADA, qualquer divergência
+        // aqui é resíduo do bug legado (ou alguém desabilitou o trigger).
+        // Filtro de contas de serviço (mesmo padrão da query A): LEFT JOIN com
+        // users + exclui inexistentes e role='admin' — foca só em massas reais.
+        const legacyMutated = <span class="cstat-no" title="statement not covered" >await db.executeQuery(`</span>
+            SELECT i.id, i.cpf, i.valor_pago, i.updated_at, i.created_at,
+                   COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) AS pago
+            FROM ${db.fq('invoices')} i
+            LEFT JOIN ${db.fq('users')} u ON u.cpf = i.cpf
+            LEFT JOIN ${db.fq('transactions')} t
+                   ON t.invoice_id = i.id AND t.type = 'INVOICE_PAYMENT'
+            WHERE i.status = 'FECHADA'
+              AND i.valor_pago IS NOT NULL
+              AND i.valor_pago &gt; 0
+              AND i.updated_at &gt; i.created_at + INTERVAL '1 minute'
+              AND u.cpf IS NOT NULL
+              AND u.role IS DISTINCT FROM 'admin'
+            GROUP BY i.id, i.cpf, i.valor_pago, i.updated_at, i.created_at
+            HAVING ABS(
+                COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0)
+                - CAST(COALESCE(i.valor_pago, '0') AS DECIMAL(15,2))
+            ) &gt; 0.02
+        `);
+&nbsp;
+<span class="cstat-no" title="statement not covered" >        for (const inv of legacyMutated) {</span>
+<span class="cstat-no" title="statement not covered" >            findings.push({</span>
+                cpf: inv.cpf,
+                name: null,
+                type: 'VALOR_PAGO_LEGADO_DIVERGE_PAGAMENTOS',
+                severity: 'info',
+                details: `Fatura ${inv.id}: valor_pago legado = R$ ${parseFloat(inv.valor_pago).toFixed(2)}, SUM(payments) = R$ ${parseFloat(inv.pago).toFixed(2)}. Provável herança pré-migration — auditar.`
+            });
+        }
+&nbsp;
+<span class="cstat-no" title="statement not covered" >        if (findings.length &gt; 0) {</span>
+<span class="cstat-no" title="statement not covered" >            console.log(`[InvoiceImmutability] ${findings.length} achados.`);</span>
+<span class="cstat-no" title="statement not covered" >            for (const f of findings) {</span>
+                const reqDummy = <span class="cstat-no" title="statement not covered" >{ user: { cpf: '00000000000', role: 'system' } };</span>
+<span class="cstat-no" title="statement not covered" >                await auditLog(reqDummy, 'invoice_immutability_finding', f.severity, f);</span>
+<span class="cstat-no" title="statement not covered" >                telegramService.alertGroup(</span>
+                    `⚠️ &lt;b&gt;InvoiceImmutability [${f.type}]&lt;/b&gt;\n\n` +
+                    `&lt;b&gt;Cliente&lt;/b&gt; ${f.name || f.cpf} (${telegramService.formatCpf(f.cpf)})\n` +
+                    `&lt;b&gt;Severidade&lt;/b&gt; ${f.severity}\n` +
+                    `&lt;b&gt;Detalhes&lt;/b&gt; ${f.details}`,
+                    'daily_anomaly'
+                );
+            }
+        } else {
+<span class="cstat-no" title="statement not covered" >            console.log('[InvoiceImmutability] Nenhum achado.');</span>
+        }
+&nbsp;
+<span class="cstat-no" title="statement not covered" >        return { success: true, count: findings.length, findings };</span>
+    } catch (e) {
+<span class="cstat-no" title="statement not covered" >        console.error('[InvoiceImmutability] Erro:', e);</span>
+<span class="cstat-no" title="statement not covered" >        telegramService.alertGroup(`🚨 &lt;b&gt;ERRO no Health Check de Imutabilidade&lt;/b&gt; ${e.message}`, 'system_error');</span>
+<span class="cstat-no" title="statement not covered" >        throw e;</span>
+    }
+}
+&nbsp;
+<span class="cstat-no" title="statement not covered" >module.exports = { runInvoiceImmutabilityHealth, resolveOrphanCutoff };</span>
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-08-20T05:42:15.531Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    

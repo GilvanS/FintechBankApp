@@ -11,7 +11,7 @@ const mockSections: AllureSection<'sec1' | 'sec2'>[] = [
 
 describe('AllureShell', () => {
   it('renders title, subtitle and sections', () => {
-    const { getByText } = render(
+    const { getByText, getAllByText } = render(
       <AllureShell
         title="Test Shell"
         subtitle="Subtítulo de Teste"
@@ -27,7 +27,8 @@ describe('AllureShell', () => {
 
     expect(getByText('Test Shell')).toBeInTheDocument();
     expect(getByText('Subtítulo de Teste')).toBeInTheDocument();
-    expect(getByText('Seção 1')).toBeInTheDocument();
+    // "Seção 1" aparece 2x: sidebar desktop + nav de pills mobile (fallback responsivo)
+    expect(getAllByText('Seção 1').length).toBeGreaterThanOrEqual(1);
     expect(getByText('Conteúdo Principal')).toBeInTheDocument();
   });
 
@@ -69,7 +70,7 @@ describe('AllureShell', () => {
     expect(handleBack).toHaveBeenCalled();
   });
 
-  it('persists sidebar position toggle in localStorage', () => {
+  it('starts with sidebar on the left and toggles side without persisting', () => {
     const { getByTitle } = render(
       <AllureShell
         title="Test Shell"
@@ -86,7 +87,8 @@ describe('AllureShell', () => {
     const toggleBtn = getByTitle('Mover menu para direita');
     expect(toggleBtn).toBeInTheDocument();
     fireEvent.click(toggleBtn);
-    expect(localStorage.getItem('allure-sidebar-side')).toBe('right');
+    expect(getByTitle('Mover menu para esquerda')).toBeInTheDocument();
+    expect(localStorage.getItem('allure-sidebar-side')).toBeNull();
   });
 
   it('renders expanded modal content and handles close', () => {

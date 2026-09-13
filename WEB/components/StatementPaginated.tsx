@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, ArrowLeftRight, Receipt, PiggyBank, ShoppingCart, CalendarClock, Gift, CreditCard } from 'lucide-react';
 import { Transaction, User } from '../types';
 import { getUserStatementPaginated } from '../services/api';
 import TransactionReceipt from './TransactionReceipt';
@@ -92,17 +92,17 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
         switch (type) {
             case 'PIX_SENT':
             case 'PIX_RECEIVED':
-            case 'PIX_CREDIT_SENT': return 'currency_exchange';
-            case 'PAYMENT': return 'receipt_long';
-            case 'DEPOSIT': return 'savings';
+            case 'PIX_CREDIT_SENT': return ArrowLeftRight;
+            case 'PAYMENT': return Receipt;
+            case 'DEPOSIT': return PiggyBank;
             case 'SHOP_DEBIT':
             case 'SHOP_CREDIT':
-            case 'CREDIT': return 'shopping_cart';
-            case 'INVOICE_INSTALLMENT': return 'event_repeat';
-            case 'CASHBACK_CREDIT': return 'redeem';
+            case 'CREDIT': return ShoppingCart;
+            case 'INVOICE_INSTALLMENT': return CalendarClock;
+            case 'CASHBACK_CREDIT': return Gift;
             case 'INVOICE_PAYMENT':
-            case 'INVOICE_ANTICIPATION': return 'credit_card';
-            default: return 'receipt_long';
+            case 'INVOICE_ANTICIPATION': return CreditCard;
+            default: return Receipt;
         }
     };
 
@@ -255,7 +255,7 @@ function StatementPaginated({ user, onNavigate, onBack }: StatementPaginatedProp
                                     role="listitem"
                                 >
                                     <div className={`flex items-center justify-center rounded-full shrink-0 size-10 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] ${isMidnight ? 'bg-volt-surface border border-white/10' : 'bg-white border-2 border-black'}`}>
-                                        <span className="material-symbols-outlined text-volt-primary" aria-hidden="true" style={{ fontSize: '18px' }}>{getIconForType(tx.type)}</span>
+                                        {(() => { const TxIcon = getIconForType(tx.type); return <TxIcon size={18} className="text-volt-primary" aria-hidden="true" />; })()}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className={`text-xs mb-0.5 font-semibold test-statement-paginated-item-date ${isMidnight ? 'text-white/50' : 'text-black/50'}`} data-testid="statement-paginated-item-date">{date} • {time} • {typeLabel}</p>

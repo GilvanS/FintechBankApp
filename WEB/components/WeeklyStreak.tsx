@@ -45,6 +45,7 @@ export default function WeeklyStreak({
         name: 'Mestre da Disciplina',
         emoji: '🏆',
         color: 'bg-yellow-400 text-black',
+        glow: 'from-yellow-400/25 via-amber-500/10 to-transparent border-yellow-400/40',
         description: 'Incrível! Você permaneceu sob o orçamento planejado por 4 semanas consecutivas!'
       };
     } else if (count === 3) {
@@ -52,6 +53,7 @@ export default function WeeklyStreak({
         name: 'Campeão de Ouro',
         emoji: '🥇',
         color: 'bg-amber-400 text-black',
+        glow: 'from-amber-400/25 via-amber-500/10 to-transparent border-amber-400/40',
         description: 'Excelente! 3 semanas de total autocontrole financeiro. Falta pouco para o topo!'
       };
     } else if (count === 2) {
@@ -59,6 +61,7 @@ export default function WeeklyStreak({
         name: 'Guardião de Prata',
         emoji: '🥈',
         color: 'bg-zinc-300 text-black',
+        glow: 'from-zinc-300/25 via-zinc-400/10 to-transparent border-zinc-300/40',
         description: 'Muito bem! 2 semanas seguidas mantendo suas finanças no rumo planejado.'
       };
     } else if (count === 1) {
@@ -66,6 +69,7 @@ export default function WeeklyStreak({
         name: 'Iniciante Bronze',
         emoji: '🥉',
         color: 'bg-amber-700 text-white',
+        glow: 'from-amber-700/25 via-amber-800/10 to-transparent border-amber-700/40',
         description: 'Ótimo começo! Primeira semana concluída com sucesso sob suas metas.'
       };
     } else {
@@ -73,6 +77,7 @@ export default function WeeklyStreak({
         name: 'Nenhum Emblema Ativo',
         emoji: '🔒',
         color: 'bg-zinc-800 text-zinc-400',
+        glow: 'from-zinc-800/40 via-zinc-800/10 to-transparent border-zinc-800',
         description: 'Defina limites saudáveis e fique sob o orçamento semanal para ativar seu primeiro emblema.'
       };
     }
@@ -83,10 +88,10 @@ export default function WeeklyStreak({
   return (
     <div className="space-y-4">
       {/* Streak Header / Banner */}
-      <div className={`p-4 rounded-xl border-2 border-black flex flex-col sm:flex-row items-center gap-4 transition-all ${
+      <div className={`p-4 rounded-xl border-2 flex flex-col sm:flex-row items-center gap-4 transition-all ${
         theme === 'midnight'
-          ? 'bg-zinc-950/80 text-white border-zinc-800'
-          : 'bg-[#FFF8E1] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+          ? `bg-gradient-to-br ${badge.glow} text-white`
+          : 'bg-[#FFF8E1] text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
       }`}>
         <motion.div
           animate={{ scale: [1, 1.05, 1] }}

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Drawing;
+using System.IO;
 using System.Windows.Forms;
 using CefSharp;
 using CefSharp.WinForms;
@@ -17,6 +18,14 @@ public class MainForm : Form
         Size = new Size(1280, 900);
         StartPosition = FormStartPosition.CenterScreen;
         WindowState = FormWindowState.Maximized;
+
+        // ApplicationIcon no .csproj só cobre o ícone do arquivo .exe no Explorer;
+        // o ícone da janela (título/taskbar) em runtime precisa ser setado aqui.
+        var iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+        if (File.Exists(iconPath))
+        {
+            Icon = new Icon(iconPath);
+        }
 
         _browser = new ChromiumWebBrowser(Program.StartUrl)
         {

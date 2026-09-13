@@ -6,6 +6,105 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 1: Nao 
     class="mt-4 p-4 rounded-xl border space-y-3 bg-white border-black/20 shadow-sm"
   >
     <div
+      class="grid grid-cols-2 gap-2 sm:grid-cols-5 text-xs mb-3 p-3 rounded-lg bg-black/5 dark:bg-white/5"
+    >
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Vencimento
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-black"
+        >
+          Dia 
+          15
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Fatura Aberta
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-blue-600"
+        >
+          R$ 
+          2365.05
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Fatura Fechada
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-rose-600"
+        >
+          R$ 
+          3870.86
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Próxima Fatura
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-purple-600"
+        >
+          R$ 
+          5490.98
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Limite Disponível
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 flex items-center justify-center gap-1 text-emerald-600"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-trending-up"
+            fill="none"
+            height="12"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="12"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M16 7h6v6"
+            />
+            <path
+              d="m22 7-8.5 8.5-5-5L2 17"
+            />
+          </svg>
+          R$ 
+          2720.78
+        </p>
+      </div>
+    </div>
+    <div
       class="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 dark:border-white/10 pb-2"
     >
       <h4
@@ -440,6 +539,105 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 2: Paga
   <div
     class="mt-4 p-4 rounded-xl border space-y-3 bg-white border-black/20 shadow-sm"
   >
+    <div
+      class="grid grid-cols-2 gap-2 sm:grid-cols-5 text-xs mb-3 p-3 rounded-lg bg-black/5 dark:bg-white/5"
+    >
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Vencimento
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-black"
+        >
+          Dia 
+          15
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Fatura Aberta
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-blue-600"
+        >
+          R$ 
+          2365.05
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Fatura Fechada
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-rose-600"
+        >
+          R$ 
+          3870.86
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Próxima Fatura
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-purple-600"
+        >
+          R$ 
+          5490.98
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Limite Disponível
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 flex items-center justify-center gap-1 text-emerald-600"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-trending-up"
+            fill="none"
+            height="12"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="12"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M16 7h6v6"
+            />
+            <path
+              d="m22 7-8.5 8.5-5-5L2 17"
+            />
+          </svg>
+          R$ 
+          2720.78
+        </p>
+      </div>
+    </div>
     <div
       class="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 dark:border-white/10 pb-2"
     >
@@ -891,6 +1089,105 @@ exports[`BackofficeInvoiceSection — Estados da Fatura Fechada > Estado 3: Paga
   <div
     class="mt-4 p-4 rounded-xl border space-y-3 bg-white border-black/20 shadow-sm"
   >
+    <div
+      class="grid grid-cols-2 gap-2 sm:grid-cols-5 text-xs mb-3 p-3 rounded-lg bg-black/5 dark:bg-white/5"
+    >
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Vencimento
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-black"
+        >
+          Dia 
+          15
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Fatura Aberta
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-blue-600"
+        >
+          R$ 
+          2365.05
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Fatura Fechada
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-rose-600"
+        >
+          R$ 
+          3870.86
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Próxima Fatura
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 text-purple-600"
+        >
+          R$ 
+          5490.98
+        </p>
+      </div>
+      <div
+        class="text-center"
+      >
+        <p
+          class="text-[10px] uppercase font-bold opacity-70 text-black/60"
+        >
+          Limite Disponível
+        </p>
+        <p
+          class="font-black text-sm mt-0.5 flex items-center justify-center gap-1 text-emerald-600"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-trending-up"
+            fill="none"
+            height="12"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="12"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M16 7h6v6"
+            />
+            <path
+              d="m22 7-8.5 8.5-5-5L2 17"
+            />
+          </svg>
+          R$ 
+          2720.78
+        </p>
+      </div>
+    </div>
     <div
       class="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 dark:border-white/10 pb-2"
     >

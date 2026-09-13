@@ -285,9 +285,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
         data-testid="login-header"
         id="login-header"
       >
-        <button 
-          onClick={onNavigateToPreLogin} 
-          className="text-black hover:text-black transition-colors p-2 -ml-2 rounded-full hover:bg-black/10 flex items-center justify-center"
+        <button
+          onClick={onNavigateToPreLogin}
+          className="text-white hover:text-volt-lime transition-colors p-2 -ml-2 rounded-full hover:bg-white/10 flex items-center justify-center"
           data-testid="login-back-button"
           id="btn-login-back"
           aria-label="Voltar"
@@ -306,7 +306,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
         <h1 
           data-testid="login-title"
           id="login-title"
-          className="text-2xl font-bold text-black mb-2 select-none cursor-pointer"
+          className="text-2xl font-bold text-white mb-2 select-none cursor-pointer"
           title="Fintech - Titulo da aplicacao"
           onClick={handleTitleTap}
           aria-label="Fintech — toque 5 vezes para acessar ajustes"
@@ -314,7 +314,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
           Fintech
         </h1>
         <p 
-          className="text-black/70 mb-10"
+          className="text-zinc-400 mb-10"
           data-testid="login-subtitle"
           id="login-subtitle"
           title="Acesse sua conta - Subtitulo da tela de login"
@@ -346,11 +346,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
                     onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
                     inputMode="numeric"
                     placeholder="999.999.999-99"
-                    className="w-full px-4 py-3 bg-white border border-black/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-black mb-4 text-black"
+                    className="w-full px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-volt-lime mb-4 placeholder-zinc-500"
                     style={{
-                      backgroundColor: '#FFFFFF',
+                      backgroundColor: '#1A2C1F',
                       borderRadius: '0.5rem',
-                      border: '1px solid transparent',
+                      border: '2px solid #1A2C1F',
                       color: '#E5E7EB'
                     }}
                     aria-label="cpf"
@@ -365,7 +365,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
             <div className="flex justify-between items-baseline mb-1">
               <label 
                 htmlFor="password" 
-                className="text-sm font-medium text-black/80 block"
+                className="text-sm font-medium text-zinc-300 block"
                 data-testid="login-password-label"
                 id="login-password-label"
               >
@@ -374,7 +374,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
               <button 
                 type="button" 
                 onClick={onNavigateToResetPassword} 
-                className="text-xs text-black underline hover:no-underline"
+                className="text-xs text-volt-lime underline hover:no-underline"
                 data-testid="login-forgot-password-link"
                 id="link-forgot-password"
                 name="login-forgot-password-link"
@@ -392,11 +392,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full px-4 py-3 bg-white border border-black/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-black mb-4 text-black"
+                    className="w-full px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-volt-lime mb-4 placeholder-zinc-500"
                     style={{
-                      backgroundColor: '#FFFFFF',
+                      backgroundColor: '#1A2C1F',
                       borderRadius: '0.5rem',
-                      border: '1px solid transparent',
+                      border: '2px solid #1A2C1F',
                       color: '#E5E7EB'
                     }}
                     aria-label="password"
@@ -409,15 +409,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
 
               <StatusMessage type="error" message={error} onClose={() => setError('')} />
 
-          <button 
-            type="submit" 
-            disabled={loading} 
-            className="w-full px-8 py-4 font-semibold text-black transition-all duration-300 rounded-lg shadow-lg bg-volt-lime border-2 border-black hover:scale-105 hover:shadow-black/40 focus:outline-none focus:ring-4 focus:ring-black/30 disabled:bg-volt-lime/70 disabled:scale-100 disabled:opacity-70 mt-8"
-            style={{
-              backgroundColor: loading ? '#A2FF0070' : '#A2FF00',
-              borderRadius: '0.5rem',
-              boxShadow: '0 10px 15px -3px rgba(34, 197, 94, 0.1), 0 4px 6px -2px rgba(34, 197, 94, 0.05)'
-            }}
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary w-full px-8 py-4 font-semibold transition-all duration-300 rounded-lg shadow-lg hover:scale-105 focus:outline-none focus:ring-4 focus:ring-black/30 disabled:opacity-70 disabled:scale-100 mt-8"
             data-testid="login-submit-button"
             id="btn-entrar"
             name="entrar"
@@ -428,14 +423,14 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
           </button>
 
           <p 
-            className="text-center text-sm text-black/70 mt-6"
+            className="text-center text-sm text-zinc-400 mt-6"
             data-testid="login-signup-section"
           >
             Não tem uma conta?{' '}
             <button 
               type="button" 
               onClick={onNavigateToSignUp} 
-              className="font-semibold text-black underline hover:no-underline"
+              className="font-semibold text-volt-lime underline hover:no-underline"
               data-testid="login-signup-link"
               id="link-signup"
               name="link-signup"

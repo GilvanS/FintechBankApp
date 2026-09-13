@@ -56,7 +56,10 @@ describe('OnboardFormContainer Component', () => {
 
     const lastCallArg = handleFormDataChange.mock.calls[handleFormDataChange.mock.calls.length - 1][0];
     expect(lastCallArg.tutorName).toBe('Roberto Silva');
-    expect(lastCallArg.tutorCpf).toBe('99988877766');
+    // O componente formata o CPF (máscara) direto no estado — nunca limpa
+    // antes de propagar via onFormDataChange nem no submit (mesmo padrão do
+    // campo cpf principal).
+    expect(lastCallArg.tutorCpf).toBe('999.888.777-66');
   });
 
   it('allows selection of card brand, tier, due day and plan', () => {

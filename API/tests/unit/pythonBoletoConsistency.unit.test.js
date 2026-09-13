@@ -14,7 +14,7 @@ const { execFileSync } = require('child_process');
 const path = require('path');
 const { buildBoletoData } = require('../../utils/boletoMath');
 
-const SCRIPT = path.join(__dirname, '..', '..', '..', 'scripts', 'invoice_payment_generator.py');
+const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'invoice_payment_generator.py');
 
 const CPF = '12312312312';
 const NAME = 'Teste Massa';
@@ -113,7 +113,7 @@ describeSuite('Consistência Python ↔ JS (gerador de boleto/PIX)', () => {
             + 'import json; d = decode_boleto_from_code(sys.argv[1]); '
             + 'print(json.dumps(d))',
             py.boleto.linhaDigitavel
-        ], { encoding: 'utf-8', timeout: 20000, cwd: path.join(__dirname, '..', '..', '..') });
+        ], { encoding: 'utf-8', timeout: 20000, cwd: path.join(__dirname, '..', '..') });
         const decoded = JSON.parse(out);
         expect(decoded.bankCode).toBe('598');
         expect(decoded.dueDate).toBe('15/07/2026');
@@ -130,7 +130,7 @@ describeSuite('Consistência Python ↔ JS (gerador de boleto/PIX)', () => {
             + 'import json; d = decode_boleto_from_code(sys.argv[1]); '
             + 'print(json.dumps(d))',
             py.boleto.barcode
-        ], { encoding: 'utf-8', timeout: 20000, cwd: path.join(__dirname, '..', '..', '..') });
+        ], { encoding: 'utf-8', timeout: 20000, cwd: path.join(__dirname, '..', '..') });
         const decoded = JSON.parse(out);
         expect(decoded.barcode).toBe(py.boleto.barcode);
         expect(decoded.amount).toBe(AMOUNT);

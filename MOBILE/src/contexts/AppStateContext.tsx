@@ -59,7 +59,7 @@ const DEFAULT_NOTIFICATIONS = [
 
 export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [theme, setThemeState] = useState<'midnight' | 'yellow'>(() => {
-        return (localStorage.getItem('volt_theme') as 'midnight' | 'yellow') || 'yellow';
+        return (localStorage.getItem('volt_theme') as 'midnight' | 'yellow') || 'midnight';
     });
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [notifications, setNotifications] = useState<AppNotification[]>([]);

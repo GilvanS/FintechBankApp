@@ -3,8 +3,27 @@ import { User } from '../../types';
 import { adminGetUserByCpf, adminUpdateBillingDay, adminRunBillingCron, adminCloseInvoice } from '../../services/api';
 import { formatCPF } from '../../utils/formatters';
 import { useAppState } from '../../contexts/AppStateContext';
-import { Search, FileText, Calendar, Loader2, Play, Receipt, AlertCircle, Clock } from 'lucide-react';
+import { Search, FileText, Calendar, Loader2, Play, Receipt, AlertCircle, Clock, CreditCard, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 import { showToast } from '../../utils/toast';
+
+/** Card de estatística com ícone em box colorido — usado no resumo do cliente. */
+const StatTile: React.FC<{
+    icon: React.ElementType;
+    label: string;
+    value: string;
+    iconBgClass: string;
+    valueColorClass: string;
+}> = ({ icon: Icon, label, value, iconBgClass, valueColorClass }) => (
+    <div className="flex items-center gap-3 p-3 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconBgClass}`}>
+            <Icon size={20} className="text-white" />
+        </div>
+        <div className="min-w-0">
+            <p className="text-[10px] opacity-70 font-bold uppercase mb-0.5 truncate">{label}</p>
+            <p className={`text-lg font-bold truncate ${valueColorClass}`}>{value}</p>
+        </div>
+    </div>
+);
 
 const BillingManagement: React.FC = () => {
     const { theme } = useAppState();
@@ -130,23 +149,42 @@ const BillingManagement: React.FC = () => {
                                 <p className="text-sm font-bold opacity-70 font-mono mt-1">{formatCPF(searchedUser.cpf)}</p>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-black/10 dark:border-white/10">
-                                <div>
-                                    <p className="text-[10px] opacity-70 font-bold uppercase mb-1">Dia do Vencimento</p>
-                                    <p className="text-xl font-bold">Dia {searchedUser.creditCard?.dueDay || searchedUser.billingDay || 10}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] opacity-70 font-bold uppercase mb-1">Fatura Aberta Atual</p>
-                                    <p className="text-xl font-bold text-volt-green">
-                                        R$ {Number(searchedUser.creditCard?.currentInvoice || 0).toFixed(2).replace('.', ',')}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] opacity-70 font-bold uppercase mb-1">Fatura Fechada</p>
-                                    <p className="text-xl font-bold text-rose-500">
-                                        R$ {Number(searchedUser.creditCard?.closedInvoice || 0).toFixed(2).replace('.', ',')}
-                                    </p>
-                                </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-black/10 dark:border-white/10">
+                                <StatTile
+                                    icon={Calendar}
+                                    label="Dia do Vencimento"
+                                    value={`Dia ${searchedUser.creditCard?.dueDay || searchedUser.billingDay || 10}`}
+                                    iconBgClass="bg-zinc-500"
+                                    valueColorClass=""
+                                />
+                                <StatTile
+                                    icon={CreditCard}
+                                    label="Fatura Aberta Atual"
+                                    value={`R$ ${Number(searchedUser.creditCard?.currentInvoice || 0).toFixed(2).replace('.', ',')}`}
+                                    iconBgClass="bg-blue-500"
+                                    valueColorClass="text-blue-600 dark:text-blue-400"
+                                />
+                                <StatTile
+                                    icon={FileText}
+                                    label="Fatura Fechada"
+                                    value={`R$ ${Number(searchedUser.creditCard?.closedInvoice || 0).toFixed(2).replace('.', ',')}`}
+                                    iconBgClass="bg-rose-500"
+                                    valueColorClass="text-rose-600 dark:text-rose-400"
+                                />
+                                <StatTile
+                                    icon={TrendingUp}
+                                    label="Próxima Fatura"
+                                    value={`R$ ${Number(searchedUser.creditCard?.currentInvoiceTotal || 0).toFixed(2).replace('.', ',')}`}
+                                    iconBgClass="bg-purple-500"
+                                    valueColorClass="text-purple-600 dark:text-purple-400"
+                                />
+                                <StatTile
+                                    icon={(searchedUser.creditCard?.availableLimit ?? 0) < 0 ? TrendingDown : Wallet}
+                                    label="Limite Disponível"
+                                    value={`${(searchedUser.creditCard?.availableLimit ?? 0) < 0 ? '-' : ''}R$ ${Math.abs(searchedUser.creditCard?.availableLimit ?? 0).toFixed(2).replace('.', ',')}`}
+                                    iconBgClass={(searchedUser.creditCard?.availableLimit ?? 0) < 0 ? 'bg-red-500' : 'bg-emerald-500'}
+                                    valueColorClass={(searchedUser.creditCard?.availableLimit ?? 0) < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}
+                                />
                             </div>
                         </div>
 

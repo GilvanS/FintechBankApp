@@ -8,7 +8,7 @@ import PreLoginDashboard from './components/PreLoginDashboard';
 import ResetPassword from './components/ResetPassword';
 import ShopLanding from './components/ShopLanding';
 import EventMonitor from './components/EventMonitor';
-import AdminDashboard from './components/Admin/AdminDashboard';
+import AdminAllureView from './components/Admin/AdminAllureView';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthContext } from './context/AuthContext';
 import DemoBanner from './components/DemoBanner';
@@ -274,7 +274,7 @@ function App() {
                             <Route path="/admin" element={
                                 <ProtectedRoute>
                                     <div className="h-full w-full overflow-y-auto">
-                                        <AdminDashboard onClose={() => navigate('/dashboard')} />
+                                        <AdminAllureView onClose={() => navigate('/dashboard')} />
                                     </div>
                                 </ProtectedRoute>
                             } />

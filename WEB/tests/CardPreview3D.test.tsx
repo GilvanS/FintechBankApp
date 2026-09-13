@@ -51,7 +51,8 @@ describe('CardPreview3D Component', () => {
     );
 
     // PLATINUM = R$ 29,90, PRO = R$ 19,90 => Total = R$ 49,80
-    expect(screen.getByText(/Anuidade Card/i)).toBeInTheDocument();
+    // O componente renderiza "Anuidade (PLATINUM)" (tier dinâmico), não "Anuidade Card".
+    expect(screen.getByText(/Anuidade/i)).toBeInTheDocument();
     expect(screen.getByText(/Plano/i)).toBeInTheDocument();
     expect(screen.getByText(/Total Mensal/i)).toBeInTheDocument();
 
