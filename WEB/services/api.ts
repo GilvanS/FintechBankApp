@@ -1825,3 +1825,140 @@ export const adminTelegramLog = async (filters?: { cpf?: string; category?: stri
         return [];
     }
 };
+
+// --- TEST PLANNING (Planejamento de Testes) ---
+export interface TestPlanningCenario {
+    SEQ?: number;
+    ID_CENARIO: string;
+    NOME?: string;
+    FEATURE?: string;
+    ID_MASSA?: string;
+    CPF?: string;
+    SENHA?: string;
+    saldo_conta?: number;
+    fatura_fechada?: number;
+    fatura_aberta?: number;
+    dias_atraso?: number;
+    PIN?: string | number;
+}
+
+export interface TestPlanningMassa {
+    id_massa: string;
+    cpf: string;
+    status: string;
+    saldo_conta: number;
+    fatura_fechada: number;
+    fatura_aberta: number;
+    dias_atraso: number;
+    nome_completo?: string;
+}
+
+export const getTestPlanningData = async (): Promise<{
+    success: boolean;
+    data?: { cenarios: TestPlanningCenario[]; massas: TestPlanningMassa[] };
+    message?: string;
+}> => {
+    try {
+        return await apiCall('/admin/test-planning', { method: 'GET' });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao carregar planejamento de testes.' };
+    }
+};
+
+export const saveTestPlanningAssignment = async (
+    idCenario: string,
+    massa: { idMassa: string; cpf: string; saldoConta: number; faturaFechada: number; faturaAberta: number; diasAtraso: number; pin: string }
+): Promise<{ success: boolean; data?: TestPlanningCenario; message?: string }> => {
+    try {
+        return await apiCall('/admin/test-planning/save', {
+            method: 'POST',
+            body: JSON.stringify({ idCenario, massa }),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao salvar planejamento de testes.' };
+    }
+};
+
+export const adminAuditFix = async (cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/audit-fix`, {
+            method: 'POST',
+            body: JSON.stringify(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao corrigir discrepâncias.' };
+    }
+};
+
+export const adminSyncOverdueDays = async (cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/sync-overdue-days`, {
+            method: 'POST',
+            body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') }),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao ressincronizar dias de atraso.' };
+    }
+};
+
+export const adminInvoicePdfPreview = async (cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/invoice-pdf-preview`, {
+            method: 'POST',
+            body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') }),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao gerar prévia da fatura.' };
+    }
+};
+
+export const adminMassaReport = async (cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/massa-report`, {
+            method: 'POST',
+            body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') }),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao gerar relatório de massa.' };
+    }
+};
+
+export const adminGetPendingCards = async (cpf?: string): Promise<{ success: boolean; users?: { cpf: string; full_name: string; card_brand: string; card_tier: string }[]; message?: string }> => {
+    try {
+        const qs = cpf ? `?cpf=${cpf.replace(/\D/g, '')}` : '';
+        return await apiCall(`/admin/scripts/pending-cards${qs}`, { method: 'GET' });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao buscar cartões pendentes.' };
+    }
+};
+
+export const adminActivatePendingCards = async (cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/activate-pending-cards`, {
+            method: 'POST',
+            body: JSON.stringify(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao ativar cartões pendentes.' };
+    }
+};
+
+export const adminRecalcularLimiteDisponivel = async (cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/recalcular-limite`, {
+            method: 'POST',
+            body: JSON.stringify(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao recalcular limite disponível.' };
+    }
+};
+
+export const adminExportMassasCsv = async (cpf?: string): Promise<{ success: boolean; data?: { csv: string; count: number }; message?: string }> => {
+    try {
+        const qs = cpf ? `?cpf=${cpf.replace(/\D/g, '')}` : '';
+        return await apiCall(`/admin/scripts/export-massas-csv${qs}`, { method: 'GET' });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao exportar CSV de massas.' };
+    }
+};

@@ -58,6 +58,7 @@
     "swagger-autogen": "^2.23.7",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.1",
+    "xlsx": "^0.18.5",
     "yamljs": "^0.3.0"
   },
   "devDependencies": {

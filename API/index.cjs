@@ -199,6 +199,8 @@ const createAdminUsersController = require('./src/controllers/adminUsersControll
 const registerAdminUsersRoutes = require('./src/routes/admin/users.routes');
 const createAdminNotificationsController = require('./src/controllers/adminNotificationsController');
 const registerAdminNotificationsRoutes = require('./src/routes/admin/notifications.routes');
+const registerTestPlanningRoutes = require('./src/routes/admin/testPlanning.routes');
+const createTestPlanningController = require('./src/controllers/testPlanningController');
 const createAdminScriptsController = require('./src/controllers/adminScriptsController');
 const registerAdminScriptsRoutes = require('./src/routes/admin/scripts.routes');
 
@@ -2850,6 +2852,10 @@ const adminUsersController = createAdminUsersController({
     setTempPassword,
 });
 registerAdminUsersRoutes({ apiRouter, bearerAuth, authenticateAdmin, asyncHandler, controller: adminUsersController });
+
+// --- Rotas de Admin: planejamento de testes (cruza TBL_CENARIOS x tbl_de_massas) ---
+const testPlanningController = createTestPlanningController({ auditLog });
+registerTestPlanningRoutes({ apiRouter, bearerAuth, authenticateAdmin, asyncHandler, controller: testPlanningController });
 
 // --- Rotas de Admin: scripts & massas (ativa scripts de API/scripts/ como botões do painel) ---
 const adminScriptsController = createAdminScriptsController({
