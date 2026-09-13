@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, CreditCard, Receipt, FileText, LogIn, RefreshCw, Repeat, Send, ShieldCheck, Activity, Timer, Palette, Moon, Sun, Sparkles, X, Wrench } from 'lucide-react';
+import { Shield, Users, CreditCard, Receipt, FileText, LogIn, RefreshCw, Repeat, Send, ShieldCheck, Activity, Timer, Palette, Moon, Sun, Sparkles, X, Wrench, ClipboardList } from 'lucide-react';
 import { AllureShell, type AllureSection } from '../shared/AllureShell';
 import { useAppState } from '../../contexts/AppStateContext';
 import { setAdminSessionToken, login } from '../../services/api';
@@ -17,13 +17,14 @@ import TelegramManagement from './TelegramManagement';
 import AuditSection from './AuditSection';
 import ShopOfferSettings from './ShopOfferSettings';
 import ScriptsMassasSection from './ScriptsMassasSection';
+import TestPlanningSection from './TestPlanningSection';
 
 interface AdminAllureViewProps {
     onClose: () => void;
     initialSearchCpf?: string;
 }
 
-type AdminSectionKey = 'users' | 'requests' | 'billing' | 'recurring' | 'cards' | 'mass-creator' | 'audit' | 'vitrine' | 'telegram' | 'scripts' | 'legacy';
+type AdminSectionKey = 'users' | 'requests' | 'billing' | 'recurring' | 'cards' | 'mass-creator' | 'audit' | 'vitrine' | 'telegram' | 'scripts' | 'test-planning' | 'legacy';
 
 const SECTIONS: AllureSection<AdminSectionKey>[] = [
     { key: 'users', label: 'Usuários', icon: Users, group: 'Usuários & Solicit.' },
@@ -36,6 +37,7 @@ const SECTIONS: AllureSection<AdminSectionKey>[] = [
     { key: 'vitrine', label: 'Vitrine', icon: Timer, group: 'Auditoria & Sistema' },
     { key: 'telegram', label: 'Telegram', icon: Send, group: 'Auditoria & Sistema' },
     { key: 'scripts', label: 'Scripts & Massas', icon: Wrench, group: 'Auditoria & Sistema' },
+    { key: 'test-planning', label: 'Planejamento de Testes', icon: ClipboardList, group: 'Testes' },
     { key: 'legacy', label: 'Painel Legado', icon: Shield, group: 'Legado' },
 ];
 
@@ -157,6 +159,8 @@ const AdminAllureView: React.FC<AdminAllureViewProps> = ({ onClose, initialSearc
                 return <ShopOfferSettings />;
             case 'scripts':
                 return <ScriptsMassasSection />;
+            case 'test-planning':
+                return <TestPlanningSection />;
             default:
                 return <UserManagement />;
         }
