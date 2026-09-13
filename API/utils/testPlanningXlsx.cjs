@@ -27,7 +27,22 @@ function saveCenarioAssignment(idCenario, campos) {
     if (indice === -1) {
         throw new Error(`Cenário "${idCenario}" não encontrado em TBL_CENARIOS.`);
     }
-    linhas[indice] = { ...linhas[indice], ...campos };
+    // A planilha real de TBL_CENARIOS tem cabeçalhos com espaços acidentais
+    // (ex: " saldo_conta " em vez de "saldo_conta"). Escrever direto pela chave
+    // limpa criava uma coluna NOVA ao lado da existente a cada save (achado em
+    // teste manual real — CT03.2 acumulou 3 colunas duplicadas de um só save).
+    // Aqui, casa por nome (trim) contra as chaves que a linha JÁ tem e escreve
+    // na chave real — nunca cria coluna nova pra um campo que já existe.
+    const linhaOriginal = linhas[indice];
+    const chavesExistentesPorTrim = new Map(
+        Object.keys(linhaOriginal).map((chave) => [chave.trim(), chave])
+    );
+    const linhaAtualizada = { ...linhaOriginal };
+    for (const [chave, valor] of Object.entries(campos)) {
+        const chaveReal = chavesExistentesPorTrim.get(chave.trim()) || chave;
+        linhaAtualizada[chaveReal] = valor;
+    }
+    linhas[indice] = linhaAtualizada;
     workbook.Sheets[CENARIOS_SHEET] = XLSX.utils.json_to_sheet(linhas);
     XLSX.writeFile(workbook, XLSX_PATH);
     return linhas[indice];

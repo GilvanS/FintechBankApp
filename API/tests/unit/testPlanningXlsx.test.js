@@ -61,4 +61,39 @@ describe('testPlanningXlsx', () => {
 
         expect(() => testPlanningXlsx.saveCenarioAssignment('CT99.9', {})).toThrow(/CT99\.9/);
     });
+
+    // Achado em teste manual real (Task 8): a planilha real de TBL_CENARIOS tem
+    // cabeçalhos com espaço acidental (" saldo_conta " em vez de "saldo_conta").
+    // Sem este casamento por trim, cada save criava uma coluna NOVA ao lado da
+    // existente, duplicando colunas na planilha a cada uso da tela.
+    test('saveCenarioAssignment escreve na coluna existente mesmo com espaço no nome do cabeçalho', () => {
+        const linhaOriginal = {
+            ID_CENARIO: 'CT03.2',
+            CPF: '00000000000',
+            ' saldo_conta ': 10,
+            ' fatura_fechada ': 100,
+        };
+        const fakeWorkbook = {
+            Sheets: {
+                TBL_CENARIOS: { '!ref': 'A1:B2' },
+                tbl_de_massas: { '!ref': 'A1:B1' },
+            },
+        };
+        XLSX.readFile.mockReturnValue(fakeWorkbook);
+        XLSX.utils.sheet_to_json.mockReturnValue([linhaOriginal]);
+        XLSX.utils.json_to_sheet.mockReturnValue({ '!ref': 'NOVA' });
+
+        const campos = { CPF: '11111111111', saldo_conta: 4678.70, fatura_fechada: 999.99 };
+        const linhaAtualizada = testPlanningXlsx.saveCenarioAssignment('CT03.2', campos);
+
+        expect(linhaAtualizada).toEqual({
+            ID_CENARIO: 'CT03.2',
+            CPF: '11111111111',
+            ' saldo_conta ': 4678.70,
+            ' fatura_fechada ': 999.99,
+        });
+        // Nunca cria uma coluna nova pra um campo que já existe (com ou sem espaço).
+        expect(linhaAtualizada).not.toHaveProperty('saldo_conta');
+        expect(linhaAtualizada).not.toHaveProperty('fatura_fechada');
+    });
 });
