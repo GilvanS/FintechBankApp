@@ -15,6 +15,13 @@ describe('validarMassaParaCenario', () => {
         expect(resultado.motivo).toBeNull();
     });
 
+    test('CT03.2 com fatura_fechada > 0 mas já PAGA é inválida (valor é imutável, não zera)', () => {
+        const massa = { fatura_fechada: 3870.86, fatura_aberta: 0, status_fatura_fechada: 'PAGA' };
+        const resultado = validarMassaParaCenario('CT03.2', massa);
+        expect(resultado.valido).toBe(false);
+        expect(resultado.motivo).toMatch(/CT03\.2/);
+    });
+
     test('CT03.1 exige fatura_aberta > 0', () => {
         expect(validarMassaParaCenario('CT03.1', { fatura_aberta: 0, fatura_fechada: 100 }).valido).toBe(false);
         expect(validarMassaParaCenario('CT03.1', { fatura_aberta: 50, fatura_fechada: 0 }).valido).toBe(true);
