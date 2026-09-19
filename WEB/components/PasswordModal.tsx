@@ -18,6 +18,9 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
     
     const [pin, setPin] = useState<string[]>(['', '', '', '']);
     const [focusedPinIndex, setFocusedPinIndex] = useState<number>(0);
+    // Trava enquanto onConfirm está em andamento: evita duplo envio (auto-submit +
+    // tecla Enter) e digitação durante a chamada à API.
+    const isSubmittingRef = useRef(false);
 
     const pinRef = useRef(pin);
     const indexRef = useRef(focusedPinIndex);
@@ -32,14 +35,18 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
         if (isOpen) {
             setPin(['', '', '', '']);
             setFocusedPinIndex(0);
+            isSubmittingRef.current = false;
         }
     }, [isOpen]);
+
+    const isPinComplete = (p: string[]) => p.every(d => d !== '');
 
     // Handle physical keyboard typing
     useEffect(() => {
         if (!isOpen) return;
 
         const handleKeyDown = (e: KeyboardEvent) => {
+            if (isLoading || isSubmittingRef.current) return;
             const currentPin = pinRef.current;
             const currentIndex = indexRef.current;
 
@@ -55,7 +62,9 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
                     setPin(newPin);
                 }
             } else if (e.key === 'Enter') {
-                if (currentPin.every(d => d !== '')) {
+                // Confirma SOMENTE com clique/Enter explícito do usuário
+                if (isPinComplete(currentPin)) {
+                    isSubmittingRef.current = true;
                     onConfirm(currentPin.join(''));
                 }
             } else if (/^[0-9]$/.test(e.key)) {
@@ -65,20 +74,19 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
                     setPin(newPin);
                     if (currentIndex < 3) {
                         setFocusedPinIndex(currentIndex + 1);
-                    } else if (currentIndex === 3) {
-                        setTimeout(() => {
-                            onConfirm(newPin.join(''));
-                        }, 100);
                     }
+                    // Sem auto-submit ao completar o 4º dígito: o usuário
+                    // confirma explicitamente com o botão ou Enter.
                 }
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, onConfirm]);
+    }, [isOpen, onConfirm, isLoading]);
 
     const handlePinChange = (val: string) => {
+        if (isLoading || isSubmittingRef.current) return;
         const currentIndex = indexRef.current;
         const currentPin = pinRef.current;
         if (currentIndex < 4) {
@@ -87,11 +95,9 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
             setPin(newPin);
             if (currentIndex < 3) {
                 setFocusedPinIndex(currentIndex + 1);
-            } else if (currentIndex === 3) {
-                setTimeout(() => {
-                    onConfirm(newPin.join(''));
-                }, 100);
             }
+            // Sem auto-submit ao completar o 4º dígito: o usuário confirma
+            // explicitamente com o botão Confirmar.
         }
     };
 
@@ -111,7 +117,8 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
     };
 
     const handleSubmit = () => {
-        if (pin.every(d => d !== '')) {
+        if (isPinComplete(pin) && !isLoading && !isSubmittingRef.current) {
+            isSubmittingRef.current = true;
             onConfirm(pin.join(''));
         }
     };
@@ -219,16 +226,6 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
                                 className={`h-14 rounded-xl font-black text-lg flex items-center justify-center cursor-pointer transition-all active:scale-95 ${keyBtnClass}`}
                             >
                                 0
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setPin(['3', '7', '1', '9']); // MOCK auto-fill
-                                    setFocusedPinIndex(3);
-                                }}
-                                className={`h-14 rounded-xl font-black text-[10px] uppercase tracking-tighter flex items-center justify-center cursor-pointer transition-all active:scale-95 ${keyBtnMutedClass}`}
-                            >
-                                Auto
                             </button>
                         </div>
 

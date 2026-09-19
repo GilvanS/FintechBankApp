@@ -45,16 +45,22 @@ import SmartAlerts from './SmartAlerts';
 import { AnimatePresence, motion } from 'motion/react';
 import { LayoutGrid } from 'lucide-react';
 
-const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; onClose: () => void; }> = ({ isOpen, onGoToPayment, onClose }) => {
+const BlockedCardModal: React.FC<{ isOpen: boolean; onGoToPayment: () => void; onClose: () => void; variant?: 'blocked' | 'blacklisted'; }> = ({ isOpen, onGoToPayment, onClose, variant = 'blocked' }) => {
     if (!isOpen) return null;
+
+    // velvet-skipping-dream.md: mesma modal, texto diferente pra 'blacklisted' (90+ dias,
+    // lista negra) vs 'blocked' (8-90 dias, cartão bloqueado) — reaproveita o visual existente.
+    const isBlacklisted = variant === 'blacklisted';
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 animate-fade-in">
             <div className="bg-surface-dark p-8 rounded-lg shadow-xl w-full max-w-sm text-center">
-                <span className="text-5xl mb-4" role="img" aria-label="Blocked">🚫</span>
-                <h2 className="text-2xl font-bold mb-2 text-white">Cartão Bloqueado</h2>
+                <span className="text-5xl mb-4" role="img" aria-label="Blocked">{isBlacklisted ? '⛔' : '🚫'}</span>
+                <h2 className="text-2xl font-bold mb-2 text-white">{isBlacklisted ? 'Conta na Lista Negra' : 'Cartão Bloqueado'}</h2>
                 <p className="text-subtle-dark mb-6">
-                    Seu cartão foi bloqueado por inadimplência. Efetue o pagamento da sua fatura para liberá-lo.
+                    {isBlacklisted
+                        ? 'Sua conta foi para a lista negra por atraso prolongado (90+ dias). Pague ou renegocie a fatura para liberar movimentações.'
+                        : 'Seu cartão foi bloqueado por inadimplência. Efetue o pagamento da sua fatura para liberá-lo.'}
                 </p>
                 <div className="flex flex-col gap-3">
                     <button 
@@ -129,6 +135,7 @@ const Dashboard: React.FC = () => {
     const [passwordModalInfo, setPasswordModalInfo] = useState({ title: '', description: '' });
     const [isProcessing, setIsProcessing] = useState(false);
     const [isBlockedModalOpen, setIsBlockedModalOpen] = useState(false);
+    const [blockedModalVariant, setBlockedModalVariant] = useState<'blocked' | 'blacklisted'>('blocked');
     const [toast, setToast] = useState<{ title: string, message: string } | null>(null);
     
     // States for various flows
@@ -358,7 +365,15 @@ const Dashboard: React.FC = () => {
 
     const handleSelectPaymentMethod = (method: 'debit' | 'credit') => {
         if (!currentItem) return;
+        // velvet-skipping-dream.md: lista negra (90+ dias) bloqueia compra em QUALQUER método
+        // (débito ou crédito) — diferente do isBlocked abaixo, que só pega crédito.
+        if (user?.creditCard.isBlacklisted) {
+            setBlockedModalVariant('blacklisted');
+            setIsBlockedModalOpen(true);
+            return;
+        }
         if (method === 'credit' && user?.creditCard.isBlocked) {
+            setBlockedModalVariant('blocked');
             setIsBlockedModalOpen(true);
             return;
         }
@@ -803,7 +818,7 @@ const Dashboard: React.FC = () => {
                  <BottomNavBar currentView={currentView} onNavigate={(view) => handleNavigate(view)} theme={theme} />
             )}
             
-            <BlockedCardModal isOpen={isBlockedModalOpen} onGoToPayment={handleGoToPaymentFromModal} onClose={handleCloseBlockedModal} />
+            <BlockedCardModal isOpen={isBlockedModalOpen} onGoToPayment={handleGoToPaymentFromModal} onClose={handleCloseBlockedModal} variant={blockedModalVariant} />
             
             <PasswordModal
                 isOpen={isPasswordModalOpen}

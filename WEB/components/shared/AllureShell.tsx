@@ -28,6 +28,10 @@ export interface AllureShellProps<K extends string> {
   onSelectSection: (key: K) => void;
   headerExtra?: React.ReactNode;
   headerActions?: React.ReactNode;
+  /** Substitui o acento ASCII padrão do header (AsciiHeaderAccent) por outro
+   *  elemento decorativo — ex.: MatrixDotLoader no Admin. Omitir mantém o
+   *  comportamento atual (retrocompatível). */
+  headerAccent?: React.ReactNode;
   children: React.ReactNode;
   expandedContent?: React.ReactNode;
   onCloseExpanded?: () => void;
@@ -55,6 +59,7 @@ export function AllureShell<K extends string>({
   onSelectSection,
   headerExtra,
   headerActions,
+  headerAccent,
   children,
   expandedContent,
   onCloseExpanded,
@@ -85,6 +90,7 @@ export function AllureShell<K extends string>({
             ? 'bg-volt-dark text-on-surface font-sans'
             : 'bg-volt-yellow text-black font-sans'
       }`}
+      style={bgClassName ? { background: 'transparent' } : undefined}
     >
       {backdrop && <AsciiBackdrop theme={theme} opacity={0.05} />}
       {/* Main Content Area */}
@@ -122,7 +128,7 @@ export function AllureShell<K extends string>({
 
             <div className="flex items-center gap-3">
               {headerActions}
-              <AsciiHeaderAccent theme={theme} width={120} height={40} />
+              {headerAccent ?? <AsciiHeaderAccent theme={theme} width={120} height={40} />}
             </div>
           </div>
 

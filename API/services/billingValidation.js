@@ -4,6 +4,7 @@
 const DatabaseFactory = require('../services/database/DatabaseFactory');
 const dbService = DatabaseFactory.createDatabaseService();
 const notificationsRepo = require('../repositories/notificationsRepo');
+const { planDistribution } = require('../utils/invoiceMath');
 
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function calcMulta(amount) { return round2((Number(amount) || 0) * 0.02); }
@@ -33,9 +34,9 @@ function calcJurosRemuneratorios(amount, days) {
 }
 function overdueStatusFor(status, days) {
   if (days <= 0) return status === 'closed' ? 'closed' : 'open';
-  if (days <= 60) return 'overdue_grace';
-  if (days <= 90) return 'overdue_critical';
-  return 'overdue_pre_loss';
+  if (days <= 7) return 'atrasado';
+  if (days <= 90) return 'bloqueado';
+  return 'perda';
 }
 function computeCurrentCycle(cfg) {
   const now = new Date();
@@ -52,19 +53,6 @@ function computeCurrentCycle(cfg) {
   const ref = String(year) + '-' + String(month).padStart(2, '0');
   return { reference: ref, closingDate, dueDate };
 }
-function planDistribution(invoicesArray, totalAmount) {
-  let rem = Number(totalAmount) || 0;
-  const sorted = [...(invoicesArray || [])].sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
-  const res = {};
-  for (const inv of sorted) {
-    const tot = Number(inv.valor_total) || 0;
-    const p = Math.min(rem, tot);
-    res[inv.id] = p;
-    rem -= p;
-  }
-  return res;
-}
-
 // rota POST /admin/billing/validate-all podem disparar runBillingValidation no
 // mesmo processo. Sem este lock em memória, duas execuções simultâneas inseriam
 // o incremento do MESMO dia 2x (causa raiz das 958 duplicatas em 107 massas).
@@ -101,18 +89,20 @@ async function runBillingValidationInner(opts) {
     const today = new Date();
 
     const users = await dbService.executeQuery(`
-        SELECT cpf, credit_card_invoice_due_date,
+        SELECT cpf, full_name, credit_card_invoice_due_date,
                COALESCE(account_status,'adimplente') AS account_status,
                COALESCE(days_overdue, 0) AS days_overdue,
                COALESCE(credit_card_available_limit, 0) AS credit_card_available_limit,
-               COALESCE(credit_card_total_limit, 5000) AS credit_card_total_limit
+               COALESCE(credit_card_total_limit, 5000) AS credit_card_total_limit,
+               COALESCE(is_blacklisted, false) AS is_blacklisted,
+               COALESCE(credit_card_is_blocked, false) AS credit_card_is_blocked
         FROM ${dbService.fq('users')}
         ${scopeFilter}
     `);
 
     // Vencimento real de cada fatura FECHADA ainda não paga — não usar
     // user.credit_card_invoice_due_date aqui: o invoiceEngine rola esse campo para o
-    // PRÃ“XIMO ciclo assim que o corte da fatura atual passa (7 dias antes do vencimento),
+    // PRÓXIMO ciclo assim que o corte da fatura atual passa (7 dias antes do vencimento),
     // então no dia do vencimento (e durante todo o período de atraso) esse campo já
     // aponta para um ciclo futuro, fazendo daysOverdue ficar sempre 0.
     // ORDER BY ASC (nao DESC): precisamos da fatura NAO PAGA MAIS ANTIGA por CPF, nao a
@@ -225,7 +215,8 @@ async function runBillingValidationInner(opts) {
             if (u.account_status !== 'adimplente' || parseInt(u.days_overdue) !== 0) {
                 await dbService.executeQuery(`
                     UPDATE ${dbService.fq('users')}
-                    SET account_status = 'adimplente', days_overdue = 0, overdue_status = 'EM_DIA', updated_at = CURRENT_TIMESTAMP
+                    SET account_status = 'adimplente', days_overdue = 0, overdue_status = 'EM_DIA',
+                        credit_card_is_blocked = false, is_blacklisted = false, updated_at = CURRENT_TIMESTAMP
                     WHERE cpf = '${u.cpf}'
                 `);
                 markedAdimplente++;
@@ -253,12 +244,61 @@ async function runBillingValidationInner(opts) {
 
         console.log(`[DEBUG] CPF: ${u.cpf}, dueDate: ${dueDate}, today: ${todayMidnight}, diffMs: ${diffMs}, daysOverdue: ${daysOverdue}, displayDays: ${displayDays}, newStatus: ${newStatus}`);
 
+        // Parcelamento NORMAL da fatura: qualquer fatura FECHADA com saldo, mesmo
+        // SEM atraso (daysOverdue=0, ainda dentro do prazo), já é elegível a
+        // parcelar — é a funcionalidade padrão de "Parcelar Fatura" do cartão,
+        // diferente do parcelamento AUTOMÁTICO (gerado sozinho pelo sistema quando
+        // o cliente paga um valor entre o mínimo e o total, só na faixa 30-44d de
+        // atraso, tabela parcelamento_elegiveis). Registro simples, sem duplicar.
+        {
+            const valorFaturaFechada = Math.max(0, parseFloat(closedInvoiceData.amount || 0));
+            if (valorFaturaFechada > 0.005) {
+                try {
+                    await dbService.executeQuery(`
+                        CREATE TABLE IF NOT EXISTS ${dbService.fq('parcelamento_fatura_elegiveis')} (
+                            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                            cpf VARCHAR(11) NOT NULL,
+                            nome_completo TEXT,
+                            valor_fatura NUMERIC(12,2) NOT NULL,
+                            dias_atraso INTEGER NOT NULL,
+                            data_entrada TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            status VARCHAR(30) NOT NULL DEFAULT 'elegivel'
+                        )
+                    `);
+                    const jaExiste = await dbService.executeQuery(`
+                        SELECT id FROM ${dbService.fq('parcelamento_fatura_elegiveis')}
+                        WHERE cpf = '${u.cpf}' AND status = 'elegivel'
+                    `);
+                    if (!jaExiste.length) {
+                        await dbService.executeQuery(`
+                            INSERT INTO ${dbService.fq('parcelamento_fatura_elegiveis')} (cpf, nome_completo, valor_fatura, dias_atraso)
+                            VALUES ('${u.cpf}', '${(u.full_name || '').replace(/'/g, "''")}', ${valorFaturaFechada.toFixed(2)}, ${daysOverdue})
+                        `);
+                    } else {
+                        // Mantém o valor/atraso atualizados enquanto a fatura segue em aberto.
+                        await dbService.executeQuery(`
+                            UPDATE ${dbService.fq('parcelamento_fatura_elegiveis')}
+                            SET valor_fatura = ${valorFaturaFechada.toFixed(2)}, dias_atraso = ${daysOverdue}
+                            WHERE cpf = '${u.cpf}' AND status = 'elegivel'
+                        `);
+                    }
+                } catch (pfErr) {
+                    console.warn(`[BillingValidation] Falha ao registrar ${u.cpf} em parcelamento_fatura_elegiveis:`, pfErr.message);
+                }
+            }
+        }
+
         // Recalcular encargos diariamente enquanto em atraso (multa 2%, IOF 0,38% + 0,0082%/dia,
         // juros remuneratórios 15,39% a.m., juros de mora 1% a.m.)
         // Acumula encargos enquanto houver residual em aberto E (fatura vencida OU pagamento
         // mínimo já feito). Com mínimo o contador de dias fica 0 mas os juros/IOF seguem
         // incrementando sobre o residual até o pagamento TOTAL.
-        if (daysOverdue > 0 || closedInvoiceData.pagamentoMinimo) {
+        // CPFs já em blacklist (90+ dias) param de acumular encargos — vão pro
+        // "cemitério" e só voltam a ser cobrados após renegociação. Sem este corte,
+        // o motor seguia somando juros/multa/IOF indefinidamente mesmo depois da
+        // massa já estar marcada como perda (is_blacklisted), inflando uma dívida
+        // que não é mais cobrável no fluxo normal.
+        if ((daysOverdue > 0 || closedInvoiceData.pagamentoMinimo) && !u.is_blacklisted) {
             // Usa o saldo RESIDUAL da fatura fechada (valor_total - valor_pago) para calcular os encargos.
             // Para massas com pagamento parcial, o encargo incide apenas sobre o que 
             // efetivamente falta pagar — NÃO sobre o valor_total bruto.
@@ -274,7 +314,7 @@ async function runBillingValidationInner(opts) {
                 // render menos.
                 //
                 // Encargos de multa (2%) e IOF adicional (0,38%) são cobranças
-                // ÃšNICAS — inseridas apenas na primeira execução, calculadas sobre
+                // ÚNICAS — inseridas apenas na primeira execução, calculadas sobre
                 // o valor_total ORIGINAL (não o residual). Juros de mora, juros
                 // remuneratórios e IOF diário são incrementos DIÁRIOS sobre o
                 // residual — sempre inseridos a cada execução.
@@ -409,7 +449,7 @@ async function runBillingValidationInner(opts) {
                     }
                 }
 
-                // ———— JUROS REMUNERATÃ“RIOS: incremento diário sobre o residual ————
+                // ———— JUROS REMUNERATÓRIOS: incremento diário sobre o residual ————
                 {
                     const dailyJurosRem = calcJurosRemuneratorios(invoiceAmount, 1);
                     if (!dayAlreadyInserted('juros_remuneratorios') && dailyJurosRem > 0.005) {
@@ -495,14 +535,126 @@ async function runBillingValidationInner(opts) {
             }
         }
 
-        if (newStatus !== u.account_status || displayDays !== parseInt(u.days_overdue)) {
+        // Faixas de bloqueio automático (velvet-skipping-dream.md): 1-7d só aviso visual,
+        // 8-90d bloqueia cartão, 90+ entra na lista negra. blacklist_since só grava na
+        // transição false→true — não pode ser sobrescrita a cada rodada do motor.
+        const willBlock = displayDays >= 8;
+        const willBlacklist = displayDays >= 90;
+        const blacklistSinceSet = willBlacklist && !u.is_blacklisted;
+        // Faixas novas (só separação de dados por ora — regra de negócio/fluxo vem depois):
+        // 30-44d elegível a parcelamento automático da fatura; 45-89d elegível a
+        // renegociação de dívida. Calculadas aqui porque displayDays já está pronto
+        // neste ponto do loop; a gravação (com guarda de "não duplicar") acontece
+        // junto com o UPDATE de status abaixo.
+        const willParcelamentoElegivel = displayDays >= 30 && displayDays < 45;
+        const willRenegociacaoElegivel = displayDays >= 45 && displayDays < 90;
+
+        if (newStatus !== u.account_status || displayDays !== parseInt(u.days_overdue)
+            || willBlock !== !!u.credit_card_is_blocked || willBlacklist !== !!u.is_blacklisted) {
             await dbService.executeQuery(`
                 UPDATE ${dbService.fq('users')}
-                SET account_status = '${newStatus}', days_overdue = ${displayDays}, overdue_status = '${overdueStatusFor(newStatus, displayDays)}', updated_at = CURRENT_TIMESTAMP
+                SET account_status = '${newStatus}', days_overdue = ${displayDays}, overdue_status = '${overdueStatusFor(newStatus, displayDays)}',
+                    credit_card_is_blocked = ${willBlock}, is_blacklisted = ${willBlacklist}
+                    ${blacklistSinceSet ? `, blacklist_since = CURRENT_TIMESTAMP` : ''},
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE cpf = '${u.cpf}'
             `);
             if (newStatus === 'inadimplente') markedInadimplente++;
             else markedAdimplente++;
+
+            // Cemitério: registro simples e histórico do momento em que a massa
+            // entrou em blacklist (>90d) — cpf, nome, dívida e data de entrada.
+            // Só a transição false→true grava (mesma guarda de blacklistSinceSet),
+            // nunca sobrescreve um registro já existente daquele CPF.
+            if (blacklistSinceSet) {
+                try {
+                    await dbService.executeQuery(`
+                        CREATE TABLE IF NOT EXISTS ${dbService.fq('cemiterio_massas')} (
+                            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                            cpf VARCHAR(11) NOT NULL,
+                            nome_completo TEXT,
+                            valor_divida NUMERIC(12,2) NOT NULL,
+                            data_entrada TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            status VARCHAR(30) NOT NULL DEFAULT 'aguardando_renegociacao',
+                            renegociado_em TIMESTAMP
+                        )
+                    `);
+                    const jaExiste = await dbService.executeQuery(`
+                        SELECT id FROM ${dbService.fq('cemiterio_massas')}
+                        WHERE cpf = '${u.cpf}' AND status = 'aguardando_renegociacao'
+                    `);
+                    if (!jaExiste.length) {
+                        const valorDivida = Math.max(0, parseFloat(closedInvoiceData.amount || 0));
+                        await dbService.executeQuery(`
+                            INSERT INTO ${dbService.fq('cemiterio_massas')} (cpf, nome_completo, valor_divida)
+                            VALUES ('${u.cpf}', '${(u.full_name || '').replace(/'/g, "''")}', ${valorDivida.toFixed(2)})
+                        `);
+                    }
+                } catch (cemErr) {
+                    console.warn(`[BillingValidation] Falha ao registrar ${u.cpf} no cemitério:`, cemErr.message);
+                }
+            }
+
+            // Parcelamento automático (30-44d): só separação de dados por ora — sem
+            // cálculo de contrato/valor de entrada ainda (isso é a próxima etapa).
+            if (willParcelamentoElegivel) {
+                try {
+                    await dbService.executeQuery(`
+                        CREATE TABLE IF NOT EXISTS ${dbService.fq('parcelamento_elegiveis')} (
+                            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                            cpf VARCHAR(11) NOT NULL,
+                            nome_completo TEXT,
+                            valor_divida NUMERIC(12,2) NOT NULL,
+                            dias_atraso INTEGER NOT NULL,
+                            data_entrada TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            status VARCHAR(30) NOT NULL DEFAULT 'elegivel'
+                        )
+                    `);
+                    const jaExiste = await dbService.executeQuery(`
+                        SELECT id FROM ${dbService.fq('parcelamento_elegiveis')}
+                        WHERE cpf = '${u.cpf}' AND status = 'elegivel'
+                    `);
+                    if (!jaExiste.length) {
+                        const valorDivida = Math.max(0, parseFloat(closedInvoiceData.amount || 0));
+                        await dbService.executeQuery(`
+                            INSERT INTO ${dbService.fq('parcelamento_elegiveis')} (cpf, nome_completo, valor_divida, dias_atraso)
+                            VALUES ('${u.cpf}', '${(u.full_name || '').replace(/'/g, "''")}', ${valorDivida.toFixed(2)}, ${displayDays})
+                        `);
+                    }
+                } catch (parErr) {
+                    console.warn(`[BillingValidation] Falha ao registrar ${u.cpf} em parcelamento_elegiveis:`, parErr.message);
+                }
+            }
+
+            // Renegociação de dívida (45-89d): idem — só separação de dados por ora.
+            if (willRenegociacaoElegivel) {
+                try {
+                    await dbService.executeQuery(`
+                        CREATE TABLE IF NOT EXISTS ${dbService.fq('renegociacao_elegiveis')} (
+                            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                            cpf VARCHAR(11) NOT NULL,
+                            nome_completo TEXT,
+                            valor_divida NUMERIC(12,2) NOT NULL,
+                            dias_atraso INTEGER NOT NULL,
+                            data_entrada TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            status VARCHAR(30) NOT NULL DEFAULT 'elegivel'
+                        )
+                    `);
+                    const jaExiste = await dbService.executeQuery(`
+                        SELECT id FROM ${dbService.fq('renegociacao_elegiveis')}
+                        WHERE cpf = '${u.cpf}' AND status = 'elegivel'
+                    `);
+                    if (!jaExiste.length) {
+                        const valorDivida = Math.max(0, parseFloat(closedInvoiceData.amount || 0));
+                        await dbService.executeQuery(`
+                            INSERT INTO ${dbService.fq('renegociacao_elegiveis')} (cpf, nome_completo, valor_divida, dias_atraso)
+                            VALUES ('${u.cpf}', '${(u.full_name || '').replace(/'/g, "''")}', ${valorDivida.toFixed(2)}, ${displayDays})
+                        `);
+                    }
+                } catch (renErr) {
+                    console.warn(`[BillingValidation] Falha ao registrar ${u.cpf} em renegociacao_elegiveis:`, renErr.message);
+                }
+            }
         }
       } catch (massErr) {
         errors.push({ cpf: u.cpf, etapa: 'billing_validation', mensagem: massErr.message });
@@ -580,7 +732,7 @@ async function runBillingValidationInner(opts) {
 // Função standalone que atualiza dias_atraso em TODAS as invoices FECHADAS não pagas
 // com base na data atual. Pode ser chamada via cron ou manualmente.
 // Diferente do sync embutido no runBillingValidation, esta função:
-// - Ã‰ independente (não depende do status do usuário mudar)
+// - É independente (não depende do status do usuário mudar)
 // - Retorna contagem de quantas invoices foram atualizadas
 // - Pode ser chamada a qualquer momento sem efeitos colaterais
 const syncInvoiceDiasAtraso = async () => {

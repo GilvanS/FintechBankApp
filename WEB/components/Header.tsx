@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PanelLeftClose, PanelLeft, Bell, HelpCircle, ArrowLeft, LogOut, ShieldAlert, Sparkles, UserCheck, Trash2, Sun, Moon, LayoutGrid, Brain, TrendingUp, BarChart2, Activity, RefreshCw, ChevronRight, GripVertical, Pin } from 'lucide-react';
 import { User, Transaction } from '../types';
 import { useDialog } from '../contexts/GlobalDialogContext';
@@ -20,19 +20,19 @@ const DEFAULT_CARDS: HubCard[] = [
   {
     id: 'health',
     category: 'ia',
-    title: 'SaÃºde Financeira IA',
-    subtitle: 'DiagnÃ³stico em tempo real, pontuaÃ§Ã£o de crÃ©dito, sugestÃµes de economia e avaliaÃ§Ã£o de riscos.',
-    icon: 'ðŸ¥',
+    title: 'Saúde Financeira IA',
+    subtitle: 'Diagnóstico em tempo real, pontuação de crédito, sugestões de economia e avaliação de riscos.',
+    icon: '🏠¥',
     span: 'double',
-    badge: 'AnÃ¡lise Ampla',
+    badge: 'Análise Ampla',
     actionType: 'financial_health',
   },
   {
     id: 'recurring',
     category: 'ia',
     title: 'Assinaturas IA',
-    subtitle: 'Rastreamento de serviÃ§os recorrentes e sugestÃµes de corte.',
-    icon: 'ðŸ”„',
+    subtitle: 'Rastreamento de serviços recorrentes e sugestões de corte.',
+    icon: '🔄',
     span: 'single',
     badge: 'Otimizar',
     actionType: 'recurring_bills',
@@ -41,8 +41,8 @@ const DEFAULT_CARDS: HubCard[] = [
     id: 'chat',
     category: 'ia',
     title: 'Assistente de Chat',
-    subtitle: 'Tire dÃºvidas e planeje metas de poupanÃ§a direto com a IA.',
-    icon: 'ðŸ”®',
+    subtitle: 'Tire dúvidas e planeje metas de poupança direto com a IA.',
+    icon: '🔮',
     span: 'single',
     badge: 'Conversar',
     actionType: 'chat',
@@ -50,18 +50,18 @@ const DEFAULT_CARDS: HubCard[] = [
   {
     id: 'balance',
     category: 'analytics',
-    title: 'EvoluÃ§Ã£o do Saldo',
-    subtitle: 'GrÃ¡ficos histÃ³ricos consolidados que analisam as flutuaÃ§Ãµes e o avanÃ§o patrimonial nos Ãºltimos 30 dias de uso.',
-    icon: 'ðŸ“ˆ',
+    title: 'Evolução do Saldo',
+    subtitle: 'Gráficos históricos consolidados que analisam as flutuações e o avanço patrimonial nos últimos 30 dias de uso.',
+    icon: '📈',
     span: 'double',
     actionType: 'balance',
   },
   {
     id: 'analytics',
     category: 'analytics',
-    title: 'AnÃ¡lise de Gastos',
-    subtitle: 'Consolidado detalhado semestral de saÃ­das divididas por categoria de forma prÃ¡tica para detectar gargalos.',
-    icon: 'ðŸ“Š',
+    title: 'Análise de Gastos',
+    subtitle: 'Consolidado detalhado semestral de saídas divididas por categoria de forma prática para detectar gargalos.',
+    icon: '📊',
     span: 'double',
     actionType: 'analytics',
   },
@@ -69,17 +69,17 @@ const DEFAULT_CARDS: HubCard[] = [
     id: 'insights',
     category: 'analytics',
     title: 'Insights Financeiros',
-    subtitle: 'Alertas inteligentes e anÃ¡lise de consumo diÃ¡rio.',
-    icon: 'ðŸ’¡',
+    subtitle: 'Alertas inteligentes e análise de consumo diário.',
+    icon: '💡',
     span: 'single',
     actionType: 'insights',
   },
   {
     id: 'trends',
     category: 'analytics',
-    title: 'Volt Forecastâ„¢',
-    subtitle: 'PrevisÃ£o preditiva inteligente para os prÃ³ximos meses.',
-    icon: 'ðŸ”®',
+    title: 'Volt Forecast™',
+    subtitle: 'Previsão preditiva inteligente para os próximos meses.',
+    icon: '🔮',
     span: 'single',
     actionType: 'trends',
   }
@@ -395,7 +395,7 @@ export default function Header({
   const getTitle = () => {
     switch (currentView) {
       case 'home': return 'VOLT';
-      case 'cards': return 'Meu CartÃ£o';
+      case 'cards': return 'Meu Cartão';
       case 'shop': return 'Volt Shop';
       case 'profile': return 'Meu Perfil';
       case 'pix': return 'PIX';
@@ -461,7 +461,7 @@ export default function Header({
           <button
             onClick={() => setIsCentralHubOpen(true)}
             className="px-2.5 py-1.5 rounded-full text-black bg-[#A2FF00] hover:bg-[#8ee500] shadow-lg transition-all active:scale-90 cursor-pointer flex items-center gap-1.5 font-black text-[10px] uppercase tracking-wider group animate-pulse"
-            title="Central Hub: PainÃ©is e Insights"
+            title="Central Hub: Painéis e Insights"
           >
             <LayoutGrid size={12} className="text-black group-hover:rotate-45 transition-transform duration-300" />
             <span className="hidden md:inline">Volt Hub</span>
@@ -504,7 +504,7 @@ export default function Header({
             <button
               onClick={() => setNotificationsOpen(!notificationsOpen)}
               className="p-1.5 rounded-full text-black hover:bg-black/5 border-2 border-black bg-[#A2FF00] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-colors active:scale-90 relative"
-              title="NotificaÃ§Ãµes"
+              title="Notificações"
             >
               <Bell size={16} />
               {notifications.length > 0 && (
@@ -526,7 +526,7 @@ export default function Header({
                     className="absolute right-0 mt-2 w-80 bg-volt-surface border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 p-4 space-y-3 text-white"
                   >
                     <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                      <span className="font-bold text-sm text-white">NotificaÃ§Ãµes ({notifications?.length || 0})</span>
+                      <span className="font-bold text-sm text-white">Notificações ({notifications?.length || 0})</span>
                       {(notifications?.length || 0) > 0 && (
                         <button
                           onClick={() => {
@@ -542,7 +542,7 @@ export default function Header({
                     <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
                       {notifications.length === 0 ? (
                         <div className="text-center py-6 text-xs font-bold text-zinc-500">
-                          Nenhuma nova notificaÃ§Ã£o ðŸŽ‰
+                          Nenhuma nova notificação 🎉
                         </div>
                       ) : (
                         notifications.map((notif) => (
@@ -559,7 +559,7 @@ export default function Header({
                               className="absolute top-2 right-2 text-zinc-500 hover:text-red-400 text-[10px] font-bold cursor-pointer transition-colors p-0.5 rounded hover:bg-white/5"
                               title="Descartar"
                             >
-                              âœ•
+                              ✕
                             </button>
                           </div>
                         ))
@@ -689,11 +689,11 @@ export default function Header({
                     <Brain size={20} />
                   </div>
                   <h3 className="font-black text-xl uppercase tracking-wider">
-                    Central de InteligÃªncia Volt
+                    Central de Inteligência Volt
                   </h3>
                 </div>
                 <p className={`text-xs ${theme === 'midnight' ? 'text-zinc-400' : 'text-zinc-600'} font-bold`}>
-                  Acesse relatÃ³rios, previsÃµes matemÃ¡ticas e ferramentas avanÃ§adas de IA para otimizar suas economias.
+                  Acesse relatórios, previsões matemáticas e ferramentas avançadas de IA para otimizar suas economias.
                 </p>
               </div>
 
@@ -708,7 +708,7 @@ export default function Header({
                   </span>
                 </div>
                 <div className="text-center border-x-2 border-black/5 dark:border-white/5">
-                  <span className={`text-[9px] font-black uppercase tracking-wider block ${theme === 'midnight' ? 'text-zinc-400' : 'text-zinc-500'}`}>TransaÃ§Ãµes</span>
+                  <span className={`text-[9px] font-black uppercase tracking-wider block ${theme === 'midnight' ? 'text-zinc-400' : 'text-zinc-500'}`}>Transações</span>
                   <span className={`text-sm font-black mt-0.5 block ${theme === 'midnight' ? 'text-white' : 'text-black'}`}>
                     {(transactions || []).length} regs
                   </span>
@@ -723,9 +723,9 @@ export default function Header({
 
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-black/5 dark:bg-white/5 p-3 px-4 rounded-2xl border border-black/10 dark:border-white/10 gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs">âœ¨</span>
+                  <span className="text-xs">✨</span>
                   <span className={`text-[10px] font-black uppercase tracking-wider ${theme === 'midnight' ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                    Arraste os cartÃµes para personalizar a grade
+                    Arraste os cartões para personalizar a grade
                   </span>
                 </div>
                 <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
@@ -745,9 +745,9 @@ export default function Header({
                           ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
                           : 'bg-green-500/10 border-green-500/30 text-green-500'
                       }`}
-                      title={simplifiedAnimations ? "Desativa transiÃ§Ãµes de CSS e efeitos para maior performance" : "Ativa transiÃ§Ãµes completas e efeitos de escala"}
+                      title={simplifiedAnimations ? "Desativa transições de CSS e efeitos para maior performance" : "Ativa transições completas e efeitos de escala"}
                     >
-                      {simplifiedAnimations ? 'âš¡ RÃ¡pido' : 'âœ¨ Fluido'}
+                      {simplifiedAnimations ? '⚡ Rápido' : '✨ Fluido'}
                     </button>
                   </div>
 
@@ -764,9 +764,9 @@ export default function Header({
               {/* Feedback Settings Bar */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-black/5 dark:bg-white/5 p-3 px-4 rounded-2xl border border-black/10 dark:border-white/10 gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs">ðŸŽ§</span>
+                  <span className="text-xs">🎧</span>
                   <span className={`text-[10px] font-black uppercase tracking-wider ${theme === 'midnight' ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                    Feedback Sensorial (Som e VibraÃ§Ã£o)
+                    Feedback Sensorial (Som e Vibração)
                   </span>
                 </div>
                 <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
@@ -808,14 +808,14 @@ export default function Header({
                           : 'bg-zinc-500/10 border-zinc-500/30 text-zinc-500'
                       }`}
                     >
-                      {soundFeedback ? 'ðŸ”Š Ativo' : 'ðŸ”‡ Mudo'}
+                      {soundFeedback ? '🔊 Ativo' : '🔇 Mudo'}
                     </button>
                   </div>
 
                   {/* Haptic Toggle */}
                   <div className="flex items-center gap-1.5">
                     <span className={`text-[8px] font-black uppercase tracking-wider ${theme === 'midnight' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                      HÃ¡ptico (Vibrar):
+                      Háptico (Vibrar):
                     </span>
                     <button
                       onClick={() => {
@@ -832,7 +832,7 @@ export default function Header({
                           : 'bg-zinc-500/10 border-zinc-500/30 text-zinc-500'
                       }`}
                     >
-                      {hapticFeedback ? 'ðŸ“³ Ativo' : 'ðŸ“´ Inativo'}
+                      {hapticFeedback ? '📳 Ativo' : '📴 Inativo'}
                     </button>
                   </div>
                 </div>
@@ -891,7 +891,7 @@ export default function Header({
                               ? 'text-amber-500 hover:text-amber-600'
                               : 'text-zinc-400 hover:text-zinc-500'
                           }`}
-                          title={isPinned ? "Desafixar widget" : "Fixar posiÃ§Ã£o do widget"}
+                          title={isPinned ? "Desafixar widget" : "Fixar posição do widget"}
                         >
                           <Pin size={11} className={isPinned ? 'fill-amber-500 rotate-45' : ''} />
                         </button>
@@ -958,13 +958,13 @@ export default function Header({
                               theme === 'midnight' ? 'bg-zinc-950/80' : 'bg-white border-black/10'
                             }`}>
                               <div className="flex justify-between items-center mb-1">
-                                <span className="text-[8px] font-extrabold uppercase tracking-wider text-zinc-400">Score de SaÃºde</span>
+                                <span className="text-[8px] font-extrabold uppercase tracking-wider text-zinc-400">Score de Saúde</span>
                                 <span className="text-[10px] font-black text-emerald-500">88/100</span>
                               </div>
                               <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
                                 <div className="bg-emerald-500 h-full rounded-full" style={{ width: '88%' }} />
                               </div>
-                              <span className="text-[7px] text-zinc-400 mt-1 font-bold">Excelente (PoupanÃ§a ativa)</span>
+                              <span className="text-[7px] text-zinc-400 mt-1 font-bold">Excelente (Poupança ativa)</span>
                             </div>
                           )}
 
@@ -973,7 +973,7 @@ export default function Header({
                               theme === 'midnight' ? 'bg-zinc-950/80' : 'bg-gray-100'
                             }`}>
                               <div className="flex justify-between items-center mb-1">
-                                <span className="text-[7px] font-extrabold uppercase tracking-wider text-zinc-400">TendÃªncia</span>
+                                <span className="text-[7px] font-extrabold uppercase tracking-wider text-zinc-400">Tendência</span>
                                 <span className="text-[8px] font-black text-[#00E5FF]">+12.4%</span>
                               </div>
                               <svg className="w-full h-8 overflow-visible" viewBox="0 0 100 30">
@@ -993,11 +993,11 @@ export default function Header({
                             <div className={`sm:w-32 w-full flex flex-col gap-1.5 p-2 rounded-xl border border-black/5 dark:border-white/5 shrink-0 ${
                               theme === 'midnight' ? 'bg-zinc-950/80' : 'bg-gray-100'
                             }`}>
-                              <span className="text-[7px] font-extrabold uppercase tracking-wider text-zinc-400">DistribuiÃ§Ã£o</span>
+                              <span className="text-[7px] font-extrabold uppercase tracking-wider text-zinc-400">Distribuição</span>
                               <div className="space-y-1">
                                 <div>
                                   <div className="flex justify-between text-[7px] font-bold text-zinc-400">
-                                    <span>RefeiÃ§Ã£o</span>
+                                    <span>Refeição</span>
                                     <span>45%</span>
                                   </div>
                                   <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1 rounded-full">
@@ -1006,7 +1006,7 @@ export default function Header({
                                 </div>
                                 <div>
                                   <div className="flex justify-between text-[7px] font-bold text-zinc-400">
-                                    <span>ServiÃ§os</span>
+                                    <span>Serviços</span>
                                     <span>30%</span>
                                   </div>
                                   <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1 rounded-full">

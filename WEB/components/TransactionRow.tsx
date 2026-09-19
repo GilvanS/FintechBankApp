@@ -1,52 +1,30 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { ShoppingBag, Utensils, Tv, Car, FileText, CheckCircle2 } from 'lucide-react';
+import { ShoppingBag, Utensils, Tv, Car, FileText, CheckCircle2, CircleDashed, Check } from 'lucide-react';
 import { CardTransaction } from '../types';
 
-/**
- * Linha de transação de fatura — layout único para InvoiceView, CurrentInvoice,
- * ClosedInvoice e Statement.
- *
- * Extraído de InvoiceView para que o destaque verde de pagamento (borda, ícone, badge
- * "Pagamento", valor com sinal +) não precise ser reimplementado — e divergir — em cada
- * tela. O backend registra o pagamento de fatura ora como `PAYMENT` (snapshot do cartão)
- * ora como `INVOICE_PAYMENT` (extrato), e ambos devem renderizar igual.
- */
-
 type TransactionLike = Omit<CardTransaction, 'type'> & {
-    type?: string;
-    description?: string;
+    type: string;
 };
 
-export interface TransactionRowProps {
+interface TransactionRowProps {
     tx: TransactionLike;
     isMidnight: boolean;
-    /** Oculta valores quando o usuário esconde o saldo. */
     balanceVisible?: boolean;
-    /** Últimos 4 dígitos usados quando a transação não traz o cartão. */
     fallbackCardNumber?: string;
-    /** Statement não mostra cartão; as telas de fatura mostram. */
     showCard?: boolean;
     onClick?: () => void;
 }
 
-/** Pagamento de fatura chega com dois `type` distintos conforme a origem. */
-export const isPaymentTx = (type?: string): boolean =>
-    type === 'PAYMENT' || type === 'INVOICE_PAYMENT';
+export const isPaymentTx = (type: string) => type === 'PAYMENT' || type === 'INVOICE_PAYMENT';
 
-export const getCategoryIcon = (category: string, isMidnight: boolean): React.ReactNode => {
-    switch ((category || '').toLowerCase()) {
-        case 'shopping':
-            return <ShoppingBag className={isMidnight ? 'text-purple-300' : 'text-black'} size={18} />;
-        case 'dining':
-            return <Utensils className={isMidnight ? 'text-amber-300' : 'text-black'} size={18} />;
-        case 'transport':
-            return <Car className={isMidnight ? 'text-blue-300' : 'text-black'} size={18} />;
-        case 'entertainment':
-            return <Tv className={isMidnight ? 'text-pink-300' : 'text-black'} size={18} />;
-        default:
-            return <FileText className={isMidnight ? 'text-zinc-300' : 'text-black'} size={18} />;
-    }
+const getCategoryIcon = (category: string, isMidnight: boolean) => {
+    const c = category.toLowerCase();
+    if (c === 'alimentação' || c === 'restaurantes' || c === 'food') return <Utensils size={18} />;
+    if (c === 'tecnologia' || c === 'eletrônicos' || c === 'tech') return <Tv size={18} />;
+    if (c === 'transporte' || c === 'viagem' || c === 'transport') return <Car size={18} />;
+    if (c === 'compras' || c === 'shopping' || c === 'retail') return <ShoppingBag size={18} />;
+    return <FileText size={18} />;
 };
 
 const formatBRL = (value: number): string => value.toFixed(2).replace('.', ',');
@@ -68,6 +46,50 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     const isPayment = isPaymentTx(tx.type);
     const label = tx.merchant || tx.description || 'Transação';
     const installmentBadge = tx.installments && String(tx.installments).trim() !== '' ? String(tx.installments) : null;
+
+    // Detect Payment Type
+    const paymentType = (tx as any).paymentType;
+    const isMinimo = isPayment && (paymentType === 'MINIMO' || label.includes('Mínimo') || label.includes('Minimo'));
+    const isParcial = isPayment && (paymentType === 'PARCIAL' || label.includes('Parcial'));
+    const isTotal = isPayment && !isMinimo && !isParcial;
+
+    // Badge configuration for partial vs total
+    const getPaymentTheme = () => {
+        if (isMinimo) {
+            return {
+                bg: isMidnight ? 'bg-amber-500/15 border border-amber-500/40 hover:border-amber-500/70 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'bg-amber-50/90 border-2 border-amber-400 shadow-[3px_3px_0px_0px_rgba(245,158,11,0.5)] hover:bg-amber-100',
+                iconBox: isMidnight ? 'bg-amber-500/25 text-amber-300 border-2 border-amber-500/40' : 'bg-amber-200 text-amber-700 border-2 border-amber-500',
+                text: isMidnight ? 'text-amber-300' : 'text-amber-700',
+                badgeText: 'Mínimo',
+                badgeStyle: isMidnight ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50' : 'bg-amber-500 text-white shadow-[1px_1px_0px_0px_rgba(0,0,0,0.2)]',
+                icon: <CircleDashed size={20} className="text-amber-500" />,
+                amountText: isMidnight ? 'text-amber-300' : 'text-amber-600',
+            };
+        }
+        if (isParcial) {
+            return {
+                bg: isMidnight ? 'bg-blue-500/15 border border-blue-500/40 hover:border-blue-500/70 shadow-[0_0_12px_rgba(59,130,246,0.15)]' : 'bg-blue-50/90 border-2 border-blue-400 shadow-[3px_3px_0px_0px_rgba(59,130,246,0.5)] hover:bg-blue-100',
+                iconBox: isMidnight ? 'bg-blue-500/25 text-blue-300 border-2 border-blue-500/40' : 'bg-blue-200 text-blue-700 border-2 border-blue-500',
+                text: isMidnight ? 'text-blue-300' : 'text-blue-700',
+                badgeText: 'Parcial',
+                badgeStyle: isMidnight ? 'bg-blue-500/25 text-blue-300 border border-blue-500/50' : 'bg-blue-500 text-white shadow-[1px_1px_0px_0px_rgba(0,0,0,0.2)]',
+                icon: <CircleDashed size={20} className="text-blue-500" />,
+                amountText: isMidnight ? 'text-blue-300' : 'text-blue-600',
+            };
+        }
+        // Total (Green)
+        return {
+            bg: isMidnight ? 'bg-emerald-500/15 border border-emerald-500/40 hover:border-emerald-500/70 shadow-[0_0_12px_rgba(16,185,129,0.15)]' : 'bg-emerald-50/90 border-2 border-emerald-400 shadow-[3px_3px_0px_0px_rgba(16,185,129,0.5)] hover:bg-emerald-100',
+            iconBox: isMidnight ? 'bg-emerald-500/25 text-emerald-300 border-2 border-emerald-500/40' : 'bg-emerald-200 text-emerald-700 border-2 border-emerald-500',
+            text: isMidnight ? 'text-emerald-300' : 'text-emerald-700',
+            badgeText: 'Pago Total',
+            badgeStyle: isMidnight ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50' : 'bg-emerald-500 text-white shadow-[1px_1px_0px_0px_rgba(0,0,0,0.2)]',
+            icon: <CheckCircle2 size={20} className="text-emerald-500" />,
+            amountText: isMidnight ? 'text-emerald-300' : 'text-emerald-600',
+        };
+    };
+
+    const paymentTheme = isPayment ? getPaymentTheme() : null;
 
     const installmentBadgeClass = (text: string): string => {
         if (text.includes('Pago') || text.includes('Mínimo') || text.includes('Parcial') || text.includes('Quitado')) {
@@ -91,9 +113,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
             onClick={onClick}
             className={`flex items-center justify-between p-3.5 rounded-2xl transition-all ${onClick ? 'cursor-pointer hover:scale-[1.01] active:scale-[0.99]' : ''} ${
                 isPayment
-                    ? (isMidnight
-                        ? 'bg-emerald-500/15 border border-emerald-500/40 hover:border-emerald-500/70 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
-                        : 'bg-emerald-50/90 border-2 border-emerald-400 shadow-[3px_3px_0px_0px_rgba(16,185,129,0.5)] hover:bg-emerald-100')
+                    ? paymentTheme!.bg
                     : isMidnight
                         ? 'bg-white/5 border border-white/5 hover:border-white/20'
                         : 'bg-[#FFED86]/40 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFED86]/60'
@@ -102,23 +122,19 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
             <div className="flex items-center gap-3">
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold ${
                     isPayment
-                        ? (isMidnight ? 'bg-emerald-500/25 text-emerald-300 border-2 border-emerald-500/40' : 'bg-emerald-200 text-emerald-700 border-2 border-emerald-500')
+                        ? paymentTheme!.iconBox
                         : isMidnight
                             ? 'bg-purple-500/20 text-purple-300'
                             : 'bg-white border-2 border-black text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
                 }`}>
-                    {isPayment ? <CheckCircle2 size={20} className="text-emerald-500" /> : getCategoryIcon(tx.category || 'other', isMidnight)}
+                    {isPayment ? paymentTheme!.icon : getCategoryIcon(tx.category || 'other', isMidnight)}
                 </div>
                 <div>
                     <div className="flex items-center gap-2">
-                        <p className={`text-xs font-black ${isPayment ? (isMidnight ? 'text-emerald-300' : 'text-emerald-700') : ''}`}>{label}</p>
+                        <p className={`text-xs font-black ${isPayment ? paymentTheme!.text : ''}`}>{label}</p>
                         {isPayment && (
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider ${
-                                isMidnight
-                                    ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50'
-                                    : 'bg-emerald-500 text-white shadow-[1px_1px_0px_0px_rgba(0,0,0,0.2)]'
-                            }`}>
-                                Pagamento
+                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider ${paymentTheme!.badgeStyle}`}>
+                                {paymentTheme!.badgeText}
                             </span>
                         )}
                         {!isPayment && installmentBadge && (
@@ -143,7 +159,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
             <div className="text-right">
                 <span className={'text-sm font-black ' + (
                     isPayment
-                        ? (isMidnight ? 'text-emerald-300' : 'text-emerald-600')
+                        ? paymentTheme!.amountText
                         : tx.amount === 0
                             ? 'text-emerald-600 dark:text-emerald-400'
                             : isMidnight ? 'text-rose-400' : 'text-rose-600'
@@ -160,8 +176,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                     </span>
                 )}
                 {isPayment && (
-                    <span className="block text-[9px] font-black uppercase text-emerald-500 dark:text-emerald-300 mt-0.5">
-                        ✓ Pago
+                    <span className={`block text-[9px] font-black uppercase mt-0.5 ${paymentTheme!.amountText}`}>
+                        {isTotal ? '✓ Pago' : isMinimo ? '• Mínimo' : '• Parcial'}
                     </span>
                 )}
             </div>

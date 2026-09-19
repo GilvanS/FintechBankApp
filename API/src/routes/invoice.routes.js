@@ -18,6 +18,10 @@ module.exports = function registerInvoiceRoutes({ apiRouter, bearerAuth, asyncHa
     apiRouter.get('/cards/invoice/installment-options', bearerAuth(), asyncHandler(controller.installmentOptions));
     apiRouter.post('/cards/invoice/parcel', bearerAuth(), asyncHandler(controller.parcel));
 
+    // Renegociação da dívida TOTAL (fechada + aberta + encargos) — saída para quem está
+    // bloqueado (8-90d) ou na lista negra (90+) sem pagar tudo à vista.
+    apiRouter.post('/cards/invoice/renegotiate', bearerAuth(), asyncHandler(controller.renegotiate));
+
     // Pagamento de fatura (total / mínimo / parcial)
     apiRouter.post('/cards/invoice/pay', bearerAuth(), asyncHandler(controller.pay));
 

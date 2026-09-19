@@ -21,6 +21,7 @@ import SpendingHeatmapSection from './SpendingHeatmapSection';
 import D3SparkLine from './charts/D3SparkLine';
 import D3RadialProgress from './charts/D3RadialProgress';
 import WeeklyStreak from './WeeklyStreak';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 interface LimitViewProps {
   accountBalance: number;
@@ -52,6 +53,7 @@ export default function LimitView({
 
   const transactions = userProfile?.transactions || [];
   const { showDialog } = useDialog();
+  const { setRef, shakeAll } = useShakeOnError();
 
   // Category Budgets State
   const [budgets, setBudgets] = useState<Record<string, number>>(() => {
@@ -1658,7 +1660,8 @@ export default function LimitView({
                   : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
               }`}>
                 <label className="text-[9px] uppercase tracking-wider font-extrabold text-on-surface-variant">Agência</label>
-                <input 
+                <input
+                  ref={setRef('agency')}
                   type="text"
                   value={agency}
                   onChange={(e) => setAgency(e.target.value)}
@@ -1675,7 +1678,8 @@ export default function LimitView({
                   : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
               }`}>
                 <label className="text-[9px] uppercase tracking-wider font-extrabold text-on-surface-variant">Conta com dígito</label>
-                <input 
+                <input
+                  ref={setRef('account')}
                   type="text"
                   value={account}
                   onChange={(e) => setAccount(e.target.value)}
@@ -1738,6 +1742,7 @@ export default function LimitView({
             onClick={() => {
               if (!agency || !account) {
                 showDialog({ title: 'Atenção', message: 'Preencha os campos de Agência e Conta.' });
+                shakeAll(['agency', 'account']);
                 return;
               }
               setScreen('resumo');

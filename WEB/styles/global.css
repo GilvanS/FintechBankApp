@@ -75,6 +75,93 @@ code, pre, .font-mono { font-family: 'JetBrains Mono', monospace; }
 .no-scrollbar,
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* ─── Error shake (ref: Transitions.dev — Error state shake) ───
+   Disparado via hooks/useShakeOnError.ts, que alterna a classe
+   .t-shake no elemento (input, wrapper, etc.) quando a validação
+   falha — obrigatório vazio ou limite de caracteres atingido. */
+:root {
+    --t-shake-distance: 6px;
+    --t-shake-overshoot: 4px;
+    --t-shake-dur-a: 80ms;
+    --t-shake-dur-b: 60ms;
+    --t-shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-shake {
+    animation: t-shake calc(var(--t-shake-dur-a) * 2 + var(--t-shake-dur-b) * 2) linear;
+}
+
+@keyframes t-shake {
+    0%     { transform: translateX(0);                                 animation-timing-function: var(--t-shake-ease); }
+    28.57% { transform: translateX(var(--t-shake-distance));           animation-timing-function: var(--t-shake-ease); }
+    57.14% { transform: translateX(calc(var(--t-shake-distance) * -1)); animation-timing-function: var(--t-shake-ease); }
+    78.57% { transform: translateX(var(--t-shake-overshoot));          animation-timing-function: var(--t-shake-ease); }
+    100%   { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .t-shake { animation: none !important; transform: none !important; }
+}
+
+/* ─── Preview do cartão — Gerador de Massa (ref: Transitions.dev
+   credit-card-form) ─────────────────────────────────────────────
+   Anéis de brilho (::before/::after) por trás do cartão + slide dos
+   dígitos ao montar. Cores via --mcf-ring1/--mcf-ring2 (inline, por
+   bandeira). Puramente visual — não interfere na geração de massa. */
+.mcf-card-glow {
+    position: relative;
+    overflow: hidden;
+}
+.mcf-card-glow::before,
+.mcf-card-glow::after {
+    content: '';
+    position: absolute;
+    border-radius: 100%;
+    filter: blur(18px);
+    pointer-events: none;
+    opacity: 0.55;
+    z-index: 0;
+}
+.mcf-card-glow::before {
+    width: 220px;
+    height: 220px;
+    left: -15%;
+    top: -60px;
+    border: 16px solid var(--mcf-ring1, #ff6be7);
+}
+.mcf-card-glow::after {
+    width: 220px;
+    height: 220px;
+    left: -30%;
+    bottom: -80px;
+    border: 16px solid var(--mcf-ring2, #7288ff);
+}
+
+.mcf-card-number {
+    display: flex;
+    height: 1.5em;
+    overflow: hidden;
+}
+.mcf-card-number .mcf-digit {
+    display: inline-flex;
+    flex-direction: column;
+    height: 1.5em;
+    line-height: 1.5em;
+    animation: mcf-digit-reveal 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.mcf-card-number .mcf-row {
+    height: 1.5em;
+    display: block;
+}
+@keyframes mcf-digit-reveal {
+    from { transform: translateY(0); }
+    to   { transform: translateY(-1.5em); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mcf-card-number .mcf-digit { animation: none !important; transform: translateY(-1.5em) !important; }
+}
+
 
 /* ════════════════════════════════════════════════════════════ */
 /*  TEMA YELLOW — Volt Brutalist                               */
@@ -758,6 +845,112 @@ body.theme-midnight .inactive-sub-tab {
 .summary-toggle-btn.inactive,
 .summary-toggle-btn.inactive * {
   color: #a1a1aa !important;
+}
+
+/* ─── Matrix dot loader (Transitions.dev) ───────────────────── */
+/* Grade 4×4 de pontinhos compartilhando um ciclo de cor. O JS entrega a
+   cada ponto um delay --d (ms); a variante é só a tabela de delays —
+   ver components/shared/MatrixDotLoader.tsx. Cores expostas como vars
+   para o painel Admin sobrescrever por tema (o cinza padrão some no
+   fundo claro do tema yellow). */
+:root {
+  --matrix-cycle: 1200ms;
+  --matrix-base: #3a3a3e;
+  --matrix-active: #b8b8c2;
+  --matrix-ease: ease-in-out;
+}
+
+.t-matrix {
+  display: grid;
+  grid-template-columns: repeat(4, 2px);
+  grid-auto-rows: 2px;
+  gap: 2px;
+}
+
+.t-matrix i {
+  display: block;
+  background: var(--matrix-base);
+  animation: t-matrix-pulse var(--matrix-cycle) var(--matrix-ease) infinite;
+  animation-delay: calc(var(--d, 0) * 1ms);
+}
+
+/* Buracos das variantes rounded não renderizam nada */
+.t-matrix i.is-gap {
+  visibility: hidden;
+  animation: none;
+}
+
+@keyframes t-matrix-pulse {
+  0%, 45%, 100% { background-color: var(--matrix-base); }
+  15%           { background-color: var(--matrix-active); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-matrix i { animation: none !important; }
+}
+
+/* ─── Card hover tilt (Transitions.dev) ─────────────────────── */
+/* O wrapper .t-tilt é a área de hit plana (nunca se transforma); o JS
+   (hooks/useCardTilt.ts) escreve --tilt-rx/--tilt-ry (rotação) e
+   --tilt-gx/--tilt-gy (posição do glare). .is-tilting troca a transição
+   longa de retorno por um follow curto enquanto o ponteiro move; .is-hover
+   faz o fade do glare. Em telas touch, pan-y mantém o scroll e o tilt só
+   acontece com mouse/pen. */
+:root {
+  --tilt-perspective: 1000px;
+  --tilt-return: 1000ms;
+  --tilt-return-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tilt-follow: 400ms;
+  --tilt-follow-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tilt-glare-opacity: 0.32;
+  --tilt-glare-fade: 300ms;
+  --tilt-glare-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-tilt { touch-action: pan-y; }
+
+.t-tilt-card {
+  position: relative;
+  transform:
+    perspective(var(--tilt-perspective))
+    rotateX(var(--tilt-rx, 0deg))
+    rotateY(var(--tilt-ry, 0deg));
+  transform-style: preserve-3d;
+  transition: transform var(--tilt-return) var(--tilt-return-ease);
+  will-change: transform;
+}
+
+.t-tilt.is-tilting .t-tilt-card {
+  transition: transform var(--tilt-follow) var(--tilt-follow-ease);
+}
+
+/* Glare seguindo o cursor: círculos suaves que somam luz (screen blend)
+   na posição do ponteiro. */
+.t-tilt-glare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: screen;
+  /* rounded-2xl: mesmo raio dos cartões que usam o efeito; z acima das faces
+     (z-10/z-20 no CardPreview3D) — pointer-events:none e blend screen, então
+     só adiciona luz por cima sem bloquear nada. */
+  border-radius: 1rem;
+  z-index: 30;
+  background:
+    radial-gradient(circle 95px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
+      rgba(255,255,255,0.48), rgba(255,255,255,0.06) 52%, rgba(255,255,255,0) 84%),
+    radial-gradient(circle 200px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
+      rgba(255,255,255,0.22), rgba(255,255,255,0.04) 58%, rgba(255,255,255,0) 78%),
+    radial-gradient(circle 360px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
+      rgba(255,255,255,0.10), rgba(255,255,255,0) 88%);
+  transition: opacity var(--tilt-glare-fade) var(--tilt-glare-ease);
+}
+
+.t-tilt.is-hover .t-tilt-glare { opacity: var(--tilt-glare-opacity); }
+
+@media (prefers-reduced-motion: reduce) {
+  .t-tilt-card { transform: none !important; transition: none !important; }
 }
 
 

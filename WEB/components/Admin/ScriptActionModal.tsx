@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Loader2, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
+import { useShakeOnError } from '../../hooks/useShakeOnError';
 
 export type ScriptActionResult = { success: boolean; data?: any; message?: string };
 
@@ -29,6 +30,7 @@ const ScriptActionModal: React.FC<ScriptActionModalProps> = ({
     const [cpf, setCpf] = useState('');
     const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
     const [result, setResult] = useState<ScriptActionResult | null>(null);
+    const { setRef, shake, onMaxLengthKeyDown } = useShakeOnError();
 
     if (!isOpen) return null;
 
@@ -41,7 +43,10 @@ const ScriptActionModal: React.FC<ScriptActionModalProps> = ({
     const cpfBlocksExecute = cpfMode === 'required' && cpfDigits.length !== 11;
 
     const handleExecute = async () => {
-        if (cpfBlocksExecute) return;
+        if (cpfBlocksExecute) {
+            shake('cpf');
+            return;
+        }
         setStatus('loading');
         const res = await onExecute(cpfDigits.length === 11 ? cpf : undefined);
         setResult(res);
@@ -89,9 +94,11 @@ const ScriptActionModal: React.FC<ScriptActionModalProps> = ({
                                     CPF da massa {cpfMode === 'optional' && <span className="opacity-60 normal-case">(opcional — vazio roda geral, em todas as massas)</span>}
                                 </label>
                                 <input
+                                    ref={setRef('cpf')}
                                     type="text"
                                     value={cpf}
                                     onChange={(e) => setCpf(e.target.value)}
+                                    onKeyDown={onMaxLengthKeyDown('cpf', 14)}
                                     placeholder="000.000.000-00 (deixe vazio para todas)"
                                     maxLength={14}
                                     className={`w-full p-3 rounded-xl outline-none font-mono ${inputClass}`}

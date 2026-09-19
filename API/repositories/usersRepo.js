@@ -2,8 +2,57 @@ const { getDb, esc } = require('./context');
 const { nowDb } = require('../utils/timezone');
 const { computeNextInvoiceDueDate } = require('../utils/billing');
 
-const MASS_MERCHANTS = ['iFood', 'Amazon BR', 'Posto Shell', 'Farmacia Pague Menos', 'Netflix', 'Uber', 'Magazine Luiza', 'Zara', 'Mercado Livre', 'Spotify'];
+// Vencimento REAL mais recente que já passou para um dado dia-do-mês (dueDay).
+// Usado para ancorar a fatura FECHADA da massa no dueDay do cartão em vez de
+// numa data solta (hoje - daysOverdue), que diverge do dia configurado.
+// Mesmo dia-do-mês `k` meses antes/depois, sem overflow (dueDay 31 em fevereiro => 28/29).
+function shiftMonthsSameDay(date, k, dueDay) {
+    const y = date.getFullYear();
+    const m = date.getMonth() + k;
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    return new Date(y, m, Math.min(dueDay, lastDay), 12, 0, 0);
+}
+
+// `minDaysPassed` (opcional): garante que o vencimento devolvido tenha ao menos N dias
+// de atraso em relação à referência — recua mês a mês até satisfazer. Usado para o ciclo
+// ATUAL inadimplente da massa: uma fatura que venceu hoje (ou há 2 dias) não pode nascer
+// como "inadimplente" — o piso é MIN_DIAS_ATRASO_CICLO_ATUAL (7d, regra de bloqueio >=8d fica
+// a 1 dia de ser atingida) e o tier escolhido pode elevar (15d/30d).
+function computeLastPassedDueDate(dueDay, referenceDate = new Date(), minDaysPassed = 0) {
+    let d = shiftMonthsSameDay(referenceDate, 0, dueDay);
+    if (d > referenceDate) d = shiftMonthsSameDay(d, -1, dueDay);
+    if (minDaysPassed > 0) {
+        const limite = new Date(referenceDate);
+        limite.setDate(limite.getDate() - minDaysPassed);
+        let guard = 0;
+        while (d > limite && guard++ < 24) d = shiftMonthsSameDay(d, -1, dueDay);
+    }
+    return d;
+}
+
+const MIN_DIAS_ATRASO_CICLO_ATUAL = 7;
+
+// Merchants do gerador de massa. Compras em merchant INTERNACIONAL carregam IOF
+// de câmbio fixo (6,38%, sem componente diário), somado ao IOF doméstico da
+// fatura em atraso (0,38% fixo + 0,0082%/dia).
+const MASS_MERCHANTS_NACIONAL = ['iFood', 'Amazon BR', 'Posto Shell', 'Farmacia Pague Menos', 'Netflix', 'Uber', 'Magazine Luiza', 'Zara', 'Mercado Livre', 'Spotify'];
+const MASS_MERCHANTS_INTERNACIONAL = ['Shopee', 'Amazon.com', 'Temu', 'AliExpress', 'Shein'];
+const MASS_MERCHANTS = MASS_MERCHANTS_NACIONAL; // compat com código que ainda usa o nome antigo
+const IOF_INTERNACIONAL_RATE = 0.0638;
+const MASS_INTERNACIONAL_PROB = 0.3;
+const MAX_MASS_CYCLES = 6;
 const round2 = (n) => Math.round(n * 100) / 100;
+
+function calcIofInternacional(amount) {
+    return round2((Number(amount) || 0) * IOF_INTERNACIONAL_RATE);
+}
+
+// Sorteia um merchant; ~30% das compras são internacionais.
+function pickMerchant() {
+    const internacional = Math.random() < MASS_INTERNACIONAL_PROB;
+    const lista = internacional ? MASS_MERCHANTS_INTERNACIONAL : MASS_MERCHANTS_NACIONAL;
+    return { nome: lista[Math.floor(Math.random() * lista.length)], internacional };
+}
 
 // Tier de atraso do gerador de massas (WEB/utils/massGenerator.ts OverdueState),
 // derivado do estado real — usado para manter users.overdue_status sincronizado
@@ -53,140 +102,204 @@ async function seedMassPixKeys(db, cpf, email) {
 }
 
 /**
- * Gera os dados de faturamento coerentes com o estado da massa recém-criada:
- *  - adimplente: compras a crédito no ciclo ATUAL (fatura aberta calculada on-the-fly)
- *  - inadimplente: compras no ciclo anterior + fatura FECHADA vencida com os 5 encargos
- *    (mesma fórmula do dashboard) e snapshot itemized_transactions.
+ * Gerador 4.0 — gera o histórico de faturamento da massa como um loop sobre
+ * `cycles: Array<'adimplente'|'inadimplente'>` (1 a 6 posições, mais antigo primeiro):
+ *  - adimplente: 3 compras SHOP_CREDIT no ciclo + fatura FECHADA paga no vencimento
+ *    (+ compras no ciclo aberto atual quando é o último ciclo).
+ *  - inadimplente: fatura FECHADA vencida não paga com os 4 encargos (multa, juros
+ *    mora, juros remuneratórios, IOF). Sequências consecutivas encadeiam
+ *    `saldo_anterior` e usam UMA compra parcelada (10-12x) aberta no 1º ciclo da
+ *    sequência — cartão bloqueado (>=8d) nunca origina compra nova. Merchant
+ *    internacional soma IOF de câmbio 6,38% ao IOF de cada parcela.
  *
- * As compras são SHOP_CREDIT com amount negativo (convenção do app). O limite
- * disponível do cartão é reduzido pelo total das compras.
+ * `users.days_overdue` final = dias desde a fatura MAIS ANTIGA da sequência ativa.
+ * Compat: payload legado `{accountStatus, daysOverdue, overdueAmount}` vira
+ * `cycles=[accountStatus]` / `overdueAmountBase=overdueAmount`.
  */
-async function seedMassBilling(db, cpf, { accountStatus, daysOverdue, overdueAmount, creditLimit }) {
+async function seedMassBilling(db, cpf, options = {}) {
+    let { cycles, overdueAmountBase, creditLimit, dueDay, minOverdueDays, accountStatus, daysOverdue, overdueAmount } = options;
+
+    if (!Array.isArray(cycles) || cycles.length === 0) {
+        const st = accountStatus || (daysOverdue > 0 ? 'inadimplente' : 'adimplente');
+        cycles = [st];
+        if (overdueAmountBase === undefined) {
+            overdueAmountBase = overdueAmount || 0;
+        }
+    }
+    if (overdueAmountBase === undefined) {
+        overdueAmountBase = overdueAmount || 0;
+    }
+
     const genId = () => (db.generateUUID ? db.generateUUID() : `tx-${cpf}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
-    const pickMerchant = () => MASS_MERCHANTS[Math.floor(Math.random() * MASS_MERCHANTS.length)];
-    const insertPurchase = async (amount, description, dateIso) => {
+    const pickMerchantName = () => MASS_MERCHANTS[Math.floor(Math.random() * MASS_MERCHANTS.length)];
+    const insertPurchase = async (amount, description, dateIso, type = 'SHOP_CREDIT', installments = null) => {
         const id = genId();
         await db.executeQuery(`
             INSERT INTO ${db.fq('transactions')}
             (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-            VALUES (${esc(id)}, ${esc(cpf)}, 'SHOP_CREDIT', ${esc((-Math.abs(amount)).toFixed(2))}, ${esc(description)}, NULL, NULL, NULL, ${esc(dateIso)})
+            VALUES (${esc(id)}, ${esc(cpf)}, ${esc(type)}, ${esc((-Math.abs(amount)).toFixed(2))}, ${esc(installments ? `${description} (${installments})` : description)}, NULL, NULL, NULL, ${esc(dateIso)})
         `);
-        return { id, amount: Math.abs(amount), merchant: description, date: dateIso, type: 'CREDIT' };
+        return { id, amount: Math.abs(amount), merchant: description, date: dateIso, type };
     };
 
-    if (accountStatus === 'inadimplente' && daysOverdue > 0 && overdueAmount > 0) {
-        const principal = round2(Number(overdueAmount));
+    const now = new Date();
+    now.setHours(12, 0, 0, 0);
 
-        // Vencimento no passado (fatura já fechada e vencida)
-        const dueDate = new Date();
-        dueDate.setHours(12, 0, 0, 0);
-        dueDate.setDate(dueDate.getDate() - daysOverdue);
+    // Âncora = vencimento do ciclo ATUAL (último). Se ele é inadimplente, o vencimento
+    // precisa ter pelo menos `minDias` de atraso (piso 7d; tier pode pedir 15d/30d) —
+    // senão recua 1 mês. Ciclos anteriores recuam 1 mês cada a partir da âncora, sempre
+    // no mesmo dueDay, para a cadeia bater com o calendário do cartão.
+    const lastIsInadimplente = cycles[cycles.length - 1] === 'inadimplente';
+    // Compat: payload legado informa `daysOverdue` (7/15/30) — vira o atraso mínimo pedido.
+    const minPedido = Number(minOverdueDays ?? daysOverdue) || 0;
+    const minDias = lastIsInadimplente ? Math.max(MIN_DIAS_ATRASO_CICLO_ATUAL, minPedido) : 0;
+    const anchor = dueDay ? computeLastPassedDueDate(Number(dueDay), now, minDias) : now;
+    const anchorDay = dueDay ? Number(dueDay) : anchor.getDate();
+    const cycleDueDates = cycles.map((_, idx) => shiftMonthsSameDay(anchor, -(cycles.length - 1 - idx), anchorDay));
 
-        // Compras do ciclo anterior somando o principal (datadas antes do vencimento)
-        const parts = splitAmount(principal, 3);
-        const items = [];
-        for (const amt of parts) {
-            const txDate = new Date(dueDate);
-            txDate.setDate(txDate.getDate() - (7 + Math.floor(Math.random() * 10)));
-            items.push(await insertPurchase(amt, pickMerchant(), txDate.toISOString()));
-        }
+    let saldoAnteriorAcumulado = 0;
+    let installmentValue = 0;
+    let installmentIndex = 0;
+    let totalInstallments = 0;
+    let isInternacional = false; // merchant da compra parcelada da sequência inadimplente ATUAL (Task 3: IOF de câmbio)
+    let sequenceStartDueDate = null; // data da 1ª fatura da sequência inadimplente ATUAL — days_overdue final usa esta, não a do último ciclo (decisão de design #5 do spec)
 
-        // 5 encargos ISO — mesma fórmula do endpoint /admin/overdue-masses-dashboard
-        const multa = round2(principal * 0.02);
-        const jurosMora = round2(principal * 0.000333 * daysOverdue);
-        const jurosRem = round2(principal * 0.00513 * daysOverdue);
-        const iofAdicional = round2(principal * 0.0038);
-        const iofDiario = round2(principal * 0.000082 * daysOverdue);
-        const iof = round2(iofAdicional + iofDiario);
+    for (let i = 0; i < cycles.length; i++) {
+        const status = cycles[i];
+        const dueDate = cycleDueDates[i];
+        const isLast = i === cycles.length - 1;
 
-        const now = nowDb();
-        const invoiceId = genId();
-        const itemizedJson = JSON.stringify(items.map(it => ({
-            id: it.id, date: it.date, amount: it.amount, merchant: it.merchant, type: it.type,
-        })));
+        if (status === 'inadimplente') {
+            const isFirstOfSequence = i === 0 || cycles[i - 1] !== 'inadimplente';
 
-        await db.executeQuery(`
-            INSERT INTO ${db.fq('invoices')}
-            (id, cpf, status, due_date, valor_total, created_at, updated_at, data_pagamento, dias_atraso, saldo_anterior, valor_multa, valor_juros_mora, valor_juros_remuneratorios, valor_iof, itemized_transactions)
-            VALUES (${esc(invoiceId)}, ${esc(cpf)}, 'FECHADA', ${esc(dueDate.toISOString())}, ${principal.toFixed(2)}, ${esc(now)}, ${esc(now)}, NULL, ${daysOverdue}, 0, ${multa}, ${jurosMora}, ${jurosRem}, ${iof}, ${esc(itemizedJson)})
-        `);
+            if (isFirstOfSequence) {
+                sequenceStartDueDate = dueDate;
+                totalInstallments = 10 + Math.floor(Math.random() * 3);
+                const principalTotal = round2(Number(overdueAmountBase) || 0);
+                installmentValue = round2(principalTotal / totalInstallments);
+                installmentIndex = 1;
 
-        // billing_charges (invoice_reference = YYYY-MM do vencimento)
-        const ref = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
-        const charges = [['multa', multa], ['juros_mora', jurosMora], ['juros_remuneratorios', jurosRem], ['iof', iof]];
-        for (const [type, amount] of charges) {
+                const merchant = pickMerchant();
+                isInternacional = merchant.internacional;
+
+                const purchaseDate = new Date(dueDate);
+                purchaseDate.setDate(purchaseDate.getDate() - (20 + Math.floor(Math.random() * 5)));
+                await insertPurchase(principalTotal, merchant.nome, purchaseDate.toISOString(), 'INVOICE_INSTALLMENT', `1/${totalInstallments}`);
+
+                const planId = genId();
+                await db.executeQuery(`
+                    INSERT INTO ${db.fq('installment_plans')}
+                    (id, cpf, description, total_amount, installments, installment_amount, remaining_balance, remaining_installments)
+                    VALUES (${esc(planId)}, ${esc(cpf)}, ${esc(merchant.nome)}, ${principalTotal.toFixed(2)}, ${totalInstallments}, ${installmentValue.toFixed(2)}, ${principalTotal.toFixed(2)}, ${totalInstallments})
+                `);
+                saldoAnteriorAcumulado = 0;
+            } else {
+                installmentIndex++;
+                const txDate = new Date(dueDate);
+                txDate.setDate(txDate.getDate() - (20 + Math.floor(Math.random() * 5)));
+                await insertPurchase(installmentValue, pickMerchantName(), txDate.toISOString(), 'INVOICE_INSTALLMENT', `${installmentIndex}/${totalInstallments}`);
+            }
+
+            const principal = installmentValue;
+            const daysOverdue = Math.max(1, Math.round((now.getTime() - dueDate.getTime()) / 86400000));
+
+            const multa = round2(principal * 0.02);
+            const jurosMora = round2(principal * 0.000333 * daysOverdue);
+            const jurosRem = round2(principal * 0.00513 * daysOverdue);
+            const iofAdicional = round2(principal * 0.0038);
+            const iofDiario = round2(principal * 0.000082 * daysOverdue);
+            // IOF de câmbio (6,38% fixo) só quando a compra parcelada da sequência é internacional.
+            const iofExtra = isInternacional ? calcIofInternacional(principal) : 0;
+            const iof = round2(iofAdicional + iofDiario + iofExtra);
+
+            const invoiceId = genId();
+            const nowIso = nowDb();
             await db.executeQuery(`
-                INSERT INTO ${db.fq('billing_charges')}
-                (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount, created_at, status)
-                VALUES (${esc(genId())}, ${esc(cpf)}, ${esc(ref)}, ${esc(type)}, ${amount}, ${daysOverdue}, ${principal.toFixed(2)}, ${esc(now)}, 'pending')
+                INSERT INTO ${db.fq('invoices')}
+                (id, cpf, status, due_date, valor_total, created_at, updated_at, data_pagamento, dias_atraso, saldo_anterior, valor_multa, valor_juros_mora, valor_juros_remuneratorios, valor_iof)
+                VALUES (${esc(invoiceId)}, ${esc(cpf)}, 'FECHADA', ${esc(dueDate.toISOString())}, ${principal.toFixed(2)}, ${esc(nowIso)}, ${esc(nowIso)}, NULL, ${daysOverdue}, ${saldoAnteriorAcumulado.toFixed(2)}, ${multa}, ${jurosMora}, ${jurosRem}, ${iof})
             `);
+
+            const ref = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
+            for (const [type, amount] of [['multa', multa], ['juros_mora', jurosMora], ['juros_remuneratorios', jurosRem], ['iof', iof]]) {
+                await db.executeQuery(`
+                    INSERT INTO ${db.fq('billing_charges')}
+                    (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount, created_at, status)
+                    VALUES (${esc(genId())}, ${esc(cpf)}, ${esc(ref)}, ${esc(type)}, ${amount}, ${daysOverdue}, ${principal.toFixed(2)}, ${esc(nowIso)}, 'pending')
+                `);
+            }
+
+            saldoAnteriorAcumulado = round2(saldoAnteriorAcumulado + principal);
+
+            if (isLast) {
+                // days_overdue final = dias desde a fatura MAIS ANTIGA não paga da
+                // sequência ativa (decisão de design #5), não do ciclo mais recente.
+                const daysOverdueFinal = Math.max(1, Math.round((now.getTime() - sequenceStartDueDate.getTime()) / 86400000));
+                await db.executeQuery(`
+                    UPDATE ${db.fq('users')}
+                    SET account_status = 'inadimplente', days_overdue = ${daysOverdueFinal},
+                        overdue_status = ${esc(overdueStatusFor('inadimplente', daysOverdueFinal))},
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE cpf = ${esc(cpf)}
+                `);
+            }
+        } else {
+            saldoAnteriorAcumulado = 0;
+            const parts = splitAmount(round2(400 + Math.random() * 600), 3);
+            let totalGasto = 0;
+            for (const amt of parts) {
+                const txDate = new Date(dueDate);
+                txDate.setDate(txDate.getDate() - (5 + Math.floor(Math.random() * 15)));
+                await insertPurchase(amt, pickMerchantName(), txDate.toISOString());
+                totalGasto += amt;
+            }
+            const invoiceId = genId();
+            const nowIso = nowDb();
+            await db.executeQuery(`
+                INSERT INTO ${db.fq('invoices')}
+                (id, cpf, status, due_date, valor_total, created_at, updated_at, data_pagamento, valor_pago, dias_atraso, saldo_anterior, valor_multa, valor_juros_mora, valor_juros_remuneratorios, valor_iof)
+                VALUES (${esc(invoiceId)}, ${esc(cpf)}, 'FECHADA', ${esc(dueDate.toISOString())}, ${totalGasto.toFixed(2)}, ${esc(nowIso)}, ${esc(nowIso)}, ${esc(dueDate.toISOString())}, ${totalGasto.toFixed(2)}, 0, 0, 0, 0, 0, 0)
+            `);
+            await db.executeQuery(`
+                INSERT INTO ${db.fq('transactions')}
+                (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+                VALUES (${esc(genId())}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${totalGasto.toFixed(2)}, 'Pagamento fatura', NULL, NULL, NULL, ${esc(dueDate.toISOString())})
+            `);
+            if (isLast) {
+                await db.executeQuery(`
+                    UPDATE ${db.fq('users')}
+                    SET account_status = 'adimplente', days_overdue = 0, overdue_status = 'EM_DIA', updated_at = CURRENT_TIMESTAMP
+                    WHERE cpf = ${esc(cpf)}
+                `);
+            }
         }
 
-        // Consome o limite disponível e alinha o status/dias de atraso
-        await db.executeQuery(`
-            UPDATE ${db.fq('users')}
-            SET credit_card_available_limit = GREATEST(0, COALESCE(credit_card_available_limit, ${Number(creditLimit) || 5000}) - ${principal.toFixed(2)}),
-                account_status = 'inadimplente',
-                days_overdue = ${daysOverdue},
-                overdue_status = ${esc(overdueStatusFor('inadimplente', daysOverdue))},
-                updated_at = CURRENT_TIMESTAMP
-            WHERE cpf = ${esc(cpf)}
-        `);
-
-        // Além da fatura FECHADA vencida, gera compras no ciclo ATUAL para que a
-        // fatura ABERTA (calculada on-the-fly) também tenha conteúdo.
-        const openParts = splitAmount(round2(300 + Math.random() * 500), 3); // R$ 300–800
-        let openGasto = 0;
-        for (const amt of openParts) {
-            const txDate = new Date();
-            txDate.setDate(txDate.getDate() - Math.floor(Math.random() * 6));
-            await insertPurchase(amt, pickMerchant(), txDate.toISOString());
-            openGasto += amt;
+        if (isLast && status === 'adimplente') {
+            const openParts = splitAmount(round2(300 + Math.random() * 500), 3);
+            for (const amt of openParts) {
+                const txDate = new Date();
+                txDate.setDate(txDate.getDate() - Math.floor(Math.random() * 6));
+                await insertPurchase(amt, pickMerchantName(), txDate.toISOString());
+            }
         }
-        await db.executeQuery(`
-            UPDATE ${db.fq('users')}
-            SET credit_card_available_limit = GREATEST(0, COALESCE(credit_card_available_limit, ${Number(creditLimit) || 5000}) - ${openGasto.toFixed(2)}),
-                updated_at = CURRENT_TIMESTAMP
-            WHERE cpf = ${esc(cpf)}
-        `);
-    } else if (accountStatus === 'adimplente') {
-        // Compras correntes no ciclo atual — a fatura aberta é calculada on-the-fly
-        const parts = splitAmount(round2(400 + Math.random() * 600), 3); // R$ 400–1000
-        let totalGasto = 0;
-        for (const amt of parts) {
-            const txDate = new Date();
-            txDate.setDate(txDate.getDate() - Math.floor(Math.random() * 8));
-            await insertPurchase(amt, pickMerchant(), txDate.toISOString());
-            totalGasto += amt;
-        }
-        await db.executeQuery(`
-            UPDATE ${db.fq('users')}
-            SET credit_card_available_limit = GREATEST(0, COALESCE(credit_card_available_limit, ${Number(creditLimit) || 5000}) - ${totalGasto.toFixed(2)}),
-                account_status = 'adimplente',
-                days_overdue = 0,
-                overdue_status = 'EM_DIA',
-                updated_at = CURRENT_TIMESTAMP
-            WHERE cpf = ${esc(cpf)}
-        `);
     }
 }
 
 /**
- * T7 — Contrato de forma da massa (Gerador 2.0), verificado logo após a geração.
+ * T7 — Contrato de forma da massa, verificado logo após a geração.
  *
- * Perfil A (inadimplente): exatamente 1 fatura FECHADA não paga. Duas ou mais
- *   indicam corrupção do estado (o mesmo padrão que produziu 39 massas sem
- *   encargo antes do fix em runBillingValidation — T1). Zero também é inválido:
- *   inadimplente sem fatura fechada não tem lastro.
- * Perfil B (adimplente): zero linhas em invoices — a fatura aberta é sempre
- *   calculada on-the-fly, nunca persistida.
+ * Gerador 4.0 (`cycles` array): o número de faturas FECHADAS não pagas deve ser
+ *   exatamente o número de ciclos 'inadimplente' na composição.
+ * Legado (`accountStatus` string): inadimplente => exatamente 1 fatura FECHADA não
+ *   paga (duas ou mais = corrupção de estado — padrão das 39 massas sem encargo
+ *   antes do fix em runBillingValidation; zero = sem lastro); adimplente => zero.
  *
  * Não bloqueia a criação da massa (o cadastro já aconteceu); apenas grava um
  * erro alto no log e retorna o resultado para o chamador decidir o que fazer.
  * Falhar em silêncio é exatamente o padrão que esta investigação encontrou e
  * corrigiu em outros pontos do sistema — não repetir aqui.
  */
-async function validarInvarianteMassa(db, cpf, accountStatus) {
+async function validarInvarianteMassa(db, cpf, cyclesOrStatus) {
     const rows = await db.executeQuery(`
         SELECT COUNT(*) AS total FROM ${db.fq('invoices')}
         WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
@@ -195,15 +308,26 @@ async function validarInvarianteMassa(db, cpf, accountStatus) {
 
     let ok = true;
     let motivo = null;
-    if (accountStatus === 'inadimplente') {
-        if (fechadasNaoPagas !== 1) {
+
+    if (Array.isArray(cyclesOrStatus)) {
+        const esperadas = cyclesOrStatus.filter(c => (typeof c === 'string' ? c : c?.accountStatus) === 'inadimplente').length;
+        if (fechadasNaoPagas !== esperadas) {
             ok = false;
-            motivo = `massa inadimplente deveria ter exatamente 1 fatura FECHADA não paga, tem ${fechadasNaoPagas}`;
+            const labels = cyclesOrStatus.map(c => typeof c === 'string' ? c : c?.accountStatus).join(',');
+            motivo = `massa com cycles=[${labels}] deveria ter ${esperadas} fatura(s) FECHADA não paga(s), tem ${fechadasNaoPagas}`;
         }
-    } else if (accountStatus === 'adimplente') {
-        if (fechadasNaoPagas !== 0) {
-            ok = false;
-            motivo = `massa adimplente deveria ter 0 faturas FECHADA não pagas, tem ${fechadasNaoPagas}`;
+    } else {
+        const accountStatus = typeof cyclesOrStatus === 'string' ? cyclesOrStatus : cyclesOrStatus?.accountStatus;
+        if (accountStatus === 'inadimplente') {
+            if (fechadasNaoPagas !== 1) {
+                ok = false;
+                motivo = `massa inadimplente deveria ter exatamente 1 fatura FECHADA não paga, tem ${fechadasNaoPagas}`;
+            }
+        } else if (accountStatus === 'adimplente') {
+            if (fechadasNaoPagas !== 0) {
+                ok = false;
+                motivo = `massa adimplente deveria ter 0 faturas FECHADA não pagas, tem ${fechadasNaoPagas}`;
+            }
         }
     }
 
@@ -338,6 +462,11 @@ async function createMassUser(payload) {
     const dueDay = payload.dueDay || 10;
     const invoiceDueDate = computeNextInvoiceDueDate(dueDay).toISOString();
 
+    // Gerador 4.0: histórico de 1-6 ciclos de fatura. Sem `cycles` no payload (clientes
+    // antigos), deriva 1 ciclo do accountStatus — comportamento idêntico ao anterior.
+    const cycles = normalizeMassCycles(payload.cycles, payload.accountStatus);
+    const accountStatus = cycles[cycles.length - 1];
+
     await db.executeQuery(`
         INSERT INTO ${db.fq('users')}
         (
@@ -348,12 +477,12 @@ async function createMassUser(payload) {
             credit_card_total_limit, credit_card_available_limit, created_at, updated_at
         )
         VALUES (
-            ${esc(id)}, ${esc(payload.fullName)}, ${esc(cleanCpf)}, ${esc(payload.email)}, ${esc(hash)},
+            ${esc(id)}, ${esc(payload.fullName)}, ${esc(cleanCpf)}, ${esc(email)}, ${esc(hash)},
             ${esc(payload.initialBalance || 2000)}, ${esc(payload.pixLimit || 1000)}, 'user', false,
             ${esc(payload.birthDate || null)}, ${esc(payload.age || null)}, ${esc(payload.hasTutor || false)},
             ${esc(tutor.fullName || null)}, ${esc(tutor.cpf || null)}, ${esc(tutor.relationship || null)}, ${esc(payload.countryOrigin || 'Brasil')},
             ${esc(addr.cep || null)}, ${esc(addr.street || null)}, ${esc(addr.number || null)}, ${esc(addr.complement || null)}, ${esc(addr.neighborhood || null)}, ${esc(addr.city || null)}, ${esc(addr.state || null)},
-            ${esc(payload.cardBrand || 'MASTERCARD')}, ${esc(dueDay)}, ${esc(dueDay)}, ${esc(invoiceDueDate)}, ${esc(payload.daysOverdue || 0)}, ${esc(payload.accountStatus || 'adimplente')}, ${esc(overdueStatusFor(payload.accountStatus, payload.daysOverdue))},
+            ${esc(payload.cardBrand || 'MASTERCARD')}, ${esc(dueDay)}, ${esc(dueDay)}, ${esc(invoiceDueDate)}, ${esc(payload.daysOverdue || 0)}, ${esc(accountStatus)}, ${esc(overdueStatusFor(accountStatus, payload.daysOverdue))},
             ${esc(payload.creditLimit || 5000)}, ${esc(payload.creditLimit || 5000)}, ${esc(now)}, ${esc(now)}
         )
     `);
@@ -393,7 +522,7 @@ async function createMassUser(payload) {
             const [expM, expY] = expiryShort.split('/');
             expiryFull = `${expM}/20${expY}`;
         }
-        const cardType = (cardData.cardType || 'PHYSICAL').toLowerCase();
+        const cardType = (payload.cardType || cardData.cardType || 'PHYSICAL').toLowerCase();
         // Ativação vem do payload (cardActivation) ou do objeto creditCard; padrão: ativado.
         const activationState = payload.cardActivation || cardData.activationState;
         const isActivated = activationState === 'AWAITING_ACTIVATION' ? false : true;
@@ -463,10 +592,11 @@ async function createMassUser(payload) {
     // ~50% das massas inadimplentes caírem no else e nunca ganharem fatura.
     try {
         await seedMassBilling(db, cleanCpf, {
-            accountStatus: payload.accountStatus || 'adimplente',
-            daysOverdue: Number(payload.daysOverdue || 0),
-            overdueAmount: Number(payload.overdueAmount || 0),
+            cycles,
+            overdueAmountBase: Number(payload.overdueAmountBase ?? payload.overdueAmount ?? 0),
             creditLimit: Number(payload.creditLimit || 5000),
+            dueDay,
+            minOverdueDays: Number(payload.minOverdueDays ?? payload.daysOverdue ?? 0),
         });
     } catch (billingErr) {
         console.warn('⚠️ Erro ao gerar faturamento da massa:', billingErr.message);
@@ -475,7 +605,7 @@ async function createMassUser(payload) {
     // T7: valida que a massa nasceu na forma canônica (ver validarInvarianteMassa).
     let massaValidation = null;
     try {
-        massaValidation = await validarInvarianteMassa(db, cleanCpf, payload.accountStatus || 'adimplente');
+        massaValidation = await validarInvarianteMassa(db, cleanCpf, cycles);
     } catch (validErr) {
         console.warn('⚠️ Erro ao validar invariante da massa:', validErr.message);
     }
@@ -495,7 +625,26 @@ async function createMassUser(payload) {
         console.warn('⚠️ Erro ao inserir assinatura padrão para a massa:', subErr.message);
     }
 
-    return { id, cpf: cleanCpf, fullName: payload.fullName, massaValidation };
+    return { id, cpf: cleanCpf, fullName: payload.fullName, cycles, massaValidation };
 }
 
-module.exports = { findByCpf, upsertSeed, updateBalance, restoreAvailableLimit, listUsers, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword, createMassUser, seedMassPixKeys, seedMassBilling, validarInvarianteMassa, overdueStatusFor };
+/**
+ * Normaliza `cycles` do payload do gerador: array de 1 a 6 'adimplente'|'inadimplente'.
+ * Sem array válido, cai em 1 ciclo derivado do accountStatus (default adimplente).
+ */
+function normalizeMassCycles(cycles, accountStatus) {
+    const VALID = ['adimplente', 'inadimplente'];
+    if (Array.isArray(cycles) && cycles.length > 0) {
+        if (cycles.length > MAX_MASS_CYCLES) {
+            throw new Error(`Máximo de ${MAX_MASS_CYCLES} ciclos de fatura por massa (recebido ${cycles.length}).`);
+        }
+        const invalido = cycles.find(c => !VALID.includes(c));
+        if (invalido !== undefined) {
+            throw new Error(`Ciclo inválido: ${String(invalido)}. Use 'adimplente' ou 'inadimplente'.`);
+        }
+        return [...cycles];
+    }
+    return [accountStatus === 'inadimplente' ? 'inadimplente' : 'adimplente'];
+}
+
+module.exports = { findByCpf, upsertSeed, updateBalance, restoreAvailableLimit, listUsers, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword, createMassUser, seedMassPixKeys, seedMassBilling, validarInvarianteMassa, overdueStatusFor, computeLastPassedDueDate, shiftMonthsSameDay, MIN_DIAS_ATRASO_CICLO_ATUAL, MASS_MERCHANTS_NACIONAL, MASS_MERCHANTS_INTERNACIONAL, calcIofInternacional, pickMerchant, normalizeMassCycles, MAX_MASS_CYCLES };

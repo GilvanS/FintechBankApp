@@ -4,6 +4,7 @@ import { User } from '../types';
 import { updateUserPixDailyLimit, requestLimitIncrease, getUserByCpf } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast, ToastContainer } from './Toast';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 const Limits: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     const { user, updateUser } = useAuth();
@@ -12,7 +13,8 @@ const Limits: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const { toast, showSuccess, showError, hide } = useToast();
-    
+    const { setRef, shake } = useShakeOnError();
+
     if(!user) return null;
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -25,6 +27,7 @@ const Limits: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
         if (isNaN(limit) || limit <= 0) {
             setError('Valor de limite inválido.');
             showError('Valor de limite invalido');
+            shake('newLimit');
             setIsLoading(false);
             return;
         }
@@ -73,6 +76,7 @@ const Limits: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
                         <div>
                             <label htmlFor="pixLimit" className="text-sm font-medium text-white/80">Novo Limite Diário (R$)</label>
                             <input
+                                ref={setRef('newLimit')}
                                 id="pixLimit"
                                 type="number"
                                 step="0.01"

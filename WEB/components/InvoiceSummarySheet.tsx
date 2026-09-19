@@ -148,6 +148,7 @@ const InvoiceSummarySheet: React.FC<InvoiceSummarySheetProps> = ({
               </div>
               <button
                 onClick={onClose}
+                aria-label="Fechar"
                 className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-on-surface-variant hover:bg-white/10"
               >
                 <X size={16} />

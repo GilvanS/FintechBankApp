@@ -3,11 +3,13 @@ import { adminAcquirerSimulate } from '../../services/api';
 import { useAppState } from '../../contexts/AppStateContext';
 import { CreditCard, Play, ShieldAlert, Loader2, DollarSign, Calendar, Lock, Hash, AlignLeft, Calculator, HelpCircle, X } from 'lucide-react';
 import { showToast } from '../../utils/toast';
+import { useShakeOnError } from '../../hooks/useShakeOnError';
 
 const CardsManagement: React.FC = () => {
     const { theme } = useAppState();
     const isMidnight = theme === 'midnight';
 
+    const { setRef, shakeAll, onMaxLengthKeyDown } = useShakeOnError();
     const [isLoading, setIsLoading] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
     
@@ -24,6 +26,12 @@ const CardsManagement: React.FC = () => {
     const handleSimulate = async () => {
         if (!cardNumber || !cvv || !expiry || !amount) {
             showToast('Preencha os campos obrigatórios do cartão e valor.', 'error');
+            const missing: string[] = [];
+            if (!cardNumber) missing.push('cardNumber');
+            if (!cvv) missing.push('cvv');
+            if (!expiry) missing.push('expiry');
+            if (!amount) missing.push('amount');
+            shakeAll(missing);
             return;
         }
 
@@ -120,6 +128,7 @@ const CardsManagement: React.FC = () => {
                                         <label className="text-sm font-black uppercase opacity-70 block mb-2">Número do Cartão *</label>
                                         <div className="relative">
                                             <input
+                                                ref={setRef('cardNumber')}
                                                 type="text"
                                                 value={cardNumber}
                                                 onChange={(e) => setCardNumber(e.target.value)}
@@ -134,9 +143,11 @@ const CardsManagement: React.FC = () => {
                                             <label className="text-sm font-black uppercase opacity-70 block mb-2">Validade *</label>
                                             <div className="relative">
                                                 <input
+                                                    ref={setRef('expiry')}
                                                     type="text"
                                                     value={expiry}
                                                     onChange={(e) => setExpiry(e.target.value)}
+                                                    onKeyDown={onMaxLengthKeyDown('expiry', 5)}
                                                     placeholder="MM/AA"
                                                     maxLength={5}
                                                     className={`w-full px-5 py-4 rounded-xl outline-none font-mono text-lg text-center tracking-widest ${inputClass}`}
@@ -148,9 +159,11 @@ const CardsManagement: React.FC = () => {
                                             <label className="text-sm font-black uppercase opacity-70 block mb-2">CVV *</label>
                                             <div className="relative">
                                                 <input
+                                                    ref={setRef('cvv')}
                                                     type="text"
                                                     value={cvv}
                                                     onChange={(e) => setCvv(e.target.value.replace(/\D/g, ''))}
+                                                    onKeyDown={onMaxLengthKeyDown('cvv', 4)}
                                                     placeholder="123"
                                                     maxLength={4}
                                                     className={`w-full px-5 py-4 rounded-xl outline-none font-mono text-lg text-center tracking-widest ${inputClass}`}
@@ -163,9 +176,11 @@ const CardsManagement: React.FC = () => {
                                             <div className="relative">
                                                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 opacity-50" size={20} />
                                                 <input
+                                                    ref={setRef('pin')}
                                                     type="password"
                                                     value={pin}
                                                     onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                                                    onKeyDown={onMaxLengthKeyDown('pin', 4)}
                                                     placeholder="****"
                                                     maxLength={4}
                                                     className={`w-full pl-10 pr-4 py-4 rounded-xl outline-none font-mono text-xl tracking-[0.2em] ${inputClass}`}
@@ -191,6 +206,7 @@ const CardsManagement: React.FC = () => {
                                         <div className="relative">
                                             <DollarSign className="absolute left-5 top-1/2 -translate-y-1/2 opacity-50" size={28} />
                                             <input
+                                                ref={setRef('amount')}
                                                 type="number"
                                                 value={amount}
                                                 onChange={(e) => setAmount(e.target.value)}

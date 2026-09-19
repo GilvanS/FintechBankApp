@@ -21,6 +21,7 @@ import {
 import { formatCPF } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../contexts/AppStateContext';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Shield, KeyRound, ArrowUpCircle, Users, Activity, Check, X, LucideIcon } from 'lucide-react';
@@ -43,6 +44,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
     const { user: adminUser, logout } = useAuth();
     const { theme } = useAppState();
     const isMidnight = theme === 'midnight';
+    const { setRef, shake, onMaxLengthKeyDown } = useShakeOnError();
     const [cpfSearch, setCpfSearch] = useState('');
     const [searchedUser, setSearchedUser] = useState<User | null>(null);
     const [passwordRequests, setPasswordRequests] = useState<PasswordResetRequest[]>([]);
@@ -197,6 +199,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                 const amount = parseFloat(depositAmount);
                 if (isNaN(amount) || amount <= 0) {
                     showToast('Valor de depósito inválido.', 'error');
+                    shake('depositAmount');
                     setIsLoadingAction(false);
                     return;
                 }
@@ -402,9 +405,11 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                         data-playwright="admin-search-form"
                     >
                         <input
+                            ref={setRef('cpfSearch')}
                             type="text"
                             value={formatCPF(cpfSearch)}
                             onChange={(e) => setCpfSearch(e.target.value)}
+                            onKeyDown={onMaxLengthKeyDown('cpfSearch', 14)}
                             placeholder="Buscar por CPF"
                             maxLength={14}
                             className={`flex-grow px-4 py-3 rounded-2xl focus:outline-none transition-all ${isMidnight ? 'font-medium' : 'font-bold'} test-input-cpf-search ${inputClass}`}
@@ -763,7 +768,7 @@ const Admin: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
                         {modalState.action === 'deposit' && (
                              <>
                                 <p className={`font-bold mb-2 uppercase text-sm ${subTextClass}`}>Informe o valor a ser depositado:</p>
-                                <input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className={`w-full p-4 rounded-xl focus:outline-none transition-all font-bold ${innerCardClass} ${isMidnight ? 'text-white placeholder-white/30' : 'text-black placeholder-black/30'}`} placeholder="0.00" />
+                                <input ref={setRef('depositAmount')} type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className={`w-full p-4 rounded-xl focus:outline-none transition-all font-bold ${innerCardClass} ${isMidnight ? 'text-white placeholder-white/30' : 'text-black placeholder-black/30'}`} placeholder="0.00" />
                             </>
                         )}
                         {modalState.action !== 'deny' && modalState.action !== 'deposit' && (

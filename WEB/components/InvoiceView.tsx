@@ -210,8 +210,15 @@ export default function InvoiceView({ user, onPayInvoice, onParcel, onBack, them
 
   const formatShortDate = (d: Date) => d.toLocaleDateString('pt-BR', { timeZone: 'UTC', day: '2-digit', month: 'short' }).replace('.', '').toUpperCase();
 
+  // Fatura fechada ainda não existe (primeiro ciclo da massa, nunca fechou) quando
+  // o valor é 0 e não há registro de fatura paga — nesse caso não existe due_date
+  // real ainda, então não mostramos vencimento fictício calculado por aritmética
+  // de mês (só o "Melhor dia de compra", que é o corte real da próxima fatura).
+  const closedInvoiceExists = invoiceAmount > 0 || !!user.creditCard.closedInvoiceIsPaid;
+
   const getSubTabDueDate = () => {
     if (activeSubTab === 'fechada') {
+      if (!closedInvoiceExists) return '';
       return `Vencimento ${formatShortDate(closedDueDate)}`;
     } else {
       return `Vencimento ${formatShortDate(openDueDate)}`;
@@ -509,9 +516,11 @@ export default function InvoiceView({ user, onPayInvoice, onParcel, onBack, them
             </div>
 
             <div className="pt-2 flex flex-col space-y-1">
-              <p className="text-xs font-black uppercase tracking-wider">
-                {getSubTabDueDate()}
-              </p>
+              {getSubTabDueDate() && (
+                <p className="text-xs font-black uppercase tracking-wider">
+                  {getSubTabDueDate()}
+                </p>
+              )}
               <p className={`text-xs ${isMidnight ? 'text-zinc-400' : 'text-black/70 font-bold'}`}>
                 Melhor dia de compra: <span className="font-black underline">{getBestPurchaseDate()}</span>
               </p>
@@ -600,21 +609,26 @@ export default function InvoiceView({ user, onPayInvoice, onParcel, onBack, them
           {/* Quick Actions Panel */}
           <div className="flex overflow-x-auto gap-3 hide-scrollbar py-2">
             {[
-              { label: isPaying ? 'Processando...' : 'Pagar Fatura', icon: QrCode, action: () => handleQuickAction('Pagar fatura') },
-              { label: 'Parcelar Fatura', icon: Split, action: () => handleQuickAction('Parcelar fatura') },
-              { label: 'Resumo da Fatura', icon: FileText, action: () => setShowSummarySheet(true) },
-              { label: 'Pagar com PIX', icon: Zap, action: () => openPixModal?.() },
-              { label: 'Gerar Boleto', icon: CreditCard, action: () => openBoletoModal?.() },
-          { label: 'Histórico Pagamentos', icon: Receipt, action: () => setShowPaymentHistory(true) },
+              { label: isPaying ? 'Processando...' : 'Pagar Fatura', icon: QrCode, action: () => handleQuickAction('Pagar fatura'), disabled: activeSubTab === 'fechada' && !closedInvoiceExists },
+              { label: 'Parcelar Fatura', icon: Split, action: () => handleQuickAction('Parcelar fatura'), disabled: activeSubTab === 'fechada' && !closedInvoiceExists },
+              { label: 'Resumo da Fatura', icon: FileText, action: () => setShowSummarySheet(true), disabled: false },
+              { label: 'Pagar com PIX', icon: Zap, action: () => openPixModal?.(), disabled: false },
+              { label: 'Gerar Boleto', icon: CreditCard, action: () => openBoletoModal?.(), disabled: false },
+          { label: 'Histórico Pagamentos', icon: Receipt, action: () => setShowPaymentHistory(true), disabled: false },
             ].map((action, idx) => {
               const Icon = action.icon;
               return (
                 <button
                   key={idx}
                   onClick={action.action}
-                  className={`flex-shrink-0 flex flex-col items-center justify-center gap-2.5 p-4 rounded-2xl transition-all active:scale-95 cursor-pointer w-32 ${
-                    isMidnight 
-                      ? 'bg-[#201f1f] border border-white/10 hover:bg-white/10 text-white' 
+                  disabled={action.disabled}
+                  className={`flex-shrink-0 flex flex-col items-center justify-center gap-2.5 p-4 rounded-2xl transition-all active:scale-95 w-32 ${
+                    action.disabled
+                      ? 'opacity-40 cursor-not-allowed'
+                      : 'cursor-pointer'
+                  } ${
+                    isMidnight
+                      ? 'bg-[#201f1f] border border-white/10 hover:bg-white/10 text-white'
                       : 'bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none text-black'
                   }`}
                 >

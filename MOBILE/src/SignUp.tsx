@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useToast, ToastContainer } from './components/Toast';
 import { signUp } from './services/api';
 import { formatCPF } from './utils/formatters';
+import { useShakeOnError } from './hooks/useShakeOnError';
 
 interface SignUpProps {
   onNavigateToLogin: () => void;
@@ -19,6 +20,7 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { toast, showSuccess, showError, hide } = useToast();
+  const { setRef, shake, shakeAll, onMaxLengthKeyDown } = useShakeOnError();
 
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -27,31 +29,36 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
 
     if (password !== confirmPassword) {
       setError('As senhas não coincidem.');
+      shakeAll(['password', 'confirmPassword']);
       return;
     }
-    
+
     // Remover formatação e validar CPF (igual ao WEB que está funcionando)
     const cpfDigits = cpf.replace(/\D/g, '');
     if (cpfDigits.length !== 11) {
         setError('CPF deve ter 11 dígitos.');
+        shake('cpf');
         return;
     }
-    
+
     // Validar senha (igual ao WEB)
     if (password.length < 6 || password.length > 12) {
         setError('A senha deve ter entre 6 e 12 caracteres.');
+        shake('password');
         return;
     }
-    
+
     // Validar nome completo (igual ao WEB)
     if (!fullName.trim()) {
         setError('Nome completo é obrigatório.');
+        shake('fullName');
         return;
     }
-    
+
     // Validar email (igual ao WEB)
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         setError('Formato de email inválido.');
+        shake('email');
         return;
     }
 
@@ -146,13 +153,14 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
             >
               Nome Completo
             </label>
-            <input 
+            <input
+              ref={setRef('fullName')}
               id="signup-fullname-input"
               data-testid="signup-input-fullname"
               name="fullName"
-              type="text" 
-              value={fullName} 
-              onChange={(e) => setFullName(e.target.value)} 
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
               required 
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
               aria-label="signup-input-fullname"
@@ -168,16 +176,18 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
             >
               CPF
             </label>
-            <input 
+            <input
+              ref={setRef('cpf')}
               id="signup-cpf-input"
               data-testid="signup-input-cpf"
               name="cpf"
-              type="text" 
-              value={formatCPF(cpf)} 
-              onChange={(e) => setCpf(e.target.value)} 
-              required 
-              inputMode="numeric" 
-              placeholder="999.999.999-99" 
+              type="text"
+              value={formatCPF(cpf)}
+              onChange={(e) => setCpf(e.target.value)}
+              onKeyDown={onMaxLengthKeyDown('cpf', 14)}
+              required
+              inputMode="numeric"
+              placeholder="999.999.999-99"
               maxLength={14}
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
               aria-label="signup-input-cpf"
@@ -193,13 +203,14 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
             >
               Email
             </label>
-            <input 
+            <input
+              ref={setRef('email')}
               id="signup-email-input"
               data-testid="signup-input-email"
               name="email"
-              type="email" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required 
               placeholder="voce@email.com" 
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
@@ -215,13 +226,14 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
             >
               Senha
             </label>
-            <input 
+            <input
+              ref={setRef('password')}
               id="signup-password-input"
               data-testid="signup-input-password"
               name="password"
-              type="password" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               required 
               placeholder="••••••••" 
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"
@@ -237,13 +249,14 @@ const SignUp: React.FC<SignUpProps> = ({ onNavigateToLogin, onSignUpSuccess }) =
             >
               Confirmar Senha
             </label>
-            <input 
+            <input
+              ref={setRef('confirmPassword')}
               id="signup-confirm-password-input"
               data-testid="signup-input-confirm-password"
               name="confirmPassword"
-              type="password" 
-              value={confirmPassword} 
-              onChange={(e) => setConfirmPassword(e.target.value)} 
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               required 
               placeholder="••••••••" 
               className="w-full px-4 py-3 bg-surface-dark border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary mb-4"

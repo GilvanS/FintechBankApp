@@ -8,6 +8,7 @@ import InfoPopupBottom from './InfoPopupBottom';
 import { useToast, ToastContainer } from './Toast';
 import { useDialog } from '../contexts/GlobalDialogContext';
 import { useAppState } from '../contexts/AppStateContext';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 interface ContactsProps {
     onBack?: () => void;
@@ -31,6 +32,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
     const { toast, showSuccess, showError, hide } = useToast();
     const [recipientInfo, setRecipientInfo] = useState<{ name: string; cpf: string } | null>(null);
     const [isSearching, setIsSearching] = useState(false);
+    const { setRef, shake } = useShakeOnError();
 
     const fetchContacts = async () => {
         if (user) {
@@ -61,6 +63,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
             const msg = 'CPF deve ter 11 digitos numericos.';
             setError(msg);
             showError(msg);
+            shake('newContactKey');
             return;
         }
 
@@ -208,6 +211,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
                                <label className={`text-sm font-medium ${labelClass}`}>Chave PIX (CPF)</label>
                                 <div className="flex gap-2 mt-1">
                                     <input
+                                        ref={setRef('newContactKey')}
                                         type="text"
                                         inputMode="numeric"
                                         pattern="[0-9]*"

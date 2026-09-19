@@ -24,7 +24,7 @@ export default function CardUnlockModal({ isOpen, onClose }: CardUnlockModalProp
   if (!isOpen || !user) return null;
 
   const creditCard = user.creditCard || {
-    number: 'â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ 8876',
+    number: '•••• •••• •••• 8876',
     dueDate: '2031-07-31',
 invoiceDueDate: '2031-07-31',
     currentInvoice: 0,
@@ -97,9 +97,9 @@ invoiceDueDate: '2031-07-31',
                   <CreditCardIcon size={20} />
                 </div>
                 <div>
-                  <h3 className="font-black text-base">Meus CartÃµes Volt</h3>
+                  <h3 className="font-black text-base">Meus Cartões Volt</h3>
                   <p className={`text-xs ${isMidnight ? 'text-zinc-400' : 'text-black/70 font-bold'}`}>
-                    GestÃ£o e desbloqueio de cartÃµes
+                    Gestão e desbloqueio de cartões
                   </p>
                 </div>
               </div>
@@ -116,7 +116,7 @@ invoiceDueDate: '2031-07-31',
               </button>
             </div>
 
-            {/* Selector de Abas (FÃ­sico x Virtual) */}
+            {/* Selector de Abas (Físico x Virtual) */}
             <div className={`flex p-2 mx-5 mt-4 rounded-2xl gap-2 ${
               isMidnight ? 'bg-white/5 border border-white/5' : 'bg-black/5 border-2 border-black'
             }`}>
@@ -128,7 +128,7 @@ invoiceDueDate: '2031-07-31',
                     : (isMidnight ? 'text-zinc-400 hover:text-white' : 'text-black/70 hover:text-black font-bold')
                 }`}
               >
-                <Smartphone size={14} /> CartÃ£o FÃ­sico
+                <Smartphone size={14} /> Cartão Físico
               </button>
 
               <button
@@ -139,15 +139,15 @@ invoiceDueDate: '2031-07-31',
                     : (isMidnight ? 'text-zinc-400 hover:text-white' : 'text-black/70 hover:text-black font-bold')
                 }`}
               >
-                <Globe size={14} /> CartÃ£o Virtual
+                <Globe size={14} /> Cartão Virtual
               </button>
             </div>
 
-            {/* ConteÃºdo da Aba */}
+            {/* Conteúdo da Aba */}
             <div className="p-5 flex flex-col gap-5">
               {activeTab === 'physical' ? (
                 <>
-                  {/* CartÃ£o FÃ­sico Widget */}
+                  {/* Cartão Físico Widget */}
                   <div className={`relative h-48 rounded-2xl p-5 flex flex-col justify-between overflow-hidden shadow-xl border ${
                     isPhysicalBlocked
                       ? 'bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-950 border-rose-500/40'
@@ -172,7 +172,7 @@ invoiceDueDate: '2031-07-31',
 
                     <div className="z-10">
                       <p className="text-lg font-mono tracking-widest text-white font-bold">
-                        â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ 8876
+                        •••• •••• •••• 8876
                       </p>
                       <div className="flex gap-4 text-xs font-mono text-zinc-400 mt-1">
                         <span>VAL: 07/31</span>
@@ -181,12 +181,12 @@ invoiceDueDate: '2031-07-31',
                     </div>
 
                     <div className="flex justify-between items-end z-10">
-                      <span className="text-xs font-black text-white uppercase">{user.fullName || 'TITULAR DO CARTÃƒO'}</span>
+                      <span className="text-xs font-black text-white uppercase">{user.fullName || 'TITULAR DO CARTÃO'}</span>
                       <span className="text-xs font-black italic text-zinc-400">elo</span>
                     </div>
                   </div>
 
-                  {/* AÃ§Ãµes do CartÃ£o FÃ­sico */}
+                  {/* Ações do Cartão Físico */}
                   <div className="flex flex-col gap-3">
                     {/* Desbloqueio/Bloqueio Toggle */}
                     <div className={`flex items-center justify-between p-4 rounded-2xl border ${
@@ -199,9 +199,9 @@ invoiceDueDate: '2031-07-31',
                           {isPhysicalBlocked ? <Lock size={18} /> : <Unlock size={18} />}
                         </div>
                         <div>
-                          <p className="text-xs font-black">Bloqueio TemporÃ¡rio</p>
+                          <p className="text-xs font-black">Bloqueio Temporário</p>
                           <p className={`text-[10px] ${isMidnight ? 'text-zinc-400' : 'text-black/70 font-bold'}`}>
-                            ImpeÃ§a compras presenciais na maquininha
+                            Impeça compras presenciais na maquininha
                           </p>
                         </div>
                       </div>
@@ -229,7 +229,7 @@ invoiceDueDate: '2031-07-31',
                         </div>
                         <div>
                           <p className="text-xs font-black">Status de Entrega</p>
-                          <p className="text-[10px] text-emerald-500 font-bold">CartÃ£o Entregue no EndereÃ§o</p>
+                          <p className="text-[10px] text-emerald-500 font-bold">Cartão Entregue no Endereço</p>
                         </div>
                       </div>
 
@@ -251,7 +251,7 @@ invoiceDueDate: '2031-07-31',
                         <div>
                           <p className="text-xs font-black">Senha da Maquininha (PIN)</p>
                           <p className={`text-[10px] ${isMidnight ? 'text-zinc-400' : 'text-black/70 font-bold'}`}>
-                            Altere a senha de 4 dÃ­gitos
+                            Altere a senha de 4 dígitos
                           </p>
                         </div>
                       </div>
@@ -268,7 +268,7 @@ invoiceDueDate: '2031-07-31',
                 </>
               ) : (
                 <>
-                  {/* CartÃ£o Virtual Widget */}
+                  {/* Cartão Virtual Widget */}
                   <div className="relative h-48 rounded-2xl p-5 flex flex-col justify-between overflow-hidden shadow-xl border bg-gradient-to-br from-indigo-950 via-purple-950 to-zinc-950 border-purple-500/30">
                     <div className="flex justify-between items-start z-10">
                       <div className="flex items-center gap-2">
@@ -287,7 +287,7 @@ invoiceDueDate: '2031-07-31',
                     <div className="z-10">
                       <div className="flex items-center gap-2">
                         <p className="text-lg font-mono tracking-widest text-white font-bold">
-                          {showVirtualData ? '4916 2260 9151 8876' : 'â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ 8876'}
+                          {showVirtualData ? '4916 2260 9151 8876' : '•••• •••• •••• 8876'}
                         </p>
                         <button
                           onClick={() => handleCopy('4916226091518876', 'number')}
@@ -298,18 +298,18 @@ invoiceDueDate: '2031-07-31',
                       </div>
 
                       <div className="flex gap-4 text-xs font-mono text-purple-200/80 mt-1">
-                        <span>VAL: {showVirtualData ? '07/31' : 'â€¢â€¢/â€¢â€¢'}</span>
-                        <span>CVV: {showVirtualData ? '901' : 'â€¢â€¢â€¢'}</span>
+                        <span>VAL: {showVirtualData ? '07/31' : '••/••'}</span>
+                        <span>CVV: {showVirtualData ? '901' : '•••'}</span>
                       </div>
                     </div>
 
                     <div className="flex justify-between items-end z-10">
-                      <span className="text-xs font-black text-white uppercase">{user.fullName || 'TITULAR DO CARTÃƒO'}</span>
+                      <span className="text-xs font-black text-white uppercase">{user.fullName || 'TITULAR DO CARTÃO'}</span>
                       <span className="text-xs font-black italic text-purple-300">visa</span>
                     </div>
                   </div>
 
-                  {/* InformaÃ§Ãµes e Recursos do CartÃ£o Virtual */}
+                  {/* Informações e Recursos do Cartão Virtual */}
                   <div className="flex flex-col gap-3">
                     <div className={`p-4 rounded-2xl border text-xs ${
                       isMidnight
@@ -319,9 +319,9 @@ invoiceDueDate: '2031-07-31',
                       <div className="flex items-start gap-2">
                         <ShieldCheck size={16} className={isMidnight ? 'text-purple-400 shrink-0 mt-0.5' : 'text-purple-700 shrink-0 mt-0.5'} />
                         <div>
-                          <p className="font-black">SeguranÃ§a AvanÃ§ada Online</p>
+                          <p className="font-black">Segurança Avançada Online</p>
                           <p className={`text-[10px] mt-0.5 ${isMidnight ? 'text-purple-300/80' : 'text-black/70'}`}>
-                            O cartÃ£o virtual Ã© ideal para assinaturas (Netflix, Amazon) e compras online.
+                            O cartão virtual é ideal para assinaturas (Netflix, Amazon) e compras online.
                           </p>
                         </div>
                       </div>
@@ -336,7 +336,7 @@ invoiceDueDate: '2031-07-31',
                       }`}
                     >
                       {copiedField === 'card' ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
-                      {copiedField === 'card' ? 'Dados Copiados!' : 'Copiar NÃºmero do CartÃ£o'}
+                      {copiedField === 'card' ? 'Dados Copiados!' : 'Copiar Número do Cartão'}
                     </button>
                   </div>
                 </>

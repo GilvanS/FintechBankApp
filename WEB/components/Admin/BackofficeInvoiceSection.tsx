@@ -476,6 +476,40 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                     );
                 })}
 
+                {/* Sem histórico de invoiceList real mas com fallback legado no banco */}
+                {closedInvoices.length === 0 && originalClosedAmount > 0 && (
+                    <button
+                        key="fallback-closed"
+                        type="button"
+                        onClick={() => onSelectInvoice('closed')}
+                        className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border relative overflow-hidden ${
+                            selectedBackofficeInvoice === 'closed'
+                                ? (isPaid
+                                    ? 'bg-emerald-500/15 border-emerald-500 shadow-sm ring-2 ring-emerald-500/40'
+                                    : 'bg-rose-500/15 border-rose-500 shadow-sm ring-2 ring-rose-500/40')
+                                : `bg-black/5 dark:bg-white/5 border-transparent ${isPaid ? 'hover:border-emerald-300' : 'hover:border-rose-300'}`
+                        }`}
+                    >
+                        <div className="flex justify-between items-center">
+                            <p className="opacity-60 text-[10px] uppercase font-bold">
+                                Fat 0 · {closedMonthLabel || 'Fechada'}
+                            </p>
+                            {isPaid ? (
+                                <span className="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full">PAGA ✅</span>
+                            ) : isOverdue ? (
+                                <span className="text-[9px] bg-rose-600 text-white font-black px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-1 shadow-sm">
+                                    ⚠️ {overdueDays}d ATRASO
+                                </span>
+                            ) : (
+                                <span className="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full">FECHADA</span>
+                            )}
+                        </div>
+                        <p className={`font-black text-sm mt-1 ${isPaid ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                            R$ {originalClosedAmount.toFixed(2)}
+                        </p>
+                    </button>
+                )}
+
                 {/* Fatura aberta/atual — sempre existe, mesmo em conta nova */}
                 <button
                     type="button"

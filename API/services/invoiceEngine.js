@@ -1,4 +1,5 @@
 const { getDb, esc } = require('../repositories/context');
+const { computeNextInvoiceDueDate, INVOICE_CUTOFF_DAYS } = require('../utils/billing');
 const { v4: uuidv4 } = require('uuid');
 
 async function runEngine(targetCpf = null) {
@@ -6,7 +7,7 @@ async function runEngine(targetCpf = null) {
   console.log(`[InvoiceEngine] Iniciando verificação de faturas${targetCpf ? ` para CPF ${targetCpf}` : ''}...`);
 
   try {
-    let query = `SELECT cpf, credit_card_invoice_due_date, credit_card_due_day FROM ${db.fq('users')} WHERE credit_card_invoice_due_date IS NOT NULL`;
+    let query = `SELECT cpf, credit_card_invoice_due_date, credit_card_due_day, COALESCE(is_blacklisted, false) AS is_blacklisted FROM ${db.fq('users')} WHERE credit_card_invoice_due_date IS NOT NULL`;
     if (targetCpf) {
       query += ` AND cpf = ${esc(targetCpf)}`;
     }
@@ -26,12 +27,21 @@ async function runEngine(targetCpf = null) {
       const dueDate = new Date(user.credit_card_invoice_due_date);
       if (isNaN(dueDate.getTime())) continue;
 
-      // Corte é 7 dias antes do vencimento
+      // CPF em blacklist (90+d, users.is_blacklisted) trava aqui: nada de fechar fatura
+      // nova nem rolar vencimento. Fica congelado na última fatura fechada — "perda pro
+      // banco", só a renegociação reativa (zera is_blacklisted/credit_card_is_blocked,
+      // ver invoiceController.js:renegotiate). Sem isso o motor continuava fechando
+      // ciclo indefinidamente pra CPF já em blacklist.
+      if (user.is_blacklisted) {
+        continue;
+      }
+
+      // Corte é INVOICE_CUTOFF_DAYS dias antes do vencimento (fonte única em utils/billing.js)
       const cutoffDate = new Date(dueDate);
-      cutoffDate.setDate(cutoffDate.getDate() - 7);
+      cutoffDate.setDate(cutoffDate.getDate() - INVOICE_CUTOFF_DAYS);
       cutoffDate.setUTCHours(23, 59, 59, 999);
 
-      // Só fecha quando a data atual ultrapassa a data de corte (7 dias antes do vencimento)
+      // Só fecha quando a data atual ultrapassa a data de corte
       if (now > cutoffDate) {
         // Passou da data de corte: fechar fatura atual e rolar vencimento para próximo mês
         console.log(`[InvoiceEngine] Fatura do CPF ${user.cpf} passou da data de corte (${cutoffDate.toISOString()}) ou override de teste. Fechando fatura...`);
@@ -52,7 +62,7 @@ async function runEngine(targetCpf = null) {
         if (lastClosed.length > 0) {
           const lastClosedDueDate = new Date(lastClosed[0].due_date);
           prevCutoffDate = new Date(lastClosedDueDate);
-          prevCutoffDate.setDate(prevCutoffDate.getDate() - 7);
+          prevCutoffDate.setDate(prevCutoffDate.getDate() - 5);
           prevCutoffDate.setUTCHours(23, 59, 59, 999);
         } else {
           prevCutoffDate = new Date(cutoffDate);
@@ -212,9 +222,8 @@ async function runEngine(targetCpf = null) {
 `);
           // Rolar o due_date para o próximo mês mesmo assim
           const dueDay = user.credit_card_due_day || 15;
-          const nextDueDate = new Date(dueDate);
-          nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-          nextDueDate.setDate(dueDay);
+          let nextDueDate = new Date(dueDate);
+          nextDueDate = computeNextInvoiceDueDate(dueDay, nextDueDate);
           await db.executeQuery(
             `UPDATE ${db.fq('users')}
              SET credit_card_invoice_due_date = ${esc(nextDueDate.toISOString())}, updated_at = CURRENT_TIMESTAMP
@@ -237,9 +246,8 @@ async function runEngine(targetCpf = null) {
 
         // 2. Calcular nova data de vencimento baseada no due_day do usuário
         const dueDay = user.credit_card_due_day || 15;
-        const nextDueDate = new Date(dueDate);
-        nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-        nextDueDate.setDate(dueDay);
+        let nextDueDate = new Date(dueDate);
+          nextDueDate = computeNextInvoiceDueDate(dueDay, nextDueDate);
 
         // 3. Atualizar usuário
         await db.executeQuery(`
@@ -251,7 +259,7 @@ async function runEngine(targetCpf = null) {
         // 4. Processar e rolar planos de parcelamento ativos (installment_plans)
         try {
           const nextDueDateCutoff = new Date(nextDueDate);
-          nextDueDateCutoff.setDate(nextDueDateCutoff.getDate() - 7);
+          nextDueDateCutoff.setDate(nextDueDateCutoff.getDate() - 5);
           nextDueDateCutoff.setUTCHours(23, 59, 59, 999);
 
           const plans = await db.executeQuery(`

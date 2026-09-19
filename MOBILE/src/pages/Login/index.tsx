@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import InfoCarousel from '../../components/InfoCarousel';
 import { API_BASE_URL } from '../../apiConfig';
 import HiddenMenu from '../Settings/HiddenMenu';
+import { useShakeOnError } from '../../hooks/useShakeOnError';
 
 interface StatusMessageProps {
   type: 'error' | 'success';
@@ -113,6 +114,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
   const [showHiddenMenu, setShowHiddenMenu] = useState(false);
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { setRef, shake } = useShakeOnError();
 
   const { login } = useAuth();
 
@@ -217,6 +219,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
     try {
       if (cpf.length !== 11) {
         setError('CPF deve ter 11 numeros');
+        shake('cpf');
         setLoading(false);
         return;
       }
@@ -338,12 +341,17 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToPreLogin, onN
               CPF
             </label>
                   <input
+                    ref={setRef('cpf')}
                     id="cpf"
                     data-testid="cpf"
                     name="cpf"
                     type="text"
                     value={formatCpf(cpf)}
-                    onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                    onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, '');
+                        if (digits.length > 11) shake('cpf');
+                        setCpf(digits.slice(0, 11));
+                    }}
                     inputMode="numeric"
                     placeholder="999.999.999-99"
                     className="w-full px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-volt-lime mb-4 placeholder-zinc-500"

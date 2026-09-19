@@ -47,6 +47,7 @@ function normalizeUserShape(input: Partial<User>): User {
         totalLimit: 0,
         pointsBalance: 0,
         isBlocked: false,
+        isBlacklisted: false,
         transactions: [],
         closedTransactions: [],
     };
@@ -68,6 +69,7 @@ function normalizeUserShape(input: Partial<User>): User {
         totalLimit: toNum(ccRaw.totalLimit),
         pointsBalance: toNum(ccRaw.pointsBalance),
         isBlocked: toBool(ccRaw.isBlocked),
+        isBlacklisted: toBool(ccRaw.isBlacklisted),
         transactions: Array.isArray(ccRaw.transactions) ? ccRaw.transactions : [],
         closedTransactions: Array.isArray(ccRaw.closedTransactions) ? ccRaw.closedTransactions : [],
         futureInstallments: (ccRaw.futureInstallments && typeof ccRaw.futureInstallments === 'object') ? ccRaw.futureInstallments : {},

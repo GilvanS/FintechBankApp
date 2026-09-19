@@ -144,7 +144,7 @@ module.exports = function createAdminUsersController(deps) {
             totalEncargos = Math.round(persisted.total * 100) / 100;
             chargesSource = 'billing_charges';
         } else if (persisted === null) {
-            // 2Âª+ fatura da mesma massa: encargos já contabilizados na primeira
+            // 2ª+ fatura da mesma massa: encargos já contabilizados na primeira
             multa = jurosMora = jurosRem = iof = totalEncargos = 0;
             chargesSource = 'already_counted';
         } else {
@@ -628,9 +628,9 @@ module.exports = function createAdminUsersController(deps) {
     if (typeof invoiceDueDate === 'string' && invoiceDueDate.trim() !== '' && invoiceDueDate !== 'Invalid Date') {
         const inv = new Date(invoiceDueDate);
         if (!isNaN(inv.getTime())) {
-            const sevenDaysAgo = new Date();
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            blockCard = inv < sevenDaysAgo;
+            const cutoffDaysAgo = new Date();
+            cutoffDaysAgo.setDate(cutoffDaysAgo.getDate() - 5);
+            blockCard = inv < cutoffDaysAgo;
         }
     }
     if (blockCard) {

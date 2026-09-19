@@ -11,6 +11,7 @@ import {
     indiceDestaque,
     proximaTrocaEm,
 } from '../utils/ofertaDestaque';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -113,6 +114,11 @@ export const ShopLanding: React.FC = () => {
     const [compraOk, setCompraOk] = useState(false);
     const pinRef = useRef<HTMLInputElement>(null);
     const fecharRef = useRef<HTMLButtonElement>(null);
+    const { setRef, shake, onMaxLengthKeyDown } = useShakeOnError();
+    const setPinRef = (el: HTMLInputElement | null) => {
+        pinRef.current = el;
+        setRef('pin')(el);
+    };
 
     const fecharModal = () => setProdutoNoModal(null);
 
@@ -339,6 +345,7 @@ export const ShopLanding: React.FC = () => {
 
         if (pin.length !== 4) {
             setErroCompra('Digite a senha de 4 dígitos do cartão.');
+            shake('pin');
             return;
         }
 
@@ -618,13 +625,14 @@ export const ShopLanding: React.FC = () => {
                                         <Lock className="w-3 h-3" /> Senha do cartão
                                     </span>
                                     <input
-                                        ref={pinRef}
+                                        ref={setPinRef}
                                         type="password"
                                         inputMode="numeric"
                                         maxLength={4}
                                         placeholder="••••"
                                         value={pin}
                                         onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                                        onKeyDown={onMaxLengthKeyDown('pin', 4)}
                                         className="w-full p-3 rounded-xl bg-[#0d0d0d] border border-white/15 text-center text-lg tracking-[0.4em] font-mono"
                                         required
                                     />

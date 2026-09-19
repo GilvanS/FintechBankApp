@@ -1,17 +1,53 @@
 const { getDb, esc } = require('./context');
 const { computeInstallmentPlan } = require('../utils/billing');
+const { calcularParcelamentoFatura, TIPOS_ENTRADA } = require('../services/installmentCalcEngine');
 const { nowDb } = require('../utils/timezone');
 
-async function createInstallments({ cpf, amount, installments }) {
+/**
+ * @param {object} params
+ * @param {object} [params.pf] - Quando informado, usa o motor real de Parcelamento de
+ *   Fatura (7,95% a.m., IOF em 2 passadas, datas reais de vencimento) em vez do Price
+ *   simplificado — { saldoAbertoAnterior, dataLimitePagamento, vencimentoProximoCorte,
+ *   diaVencimento }. Sem `pf`, mantém o cálculo antigo (usado hoje por `renegotiate`,
+ *   que é outro produto ainda não migrado pro motor fiel à planilha).
+ */
+async function createInstallments({ cpf, amount, installments, pf }) {
     const db = getDb();
-    const plan = computeInstallmentPlan(amount, installments);
+
+    let plan;
+    let dueDates = null;
+    if (pf) {
+        const result = calcularParcelamentoFatura({
+            valorFatura: amount,
+            saldoAbertoAnterior: pf.saldoAbertoAnterior || 0,
+            taxaMensal: 0.0795,
+            prazo: installments,
+            tipoEntrada: TIPOS_ENTRADA.SEM_ENTRADA,
+            dataLimitePagamento: pf.dataLimitePagamento,
+            vencimentoProximoCorte: pf.vencimentoProximoCorte,
+            diaVencimento: pf.diaVencimento,
+        });
+        plan = {
+            installmentValue: result.valorParcela,
+            totalAmount: result.totalAPagar,
+            iof: result.iofTotal,
+            juros: result.totalJuros,
+            // campos extras (não usados pelo Price antigo) — pra registro em tbl_pf
+            saldoFinanciado: result.saldoFinanciado,
+            iofAdicional: result.iofAdicional,
+            cetAnual: result.cetAnual,
+        };
+        dueDates = result.tabelaAmortizacao.map(r => r.dataVencimento);
+    } else {
+        plan = computeInstallmentPlan(amount, installments);
+    }
+
     const baseDate = new Date();
     const planId = db.generateUUID();
 
     let firstDueDate = null;
     for (let i = 1; i <= installments; i++) {
-        const dueDate = new Date(baseDate);
-        dueDate.setMonth(baseDate.getMonth() + i);
+        const dueDate = dueDates ? dueDates[i - 1] : new Date(baseDate.getFullYear(), baseDate.getMonth() + i, baseDate.getDate());
         if (i === 1) firstDueDate = dueDate.toISOString();
         const id = db.generateUUID();
         await db.executeQuery(`

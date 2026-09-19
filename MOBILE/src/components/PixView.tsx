@@ -13,6 +13,7 @@ import PixKeyManagement from './PixKeyManagement';
 import PasswordModal from './PasswordModal';
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../contexts/AppStateContext';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 type PixSubView = 'transfer' | 'keyManagement' | 'contacts' | 'confirmation';
 
@@ -23,6 +24,7 @@ interface PixViewProps {
 export default function PixView({ onBack }: PixViewProps) {
   const { user, updateUser } = useAuth();
   const { triggerSmartAlertCheck, theme } = useAppState();
+  const { setRef, shake } = useShakeOnError();
   const isMidnight = theme === 'midnight';
   const accent = isMidnight ? '#00E38B' : '#A2FF00';
   const [subView, setSubView] = useState<PixSubView>('transfer');
@@ -143,9 +145,17 @@ export default function PixView({ onBack }: PixViewProps) {
     if (!user) return;
     setError('');
 
+    // velvet-skipping-dream.md: conta na lista negra (90+ dias de atraso) não envia PIX —
+    // só pagar ou renegociar a fatura liberam de novo.
+    if (user.creditCard?.isBlacklisted) {
+      setError('Conta na lista negra por atraso. Pague ou renegocie a fatura para liberar transferências.');
+      return;
+    }
+
     const numericAmount = parseCurrency(amount);
     if (isNaN(numericAmount) || numericAmount <= 0) {
       setError('Por favor, insira um valor válido maior que zero.');
+      shake('amount');
       return;
     }
 
@@ -156,6 +166,7 @@ export default function PixView({ onBack }: PixViewProps) {
 
     if (!pixKey.trim()) {
       setError('Por favor, insira a chave Pix.');
+      shake('pixKey');
       return;
     }
 
@@ -358,6 +369,7 @@ export default function PixView({ onBack }: PixViewProps) {
                pixKeyType === 'phone' ? 'Informe o Celular' : 'Informe a Chave Aleatória'}
             </label>
             <input
+              ref={setRef('pixKey')}
               type="text"
               value={pixKey}
               onChange={(e) => setPixKey(e.target.value)}
@@ -379,6 +391,7 @@ export default function PixView({ onBack }: PixViewProps) {
             <div className="relative">
               <span className={`absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black uppercase ${labelClass}`}>R$</span>
               <input
+                ref={setRef('amount')}
                 type="text"
                 value={amount}
                 onChange={handleAmountChange}
@@ -558,11 +571,13 @@ export default function PixView({ onBack }: PixViewProps) {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={loading}
-            className={`w-full py-4 rounded-full font-black uppercase tracking-widest text-xs transition-all active:scale-[0.97] flex items-center justify-center gap-1.5 cursor-pointer ${primaryBtnClass}`}
+            disabled={loading || !!user?.creditCard?.isBlacklisted}
+            className={`w-full py-4 rounded-full font-black uppercase tracking-widest text-xs transition-all active:scale-[0.97] flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${primaryBtnClass}`}
           >
             {loading ? (
               <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+            ) : user?.creditCard?.isBlacklisted ? (
+              'Transferências bloqueadas'
             ) : (
               <>
                 Prosseguir <Send size={12} />

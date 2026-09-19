@@ -8,6 +8,7 @@ import InfoPopupBottom from './InfoPopupBottom';
 import { useToast, ToastContainer } from './Toast';
 import { useDialog } from '../contexts/GlobalDialogContext';
 import { useAppState } from '../contexts/AppStateContext';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 interface ContactsProps {
     onBack?: () => void;
@@ -29,6 +30,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
     const [newContactKey, setNewContactKey] = useState('');
     const [error, setError] = useState('');
     const { toast, showSuccess, showError, hide } = useToast();
+    const { setRef, shake } = useShakeOnError();
     const [recipientInfo, setRecipientInfo] = useState<{ name: string; cpf: string } | null>(null);
     const [isSearching, setIsSearching] = useState(false);
 
@@ -61,6 +63,7 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
             const msg = 'CPF deve ter 11 digitos numericos.';
             setError(msg);
             showError(msg);
+            shake('newContactKey');
             return;
         }
 
@@ -208,11 +211,16 @@ const Contacts: React.FC<ContactsProps> = ({ onBack, onSelectContact }) => {
                                <label className={`text-sm font-medium ${labelClass}`}>Chave PIX (CPF)</label>
                                 <div className="flex gap-2 mt-1">
                                     <input
+                                        ref={setRef('newContactKey')}
                                         type="text"
                                         inputMode="numeric"
                                         pattern="[0-9]*"
                                         value={newContactKey}
-                                        onChange={e => setNewContactKey(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                                        onChange={e => {
+                                            const digits = e.target.value.replace(/\D/g, '');
+                                            if (digits.length > 11) shake('newContactKey');
+                                            setNewContactKey(digits.slice(0, 11));
+                                        }}
                                         required
                                         disabled={!!recipientInfo}
                                         className={`flex-1 rounded-lg py-3 px-4 transition-all disabled:opacity-50 ${inputClass}`}

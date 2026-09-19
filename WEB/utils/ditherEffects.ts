@@ -76,17 +76,19 @@ export function applyAsciiHalftone(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
-  opts: { chars?: string; cellSize?: number } = {}
+  opts: { chars?: string; cellSize?: number; bg?: string; color?: string } = {}
 ): void {
   const chars = opts.chars ?? ' .:-=+*#%@';
   const cellSize = opts.cellSize ?? 8;
+  const bg = opts.bg ?? '#000';
+  const color = opts.color ?? '#D4FF3D';
   const imageData = ctx.getImageData(0, 0, w, h);
   const data = imageData.data;
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#000';
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, w, h);
   ctx.font = `${cellSize}px monospace`;
-  ctx.fillStyle = '#D4FF3D';
+  ctx.fillStyle = color;
   for (let y = 0; y < h; y += cellSize) {
     for (let x = 0; x < w; x += cellSize) {
       const idx = (y * w + x) * 4;

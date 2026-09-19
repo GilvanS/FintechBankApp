@@ -20,7 +20,7 @@ module.exports = function registerUsersRoutes({ apiRouter, bearerAuth, asyncHand
 
     apiRouter.put('/users/:cpf/profile', bearerAuth(), asyncHandler(controller.updateProfile));
 
-    // --- Rotas de NotificaÃ§Ãµes (via repositÃ³rio) ---
+    // --- Rotas de Notificações (via repositório) ---
     apiRouter.get('/users/:cpf/notifications', bearerAuth(), asyncHandler(controller.getNotifications));
     apiRouter.post('/users/:cpf/notifications/:id/read', bearerAuth(), asyncHandler(controller.markNotificationRead));
 

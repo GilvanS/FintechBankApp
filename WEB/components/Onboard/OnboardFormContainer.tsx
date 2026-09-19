@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CardBrand, CardTier, OnboardPlan, CardProductType } from './CardPreview3D';
 import { ShieldCheck, CreditCard, UserCheck, MapPin, Sparkles, Award, Globe } from 'lucide-react';
+import { useShakeOnError } from '../../hooks/useShakeOnError';
 
 export interface OnboardFormData {
   // Section 1: Dados Pessoais
@@ -116,6 +117,7 @@ export default function OnboardFormContainer({
     ...defaultFormData,
     ...initialData,
   });
+  const { setRef, onMaxLengthKeyDown } = useShakeOnError();
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -205,11 +207,13 @@ export default function OnboardFormContainer({
                   CPF
                 </label>
                 <input
+                  ref={setRef('cpf')}
                   id="onboard-cpf"
                   type="text"
                   name="cpf"
                   value={formData.cpf}
                   onChange={handleChange}
+                  onKeyDown={onMaxLengthKeyDown('cpf', 14)}
                   placeholder="000.000.000-00"
                   maxLength={14}
                   required
@@ -260,11 +264,13 @@ export default function OnboardFormContainer({
                       CPF do Tutor Legal
                     </label>
                     <input
+                      ref={setRef('tutorCpf')}
                       id="onboard-tutorCpf"
                       type="text"
                       name="tutorCpf"
                       value={formData.tutorCpf || ''}
                       onChange={handleChange}
+                      onKeyDown={onMaxLengthKeyDown('tutorCpf', 14)}
                       placeholder="000.000.000-00"
                       maxLength={14}
                       required={requiresTutor}
@@ -301,11 +307,13 @@ export default function OnboardFormContainer({
                   Celular
                 </label>
                 <input
+                  ref={setRef('phone')}
                   id="onboard-phone"
                   type="text"
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
+                  onKeyDown={onMaxLengthKeyDown('phone', 16)}
                   placeholder="(11) 99999-9999"
                   maxLength={16}
                   required
@@ -318,11 +326,13 @@ export default function OnboardFormContainer({
                   Senha
                 </label>
                 <input
+                  ref={setRef('password')}
                   id="onboard-password"
                   type="password"
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
+                  onKeyDown={onMaxLengthKeyDown('password', 12)}
                   placeholder="6 a 12 caracteres"
                   maxLength={12}
                   required
@@ -335,11 +345,13 @@ export default function OnboardFormContainer({
                   Confirmar Senha
                 </label>
                 <input
+                  ref={setRef('confirmPassword')}
                   id="onboard-confirmPassword"
                   type="password"
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={handleChange}
+                  onKeyDown={onMaxLengthKeyDown('confirmPassword', 12)}
                   placeholder="Repita a senha"
                   maxLength={12}
                   required
@@ -379,11 +391,13 @@ export default function OnboardFormContainer({
                   CEP / ZipCode
                 </label>
                 <input
+                  ref={setRef('cep')}
                   id="onboard-cep"
                   type="text"
                   name="cep"
                   value={formData.cep}
                   onChange={handleChange}
+                  onKeyDown={onMaxLengthKeyDown('cep', 9)}
                   placeholder="00000-000"
                   maxLength={9}
                   required
@@ -460,11 +474,13 @@ export default function OnboardFormContainer({
                   UF
                 </label>
                 <input
+                  ref={setRef('state')}
                   id="onboard-state"
                   type="text"
                   name="state"
                   value={formData.state}
                   onChange={handleChange}
+                  onKeyDown={onMaxLengthKeyDown('state', 2)}
                   maxLength={2}
                   required
                   className="w-full bg-volt-surface border border-volt-surface-high rounded-lg px-3 py-2 text-sm text-volt-white uppercase focus:outline-none focus:border-volt-green"

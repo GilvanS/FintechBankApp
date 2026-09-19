@@ -182,11 +182,10 @@ module.exports = function createAdminScriptsController(deps) {
     // filtra pra só 1 massa — ID_MASSA continua refletindo a posição real dela no conjunto
     // inteiro (calculado antes do filtro, não recomeça em ID_0001 pra um export de 1 CPF).
     const exportMassasCsv = async (req, res) => {
-        const { buildQuery, rowsToCsv } = require('../../utils/tblDeMassasExport.cjs');
-        const { esc } = repoContext;
+        const { getExportMassasData, rowsToCsv } = require('../../utils/tblDeMassasExport.cjs');
         const cpf = cleanCpf(req.query?.cpf);
         try {
-            const rows = await dbService.executeQuery(buildQuery({ cpf: cpf.length === 11 ? cpf : undefined, esc }));
+            const rows = await getExportMassasData(dbService, { cpf: cpf.length === 11 ? cpf : undefined });
             const csv = rowsToCsv(rows);
             auditLog(req, 'admin_script_export_massas_csv', 'info', { cpf: cpf || 'ALL', count: rows.length });
             res.json({ success: true, data: { csv, count: rows.length }, executedAt: new Date().toISOString() });

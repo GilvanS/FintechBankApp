@@ -1,5 +1,18 @@
 'use strict';
 
+// Fonte única da regra de corte (dias antes do vencimento em que a fatura
+// fecha). Usada pelo invoiceEngine (fechamento real) e por enrichUserCreditCardData
+// (exibição no Web/Mobile) — nunca hardcodar esse número em outro lugar.
+const INVOICE_CUTOFF_DAYS = 5;
+
+function computeCutoffDate(dueDate) {
+    if (!dueDate) return null;
+    const d = new Date(dueDate);
+    if (isNaN(d.getTime())) return null;
+    d.setDate(d.getDate() - INVOICE_CUTOFF_DAYS);
+    return d;
+}
+
 /**
  * Computa o status do ciclo de faturamento atual.
  *
@@ -110,9 +123,24 @@ function buildInstallmentOptions(principal) {
  * @returns {Date}
  */
 function computeNextInvoiceDueDate(dueDay = 10, now = new Date()) {
-    const target = new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
+    let targetYear = now.getFullYear();
+    // Bug histórico: sempre pulava pro mês seguinte, mesmo quando ainda estávamos
+    // dentro do ciclo atual (antes do corte) — ex.: hoje 18/09, corte 18/09 (dueDay
+    // 23 - INVOICE_CUTOFF_DAYS), a fatura deveria vencer 23/09, não 23/10. Só pula
+    // mês quando o corte deste mês já passou.
+    const cutoffDay = dueDay - INVOICE_CUTOFF_DAYS;
+    const alreadyPastCutoff = now.getDate() > cutoffDay;
+    let targetMonth = now.getMonth() + (alreadyPastCutoff ? 1 : 0);
+    let targetDay = dueDay;
+
+    if (dueDay >= 29) {
+        targetMonth += 1;
+        targetDay = 1;
+    }
+
+    const target = new Date(targetYear, targetMonth, targetDay);
     target.setHours(12, 0, 0, 0);
     return target;
 }
 
-module.exports = { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate };
+module.exports = { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate, INVOICE_CUTOFF_DAYS, computeCutoffDate };

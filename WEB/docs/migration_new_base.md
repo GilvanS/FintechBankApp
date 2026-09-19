@@ -153,7 +153,7 @@ Adaptar interface `User` para coincidir com os types da nova base.
 Copiar do WEB antigo e estilizar com tokens da nova base (`.btn-primary`, `.modal-card`).
 
 ### 6. Fix encoding UTF-8 na nova base
-Corrigir `TerÃ§a-feira` → `Terça-feira` e similares no App.tsx.
+Corrigir `Terça-feira` → `Terça-feira` e similares no App.tsx.
 
 ### 7. Fix dados hardcoded na nova base
 Substituir `name: 'GILVAN SILVA'`, `email: 'gillvanjs@gmail.com'` por `useAuth()`.

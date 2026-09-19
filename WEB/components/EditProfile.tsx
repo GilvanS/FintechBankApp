@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import { updateUserProfile } from '../services/api';
 import { useToast, ToastContainer } from './Toast';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 interface EditProfileProps {
     user: User;
@@ -20,6 +21,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
     const [error, setError] = useState('');
 
     const { toast, showSuccess, showError, hide } = useToast();
+    const { setRef, onMaxLengthKeyDown } = useShakeOnError();
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -115,10 +117,12 @@ const EditProfile: React.FC<EditProfileProps> = ({ user, onBack, onSave }) => {
                     <div>
                         <label htmlFor="edit-description" className="text-sm font-medium text-on-surface-variant">Descrição do perfil</label>
                         <textarea
+                            ref={setRef('description')}
                             id="edit-description"
                             name="description"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
+                            onKeyDown={onMaxLengthKeyDown('description', 100)}
                             maxLength={100}
                             rows={3}
                             className="w-full px-4 py-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-volt-green transition-all font-bold resize-none test-input-description"

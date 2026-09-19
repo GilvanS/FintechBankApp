@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { CreditCard, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../contexts/AppStateContext';
-import { payCreditCardInvoice } from '../services/api';
+import { payCreditCardInvoice, getUserByCpf, getUserStatement } from '../services/api';
 import PasswordModal from './PasswordModal';
 import CardsView from './CardsView';
 
@@ -47,19 +47,32 @@ const CardDashboard: React.FC<CardDashboardProps> = ({ onBack, onNavigate }) => 
         setPaymentError('');
         try {
             const result = await payCreditCardInvoice(user.cpf, enteredPin);
-            if (result && (result.success || (result as any).cpf)) {
-                const updatedUser = result.user || result;
-                updateUser(updatedUser);
+            // Só finaliza o fluxo se a API confirmou sucesso — em caso de erro
+            // (inclusive falha de comunicação), o pagamento NÃO é considerado feito.
+            if (result && result.success) {
+                // Revalida os dados no backend: garante saldo/limite/fatura atualizados
+                // mesmo que a resposta do pagamento venha incompleta.
+                const refreshed = await getUserByCpf(user.cpf);
+                if (refreshed.success && refreshed.user) {
+                    const stmt = await getUserStatement(user.cpf);
+                    updateUser(
+                        stmt.success && stmt.transactions
+                            ? { ...refreshed.user, transactions: stmt.transactions }
+                            : refreshed.user
+                    );
+                } else if (result.user) {
+                    updateUser(result.user);
+                }
                 setPaymentSuccess(true);
                 setTimeout(() => {
                     setPaymentSuccess(false);
                     setShowPaymentModal(false);
                 }, 2000);
             } else {
-                setPaymentError(result.message || 'Erro ao realizar pagamento.');
+                setPaymentError(result?.message || 'Erro ao realizar pagamento.');
             }
         } catch (error: any) {
-            setPaymentError(error.message || 'Erro ao realizar pagamento.');
+            setPaymentError(error?.message || 'Erro de comunicação com o servidor. Tente novamente.');
         }
     };
 

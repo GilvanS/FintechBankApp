@@ -148,8 +148,7 @@ if ($Kafka) {
 
 if ($Plane) {
     Write-Host "==> Subindo Plane (infra: db, redis, mq, minio)..." -ForegroundColor Cyan
-    $dc = "if docker compose version >/dev/null 2>&1; then docker compose; else /usr/libexec/docker/cli-plugins/docker-compose; fi"
-    $upPlaneInfra = "cd '$planePath' && $dc -f $planeYml up -d plane-db plane-redis plane-mq plane-minio"
+    $upPlaneInfra = "cd '$planePath' && if docker compose version >/dev/null 2>&1; then docker compose -f $planeYml up -d plane-db plane-redis plane-mq plane-minio; else /usr/libexec/docker/cli-plugins/docker-compose -f $planeYml up -d plane-db plane-redis plane-mq plane-minio; fi"
     wsl -d $Distro -e sh -c $upPlaneInfra
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Falha ao subir infra do Plane." -ForegroundColor Red
@@ -160,11 +159,11 @@ if ($Plane) {
         wsl -d $Distro -e sh -c $waitPlane
 
         Write-Host "==> Rodando migracoes do Plane..."
-        $migrate = "cd '$planePath' && $dc -f $planeYml run --rm migrator"
+        $migrate = "cd '$planePath' && if docker compose version >/dev/null 2>&1; then docker compose -f $planeYml run --rm migrator; else /usr/libexec/docker/cli-plugins/docker-compose -f $planeYml run --rm migrator; fi"
         wsl -d $Distro -e sh -c $migrate
 
         Write-Host "==> Subindo API + workers do Plane..."
-        $upPlaneApp = "cd '$planePath' && $dc -f $planeYml up -d api worker beat-worker"
+        $upPlaneApp = "cd '$planePath' && if docker compose version >/dev/null 2>&1; then docker compose -f $planeYml up -d api worker beat-worker; else /usr/libexec/docker/cli-plugins/docker-compose -f $planeYml up -d api worker beat-worker; fi"
         wsl -d $Distro -e sh -c $upPlaneApp
         if ($LASTEXITCODE -ne 0) {
             Write-Host "Falha ao subir API/workers do Plane." -ForegroundColor Red
@@ -202,5 +201,6 @@ Write-Host "Para subir a API:  cd F:\GITHUB\FintechBankApp\API ; npm run dev"
 if ($Plane) {
     Write-Host "Plane API:         http://localhost:8000"
     Write-Host "Plane MinIO:       http://localhost:9090"
+    Write-Host "Plane web/admin:   portas 4000/4001 (ajustadas p/ nao colidir com fintech 3000/3001)"
     Write-Host "Para subir web:    cd /mnt/a/Workspace/plane ; yarn dev"
 }

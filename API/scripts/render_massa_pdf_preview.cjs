@@ -178,7 +178,7 @@ function buildPdfData({ cpf, cc, user, type, plans, cartaoFinal }) {
     let previsaoFechamento = null;
     if (refDue && !isNaN(refDue.getTime())) {
         const p = new Date(refDue);
-        p.setDate(p.getDate() - 7);
+        p.setDate(p.getDate() - 5);
         previsaoFechamento = p.toISOString();
     }
 

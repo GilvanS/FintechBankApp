@@ -149,7 +149,7 @@ function ensureTopic(cpf, nome) {
         if (before.length > 0) return; // já existia: não repete boas-vindas
         // Gate pela categoria 'welcome' — se admin desligou, não manda a mensagem.
         // O tópico é mantido (CPF/gerador precisam da row) mas sem o texto de boas-vindas.
-        if (!(await isCategoryActive('welcome')) || !(await isCategoryActive('auto_create_topics'))) {
+        if (!(await isCategoryActive('welcome'))) {
             console.debug(`[telegram:skip] category=welcome reason=disabled (ensureTopic cpf=${cpf})`);
             return;
         }

@@ -28,6 +28,22 @@ module.exports = function createTestPlanningController(deps) {
         if (!idCenario || !massa || !massa.cpf) {
             return res.status(400).json({ success: false, message: 'idCenario e massa (com cpf) são obrigatórios.' });
         }
+
+        // DESLIGADO a pedido (2026-09-14): saveCenarioAssignment() reconstrói
+        // TBL_CENARIOS do zero via XLSX.utils.json_to_sheet + XLSX.writeFile —
+        // o mesmo padrão que já apagou a formatação de TBL_CADASTRO uma vez em
+        // poc-fintech-playwright/packages/gerador-massa-unificado/scripts/corrigirTblCadastro.ts.
+        // Todas as abas de MassaDados.xlsx agora são tabela dinâmica + fórmulas
+        // de correlação — não pode arriscar de novo. Religar só depois de portar
+        // o append seguro (PizZip, preserva Tabela) de
+        // poc-fintech-playwright/tests/utils/excelTableAppender.ts. Lógica original
+        // preservada comentada abaixo, pra restaurar quando o save seguro estiver pronto.
+        return res.status(503).json({
+            success: false,
+            message: 'Salvar no xlsx está temporariamente desligado: a escrita atual reconstrói a aba TBL_CENARIOS e apagaria a tabela dinâmica/fórmulas da planilha.',
+        });
+
+        /*
         const campos = {
             ID_MASSA: massa.idMassa,
             CPF: massa.cpf,
@@ -53,6 +69,7 @@ module.exports = function createTestPlanningController(deps) {
             }
             res.status(500).json({ success: false, message: 'Erro ao salvar em TBL_CENARIOS: ' + err.message });
         }
+        */
     };
 
     return { getPlanningData, saveAssignment };

@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { confirmPasswordReset } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useToast, ToastContainer } from './Toast';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 interface ResetPasswordProps {
     onResetSuccess: () => void;
@@ -20,12 +21,14 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onResetSuccess, onNavigat
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const { toast, showSuccess, showError, hide } = useToast();
+    const { setRef, shakeAll, onMaxLengthKeyDown } = useShakeOnError();
 
     const handleReset = async (e: React.FormEvent) => {
         e.preventDefault();
         if (newPassword !== confirmPassword) {
             setError('As senhas nao coincidem.');
             showError('As senhas nao coincidem.');
+            shakeAll(['newPassword', 'confirmPassword']);
             return;
         }
         setIsLoading(true);
@@ -66,7 +69,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onResetSuccess, onNavigat
                 <form onSubmit={handleReset} className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-300">CPF</label>
-                        <input type="text" value={formatCPF(cpf)} onChange={(e) => setCpf(e.target.value)} required maxLength={14} className="w-full input-style" />
+                        <input ref={setRef('cpf')} type="text" value={formatCPF(cpf)} onChange={(e) => setCpf(e.target.value)} onKeyDown={onMaxLengthKeyDown('cpf', 14)} required maxLength={14} className="w-full input-style" />
                     </div>
                      <div>
                         <label className="block text-sm font-medium text-gray-300">Token de Redefinição</label>
@@ -74,11 +77,11 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onResetSuccess, onNavigat
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-300">Nova Senha</label>
-                        <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="w-full input-style" />
+                        <input ref={setRef('newPassword')} type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="w-full input-style" />
                     </div>
                      <div>
                         <label className="block text-sm font-medium text-gray-300">Confirme a Nova Senha</label>
-                        <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="w-full input-style" />
+                        <input ref={setRef('confirmPassword')} type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="w-full input-style" />
                     </div>
                     
                     {error && <p className="text-sm text-red-400">{error}</p>}

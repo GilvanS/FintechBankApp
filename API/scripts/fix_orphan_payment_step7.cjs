@@ -579,7 +579,7 @@ async function runLegacy(client) {
     );
     let orphans = 0;
     for (const t of afterTx.rows) {
-        const status = t.invoice_id ? 'vinculada ✅' : 'ÓRFÃ ❌';
+        const status = t.invoice_id ? 'vinculada ✅' : 'ÓRFà❌';
         if (!t.invoice_id) orphans++;
         console.log(`  - ${t.id} | ${t.amount} | invoice_id=${t.invoice_id || 'NULL'} ${status}`);
     }

@@ -9,6 +9,7 @@ import { Transaction } from '../types';
 import { getProducts, checkout } from '../services/api';
 import PasswordModal from './PasswordModal';
 import { useDialog } from '../contexts/GlobalDialogContext';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 import {
   IntervaloOferta,
   lerIntervaloOferta,
@@ -77,6 +78,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
   const [loading, setLoading] = useState(true);
   const [pin, setPin] = useState('');
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const { setRef, shake, onMaxLengthKeyDown } = useShakeOnError();
 
   useEffect(() => {
     let active = true;
@@ -175,6 +177,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
 
     if (pin.length !== 4) {
       setCheckoutError('A senha do cartão deve ter exatamente 4 dígitos.');
+      shake('pin');
       return;
     }
 
@@ -731,6 +734,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                         Senha de 4 dígitos do Cartão
                       </label>
                       <input
+                        ref={setRef('pin')}
                         type="password"
                         maxLength={4}
                         value={pin}
@@ -738,6 +742,7 @@ export default function ShopView({ accountBalance, onPurchaseComplete, theme }: 
                           setPin(e.target.value.replace(/\D/g, ''));
                           setCheckoutError(null);
                         }}
+                        onKeyDown={onMaxLengthKeyDown('pin', 4)}
                         required
                         placeholder="••••"
                         className="w-full p-2.5 text-center text-lg rounded-xl border-2 border-black focus:outline-none focus:border-black bg-white text-black tracking-[0.5em] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"

@@ -24,7 +24,7 @@ const fs = require('fs');
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const DatabaseFactory = require('../services/database/DatabaseFactory');
-const { buildQuery, rowsToCsv } = require('../utils/tblDeMassasExport.cjs');
+const { getExportMassasData, rowsToCsv } = require('../utils/tblDeMassasExport.cjs');
 
 const OUT_PATH = 'A:\\Workspace\\poc-fintech-playwright\\data\\tbl_de_massas.csv';
 
@@ -33,7 +33,7 @@ async function main() {
     await db.connect();
 
     console.log('🔎 Consultando dados das massas...');
-    const rows = await db.executeQuery(buildQuery());
+    const rows = await getExportMassasData(db);
 
     fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
     fs.writeFileSync(OUT_PATH, rowsToCsv(rows), 'utf8');

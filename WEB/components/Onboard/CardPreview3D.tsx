@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Wifi, Lock, ShieldCheck, Sparkles } from 'lucide-react';
+import TiltCard from '../shared/TiltCard';
 
 export type CardBrand = 'VISA' | 'MASTERCARD' | 'ELO' | 'AMEX' | 'HIPERCARD';
 export type CardTier = 'BRONZE' | 'GOLD' | 'PLATINUM' | 'BLACK';
@@ -61,28 +62,7 @@ export default function CardPreview3D({
   estimatedLimit = 5000,
   isEmbossing = false,
 }: CardPreview3DProps) {
-  const [rotateX, setRotateX] = useState(0);
-  const [rotateY, setRotateY] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const card = e.currentTarget.getBoundingClientRect();
-    const centerX = card.left + card.width / 2;
-    const centerY = card.top + card.height / 2;
-    const mouseX = e.clientX - centerX;
-    const mouseY = e.clientY - centerY;
-
-    const rx = (-mouseY / (card.height / 2)) * 12;
-    const ry = (mouseX / (card.width / 2)) * 12;
-
-    setRotateX(rx);
-    setRotateY(ry);
-  };
-
-  const handleMouseLeave = () => {
-    setRotateX(0);
-    setRotateY(0);
-  };
 
   // Card Background Gradients
   const getTierGradient = (t: CardTier) => {
@@ -111,23 +91,23 @@ export default function CardPreview3D({
           sobrepondo. `perspective` precisa ficar no PAI (aqui), nunca no próprio
           elemento que gira — senão a perspectiva gira junto e perde o efeito. */}
       <div className="w-full select-none" style={{ perspective: '1500px' }}>
-        <motion.div
-          className={`relative w-full aspect-[1.586/1] rounded-2xl border shadow-2xl transition-all duration-200 cursor-pointer backdrop-blur-md ${getTierGradient(
-            tier
-          )}`}
-          style={{
-            transformStyle: 'preserve-3d',
-            WebkitTransformStyle: 'preserve-3d',
-          }}
-          animate={{
-            rotateX: rotateX,
-            rotateY: isFlipped ? 180 + rotateY : rotateY,
-          }}
-          transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          onClick={() => setIsFlipped(!isFlipped)}
-        >
+        {/* Tilt 3D (Transitions.dev): wrapper t-tilt rastreia o ponteiro e inclina o card;
+            o flip frente/verso acontece SÓ POR CLIQUE — mover o mouse apenas inclina. */}
+        <TiltCard>
+          <motion.div
+            className={`relative w-full aspect-[1.586/1] rounded-2xl border shadow-2xl cursor-pointer backdrop-blur-md ${getTierGradient(
+              tier
+            )}`}
+            style={{
+              transformStyle: 'preserve-3d',
+              WebkitTransformStyle: 'preserve-3d',
+            }}
+            animate={{
+              rotateY: isFlipped ? 180 : 0,
+            }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            onClick={() => setIsFlipped(!isFlipped)}
+          >
           {/* Shine effect overlay */}
           <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent pointer-events-none rounded-2xl z-20" />
 
@@ -239,10 +219,11 @@ export default function CardPreview3D({
               <span>Fintech Bank S.A.</span>
             </div>
           </div>
-        </motion.div>
+          </motion.div>
+        </TiltCard>
 
         <p className="text-center text-xs text-volt-muted mt-2">
-          Clique no cartão para girar (frente/verso)
+          Clique no cartão para virar e ver o CVV
         </p>
       </div>
 

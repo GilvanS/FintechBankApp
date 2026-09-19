@@ -13,6 +13,34 @@
    nao pela media query prefers-color-scheme. */
 @custom-variant dark (&:where(.theme-midnight, .theme-midnight *));
 
+/* ─── Error shake (ref: Transitions.dev — Error state shake) ───
+   Disparado via hooks/useShakeOnError.ts, que alterna a classe
+   .t-shake no elemento (input, wrapper, etc.) quando a validação
+   falha — obrigatório vazio ou limite de caracteres atingido. */
+:root {
+    --t-shake-distance: 6px;
+    --t-shake-overshoot: 4px;
+    --t-shake-dur-a: 80ms;
+    --t-shake-dur-b: 60ms;
+    --t-shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-shake {
+    animation: t-shake calc(var(--t-shake-dur-a) * 2 + var(--t-shake-dur-b) * 2) linear;
+}
+
+@keyframes t-shake {
+    0%     { transform: translateX(0);                                 animation-timing-function: var(--t-shake-ease); }
+    28.57% { transform: translateX(var(--t-shake-distance));           animation-timing-function: var(--t-shake-ease); }
+    57.14% { transform: translateX(calc(var(--t-shake-distance) * -1)); animation-timing-function: var(--t-shake-ease); }
+    78.57% { transform: translateX(var(--t-shake-overshoot));          animation-timing-function: var(--t-shake-ease); }
+    100%   { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .t-shake { animation: none !important; transform: none !important; }
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk", "Manrope", sans-serif;

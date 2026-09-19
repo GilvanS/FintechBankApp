@@ -8,8 +8,8 @@ const repoContext = require('../repositories/context');
 /**
  * Usada tanto pela rota POST /admin/fix-orphan-payments quanto pelo cron semanal.
  * @param {Object} opts
- * @param {string|null} opts.cpfFilter  â€” filtra por CPF especÃ­fico
- * @param {function|null} opts.onComplete â€” callback(opts) chamado ao final com { cpfFilter, fixed, errors, usersScanned }
+ * @param {string|null} opts.cpfFilter  — filtra por CPF específico
+ * @param {function|null} opts.onComplete — callback(opts) chamado ao final com { cpfFilter, fixed, errors, usersScanned }
  */
 async function runOrphanPaymentFix({ cpfFilter = null, onComplete = null } = {}) {
     const { esc } = repoContext;
@@ -67,9 +67,9 @@ async function runOrphanPaymentFix({ cpfFilter = null, onComplete = null } = {})
                 `);
 
                 if (recentInvoice.length > 0) {
-                    // Fatura FECHADA Ã© imutÃ¡vel: ajustamos o BANCO DO PAGAMENTO (refund
+                    // Fatura FECHADA é imutável: ajustamos o BANCO DO PAGAMENTO (refund
                     // para balance) em vez de mexer em valor_pago. Excedente vira saldo credor
-                    // e abaterÃ¡ a prÃ³xima fatura via creditoExcedente.
+                    // e abaterá a próxima fatura via creditoExcedente.
                     const inv = recentInvoice[0];
                     const excess = round2(missing);
                     if (excess > 0.01) {
@@ -95,10 +95,10 @@ async function runOrphanPaymentFix({ cpfFilter = null, onComplete = null } = {})
                 }
             }
 
-            // Caso B: valor_pago > pagamentos (legado â€” sÃ³ acontece em faturas prÃ©-migration
-            // onde valor_pago ficou inflado pelo bug). Como fatura FECHADA Ã© imutÃ¡vel, o
-            // ajuste Ã© devolvido para o balance do usuÃ¡rio â€” o caminho novo lÃª SUM(pagamentos)
-            // e nÃ£o usa mais esse campo para derivar quitaÃ§Ã£o.
+            // Caso B: valor_pago > pagamentos (legado — só acontece em faturas pré-migration
+            // onde valor_pago ficou inflado pelo bug). Como fatura FECHADA é imutável, o
+            // ajuste é devolvido para o balance do usuário — o caminho novo lê SUM(pagamentos)
+            // e não usa mais esse campo para derivar quitação.
             if (invoiceTotalPago > paymentTotal + 0.02) {
                 const excess = round2(invoiceTotalPago - paymentTotal);
                 if (excess > 0.01) {

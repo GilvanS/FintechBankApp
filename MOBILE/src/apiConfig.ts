@@ -8,7 +8,7 @@
  */
 
 // IP fixado no momento do build (fallback caso o menu oculto nunca seja usado)
-export const API_DEFAULT_URL = 'http://192.168.10.105:3001';
+export const API_DEFAULT_URL = 'http://192.168.10.103:3001';
 
 // Sub-redes candidatas para descoberta automatica quando o IP mudar por DHCP.
 // '10.0.2' cobre o AVD do emulador Android: sua rede virtual NAT usa sempre

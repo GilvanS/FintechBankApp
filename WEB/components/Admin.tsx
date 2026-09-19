@@ -28,6 +28,7 @@ import OverdueBadge from './Admin/OverdueBadge';
 import StatCard from './Admin/StatCard';
 import BillingMockSection from './Admin/BillingMockSection';
 import ConfirmModal from './Admin/ConfirmModal';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 const Admin: React.FC<{ onClose: () => void; initialSearchCpf?: string }> = ({ onClose, initialSearchCpf }) => {
     const { user: adminUser, logout } = useAuth();
@@ -63,6 +64,7 @@ const Admin: React.FC<{ onClose: () => void; initialSearchCpf?: string }> = ({ o
     const [denyReason, setDenyReason] = useState('');
     const [depositAmount, setDepositAmount] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const { setRef, onMaxLengthKeyDown } = useShakeOnError();
 
     // State for card details form
     const [cardDueDate, setCardDueDate] = useState('');
@@ -414,9 +416,11 @@ const Admin: React.FC<{ onClose: () => void; initialSearchCpf?: string }> = ({ o
                         data-playwright="admin-search-form"
                     >
                         <input
+                            ref={setRef('cpfSearch')}
                             type="text"
                             value={formatCPF(cpfSearch)}
                             onChange={(e) => setCpfSearch(e.target.value)}
+                            onKeyDown={onMaxLengthKeyDown('cpfSearch', 14)}
                             placeholder="Buscar por CPF"
                             maxLength={14}
                             className={`flex-grow px-4 py-3 rounded-2xl focus:outline-none transition-all ${isMidnight ? 'font-medium' : 'font-bold'} test-input-cpf-search ${inputClass}`}

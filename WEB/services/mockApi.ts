@@ -1356,7 +1356,7 @@ export const getInvoiceSummary = async (
 
         const closedDueDate = cc.closedInvoiceDueDate ? new Date(cc.closedInvoiceDueDate) : new Date(Date.UTC(2026, 6, 15));
         const closedBestBuy = new Date(closedDueDate);
-        closedBestBuy.setUTCDate(closedBestBuy.getUTCDate() - 7);
+        closedBestBuy.setUTCDate(closedBestBuy.getUTCDate() - 5);
 
         return {
             success: true,
@@ -1379,7 +1379,7 @@ export const getInvoiceSummary = async (
 
     const openDueDate = cc.invoiceDueDate ? new Date(cc.invoiceDueDate) : new Date(Date.UTC(2026, 7, 15));
     const openBestBuy = new Date(openDueDate);
-    openBestBuy.setUTCDate(openBestBuy.getUTCDate() - 7);
+    openBestBuy.setUTCDate(openBestBuy.getUTCDate() - 5);
 
     // Fatura Aberta + Motor de Encargos por Atraso (acumulados diariamente)
     let open = Number(cc.currentInvoice || 0);
@@ -2050,3 +2050,78 @@ export const adminTelegramUpdateSetting = async (_category: string, _fields: Par
 export const adminTelegramTestCategory = async (_category: string) => demoFail();
 export const adminTelegramSendPdf = async (_cpf: string, _type: 'open' | 'closed' | 'previous') => demoFail();
 export const adminTelegramSendTable = async (_cpf: string, _payload: { title: string; headers: string[]; rows: string[][] }) => demoFail();
+
+// --- System Config (tema padrão) ---
+// Mesma chave que o AppStateContext usa como cache local; no demo não há
+// backend, então o "padrão do sistema" vive só neste localStorage.
+export const getSystemConfig = async (): Promise<{ success: boolean; defaultTheme: 'yellow' | 'midnight' }> => {
+    const stored = localStorage.getItem('volt_admin_default_theme');
+    return { success: true, defaultTheme: stored === 'midnight' ? 'midnight' : 'yellow' };
+};
+export const adminUpdateSystemConfig = async (defaultTheme: 'yellow' | 'midnight'): Promise<{ success: boolean; message: string }> => {
+    localStorage.setItem('volt_admin_default_theme', defaultTheme);
+    return { success: true, message: 'Tema padrão atualizado (modo demo, salvo apenas localmente).' };
+};
+
+export const adminAdjustCreditLimit = async (_cpf: string, _totalLimit: number): Promise<{ success: boolean; message: string }> => demoFail();
+
+// --- Scripts admin (massas) — indisponíveis sem backend ---
+export const adminAuditFix = async (_cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
+export const adminSyncOverdueDays = async (_cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
+export const adminInvoicePdfPreview = async (_cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
+export const adminMassaReport = async (_cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
+export const adminActivatePendingCards = async (_cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
+export const adminRecalcularLimiteDisponivel = async (_cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
+export const adminExportMassasCsv = async (_cpf?: string): Promise<{ success: boolean; data?: { csv: string; count: number }; message?: string }> => demoFail();
+
+// --- Planejamento de testes (TestPlanningSection) ---
+export interface TestPlanningCenario {
+    SEQ?: number;
+    ID_CENARIO: string;
+    NOME?: string;
+    FEATURE?: string;
+    ID_MASSA?: string;
+    CPF?: string;
+    SENHA?: string;
+    saldo_conta?: number;
+    fatura_fechada?: number;
+    fatura_aberta?: number;
+    dias_atraso?: number;
+    PIN?: string | number;
+}
+
+export interface TestPlanningMassa {
+    id_massa: string;
+    cpf: string;
+    status: string;
+    saldo_conta: number;
+    fatura_fechada: number;
+    fatura_aberta: number;
+    dias_atraso: number;
+    nome_completo?: string;
+}
+
+// Sem backend, deriva as massas dos próprios usuários demo carregados dos CSVs.
+export const getTestPlanningData = async (): Promise<{
+    success: boolean;
+    data?: { cenarios: TestPlanningCenario[]; massas: TestPlanningMassa[] };
+    message?: string;
+}> => {
+    const store = _getStore();
+    const massas: TestPlanningMassa[] = store.users.map(u => ({
+        id_massa: u.cpf,
+        cpf: u.cpf,
+        status: u.isBlocked ? 'bloqueada' : 'disponivel',
+        saldo_conta: Number(u.balance) || 0,
+        fatura_fechada: Number(u.creditCard?.closedInvoice) || 0,
+        fatura_aberta: Number(u.creditCard?.currentInvoice) || 0,
+        dias_atraso: 0,
+        nome_completo: u.fullName,
+    }));
+    return { success: true, data: { cenarios: [], massas } };
+};
+
+export const saveTestPlanningAssignment = async (
+    _idCenario: string,
+    _massa: { idMassa: string; cpf: string; saldoConta: number; faturaFechada: number; faturaAberta: number; diasAtraso: number; pin: string }
+): Promise<{ success: boolean; data?: TestPlanningCenario; message?: string }> => demoFail();

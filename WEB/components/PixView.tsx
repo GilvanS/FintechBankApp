@@ -9,6 +9,7 @@ import PixKeyManagement from './PixKeyManagement';
 import PasswordModal from './PasswordModal';
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../contexts/AppStateContext';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 export type PixSubView = 'transfer' | 'keyManagement' | 'contacts' | 'confirmation';
 
@@ -49,6 +50,7 @@ export default function PixView({ onBack, hideChrome = false, activeSubView }: P
   const [pendingPinAction, setPendingPinAction] = useState<null | ((pin: string) => Promise<void>)>(null);
 
   const [useCredit, setUseCredit] = useState(false);
+  const { setRef, shake, onMaxLengthKeyDown } = useShakeOnError();
 
   // AI Auto-categorization states
   const [selectedCategory, setSelectedCategory] = useState<'refeicao' | 'mobilidade' | 'cultura' | 'saude' | 'outros'>('outros');
@@ -150,9 +152,17 @@ export default function PixView({ onBack, hideChrome = false, activeSubView }: P
     if (!user) return;
     setError('');
 
+    // velvet-skipping-dream.md: conta na lista negra (90+ dias de atraso) não envia PIX —
+    // só pagar ou renegociar a fatura liberam de novo.
+    if (user.creditCard?.isBlacklisted) {
+      setError('Conta na lista negra por atraso. Pague ou renegocie a fatura para liberar transferências.');
+      return;
+    }
+
     const numericAmount = parseCurrency(amount);
     if (isNaN(numericAmount) || numericAmount <= 0) {
       setError('Por favor, insira um valor válido maior que zero.');
+      shake('amount');
       return;
     }
 
@@ -163,6 +173,7 @@ export default function PixView({ onBack, hideChrome = false, activeSubView }: P
 
     if (!pixKey.trim()) {
       setError('Por favor, insira a chave Pix.');
+      shake('pixKey');
       return;
     }
 
@@ -189,7 +200,9 @@ export default function PixView({ onBack, hideChrome = false, activeSubView }: P
               result = await performPix(user.cpf, transferDetails.key, transferDetails.amount, transferDetails.description, pin, transferDetails.category);
           }
           if (result.success) {
-              // Update user balance/statement
+              // Update user balance/statement. Se o refresh falhar (erro de
+              // comunicação), usa o user devolvido pela própria transferência para
+              // não exibir dados desatualizados nem updateUser(undefined).
               const refreshed = await getUserByCpf(user.cpf);
               if (refreshed.success && refreshed.user) {
                   const stmt = await getUserStatement(user.cpf);
@@ -204,6 +217,8 @@ export default function PixView({ onBack, hideChrome = false, activeSubView }: P
                   } else {
                       updateUser(refreshed.user);
                   }
+              } else if (result.user) {
+                  updateUser(result.user);
               }
               setSubView('transfer');
               setSuccess(true);
@@ -371,6 +386,7 @@ export default function PixView({ onBack, hideChrome = false, activeSubView }: P
                  pixKeyType === 'phone' ? 'Informe o Celular' : 'Informe a Chave Aleatória'}
               </label>
               <input
+                ref={setRef('pixKey')}
                 type="text"
                 value={pixKey}
                 onChange={(e) => {
@@ -381,6 +397,11 @@ export default function PixView({ onBack, hideChrome = false, activeSubView }: P
                     setPixKey(raw);
                   }
                 }}
+                onKeyDown={onMaxLengthKeyDown('pixKey',
+                  pixKeyType === 'cpf' ? 11 :
+                  pixKeyType === 'phone' ? 11 :
+                  pixKeyType === 'email' ? 254 : 64
+                )}
                 placeholder={
                   pixKeyType === 'cpf' ? '000.000.000-00' :
                   pixKeyType === 'email' ? 'exemplo@email.com' :
@@ -404,6 +425,7 @@ export default function PixView({ onBack, hideChrome = false, activeSubView }: P
               <div className="relative">
                 <span className={`absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black uppercase ${labelClass}`}>R$</span>
                 <input
+                  ref={setRef('amount')}
                   type="text"
                   value={amount}
                   onChange={handleAmountChange}
@@ -588,11 +610,13 @@ export default function PixView({ onBack, hideChrome = false, activeSubView }: P
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={loading}
-            className={`w-full py-4 rounded-full font-black uppercase tracking-widest text-xs transition-all active:scale-[0.97] flex items-center justify-center gap-1.5 cursor-pointer ${primaryBtnClass}`}
+            disabled={loading || !!user?.creditCard?.isBlacklisted}
+            className={`w-full py-4 rounded-full font-black uppercase tracking-widest text-xs transition-all active:scale-[0.97] flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${primaryBtnClass}`}
           >
             {loading ? (
               <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+            ) : user?.creditCard?.isBlacklisted ? (
+              'Transferências bloqueadas'
             ) : (
               <>
                 Prosseguir <Send size={12} />

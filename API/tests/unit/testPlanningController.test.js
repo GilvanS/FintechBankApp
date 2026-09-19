@@ -1,4 +1,4 @@
-jest.mock('../../utils/testPlanningXlsx.cjs');
+﻿jest.mock('../../utils/testPlanningXlsx.cjs');
 jest.mock('../../utils/testPlanningRules.cjs');
 const { readPlanningData, saveCenarioAssignment } = require('../../utils/testPlanningXlsx.cjs');
 const { validarMassaParaCenario } = require('../../utils/testPlanningRules.cjs');
@@ -58,7 +58,7 @@ describe('testPlanningController', () => {
         expect(saveCenarioAssignment).not.toHaveBeenCalled();
     });
 
-    test('saveAssignment mapeia os campos e chama saveCenarioAssignment', async () => {
+    test.skip('saveAssignment mapeia os campos e chama saveCenarioAssignment', async () => {
         saveCenarioAssignment.mockReturnValue({ ID_CENARIO: 'CT03.2', CPF: '26700822386' });
         validarMassaParaCenario.mockReturnValue({ valido: true, motivo: null });
         const req = {
@@ -98,7 +98,7 @@ describe('testPlanningController', () => {
         expect(res.json).toHaveBeenCalledWith({ success: true, data: { ID_CENARIO: 'CT03.2', CPF: '26700822386' } });
     });
 
-    test('saveAssignment salva com success:true mesmo quando a massa não atende ao pré-requisito do cenário (não-bloqueante)', async () => {
+    test.skip('saveAssignment salva com success:true mesmo quando a massa não atende ao pré-requisito do cenário (não-bloqueante)', async () => {
         saveCenarioAssignment.mockReturnValue({ ID_CENARIO: 'CT03.1', CPF: '11122233344' });
         validarMassaParaCenario.mockReturnValue({
             valido: false,
@@ -132,7 +132,7 @@ describe('testPlanningController', () => {
         });
     });
 
-    test('saveAssignment retorna 503 se o xlsx estiver travado no Excel (EBUSY)', async () => {
+    test.skip('saveAssignment retorna 503 se o xlsx estiver travado no Excel (EBUSY)', async () => {
         const erro = new Error('resource busy or locked');
         erro.code = 'EBUSY';
         saveCenarioAssignment.mockImplementation(() => { throw erro; });
@@ -144,4 +144,17 @@ describe('testPlanningController', () => {
         expect(res.status).toHaveBeenCalledWith(503);
         expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: false, message: expect.stringMatching(/Excel/) }));
     });
+    test('saveAssignment retorna 503 com mensagem de bloqueio (desligado a pedido)', async () => {
+        const req = { body: { idCenario: 'CT02.1', massa: { cpf: '59779354070' } } };
+        const res = mockRes();
+
+        await controller.saveAssignment(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(503);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+            success: false,
+            message: expect.stringMatching(/temporariamente desligado/)
+        }));
+    });
 });
+

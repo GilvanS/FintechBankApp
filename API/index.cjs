@@ -1,6 +1,6 @@
 const { RedisStore } = require('rate-limit-redis');
 const redisClient = require('./services/redisClient');
-﻿// PRIMEIRA LINHA — antes de qualquer require. Node lê process.env.TZ na primeira operação de data.
+// PRIMEIRA LINHA — antes de qualquer require. Node lê process.env.TZ na primeira operação de data.
 process.env.TZ = process.env.TZ || 'America/Sao_Paulo';
 
 const dotenv = require('dotenv');
@@ -46,7 +46,7 @@ const { addContact } = require('./repositories/pixRepo');
 const usersRepo = require('./repositories/usersRepo');
 const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequested, setTempPassword, overdueStatusFor } = require('./repositories/usersRepo');
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
-const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate } = require('./utils/billing');
+const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate, computeCutoffDate, INVOICE_CUTOFF_DAYS } = require('./utils/billing');
 const cardEngine = require('./utils/cardEngine');
 const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates, classifyDoubleCount } = require('./utils/invoiceMath');
 
@@ -350,7 +350,9 @@ scheduleCron('0 0 * * *', async () => {
 });
 
 // Cron de auditoria diária de anomalias (executa às 02:00 BRT)
-scheduleCron('0 2 * * *', async () => {
+// Auditoria a cada 2h (era 1x/dia 02:00) — lotes menores em dailyAudit.js
+// evitam processar tudo de uma vez, autocura distribuída ao longo do dia.
+scheduleCron('0 */2 * * *', async () => {
     telegramService.alertGroup('⚠️ Job de auditoria diária iniciando: varredura de anomalias...', 'system_start');
     try {
         await assertTimezone(dbService);
@@ -482,12 +484,14 @@ const normalizeUser = (dbUser) => {
             totalLimit: dbUser.credit_card_total_limit ? parseFloat(dbUser.credit_card_total_limit) : null,
             pointsBalance: dbUser.credit_card_points_balance ? parseInt(dbUser.credit_card_points_balance, 10) : 0,
             isBlocked: !!dbUser.credit_card_is_blocked,
+            isBlacklisted: !!dbUser.is_blacklisted,
             deliveryStatus: getDeliveryStatus(),
             isActivated: !!dbUser.card_is_activated,
             dueDay: dbUser.credit_card_due_day || 15,
-            closingDay: (dbUser.credit_card_due_day || 15) - 7 > 0 
-                ? (dbUser.credit_card_due_day || 15) - 7 
-                : new Date(new Date().getFullYear(), new Date().getMonth(), (dbUser.credit_card_due_day || 15) - 7).getDate(),
+            closingDay: (dbUser.credit_card_due_day || 15) - INVOICE_CUTOFF_DAYS > 0
+                ? (dbUser.credit_card_due_day || 15) - INVOICE_CUTOFF_DAYS
+                : new Date(new Date().getFullYear(), new Date().getMonth(), (dbUser.credit_card_due_day || 15) - INVOICE_CUTOFF_DAYS).getDate(),
+            currentInvoiceCutoffDate: computeCutoffDate(dbUser.credit_card_invoice_due_date),
             // Observacao: transacoes do cartao sao representadas em `transactions` com tipos INVOICE_*
         }
     };
@@ -626,6 +630,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             if (closedInvoice) {
                 // Janela de transações da fatura fechada continua ancorada na mais recente
                 normalized.creditCard.closedInvoiceDueDate = closedInvoice.due_date;
+                normalized.creditCard.closedInvoiceCutoffDate = computeCutoffDate(closedInvoice.due_date);
                 // daysOverdue REAL: ancorar na fatura fechada MAIS ANTIGA não paga.
                 // Ex.: massa com 2 fechadas não pagas (venc. jul/10 + ago/10) — a de jul
                 // tem 24 dias de atraso, a de ago ainda não venceu. Usar a mais recente
@@ -693,6 +698,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                         .sort((a, b) => new Date(b) - new Date(a))[0] || null;
 
                     normalized.creditCard.closedInvoiceDueDate = _maisRecente.due_date;
+                    normalized.creditCard.closedInvoiceCutoffDate = computeCutoffDate(_maisRecente.due_date);
                     normalized.creditCard._closedInvoiceValorTotal = Math.round(_totalVal * 100) / 100;
                     normalized.creditCard._closedInvoiceValorPago = Math.round(_totalPago * 100) / 100;
                     normalized.creditCard._closedInvoiceDataPagamento = _ultimoPagamento;
@@ -715,6 +721,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                     : invRows.find(i => i.status === 'FECHADA' && computeInvoiceGross(i) > 0);
                 if (latestFechada) {
                     normalized.creditCard.closedInvoiceDueDate = latestFechada.due_date;
+                    normalized.creditCard.closedInvoiceCutoffDate = computeCutoffDate(latestFechada.due_date);
 
                     // Somar todas as faturas fechadas pagas na mesma data de pagamento (lote único de quitação)
                     const sameBatchInvoices = invRows.filter(i =>
@@ -781,7 +788,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     let _prevPrevCloseMs = 0; // data de corte da anterior
     if (invoiceDueDateEndOfDay && !isNaN(invoiceDueDateEndOfDay.getTime())) {
         const _cd = new Date(invoiceDueDateEndOfDay);
-        _cd.setDate(_cd.getDate() - 7);
+        _cd.setDate(_cd.getDate() - 5);
         _closeMs = _cd.getTime();
 
         const _prevCd = new Date(_cd);
@@ -793,7 +800,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         _prevPrevCloseMs = _prevPrevCd.getTime();
     } else {
         const _cd = new Date();
-        _cd.setDate(_cd.getDate() - 7);
+        _cd.setDate(_cd.getDate() - 5);
         _cd.setUTCHours(23, 59, 59, 999);
         _closeMs = _cd.getTime();
 
@@ -811,7 +818,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         if (!isNaN(_closedDue.getTime())) {
             _closedDue.setUTCHours(23, 59, 59, 999);
             const _closedCut = new Date(_closedDue);
-            _closedCut.setDate(_closedCut.getDate() - 7);
+            _closedCut.setDate(_closedCut.getDate() - 5);
             _prevCloseMs = _closedCut.getTime();
             const _closedPrevCut = new Date(_closedCut);
             _closedPrevCut.setMonth(_closedPrevCut.getMonth() - 1);
@@ -1939,7 +1946,12 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
     if (!Array.isArray(items) || !items.length || !paymentMethod || !pin || String(pin).trim().length !== 4) {
         return res.status(400).json({ success: false, message: 'Payload invalido.' });
     }
-    
+
+    const [blacklistCheckUser] = await dbService.executeQuery(`SELECT is_blacklisted FROM ${dbService.fq('users')} WHERE cpf = '${req.user.cpf}'`);
+    if (blacklistCheckUser && blacklistCheckUser.is_blacklisted) {
+        return res.status(403).json({ success: false, message: 'Conta na lista negra por atraso. Pague ou renegocie a fatura para liberar compras.' });
+    }
+
     if (['card_debit', 'credit'].includes(paymentMethod)) {
         const [card] = await dbService.executeQuery(`SELECT * FROM ${dbService.fq('cards')} WHERE user_cpf = '${req.user.cpf}' AND card_type = 'physical'`);
         if (!card) {
@@ -2253,7 +2265,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
             (id, cpf, type, amount, description, from_user, to_user, to_key, date)
             VALUES ('${txId}', '${req.user.cpf}', 'SHOP_CREDIT', -${creditAmount.toFixed(2)}, '${safeProductDesc}', NULL, NULL, NULL, '${nowIso}')
         `);
-        // Transparência de encargos (CDC art. 52 Â· Res. BCB 96/2021 e 365/2023): quando a compra
+        // Transparência de encargos (CDC art. 52 · Res. BCB 96/2021 e 365/2023): quando a compra
         // tiver juros, a mensagem expõe juros R$, taxa efetiva e total com/sem financiamento.
         // Vencimentos das parcelas (mesma regra do bloco abaixo: corte = vencimento - 7 dias;
         // parcela i = corte + (i-1) mês) — p/ listar PARC 1..N na tabela da mensagem.
@@ -2261,7 +2273,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
         if (qty >= 2) {
             const _due = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
             const _firstDue = new Date(_due);
-            _firstDue.setDate(_firstDue.getDate() - 7);
+            _firstDue.setDate(_firstDue.getDate() - 5);
             _firstDue.setUTCHours(23, 59, 59, 999);
             const _parcela = totalParcelado / qty;
             for (let i = 0; i < qty; i++) {
@@ -2294,7 +2306,7 @@ apiRouter.post('/shop/checkout', bearerAuth(), asyncHandler(async (req, res) => 
 
             // O corte da fatura (data da primeira parcela) é 7 dias antes do vencimento
             const firstDue = new Date(userDueDate);
-            firstDue.setDate(firstDue.getDate() - 7);
+            firstDue.setDate(firstDue.getDate() - 5);
             firstDue.setUTCHours(23, 59, 59, 999);
 
             const parcela = totalParcelado / qty;
@@ -2682,11 +2694,12 @@ apiRouter.post('/pix/transfer', bearerAuth(), asyncHandler(async (req, res) => {
         return res.status(404).json({ success: false, message: 'Usuário remetente não encontrado.' });
     }
     const fromUser = fromUserRows[0];
+    if (fromUser.is_blacklisted) return res.status(403).json({ success: false, message: 'Conta na lista negra por atraso. Pague ou renegocie a fatura para liberar transferências.' });
     const balance = parseFloat(fromUser.balance || 0);
     if (balance < numericAmount) {
         return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
     }
-    
+
     // Check daily limit
     const today = toDateOnly(new Date());
     const dailyUsageRows = await dbService.executeQuery(`
@@ -2771,7 +2784,8 @@ apiRouter.post('/pix/transfer-credit', bearerAuth(), pinGuard('pin'), asyncHandl
         return res.status(404).json({ success: false, message: 'Usuário remetente não encontrado.' });
     }
     const fromUser = fromUsers[0];
-    
+    if (fromUser.is_blacklisted) return res.status(403).json({ success: false, message: 'Conta na lista negra por atraso. Pague ou renegocie a fatura para liberar transferências.' });
+
     // Buscar destinatário usando a mesma lógica do /pix/transfer
     const keyType = recipientKey.includes('@') ? 'EMAIL' : 'CPF';
     const normalizedKey = keyType === 'CPF' ? recipientKey.replace(/\D/g, '') : recipientKey;
@@ -3042,7 +3056,7 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
     let previsaoFechamento = null;
     if (refDue && !isNaN(refDue.getTime())) {
         const p = new Date(refDue);
-        p.setDate(p.getDate() - 7);
+        p.setDate(p.getDate() - 5);
         previsaoFechamento = p.toISOString();
     }
 
@@ -3759,7 +3773,7 @@ apiRouter.post('/admin/acquirer-simulate', bearerAuth(), authenticateAdmin, asyn
             VALUES ('${txId}', '${user.cpf}', '${txType}', -${totalWithInterest}, '${description}', '${nowDb()}')
         `);
         // Mensagem da compra no tópico Telegram da massa (padrão da Loja /shop).
-        // Transparência de encargos (CDC art. 52 Â· Res. BCB 96/2021 e 365/2023): juros R$, taxa
+        // Transparência de encargos (CDC art. 52 · Res. BCB 96/2021 e 365/2023): juros R$, taxa
         // efetiva e total com juros são expostos quando a compra parcelada tiver encargos.
         // Vencimentos das parcelas (mesma regra do plano abaixo: nextDue = data da compra;
         // parcela i = nextDue + (i-1) mês) — p/ listar PARC 1..N na tabela da mensagem.
@@ -5139,6 +5153,56 @@ apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], asyn
     res.json(result);
 }));
 
+// GET /admin/cemiterio — lista massas em blacklist (>90d), paradas de cobrar.
+// ?status= filtra (default: aguardando_renegociacao); passe status=renegociado
+// para ver o histórico de quem já saiu.
+apiRouter.get('/admin/cemiterio', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const status = (req.query?.status || 'aguardando_renegociacao').replace(/[^a-z_]/g, '');
+    try {
+        const rows = await dbService.executeQuery(`
+            SELECT id, cpf, nome_completo, valor_divida, data_entrada, status, renegociado_em
+            FROM ${dbService.fq('cemiterio_massas')}
+            WHERE status = '${status}'
+            ORDER BY data_entrada DESC
+        `);
+        res.json({ success: true, data: rows, count: rows.length });
+    } catch (e) {
+        // Tabela pode nao existir ainda se nenhuma massa jamais entrou em blacklist.
+        res.json({ success: true, data: [], count: 0 });
+    }
+}));
+
+// POST /admin/cemiterio/:cpf/renegociar — encerra a estadia no cemitério: sai da
+// blacklist e volta a ser cobrado normalmente pelo motor de billing. Não altera
+// days_overdue/account_status (a dívida em si continua registrada nas invoices),
+// só remove o "freeze" que impedia novos encargos.
+apiRouter.post('/admin/cemiterio/:cpf/renegociar', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const cpf = String(req.params.cpf || '').replace(/\D/g, '');
+    if (cpf.length !== 11) return res.status(400).json({ success: false, message: 'CPF inválido.' });
+
+    const registro = await dbService.executeQuery(`
+        SELECT id FROM ${dbService.fq('cemiterio_massas')}
+        WHERE cpf = '${cpf}' AND status = 'aguardando_renegociacao'
+    `);
+    if (!registro.length) {
+        return res.status(404).json({ success: false, message: 'CPF não encontrado no cemitério (ou já renegociado).' });
+    }
+
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('cemiterio_massas')}
+        SET status = 'renegociado', renegociado_em = CURRENT_TIMESTAMP
+        WHERE cpf = '${cpf}' AND status = 'aguardando_renegociacao'
+    `);
+    await dbService.executeQuery(`
+        UPDATE ${dbService.fq('users')}
+        SET is_blacklisted = false, updated_at = CURRENT_TIMESTAMP
+        WHERE cpf = '${cpf}'
+    `);
+
+    auditLog(req, 'admin_cemiterio_renegociar', 'info', { cpf });
+    res.json({ success: true, message: 'CPF renegociado — saiu do cemitério e voltou a ser cobrado normalmente.' });
+}));
+
 // GET /admin/billing/account/:cpf/status — status detalhado de uma conta
 apiRouter.get('/admin/billing/account/:cpf/status', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
     const { cpf } = req.params;
@@ -5239,7 +5303,7 @@ apiRouter.post('/pix/categorize', bearerAuth(), asyncHandler(async (req, res) =>
     if (!description || typeof description !== 'string') {
         return res.status(400).json({ success: false, message: 'Campo description é obrigatório.' });
     }
-    const lc = description.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const lc = description.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
     // 1. Busca por keyword
     for (const entry of PIX_KEYWORD_MAP) {
@@ -5262,7 +5326,7 @@ apiRouter.post('/pix/categorize', bearerAuth(), asyncHandler(async (req, res) =>
         `);
         for (const tx of (history || [])) {
             if (tx.category && tx.description) {
-                const txDesc = String(tx.description).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+                const txDesc = String(tx.description).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                 const words = lc.split(/\s+/).filter(w => w.length > 3);
                 if (words.some(w => txDesc.includes(w))) {
                     return res.json({ success: true, category: tx.category, confidence: 65, reason: 'Padrão do histórico do usuário' });
@@ -5346,7 +5410,7 @@ async function initializeDatabase() {
                 FROM information_schema.columns 
                 WHERE table_schema = 'fintech' 
                 AND table_name = 'users' 
-                AND column_name IN ('credit_card_total_limit', 'credit_card_available_limit', 'credit_card_points_balance', 'credit_card_is_blocked')
+                AND column_name IN ('credit_card_total_limit', 'credit_card_available_limit', 'credit_card_points_balance', 'credit_card_is_blocked', 'is_blacklisted', 'blacklist_since')
             `);
             
             const existingColumns = creditCardColumns.map(c => c.column_name);
@@ -5387,7 +5451,25 @@ async function initializeDatabase() {
                 `);
                 console.log('✅ Coluna credit_card_is_blocked adicionada.');
             }
-            
+
+            if (!existingColumns.includes('is_blacklisted')) {
+                console.log('🔧 Adicionando coluna is_blacklisted...');
+                await dbService.executeQuery(`
+                    ALTER TABLE ${dbService.fq('users')}
+                    ADD COLUMN is_blacklisted BOOLEAN DEFAULT FALSE
+                `);
+                console.log('✅ Coluna is_blacklisted adicionada.');
+            }
+
+            if (!existingColumns.includes('blacklist_since')) {
+                console.log('🔧 Adicionando coluna blacklist_since...');
+                await dbService.executeQuery(`
+                    ALTER TABLE ${dbService.fq('users')}
+                    ADD COLUMN blacklist_since TIMESTAMP NULL
+                `);
+                console.log('✅ Coluna blacklist_since adicionada.');
+            }
+
             // Atualizar DEFAULT de pix_daily_limit para 2000.00
             console.log('🔧 Atualizando DEFAULT de pix_daily_limit para 2000.00...');
             await dbService.executeQuery(`
@@ -7163,7 +7245,7 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
         }));
         const valorPagoTotal = round2(invoices.reduce((s, i) => s + i.valorPago, 0));
 
-        // 5. Pagamentos JÃ vinculados (invoice_id setado) — completam a cobertura
+        // 5. Pagamentos Jàvinculados (invoice_id setado) — completam a cobertura
         const linkedRes = await dbService.executeQuery(`
             SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS total
             FROM ${dbService.fq('transactions')}
@@ -7559,12 +7641,18 @@ if (!IS_TEST) {
                 return res.status(400).json({ success: false, message: 'Dados incompletos para criação da massa.' });
             }
             const created = await usersRepo.createMassUser(payload);
-            telegramService.ensureTopic(created.cpf, created.fullName);
+            // Sem ensureTopic aqui de proposito: criar o topico do Telegram na hora
+            // gera notificacao nativa do proprio Telegram (fora do nosso controle de
+            // toggles). Massa de teste nao precisa de topico ja pronto — send() cria
+            // o topico sob demanda quando o primeiro evento real (compra, pix, etc)
+            // acontecer pra esse CPF.
 
             require('./services/eventBus').publish('mass.created', {
                 cpf: created.cpf,
                 fullName: created.fullName,
-                accountStatus: payload.accountStatus,
+                // Estado atual = último ciclo (Gerador 4.0); cai no accountStatus do payload em clientes antigos.
+                accountStatus: created.cycles?.[created.cycles.length - 1] || payload.accountStatus,
+                cycles: created.cycles,
                 cardBrand: payload.cardBrand,
             }).catch(() => {});
 

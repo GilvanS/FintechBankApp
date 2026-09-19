@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle2, AlertTriangle, ArrowDownLeft, Landmark, QrCode, Clipboard } from 'lucide-react';
 import { Transaction } from '../types';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 interface DepositModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export default function DepositModal({ isOpen, onClose, onDepositComplete }: Dep
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [generatedCode, setGeneratedCode] = useState('');
+  const { setRef, shake } = useShakeOnError();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,6 +27,7 @@ export default function DepositModal({ isOpen, onClose, onDepositComplete }: Dep
     const numericAmount = parseFloat(amount.replace(',', '.'));
     if (isNaN(numericAmount) || numericAmount <= 0) {
       setError('Por favor, insira um valor válido maior que zero.');
+      shake('amount');
       return;
     }
 
@@ -183,6 +186,7 @@ export default function DepositModal({ isOpen, onClose, onDepositComplete }: Dep
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-volt-primary font-bold">R$</span>
                     <input
+                      ref={setRef('amount')}
                       type="text"
                       inputMode="decimal"
                       required

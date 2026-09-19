@@ -1,6 +1,6 @@
 
 // Dentro do componente Login
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 // FIX: Corrected import path for useAuth from parent directory.
 import { useAuth } from '../context/AuthContext';
 import { login, requestNewPassword } from '../services/api';
@@ -11,7 +11,9 @@ import { getUserByCpf } from '../services/api';
 import { getUserMe } from '../services/api';
 import { getUserStatement } from '../services/api';
 import { useAppState } from '../contexts/AppStateContext';
-import { ArrowLeft, ShieldCheck, AlertCircle, Shield } from 'lucide-react';
+import { useShakeOnError } from '../hooks/useShakeOnError';
+import AsciiHalftoneBackground from './shared/AsciiHalftoneBackground';
+import { ArrowLeft, ShieldCheck, AlertCircle, Shield, Minus, Plus, ImagePlus, X as ClearIcon } from 'lucide-react';
 
 interface LoginProps {
     onNavigateToSignUp: () => void;
@@ -30,6 +32,31 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
     const { toast, showSuccess, showError, showInfo, hide } = useToast();
     const { theme, setTheme } = useAppState();
     const [logoClicks, setLogoClicks] = useState(0);
+    const { setRef, shakeAll, onMaxLengthKeyDown } = useShakeOnError();
+
+    // Fundo animado (Halftone Bloom) — puramente decorativo, sem relação com
+    // login/validação. dotSize e bgImage só existem pra dar controle visual
+    // (aumentar/diminuir o pixel do efeito, testar com uma imagem própria).
+    const [bgCellSize, setBgCellSize] = useState(8);
+    const [bgImage, setBgImage] = useState<string | null>(null);
+    const handleBgImagePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setBgImage((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return URL.createObjectURL(file);
+        });
+        e.target.value = '';
+    };
+    const clearBgImage = () => {
+        setBgImage((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return null;
+        });
+    };
+    // Revoga a object URL ao desmontar a tela (usuário navega pra outro lugar
+    // sem clicar em "remover imagem" antes).
+    useEffect(() => () => { if (bgImage) URL.revokeObjectURL(bgImage); }, [bgImage]);
 
     const handleLogoClick = () => {
         // Nao chamar setTheme dentro do updater de setLogoClicks: o updater roda
@@ -67,7 +94,9 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
         }
         
         setFieldErrors(errors);
-        return Object.keys(errors).length === 0;
+        const errorKeys = Object.keys(errors);
+        if (errorKeys.length > 0) shakeAll(errorKeys);
+        return errorKeys.length === 0;
     };
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -129,6 +158,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
         const rawCpf = cpf.replace(/\D/g, '');
         if (!rawCpf || rawCpf.length < 11) {
             setFieldErrors({ cpf: 'Campo obrigatório' });
+            shakeAll(['cpf']);
             return;
         }
         setError('');
@@ -146,15 +176,67 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
     };
 
     return (
-        <div 
-            className="bg-volt-dark text-white h-full flex flex-col justify-between p-6 sm:p-8 test-login-page"
+        <div
+            className="relative overflow-hidden bg-volt-dark text-white h-full flex flex-col justify-between p-6 sm:p-8 test-login-page"
             id="login-page"
             data-testid="login-page"
             data-cy="login-page"
             data-playwright="login-page"
             role="main"
         >
-            <header id="login-header" data-testid="login-header" data-cy="login-header">
+            {/* Fundo decorativo (Halftone Bloom) — atrás de todo o conteúdo, não
+                interfere no clique dos campos/botões (pointer-events-none). */}
+            <div className="absolute inset-0 z-0 pointer-events-none" aria-hidden="true">
+                <AsciiHalftoneBackground cellSize={bgCellSize} imageSrc={bgImage ?? undefined} className="w-full h-full" />
+            </div>
+
+            {/* Mini-controle do efeito de fundo: tamanho do pixel + testar com imagem.
+                Puramente decorativo/demo — não faz parte do fluxo de login. */}
+            <div
+                className="absolute bottom-3 right-3 z-20 flex items-center gap-1 bg-black/40 backdrop-blur-sm rounded-full px-1.5 py-1 pointer-events-auto"
+                data-testid="login-bg-fx-controls"
+            >
+                <button
+                    type="button"
+                    onClick={() => setBgCellSize((d) => Math.max(3, d - 1))}
+                    aria-label="Diminuir pixel do efeito de fundo"
+                    data-testid="login-bg-fx-dot-decrease"
+                    className="w-6 h-6 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white"
+                >
+                    <Minus className="w-3 h-3" aria-hidden="true" />
+                </button>
+                <span className="text-[10px] w-4 text-center tabular-nums opacity-70" data-testid="login-bg-fx-dot-value">{bgCellSize}</span>
+                <button
+                    type="button"
+                    onClick={() => setBgCellSize((d) => Math.min(24, d + 1))}
+                    aria-label="Aumentar pixel do efeito de fundo"
+                    data-testid="login-bg-fx-dot-increase"
+                    className="w-6 h-6 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white"
+                >
+                    <Plus className="w-3 h-3" aria-hidden="true" />
+                </button>
+                <label
+                    className="w-6 h-6 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                    aria-label="Testar efeito de fundo com uma imagem"
+                    data-testid="login-bg-fx-image-pick"
+                >
+                    <ImagePlus className="w-3 h-3" aria-hidden="true" />
+                    <input type="file" accept="image/*" className="hidden" onChange={handleBgImagePick} />
+                </label>
+                {bgImage && (
+                    <button
+                        type="button"
+                        onClick={clearBgImage}
+                        aria-label="Remover imagem de teste do efeito de fundo"
+                        data-testid="login-bg-fx-image-clear"
+                        className="w-6 h-6 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white"
+                    >
+                        <ClearIcon className="w-3 h-3" aria-hidden="true" />
+                    </button>
+                )}
+            </div>
+
+            <header className="relative z-10" id="login-header" data-testid="login-header" data-cy="login-header">
                 <button 
                     onClick={onNavigateToPreLogin} 
                     className="flex items-center space-x-2 text-gray-400 hover:text-white test-back-button"
@@ -170,8 +252,8 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                 </button>
             </header>
 
-            <main 
-                className="flex-grow flex flex-col justify-center -mt-16 test-login-main" 
+            <main
+                className="relative z-10 flex-grow flex flex-col justify-center -mt-16 test-login-main"
                 id="login-main"
                 data-testid="login-main"
                 data-cy="login-main"
@@ -219,6 +301,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                         >
                             <label htmlFor="login-cpf" className="block text-sm font-medium text-gray-400 mb-1">CPF</label>
                             <input
+                                ref={setRef('cpf')}
                                 id="login-cpf"
                                 name="cpf"
                                 type="text"
@@ -229,6 +312,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                         setFieldErrors({ ...fieldErrors, cpf: undefined });
                                     }
                                 }}
+                                onKeyDown={onMaxLengthKeyDown('cpf', 14)}
                                 placeholder="000.000.000-00"
                                 maxLength={14}
                                 className={`w-full px-4 py-3 bg-volt-surface border-2 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-cpf ${
@@ -280,6 +364,7 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                                 </button>
                             </div>
                             <input
+                                ref={setRef('password')}
                                 id="login-password"
                                 name="password"
                                 type="password"
@@ -372,8 +457,8 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                 </div>
             </main>
 
-            <footer 
-                className="text-center test-login-footer" 
+            <footer
+                className="relative z-10 text-center test-login-footer"
                 id="login-footer"
                 data-testid="login-footer"
                 data-cy="login-footer"

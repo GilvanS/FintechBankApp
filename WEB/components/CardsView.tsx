@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   CreditCard, Eye, EyeOff, Key, ShieldAlert, Sliders, 
@@ -12,6 +12,8 @@ import { getMyCards, generateVirtualCard, toggleBlockCard, deleteVirtualCard, Ap
 import PasswordModal from './PasswordModal';
 import CardDeliveryTracking, { DeliveryStatus, isDeliveryStatus } from './CardDeliveryTracking';
 import InvoiceSummarySheet from './InvoiceSummarySheet';
+import TiltCard from './shared/TiltCard';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 interface CardsViewProps {
   creditCard: CardType;
@@ -24,11 +26,11 @@ interface CardsViewProps {
   onRequestPayInvoice: () => void; // abre o fluxo real de pagamento (PIN + backend) no pai
 }
 
-// Dados impressos no plÃ¡stico fÃ­sico (mock homologado â€” .spec/6, seÃ§Ã£o 4)
+// Dados impressos no plástico físico (mock homologado — .spec/6, seção 4)
 const PHYSICAL_EXPIRY = '08/30';
 const PHYSICAL_CVV = '123';
 
-// CartÃ£o virtual da UI â€” derivado de ApiCard (fintech.cards); nÃºmero sempre truncado
+// Cartão virtual da UI — derivado de ApiCard (fintech.cards); número sempre truncado
 interface VirtualCard {
   id: string;
   name: string;
@@ -58,7 +60,7 @@ export default function CardsView({
   const [showInvoiceSummary, setShowInvoiceSummary] = useState(false);
   const [tempLimit, setTempLimit] = useState(creditCard.totalLimit);
   const [tempDueDay, setTempDueDay] = useState(creditCard.dueDay || 15);
-  // NFC nÃ£o existe no modelo do backend â€” persistÃªncia local
+  // NFC não existe no modelo do backend — persistência local
   const [nfcEnabled, setNfcEnabled] = useState(() => localStorage.getItem('volt_nfc_enabled') !== 'false');
 
   // Physical Card Delivery tracking & unlock
@@ -82,11 +84,11 @@ export default function CardsView({
   const [unlockError, setUnlockError] = useState('');
   const [unlockSuccess, setUnlockSuccess] = useState(false);
 
-  // Delivery UX: modal de rastreamento + revelar form de ativaÃ§Ã£o
+  // Delivery UX: modal de rastreamento + revelar form de ativação
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [showUnlockForm, setShowUnlockForm] = useState(false);
 
-  // Virtual Cards â€” seleÃ§Ã£o ativa (preferÃªncia de UI); a lista vem da API
+  // Virtual Cards — seleção ativa (preferência de UI); a lista vem da API
   const [activeVirtualCardId, setActiveVirtualCardId] = useState<string | null>(() => {
     const saved = localStorage.getItem('volt_active_virtual_card_id');
     return saved || null;
@@ -98,7 +100,7 @@ export default function CardsView({
   const [newVirtualCardError, setNewVirtualCardError] = useState('');
   const [isCreatingVirtual, setIsCreatingVirtual] = useState(false);
 
-  // Reveal details â€” nÃºmero/CVV sÃ³ destrunca apÃ³s PIN correto (auto-oculta em 20s)
+  // Reveal details — número/CVV só destrunca após PIN correto (auto-oculta em 20s)
   const [revealVirtualDetails, setRevealVirtualDetails] = useState(false);
   const [revealPhysicalDetails, setRevealPhysicalDetails] = useState(false);
   const [revealPinTarget, setRevealPinTarget] = useState<'physical' | 'virtual' | null>(null);
@@ -107,7 +109,9 @@ export default function CardsView({
   // Copy feedback state
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  // Timers pendentes â€” limpos no unmount (evita setState pÃ³s-unmount no WebView)
+  const { setRef, shake, onMaxLengthKeyDown } = useShakeOnError();
+
+  // Timers pendentes — limpos no unmount (evita setState pós-unmount no WebView)
   const timersRef = React.useRef<ReturnType<typeof setTimeout>[]>([]);
   const scheduleTimer = (fn: () => void, ms: number) => {
     const id = setTimeout(fn, ms);
@@ -118,8 +122,8 @@ export default function CardsView({
     return () => { timersRef.current.forEach(clearTimeout); };
   }, []);
 
-  // CartÃµes reais da API (fintech.cards) â€” nÃºmero exibido SEMPRE truncado na UI;
-  // revelar sem truncar serÃ¡ uma feature separada (fluxo seguro)
+  // Cartões reais da API (fintech.cards) — número exibido SEMPRE truncado na UI;
+  // revelar sem truncar será uma feature separada (fluxo seguro)
   const [apiCards, setApiCards] = useState<ApiCard[]>([]);
   const refreshApiCards = React.useCallback(() => {
     let cancelled = false;
@@ -134,7 +138,7 @@ export default function CardsView({
     .filter(c => c.type === 'virtual')
     .map(c => ({
       id: String(c.id),
-      name: (c.nickname || 'CARTÃƒO VIRTUAL').toUpperCase(),
+      name: (c.nickname || 'CARTÃO VIRTUAL').toUpperCase(),
       numberMasked: c.numberMasked,
       last4: (c.numberMasked || '').trim().slice(-4),
       fullNumber: c.number,
@@ -169,7 +173,7 @@ export default function CardsView({
         alert(data.message || 'Erro ao alterar vencimento.');
       }
     } catch (e) {
-      alert('Erro na conexÃ£o com o servidor.');
+      alert('Erro na conexão com o servidor.');
     }
   };
 
@@ -228,7 +232,7 @@ export default function CardsView({
       const data = await res.json();
       
       if (!data.success) {
-        setUnlockError(data.message || 'Erro ao ativar cartÃ£o.');
+        setUnlockError(data.message || 'Erro ao ativar cartão.');
         return;
       }
       
@@ -239,13 +243,13 @@ export default function CardsView({
         localStorage.setItem('volt_physical_unlocked', 'true');
         localStorage.setItem('volt_physical_status', 'unlocked');
         updateCreditCard({ isActivated: true, deliveryStatus: 'unlocked' });
-        refreshApiCards(); // o backend gera o cartÃ£o fÃ­sico real na ativaÃ§Ã£o
+        refreshApiCards(); // o backend gera o cartão físico real na ativação
         setUnlockSuccess(false);
         setUnlockExpiry('');
         setUnlockCvv('');
       }, 2000);
     } catch (error) {
-      setUnlockError('Erro de conexÃ£o ao ativar cartÃ£o.');
+      setUnlockError('Erro de conexão ao ativar cartão.');
     }
   };
 
@@ -254,7 +258,8 @@ export default function CardsView({
     setNewVirtualCardError('');
 
     if (!newVirtualCardName.trim()) {
-      setNewVirtualCardError('Por favor, dÃª um nome para identificar o cartÃ£o.');
+      setNewVirtualCardError('Por favor, dê um nome para identificar o cartão.');
+      shake('newVirtualCardName');
       return;
     }
 
@@ -263,7 +268,7 @@ export default function CardsView({
     setIsCreatingVirtual(false);
 
     if (!result.success) {
-      setNewVirtualCardError(result.message || 'Erro ao gerar cartÃ£o virtual.');
+      setNewVirtualCardError(result.message || 'Erro ao gerar cartão virtual.');
       return;
     }
 
@@ -288,7 +293,7 @@ export default function CardsView({
     if (result.success) refreshApiCards();
   };
 
-  // Revelar nÃºmero completo: exige PIN do cartÃ£o (mock 9898); auto-oculta em 20s
+  // Revelar número completo: exige PIN do cartão (mock 9898); auto-oculta em 20s
   const handleRevealPinConfirm = (enteredPin: string) => {
     const expectedPin = apiPhysical?.pin || '9898';
     if (enteredPin !== expectedPin) {
@@ -331,7 +336,7 @@ export default function CardsView({
               : 'text-on-surface-variant hover:text-white'
           }`}
         >
-          CartÃ£o fÃ­sico
+          Cartão físico
         </button>
         <button
           onClick={() => setActiveType('virtual')}
@@ -341,7 +346,7 @@ export default function CardsView({
               : 'text-on-surface-variant hover:text-white'
           }`}
         >
-          CartÃ£o virtual
+          Cartão virtual
         </button>
       </div>
 
@@ -349,7 +354,7 @@ export default function CardsView({
       <div className="exempt-brutalist w-full bg-volt-surface p-3.5 rounded-2xl border border-white/5 flex flex-col items-center gap-2">
         <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
           <Sparkles size={11} className="text-volt-green animate-pulse" />
-          ConversÃ£o de Tecnologia Volt
+          Conversão de Tecnologia Volt
         </span>
         <div className="w-full h-24 flex items-center justify-center">
           <svg viewBox="0 0 340 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -380,7 +385,7 @@ export default function CardsView({
               <line x1="33" y1="32" x2="33" y2="44" stroke="#000" strokeWidth="1" />
               <circle cx="85" cy="58" r="8" fill="#FF5C8D" stroke="#000" strokeWidth="1.5" />
               <circle cx="91" cy="58" r="8" fill="#FFE500" stroke="#000" strokeWidth="1.5" opacity="0.8" />
-              <text x="60" y="28" fill="#fff" fontSize="7" fontWeight="900" fontFamily="sans-serif">FÃSICO</text>
+              <text x="60" y="28" fill="#fff" fontSize="7" fontWeight="900" fontFamily="sans-serif">FÍSICO</text>
             </g>
 
             {/* Middle connecting system: digital transmission stream */}
@@ -451,17 +456,21 @@ export default function CardsView({
         </div>
         <p className="text-[10px] text-zinc-500 font-medium text-center leading-relaxed max-w-[280px]">
           {activeType === 'physical' 
-            ? 'CartÃ£o fÃ­sico com chip EMV por aproximaÃ§Ã£o ativo para compras em lojas fÃ­sicas.'
-            : 'CartÃ£o virtual dinÃ¢mico e criptografado para garantir mÃ¡xima seguranÃ§a em compras online.'
+            ? 'Cartão físico com chip EMV por aproximação ativo para compras em lojas físicas.'
+            : 'Cartão virtual dinâmico e criptografado para garantir máxima segurança em compras online.'
           }
         </p>
       </div>
 
-      {/* Credit Card Visual Shell Container with 3D perspective */}
-      <div 
-        className="relative w-full aspect-[1.58/1] rounded-2xl"
-        style={{ perspective: "1500px" }}
-      >
+      {/* Credit Card Visual Shell Container with 3D perspective.
+          TiltCard (Transitions.dev): o wrapper rastreia o ponteiro e inclina o cartão
+          (rotateX/rotateY + glare seguindo o cursor); toque não gera tilt — preserva o
+          scroll e os cliques internos (olho de revelar, criar virtual) continuam funcionando. */}
+      <TiltCard>
+        <div 
+          className="relative w-full aspect-[1.58/1] rounded-2xl"
+          style={{ perspective: "1500px" }}
+        >
         {/* Neon Gradients changing based on Physical / Virtual */}
         <AnimatePresence mode="wait">
           <motion.div
@@ -503,8 +512,8 @@ export default function CardsView({
                   <Plus size={24} className="animate-pulse" />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="text-white font-black text-xs uppercase tracking-wider">Criar Primeiro CartÃ£o Virtual</p>
-                  <p className="text-[9px] text-zinc-400 max-w-[200px]">Ative um cartÃ£o virtual agora para compras online seguras.</p>
+                  <p className="text-white font-black text-xs uppercase tracking-wider">Criar Primeiro Cartão Virtual</p>
+                  <p className="text-[9px] text-zinc-400 max-w-[200px]">Ative um cartão virtual agora para compras online seguras.</p>
                 </div>
               </>
             ) : (
@@ -566,7 +575,7 @@ export default function CardsView({
                         {activeType === 'physical' ? (
                           revealPhysicalDetails && apiPhysical
                             ? apiPhysical.number
-                            : (apiPhysical?.numberMasked ?? `â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ ${String(creditCard.number || '').split(' ').pop()}`)
+                            : (apiPhysical?.numberMasked ?? `•••• •••• •••• ${String(creditCard.number || '').split(' ').pop()}`)
                         ) : (
                           revealVirtualDetails ? selectedVirtualCard.fullNumber : selectedVirtualCard.numberMasked
                         )}
@@ -578,7 +587,7 @@ export default function CardsView({
                         e.stopPropagation();
                         const isRevealed = activeType === 'physical' ? revealPhysicalDetails : revealVirtualDetails;
                         if (isRevealed) {
-                          // ocultar nÃ£o exige PIN
+                          // ocultar não exige PIN
                           setRevealPhysicalDetails(false);
                           setRevealVirtualDetails(false);
                         } else {
@@ -586,7 +595,7 @@ export default function CardsView({
                           setRevealPinTarget(activeType);
                         }
                       }}
-                      aria-label="Revelar ou ocultar dados do cartÃ£o"
+                      aria-label="Revelar ou ocultar dados do cartão"
                       className="p-1 hover:bg-white/10 rounded-lg text-white/70 hover:text-white transition-all cursor-pointer"
                     >
                       {activeType === 'physical' ? (
@@ -615,9 +624,9 @@ export default function CardsView({
                         <p className="text-[8px] text-white/50 uppercase tracking-widest font-bold">CVV</p>
                         <p className="text-white font-mono font-bold text-xs">
                           {activeType === 'physical' ? (
-                            revealPhysicalDetails ? (apiPhysical?.cvv || PHYSICAL_CVV) : 'â€¢â€¢â€¢'
+                            revealPhysicalDetails ? (apiPhysical?.cvv || PHYSICAL_CVV) : '•••'
                           ) : (
-                            revealVirtualDetails ? selectedVirtualCard.cvv : 'â€¢â€¢â€¢'
+                            revealVirtualDetails ? selectedVirtualCard.cvv : '•••'
                           )}
                         </p>
                       </div>
@@ -642,9 +651,9 @@ export default function CardsView({
                 <Lock size={20} className="animate-bounce" />
               </div>
               <div className="space-y-1">
-                <p className="font-extrabold text-sm tracking-widest uppercase text-yellow-400">CartÃ£o Inativo</p>
+                <p className="font-extrabold text-sm tracking-widest uppercase text-yellow-400">Cartão Inativo</p>
                 <p className="text-[10px] text-zinc-400 max-w-[260px] leading-relaxed">
-                  Confirme o recebimento do cartÃ£o fÃ­sico e digite os dados de seguranÃ§a para desbloquear.
+                  Confirme o recebimento do cartão físico e digite os dados de segurança para desbloquear.
                 </p>
               </div>
             </motion.div>
@@ -663,7 +672,7 @@ export default function CardsView({
               <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
                 <ShieldAlert size={24} className="animate-pulse" />
               </div>
-              <p className="font-extrabold text-sm tracking-widest uppercase text-white">CartÃ£o Bloqueado</p>
+              <p className="font-extrabold text-sm tracking-widest uppercase text-white">Cartão Bloqueado</p>
               <p className="text-[10px] text-on-surface-variant">Desbloqueie no interruptor abaixo</p>
             </motion.div>
           )}
@@ -678,12 +687,13 @@ export default function CardsView({
               <div className="w-12 h-12 rounded-full bg-zinc-700/30 border border-zinc-600/30 flex items-center justify-center text-zinc-400">
                 <Lock size={20} />
               </div>
-              <p className="font-extrabold text-sm tracking-widest uppercase text-white">CartÃ£o Virtual Bloqueado</p>
-              <p className="text-[10px] text-on-surface-variant">Ative na lista de cartÃµes abaixo</p>
+              <p className="font-extrabold text-sm tracking-widest uppercase text-white">Cartão Virtual Bloqueado</p>
+              <p className="text-[10px] text-on-surface-variant">Ative na lista de cartões abaixo</p>
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+        </div>
+      </TiltCard>
       </div>
 
       {/* Right Column (50%): Controls, Delivery Tracking, Virtual Cards List & Actions */}
@@ -692,23 +702,23 @@ export default function CardsView({
       {/* --- PHYSICAL TRACKING & UNLOCK SUITE --- */}
       {activeType === 'physical' && !isPhysicalUnlocked && (
         <div className="space-y-4">
-          {/* Mensagem do cartÃ£o vinda do backend (profile_message) â€” tambÃ©m exibida no Perfil */}
+          {/* Mensagem do cartão vinda do backend (profile_message) — também exibida no Perfil */}
           {profileMessage && (
             <div className="bg-volt-surface border border-volt-green/20 rounded-2xl p-3.5 flex items-start gap-2.5">
               <Sparkles size={14} className="text-volt-green shrink-0 mt-0.5 animate-pulse" aria-hidden="true" />
               <p className="text-[11px] text-zinc-300 leading-relaxed font-semibold">{profileMessage}</p>
             </div>
           )}
-          {/* Bento card de logÃ­stica â€” botÃµes Rastrear / Recebi meu cartÃ£o */}
+          {/* Bento card de logística — botões Rastrear / Recebi meu cartão */}
           <div className="bg-volt-surface border border-white/5 rounded-2xl p-5 flex flex-col gap-4">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl bg-volt-green/10 border border-volt-green/20 flex items-center justify-center text-volt-green shrink-0">
                 <CreditCard size={20} />
               </div>
               <div>
-                <h4 className="text-sm font-black text-white">CartÃ£o FintechBank</h4>
+                <h4 className="text-sm font-black text-white">Cartão FintechBank</h4>
                 <p className="text-[11px] text-on-surface-variant leading-relaxed mt-0.5">
-                  Acompanhe a entrega do seu cartÃ£o. Enquanto isso, comece a usar seu cartÃ£o virtual.
+                  Acompanhe a entrega do seu cartão. Enquanto isso, comece a usar seu cartão virtual.
                 </p>
               </div>
             </div>
@@ -725,7 +735,7 @@ export default function CardsView({
                 className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-volt-green text-black font-black text-xs transition-all active:scale-95 uppercase tracking-wide"
                 data-testid="btn-recebi-cartao"
               >
-                <Check size={14} /> Recebi meu cartÃ£o
+                <Check size={14} /> Recebi meu cartão
               </button>
             </div>
           </div>
@@ -751,7 +761,7 @@ export default function CardsView({
                   <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-bold text-base text-white flex items-center gap-2">
-                      <MapPin size={18} className="text-volt-green" /> Rastreamento do cartÃ£o
+                      <MapPin size={18} className="text-volt-green" /> Rastreamento do cartão
                     </h3>
                     <button
                       onClick={() => setShowTrackingModal(false)}
@@ -774,16 +784,17 @@ export default function CardsView({
             <form onSubmit={handleUnlockPhysicalCard} className="bg-volt-surface-high border border-volt-green/20 p-4 rounded-xl space-y-4">
               <div className="flex items-center gap-2 border-b border-white/5 pb-2">
                 <Unlock size={14} className="text-volt-green" />
-                <h5 className="text-[11px] font-black text-white uppercase tracking-wider">AtivaÃ§Ã£o Segura do CartÃ£o</h5>
+                <h5 className="text-[11px] font-black text-white uppercase tracking-wider">Ativação Segura do Cartão</h5>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[9px] text-zinc-400 uppercase font-bold tracking-wider flex items-center gap-1">
-                    Validade do CartÃ£o
+                    Validade do Cartão
                     <span className="text-volt-green">*</span>
                   </label>
                   <input
+                    ref={setRef('unlockExpiry')}
                     type="text"
                     maxLength={5}
                     placeholder="MM/AA"
@@ -795,21 +806,24 @@ export default function CardsView({
                       }
                       setUnlockExpiry(val);
                     }}
+                    onKeyDown={onMaxLengthKeyDown('unlockExpiry', 5)}
                     className="w-full bg-black/40 border border-white/10 rounded-lg p-2.5 text-xs text-white font-mono placeholder:text-zinc-600 focus:outline-none focus:border-volt-green"
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[9px] text-zinc-400 uppercase font-bold tracking-wider flex items-center gap-1">
-                    CÃ³digo CVV
+                    Código CVV
                     <span className="text-volt-green">*</span>
                   </label>
                   <input
+                    ref={setRef('unlockCvv')}
                     type="password"
                     maxLength={3}
-                    placeholder="3 dÃ­gitos"
+                    placeholder="3 dígitos"
                     value={unlockCvv}
                     onChange={(e) => setUnlockCvv(e.target.value)}
+                    onKeyDown={onMaxLengthKeyDown('unlockCvv', 3)}
                     className="w-full bg-black/40 border border-white/10 rounded-lg p-2.5 text-xs text-white font-mono placeholder:text-zinc-600 focus:outline-none focus:border-volt-green"
                   />
                 </div>
@@ -819,7 +833,7 @@ export default function CardsView({
               <div className="bg-white/5 p-2 rounded-lg flex items-start gap-2">
                 <HelpCircle size={13} className="text-volt-green shrink-0 mt-0.5" />
                 <p className="text-[9px] text-zinc-400 leading-normal">
-                  <span className="font-extrabold text-white uppercase">Dados do CartÃ£o:</span> CVV = <span className="font-mono text-volt-green font-bold">Ãºltimos 3 dÃ­gitos do seu CPF</span>; validade conforme a mensagem no seu <span className="font-extrabold text-volt-green">Perfil</span> (criaÃ§Ã£o da conta +5 anos).
+                  <span className="font-extrabold text-white uppercase">Dados do Cartão:</span> CVV = <span className="font-mono text-volt-green font-bold">últimos 3 dígitos do seu CPF</span>; validade conforme a mensagem no seu <span className="font-extrabold text-volt-green">Perfil</span> (criação da conta +5 anos).
                 </p>
               </div>
 
@@ -835,14 +849,14 @@ export default function CardsView({
                   <div className="w-10 h-10 rounded-full bg-volt-green/20 flex items-center justify-center">
                     <CheckCircle2 size={20} className="animate-bounce" />
                   </div>
-                  <span className="text-[10px] font-bold text-center">Desbloqueando cartÃ£o, aguarde...</span>
+                  <span className="text-[10px] font-bold text-center">Desbloqueando cartão, aguarde...</span>
                 </div>
               ) : (
                 <button
                   type="submit"
                   className="w-full bg-volt-green text-black font-extrabold py-2.5 rounded-xl text-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer uppercase tracking-wider"
                 >
-                  Confirmar e Desbloquear CartÃ£o
+                  Confirmar e Desbloquear Cartão
                 </button>
               )}
             </form>
@@ -856,14 +870,14 @@ export default function CardsView({
           <div className="flex justify-between items-center">
             <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
               <Plus size={14} className="text-cyan-400" />
-              Meus CartÃµes Virtuais
+              Meus Cartões Virtuais
             </h4>
             <button
               onClick={() => setShowCreateVirtualModal(true)}
               className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider active:scale-95 transition-all cursor-pointer flex items-center gap-1"
             >
               <Plus size={12} />
-              Novo CartÃ£o
+              Novo Cartão
             </button>
           </div>
           <div className="flex gap-2">
@@ -889,16 +903,16 @@ export default function CardsView({
                 <CreditCard size={22} className="animate-pulse" />
               </div>
               <div className="space-y-1">
-                <h5 className="font-bold text-sm text-white">Nenhum CartÃ£o Virtual Ativo</h5>
+                <h5 className="font-bold text-sm text-white">Nenhum Cartão Virtual Ativo</h5>
                 <p className="text-[10px] text-zinc-400 max-w-[240px] leading-relaxed">
-                  Crie cartÃµes virtuais temporÃ¡rios de 24h ou recorrentes para suas assinaturas com mÃ¡xima proteÃ§Ã£o de dados.
+                  Crie cartões virtuais temporários de 24h ou recorrentes para suas assinaturas com máxima proteção de dados.
                 </p>
               </div>
               <button
                 onClick={() => setShowCreateVirtualModal(true)}
                 className="bg-cyan-400 hover:bg-cyan-300 text-black px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider active:scale-95 transition-all cursor-pointer mt-1"
               >
-                Gerar CartÃ£o Virtual
+                Gerar Cartão Virtual
               </button>
             </div>
           ) : (
@@ -910,7 +924,7 @@ export default function CardsView({
                     key={card.id}
                     role="button"
                     tabIndex={0}
-                    aria-label={`Selecionar cartÃ£o virtual ${card.name}`}
+                    aria-label={`Selecionar cartão virtual ${card.name}`}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
@@ -945,7 +959,7 @@ export default function CardsView({
                             )}
                           </h5>
                           <span className="text-[9px] text-zinc-500 uppercase font-black tracking-wider">
-                            Virtual Â· Compras Online
+                            Virtual · Compras Online
                           </span>
                         </div>
                       </div>
@@ -967,12 +981,12 @@ export default function CardsView({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (confirm(`Deseja realmente excluir e queimar o cartÃ£o virtual ${card.name}?`)) {
+                            if (confirm(`Deseja realmente excluir e queimar o cartão virtual ${card.name}?`)) {
                               handleDeleteVirtualCard(card.id);
                             }
                           }}
                           className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/10 rounded-lg active:scale-95 transition-all cursor-pointer"
-                          title="Excluir CartÃ£o"
+                          title="Excluir Cartão"
                         >
                           <Flame size={13} />
                         </button>
@@ -982,7 +996,7 @@ export default function CardsView({
                     {/* Numeric details row */}
                     <div className="flex justify-between items-center bg-black/20 p-2 rounded-xl border border-white/5">
                       <div className="font-mono text-[11px] text-zinc-300 tracking-wider">
-                        â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ {card.last4}
+                        •••• •••• •••• {card.last4}
                       </div>
                       
                       <div className="flex items-center gap-3">
@@ -1070,7 +1084,7 @@ export default function CardsView({
               </svg>
             </span>
             <div>
-              <p className="text-sm text-white font-bold">Pagar por aproximaÃ§Ã£o (NFC)</p>
+              <p className="text-sm text-white font-bold">Pagar por aproximação (NFC)</p>
               <p className="text-[11px] text-on-surface-variant">Ativar pagamentos sem contato</p>
             </div>
           </div>
@@ -1096,8 +1110,8 @@ export default function CardsView({
               <ShieldAlert size={20} />
             </span>
             <div>
-              <p className="text-sm text-white font-bold">Bloquear cartÃ£o fÃ­sico</p>
-              <p className="text-[11px] text-on-surface-variant">Bloqueio temporÃ¡rio de seguranÃ§a</p>
+              <p className="text-sm text-white font-bold">Bloquear cartão físico</p>
+              <p className="text-[11px] text-on-surface-variant">Bloqueio temporário de segurança</p>
             </div>
           </div>
           <button 
@@ -1145,16 +1159,17 @@ export default function CardsView({
                 <div className="w-12 h-12 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400 mx-auto mb-2">
                   <CreditCard size={20} className="animate-pulse" />
                 </div>
-                <h4 className="font-extrabold text-lg text-white">Novo CartÃ£o Virtual</h4>
-                <p className="text-xs text-on-surface-variant">Crie um cartÃ£o para comprar com total discriÃ§Ã£o.</p>
+                <h4 className="font-extrabold text-lg text-white">Novo Cartão Virtual</h4>
+                <p className="text-xs text-on-surface-variant">Crie um cartão para comprar com total discrição.</p>
               </div>
 
               <form onSubmit={handleCreateVirtualCard} className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] text-zinc-400 font-extrabold uppercase tracking-wider">
-                    IdentificaÃ§Ã£o / Nome do CartÃ£o
+                    Identificação / Nome do Cartão
                   </label>
                   <input
+                    ref={setRef('newVirtualCardName')}
                     type="text"
                     required
                     placeholder="Ex: NETFLIX, COMPRAS SEGUURAS"
@@ -1167,7 +1182,7 @@ export default function CardsView({
                 <div className="bg-black/30 border border-white/5 rounded-xl p-2.5 flex items-center gap-2">
                   <Calendar size={14} className="text-cyan-400 shrink-0" />
                   <p className="text-[9px] text-zinc-400 leading-normal">
-                    CartÃ£o <span className="font-bold text-white">recorrente</span> para compras online e assinaturas, com a mesma validade do seu cartÃ£o fÃ­sico e CVV exclusivo.
+                    Cartão <span className="font-bold text-white">recorrente</span> para compras online e assinaturas, com a mesma validade do seu cartão físico e CVV exclusivo.
                   </p>
                 </div>
 
@@ -1191,7 +1206,7 @@ export default function CardsView({
                     disabled={isCreatingVirtual}
                     className="flex-1 bg-cyan-400 text-black font-extrabold py-3 rounded-xl text-xs hover:bg-cyan-300 active:scale-95 transition-all cursor-pointer uppercase tracking-wider disabled:opacity-50 disabled:cursor-wait"
                   >
-                    {isCreatingVirtual ? 'Gerando...' : 'Gerar CartÃ£o'}
+                    {isCreatingVirtual ? 'Gerando...' : 'Gerar Cartão'}
                   </button>
                 </div>
               </form>
@@ -1246,7 +1261,7 @@ export default function CardsView({
                   </p>
                   <p className="mt-2">
                     Com o vencimento no dia <strong className="text-white">{tempDueDay}</strong>, 
-                    o fechamento serÃ¡ no dia <strong className="text-white">{tempDueDay - 7 > 0 ? tempDueDay - 7 : new Date(new Date().getFullYear(), new Date().getMonth(), tempDueDay - 7).getDate()}</strong>.
+                    o fechamento será no dia <strong className="text-white">{tempDueDay - 7 > 0 ? tempDueDay - 7 : new Date(new Date().getFullYear(), new Date().getMonth(), tempDueDay - 7).getDate()}</strong>.
                   </p>
                 </div>
               </div>
@@ -1292,14 +1307,14 @@ export default function CardsView({
                 <Key size={20} />
               </div>
               <div>
-                <h4 className="font-bold text-lg text-white">Senha do CartÃ£o</h4>
-                <p className="text-xs text-on-surface-variant mt-1">Nunca compartilhe sua senha com ninguÃ©m.</p>
+                <h4 className="font-bold text-lg text-white">Senha do Cartão</h4>
+                <p className="text-xs text-on-surface-variant mt-1">Nunca compartilhe sua senha com ninguém.</p>
               </div>
               <div className="bg-white/5 border border-white/5 rounded-xl p-4 font-mono text-2xl font-bold tracking-widest text-volt-green">
                 { (apiPhysical?.pin || '9898').split('').join(' ') }
               </div>
               <p className="text-[10px] text-on-surface-variant leading-relaxed">
-                Esta senha Ã© utilizada para compras fÃ­sicas em estabelecimentos comerciais usando seu chip fÃ­sico.
+                Esta senha é utilizada para compras físicas em estabelecimentos comerciais usando seu chip físico.
               </p>
               <button
                 onClick={() => setShowPasswordModal(false)}
@@ -1335,7 +1350,7 @@ export default function CardsView({
               </div>
               <div>
                 <h4 className="font-bold text-lg text-white">Ajuste de Limite</h4>
-                <p className="text-xs text-on-surface-variant mt-1">Escolha o limite mÃ¡ximo para transaÃ§Ãµes com cartÃ£o.</p>
+                <p className="text-xs text-on-surface-variant mt-1">Escolha o limite máximo para transações com cartão.</p>
               </div>
 
               <div className="space-y-2">
@@ -1355,8 +1370,8 @@ export default function CardsView({
                   className="w-full accent-volt-green bg-white/5 h-2 rounded-full outline-none cursor-pointer"
                 />
                 <div className="flex justify-between text-[9px] text-on-surface-variant">
-                  <span>MÃ­n: R$ 500</span>
-                  <span>MÃ¡x: R$ 10.000</span>
+                  <span>Mín: R$ 500</span>
+                  <span>Máx: R$ 10.000</span>
                 </div>
               </div>
 

@@ -27,7 +27,8 @@ module.exports = function createInvoiceController(deps) {
         paymentGeneratorScriptPath,
     } = deps;
 
-    const { computeCurrentCycle, buildInstallmentOptions } = require('../../utils/billing');
+    const { computeCurrentCycle, buildInstallmentOptions, computeNextInvoiceDueDate } = require('../../utils/billing');
+    const { calcularParcelamentoFatura, TIPOS_ENTRADA } = require('../../services/installmentCalcEngine');
 
     // Comprovante Telegram: sem essas duas o valor sai '4070.86' e a data '2026-07-15'.
     const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -140,7 +141,8 @@ module.exports = function createInvoiceController(deps) {
         if (stillOpen === 0) {
             await dbService.executeQuery(`
                 UPDATE ${dbService.fq('users')}
-                SET account_status = 'adimplente', days_overdue = 0, overdue_status = 'EM_DIA', updated_at = CURRENT_TIMESTAMP
+                SET account_status = 'adimplente', days_overdue = 0, overdue_status = 'EM_DIA',
+                    credit_card_is_blocked = false, is_blacklisted = false, updated_at = CURRENT_TIMESTAMP
                 WHERE cpf = ${esc(cpf)}
             `);
         }
@@ -470,7 +472,36 @@ module.exports = function createInvoiceController(deps) {
         if (!closedDebt || closedDebt.owed <= 0) {
             return res.status(400).json({ success: false, message: 'Nenhuma fatura fechada para parcelar.' });
         }
-        res.json({ success: true, amount: closedDebt.owed, options: buildInstallmentOptions(closedDebt.owed) });
+        const user = await usersRepo.findByCpf(cpf);
+        const diaVencimento = (user && user.credit_card_due_day) || 10;
+        const dataLimitePagamento = new Date(closedDebt.invoice.due_date);
+        const vencimentoProximoCorte = computeNextInvoiceDueDate(diaVencimento, dataLimitePagamento);
+        const saldoAbertoAnterior = parseFloat(closedDebt.invoice.saldo_anterior || 0);
+
+        // Preview com o mesmo motor (7,95% a.m., datas reais) que /cards/invoice/parcel vai
+        // cobrar de fato — antes usava Price simplificado (~15,39% a.m.) e divergia do cobrado.
+        const options = [];
+        for (let n = 2; n <= 12; n++) {
+            const result = calcularParcelamentoFatura({
+                valorFatura: closedDebt.owed,
+                saldoAbertoAnterior,
+                taxaMensal: 0.0795,
+                prazo: n,
+                tipoEntrada: TIPOS_ENTRADA.SEM_ENTRADA,
+                dataLimitePagamento,
+                vencimentoProximoCorte,
+                diaVencimento,
+            });
+            options.push({
+                installments: n,
+                installmentValue: result.valorParcela,
+                totalAmount: result.totalAPagar,
+                iof: result.iofTotal,
+                juros: result.totalJuros,
+                monthlyRate: 0.0795,
+            });
+        }
+        res.json({ success: true, amount: closedDebt.owed, options });
     };
     
     const parcel = async (req, res) => {
@@ -511,7 +542,18 @@ module.exports = function createInvoiceController(deps) {
         if (principal <= 0) {
             return res.status(400).json({ success: false, message: 'Nenhuma fatura fechada para parcelar.' });
         }
-    
+
+        // Motor real de PF (7,95% a.m., datas reais) só quando há fatura fechada de
+        // verdade pra ancorar as datas/saldo herdado; o caminho legado (sem registro em
+        // invoices) mantém o Price simplificado por não ter essa base.
+        const diaVencimento = user.credit_card_due_day || 10;
+        const pfParams = closedDebt ? {
+            saldoAbertoAnterior: parseFloat(closedDebt.invoice.saldo_anterior || 0),
+            dataLimitePagamento: cutoff,
+            vencimentoProximoCorte: computeNextInvoiceDueDate(diaVencimento, cutoff),
+            diaVencimento,
+        } : null;
+
         // O saldo antigo é refinanciado no novo plano: remove as parcelas/valor vencido
         // que estão sendo substituídas pelas novas parcelas com encargos.
         await dbService.executeQuery(`
@@ -541,8 +583,50 @@ module.exports = function createInvoiceController(deps) {
             await refreshAccountStatus(cpf);
         }
     
-        const plan = await cardRepo.createInstallments({ cpf, amount: principal, installments });
-    
+        const plan = await cardRepo.createInstallments({ cpf, amount: principal, installments, pf: pfParams });
+
+        // tbl_pf: registro do contrato de Parcelamento de Fatura (histórico/auditoria —
+        // hoje nada persiste os valores calculados, só as parcelas soltas em transactions).
+        // Só grava quando passou pelo motor real (pfParams truthy); o caminho legado (sem
+        // fatura fechada de verdade) fica de fora por não ter base de dados confiável.
+        if (pfParams) {
+            try {
+                await dbService.executeQuery(`
+                    CREATE TABLE IF NOT EXISTS ${dbService.fq('tbl_pf')} (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        cpf VARCHAR(11) NOT NULL,
+                        invoice_id VARCHAR(255),
+                        plan_id VARCHAR(255),
+                        valor_fatura NUMERIC(12,2) NOT NULL,
+                        saldo_aberto_anterior NUMERIC(12,2) NOT NULL DEFAULT 0,
+                        taxa_mensal NUMERIC(6,4) NOT NULL,
+                        prazo INTEGER NOT NULL,
+                        tipo_entrada VARCHAR(50) NOT NULL,
+                        nova_entrada NUMERIC(12,2) NOT NULL DEFAULT 0,
+                        valor_parcela NUMERIC(12,2) NOT NULL,
+                        saldo_financiado NUMERIC(12,2) NOT NULL,
+                        iof_total NUMERIC(12,2) NOT NULL,
+                        iof_adicional NUMERIC(12,2) NOT NULL,
+                        cet_anual NUMERIC(10,6) NOT NULL,
+                        data_contratacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                `);
+                await dbService.executeQuery(`
+                    INSERT INTO ${dbService.fq('tbl_pf')}
+                        (cpf, invoice_id, plan_id, valor_fatura, saldo_aberto_anterior, taxa_mensal, prazo,
+                         tipo_entrada, nova_entrada, valor_parcela, saldo_financiado, iof_total, iof_adicional, cet_anual)
+                    VALUES (
+                        ${esc(cpf)}, ${esc(closedDebt ? closedDebt.invoice.id : null)}, ${esc(plan.planId)},
+                        ${principal}, ${pfParams.saldoAbertoAnterior}, 0.0795, ${installments},
+                        ${esc(TIPOS_ENTRADA.SEM_ENTRADA)}, 0,
+                        ${plan.installmentValue}, ${plan.saldoFinanciado}, ${plan.iof}, ${plan.iofAdicional}, ${plan.cetAnual}
+                    )
+                `);
+            } catch (tblPfErr) {
+                console.warn(`[Parcel] Falha ao registrar ${cpf} em tbl_pf:`, tblPfErr.message);
+            }
+        }
+
         await notificationsRepo.addNotification({
             cpf,
             title: 'Fatura parcelada',
@@ -579,6 +663,118 @@ module.exports = function createInvoiceController(deps) {
         });
     };
     
+    // Renegociação (velvet-skipping-dream.md): saída pra quem está bloqueado (8-90d) ou
+    // na lista negra (90+). Reaproveita a mesma infra de `parcel` (cardRepo.createInstallments),
+    // mas parcela a dívida TOTAL — fechada + ciclo aberto (consumo de limite) + encargos
+    // pendentes — não só a fatura fechada. Ao contratar, tira o usuário do estado ruim por
+    // completo: zera is_blacklisted, credit_card_is_blocked, days_overdue, account_status.
+    const renegotiate = async (req, res) => {
+        const { cpf, installments, pin } = req.body || {};
+        if (!cpf || cpf.length !== 11 || !Number.isInteger(installments) || installments < 2 || installments > 12 || !pin || pin.length !== 4) {
+            return res.status(400).json({ success: false, message: 'Payload invalido.' });
+        }
+        if (req.user.cpf !== cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
+
+        const user = await usersRepo.findByCpf(cpf);
+        if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+        const { esc } = repoContext;
+        const round2 = n => Math.round(n * 100) / 100;
+
+        // Consumo total do limite = fechada não paga + ciclo aberto ainda não faturado
+        // (o mesmo cálculo de invoiceAmount em invoiceStatus). Encargos pendentes somam à parte.
+        const totalLimit = parseFloat(user.credit_card_total_limit || 0);
+        const availableLimit = parseFloat(user.credit_card_available_limit || 0);
+        const consumedLimit = Math.max(0, round2(totalLimit - availableLimit));
+
+        const chargesRows = await dbService.executeQuery(`
+            SELECT COALESCE(SUM(CAST(amount AS DECIMAL(15,2))), 0) AS total
+            FROM ${dbService.fq('billing_charges')}
+            WHERE cpf = ${esc(cpf)} AND status = 'pending'
+        `);
+        const pendingChargesTotal = round2(parseFloat(chargesRows[0]?.total || 0));
+
+        const totalDebt = round2(consumedLimit + pendingChargesTotal);
+        if (totalDebt <= 0) {
+            return res.status(400).json({ success: false, message: 'Nenhuma dívida para renegociar.' });
+        }
+
+        const nowIso = nowDb();
+        const cutoff = new Date();
+        cutoff.setUTCHours(23, 59, 59, 999);
+        const cutoffIso = cutoff.toISOString();
+
+        // Consolida: remove parcelas legadas (substituídas pelo novo plano) e quita os
+        // encargos pendentes — a dívida inteira migra pro plano novo.
+        await dbService.executeQuery(`
+            DELETE FROM ${dbService.fq('transactions')}
+            WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
+        `);
+        if (pendingChargesTotal > 0) {
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('billing_charges')}
+                SET status = 'paid'
+                WHERE cpf = ${esc(cpf)} AND status = 'pending'
+            `);
+        }
+
+        const currentInvDue = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
+        const nextInvDue = new Date(currentInvDue);
+        nextInvDue.setMonth(currentInvDue.getMonth() + 1);
+
+        // Limite volta ao total (a dívida inteira, fechada + aberta, foi refinanciada) e o
+        // usuário sai do estado ruim por completo — mesmo shape do pagamento total.
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')}
+            SET credit_card_available_limit = ${totalLimit.toFixed(2)},
+                credit_card_is_blocked = false,
+                is_blacklisted = false,
+                account_status = 'adimplente',
+                days_overdue = 0,
+                overdue_status = 'EM_DIA',
+                credit_card_invoice_due_date = '${nextInvDue.toISOString()}',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE cpf = ${esc(cpf)}
+        `);
+
+        const plan = await cardRepo.createInstallments({ cpf, amount: totalDebt, installments });
+
+        await notificationsRepo.addNotification({
+            cpf,
+            title: 'Dívida renegociada',
+            message: [
+                '💵 <b>COMPROVANTE DE RENEGOCIAÇÃO DE DÍVIDA</b>',
+                '',
+                `<b>Cliente</b>    ${user.full_name}`,
+                `<b>CPF</b>        <code>${telegramService.formatCpf(cpf)}</code>`,
+                '',
+                `<b>Financiado</b> <code>R$ ${brl(totalDebt)}</code>`,
+                `<b>Parcelas</b>   ${installments}x de <code>R$ ${brl(plan.installmentValue)}</code>`,
+                `<b>Total</b>      <code>R$ ${brl(plan.totalAmount)}</code>`,
+                `<b>1ª parcela</b> ${plan.firstDueDate ? diaBR(plan.firstDueDate) : 'Próxima fatura'}`,
+                `<b>Contratado</b> ${dataBR(nowIso)}`,
+                '',
+                '<b>Status</b>     CONTA REGULARIZADA ✅'
+            ].join('\n'),
+            actionUrl: '/dashboard'
+        });
+
+        res.json({
+            success: true,
+            message: 'Dívida renegociada com sucesso. Conta regularizada.',
+            receipt: {
+                amount: totalDebt,
+                installments,
+                installmentValue: plan.installmentValue,
+                totalAmount: plan.totalAmount,
+                iof: plan.iof,
+                juros: plan.juros,
+                firstDueDate: plan.firstDueDate,
+                transactionId: plan.planId
+            }
+        });
+    };
+
     const pay = async (req, res) => {
         const { cpf, pin, amount } = req.body || {};
         if (!cpf || cpf.length !== 11 || !pin || pin.length !== 4) {
@@ -1143,7 +1339,14 @@ module.exports = function createInvoiceController(deps) {
             return res.status(400).json({ success: false, message: 'Payload invalido.' });
         }
         if (req.user.cpf !== cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
-    
+
+        // Busca o usuário ANTES de qualquer efeito colateral: o handler abaixo usa
+        // user.full_name na notificação, e sem esta busca a rota lançava
+        // ReferenceError depois de já ter antecipado as parcelas no banco —
+        // a operação era gravada mas o cliente recebia erro.
+        const user = await usersRepo.findByCpf(cpf);
+        if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
         await cardRepo.anticipateInstallments({ cpf, transactionIds });
         auditLog(req, 'card_anticipate', 'info', { count: transactionIds.length });
         await notificationsRepo.addNotification({
@@ -1174,6 +1377,7 @@ module.exports = function createInvoiceController(deps) {
         invoiceStatus,
         installmentOptions,
         parcel,
+        renegotiate,
         pay,
         summary,
         history,

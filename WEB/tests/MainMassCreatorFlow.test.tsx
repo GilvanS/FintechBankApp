@@ -47,7 +47,7 @@ describe('⚡ MainMassCreatorFlow & 360 Global Mass Engine', () => {
         }
     });
 
-    it('renderiza o painel 3.0 em pagina unica, sem wizard de etapas', () => {
+    it('renderiza o painel 4.0 em pagina unica, sem wizard de etapas', () => {
         renderWithContext(<MainMassCreatorFlow />);
 
         // Todas as secoes visiveis de uma vez — nao ha mais navegacao entre etapas.

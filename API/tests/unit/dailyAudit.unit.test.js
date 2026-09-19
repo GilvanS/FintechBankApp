@@ -24,13 +24,15 @@ describe('dailyAudit service unit tests', () => {
             if (query.includes('array_agg') || (query.includes('COUNT(*)') && query.includes('HAVING'))) {
                 return []; // FATURA_DUPLICADA query — sem duplicatas
             }
-            if (query.includes('FROM "invoices"')) {
+            if (query.includes('FROM "invoices"') && query.includes('COALESCE')) {
                 return [{
+                    id: 'inv-1',
                     cpf: '12345678901',
                     full_name: 'Usuario Teste',
                     due_date: new Date('2026-07-01'),
                     valor_total: 1000.00,
-                    valor_pago: 200.00
+                    valor_pago: 200.00,
+                    credit_card_due_day: 1
                 }];
             }
             if (query.includes('FROM "billing_charges"')) {

@@ -6,6 +6,7 @@ import { useToast, ToastContainer } from './Toast';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import PixKeySuccessModal from './PixKeySuccessModal';
 import { useAppState } from '../contexts/AppStateContext';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 interface PixKeyManagementProps {
     onBack: () => void;
@@ -30,6 +31,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
     const [error, setError] = useState('');
     const [showKeyTypeDropdown, setShowKeyTypeDropdown] = useState(false);
     const { toast, showSuccess, showError, hide } = useToast();
+    const { setRef, shake, onMaxLengthKeyDown } = useShakeOnError();
 
     const fetchKeys = async () => {
         if (user) {
@@ -129,17 +131,20 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
         e.preventDefault();
         if (!user || !newKeyValue) {
             setError('O valor da chave é obrigatório.');
+            shake('keyValue');
             return;
         }
-        
+
         // Validação básica
         if (newKeyType === 'EMAIL' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newKeyValue)) {
             setError('Email inválido.');
+            shake('keyValue');
             return;
         }
-        
+
         if (newKeyType === 'CPF' && newKeyValue.replace(/\D/g, '').length !== 11) {
             setError('CPF deve ter 11 dígitos.');
+            shake('keyValue');
             return;
         }
         
@@ -523,6 +528,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                         Chave
                                     </label>
                                     <input
+                                        ref={setRef('keyValue')}
                                         id="keyValue"
                                         type={newKeyType === 'CPF' ? 'tel' : 'text'}
                                         value={newKeyValue}
@@ -531,6 +537,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                             if (newKeyType === 'CPF') {
                                                 // Permitir apenas números
                                                 const numericValue = val.replace(/\D/g, '');
+                                                if (numericValue.length > 11) shake('keyValue');
                                                 // Limitar a 11 dígitos
                                                 if (numericValue.length <= 11) {
                                                     // Aplicar máscara visual se desejar, ou manter raw.
@@ -541,6 +548,7 @@ const PixKeyManagement: React.FC<PixKeyManagementProps> = ({ onBack }) => {
                                                 setNewKeyValue(val);
                                             }
                                         }}
+                                        onKeyDown={newKeyType === 'EMAIL' ? onMaxLengthKeyDown('keyValue', 100) : undefined}
                                         placeholder={newKeyType === 'EMAIL' ? 'Digite seu e-mail' : 'Digite apenas números (11 dígitos)'}
                                         className={`w-full px-4 py-3 rounded-lg focus:outline-none focus:ring-2 ${isMidnight ? 'bg-background-dark border border-subtle-dark/50 focus:ring-primary text-white placeholder-gray-500' : 'bg-black/5 border border-black/20 focus:ring-black/20 text-black placeholder-black/30'}`}
                                         data-testid="pix-key-value-input"

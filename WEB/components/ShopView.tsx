@@ -3,7 +3,9 @@ import { ShoppingBag, Zap, CreditCard, CheckCircle2, AlertCircle, ShoppingCart, 
 import { motion, AnimatePresence } from 'framer-motion';
 import { Product } from '../types';
 import { useAppState } from '../contexts/AppStateContext';
+import { useAuth } from '../context/AuthContext';
 import { checkout, getProducts } from '../services/api';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 interface ShopViewProps {
   /** Opcional: quando não vem do pai, a própria tela busca o catálogo. */
@@ -14,6 +16,10 @@ interface ShopViewProps {
 export const ShopView: React.FC<ShopViewProps> = ({ products: productsProp, accountBalance }) => {
   const { theme } = useAppState();
   const isMidnight = theme === 'midnight';
+  const { user } = useAuth();
+  // velvet-skipping-dream.md: conta na lista negra (90+ dias de atraso) não compra —
+  // só pagar ou renegociar a fatura liberam de novo.
+  const isBlacklisted = !!user?.creditCard?.isBlacklisted;
 
   // O Dashboard renderiza esta tela sem passar `products`, então o catálogo é
   // carregado aqui — mesmo padrão já usado na versão mobile. A lista começa
@@ -55,6 +61,7 @@ export const ShopView: React.FC<ShopViewProps> = ({ products: productsProp, acco
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
+  const { setRef, shake, onMaxLengthKeyDown } = useShakeOnError();
 
   const [cashbackBalance] = useState(() => {
     return parseFloat(localStorage.getItem('volt_cashback_balance') || '0.00');
@@ -79,8 +86,14 @@ export const ShopView: React.FC<ShopViewProps> = ({ products: productsProp, acco
     e.preventDefault();
     if (!selectedProduct) return;
 
+    if (isBlacklisted) {
+      setCheckoutError('Conta na lista negra por atraso. Pague ou renegocie a fatura para liberar compras.');
+      return;
+    }
+
     if (!pin || pin.length !== 4) {
       setCheckoutError('Digite a sua senha de 4 dígitos do cartão para confirmar.');
+      shake('pin');
       return;
     }
 
@@ -318,24 +331,31 @@ export const ShopView: React.FC<ShopViewProps> = ({ products: productsProp, acco
                   <div className="space-y-1">
                     <label className="text-[10px] font-extrabold uppercase block">Senha do Cartão (4 dígitos)</label>
                     <input
+                      ref={setRef('pin')}
                       type="password"
                       maxLength={4}
                       placeholder="••••"
                       value={pin}
                       onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                      onKeyDown={onMaxLengthKeyDown('pin', 4)}
                       className="w-full p-2.5 text-center text-base tracking-widest rounded-xl border-2 border-black font-mono"
                       required
                     />
                   </div>
 
+                  {isBlacklisted && (
+                    <p className="text-xs text-red-500 font-bold flex items-center gap-1">
+                      <Lock size={12} /> Conta na lista negra por atraso. Pague ou renegocie a fatura para comprar de novo.
+                    </p>
+                  )}
                   {checkoutError && <p className="text-xs text-red-500 font-bold">{checkoutError}</p>}
 
                   <button
                     type="submit"
-                    disabled={checkoutLoading}
-                    className="w-full font-black py-3 rounded-2xl text-xs uppercase tracking-wider bg-volt-green border-2 border-black text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none"
+                    disabled={checkoutLoading || isBlacklisted}
+                    className="w-full font-black py-3 rounded-2xl text-xs uppercase tracking-wider bg-volt-green border-2 border-black text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {checkoutLoading ? 'Processando...' : 'Confirmar e Pagar'}
+                    {checkoutLoading ? 'Processando...' : isBlacklisted ? 'Compras bloqueadas' : 'Confirmar e Pagar'}
                   </button>
                 </form>
               ) : (

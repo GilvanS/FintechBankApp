@@ -4,6 +4,7 @@ import { signUp } from '../services/api';
 import { formatCPF } from '../utils/formatters';
 import { useToast, ToastContainer } from './Toast';
 import SignUpSuccessModal from './SignUpSuccessModal';
+import { useShakeOnError } from '../hooks/useShakeOnError';
 
 interface SignUpProps {
     onSignUpSuccess: () => void;
@@ -22,33 +23,39 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [userData, setUserData] = useState({ fullName: '', email: '', cpf: '' });
     const { toast, showSuccess, showError, hide } = useToast();
+    const { setRef, shake, shakeAll, onMaxLengthKeyDown } = useShakeOnError();
 
     const handleSignUp = async (e: React.FormEvent) => {
         e.preventDefault();
         if (password !== confirmPassword) {
             setError('As senhas nao coincidem.');
             showError('As senhas nao coincidem.');
+            shakeAll(['password', 'confirmPassword']);
             return;
         }
         const cpfDigits = cpf.replace(/\D/g, '');
         if (cpfDigits.length !== 11) {
             setError('CPF deve ter 11 digitos.');
             showError('CPF deve ter 11 digitos.');
+            shake('cpf');
             return;
         }
         if (password.length < 6 || password.length > 12) {
             setError('A senha deve ter entre 6 e 12 caracteres.');
             showError('A senha deve ter entre 6 e 12 caracteres.');
+            shake('password');
             return;
         }
         if (!fullName.trim()) {
             setError('Nome completo e obrigatorio.');
             showError('Nome completo e obrigatorio.');
+            shake('fullName');
             return;
         }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             setError('Formato de email invalido.');
             showError('Formato de email invalido.');
+            shake('email');
             return;
         }
 
@@ -147,11 +154,12 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                         data-cy="signup-field-fullname"
                     >
                         <label htmlFor="signup-fullname" className="block text-sm font-medium text-gray-400 mb-1">Nome Completo</label>
-                        <input 
+                        <input
+                            ref={setRef('fullName')}
                             id="signup-fullname"
                             name="fullname"
-                            type="text" 
-                            value={fullName} 
+                            type="text"
+                            value={fullName}
                             onChange={(e) => setFullName(e.target.value)} 
                             required 
                             className="w-full px-4 py-3 bg-volt-surface border-2 border-volt-surface rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-fullname"
@@ -171,11 +179,12 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                         data-cy="signup-field-email"
                     >
                         <label htmlFor="signup-email" className="block text-sm font-medium text-gray-400 mb-1">E-mail</label>
-                        <input 
+                        <input
+                            ref={setRef('email')}
                             id="signup-email"
                             name="email"
-                            type="email" 
-                            value={email} 
+                            type="email"
+                            value={email}
                             onChange={(e) => setEmail(e.target.value)} 
                             required 
                             className="w-full px-4 py-3 bg-volt-surface border-2 border-volt-surface rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-email"
@@ -195,14 +204,16 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                         data-cy="signup-field-cpf"
                     >
                         <label htmlFor="signup-cpf" className="block text-sm font-medium text-gray-400 mb-1">CPF</label>
-                        <input 
+                        <input
+                            ref={setRef('cpf')}
                             id="signup-cpf"
                             name="cpf"
-                            type="text" 
-                            value={formatCPF(cpf)} 
-                            onChange={(e) => setCpf(e.target.value)} 
-                            required 
-                            maxLength={14} 
+                            type="text"
+                            value={formatCPF(cpf)}
+                            onChange={(e) => setCpf(e.target.value)}
+                            onKeyDown={onMaxLengthKeyDown('cpf', 14)}
+                            required
+                            maxLength={14}
                             className="w-full px-4 py-3 bg-volt-surface border-2 border-volt-surface rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-cpf"
                             data-testid="signup-input-cpf"
                             data-cy="signup-input-cpf"
@@ -221,11 +232,12 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                         data-cy="signup-field-password"
                     >
                         <label htmlFor="signup-password" className="block text-sm font-medium text-gray-400 mb-1">Senha</label>
-                        <input 
+                        <input
+                            ref={setRef('password')}
                             id="signup-password"
                             name="password"
-                            type="password" 
-                            value={password} 
+                            type="password"
+                            value={password}
                             onChange={(e) => setPassword(e.target.value)} 
                             required 
                             className="w-full px-4 py-3 bg-volt-surface border-2 border-volt-surface rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-password"
@@ -245,11 +257,12 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUpSuccess, onNavigateToLogin }) =
                         data-cy="signup-field-confirm-password"
                     >
                         <label htmlFor="signup-confirm-password" className="block text-sm font-medium text-gray-400 mb-1">Confirme a Senha</label>
-                        <input 
+                        <input
+                            ref={setRef('confirmPassword')}
                             id="signup-confirm-password"
                             name="confirm-password"
-                            type="password" 
-                            value={confirmPassword} 
+                            type="password"
+                            value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)} 
                             required 
                             className="w-full px-4 py-3 bg-volt-surface border-2 border-volt-surface rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-volt-green focus:border-transparent test-input-confirm-password"

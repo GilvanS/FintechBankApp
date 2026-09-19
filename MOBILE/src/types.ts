@@ -75,6 +75,7 @@ export interface CreditCard {
     totalLimit: number;
     pointsBalance: number;
     isBlocked: boolean;
+    isBlacklisted?: boolean;
     deliveryStatus?: 'manufacturing' | 'shipping' | 'tracking' | 'delivered' | 'unlocked';
     isActivated?: boolean;
     daysOverdue?: number;

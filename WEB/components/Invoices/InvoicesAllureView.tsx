@@ -7,6 +7,9 @@ import {
   FileText,
   Calendar,
   AlertCircle,
+  AlertTriangle,
+  Lock,
+  ShieldOff,
   Search,
   Barcode,
   QrCode,
@@ -16,6 +19,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { AllureShell, type AllureSection } from '../shared/AllureShell';
+import StatusPill from '../Admin/common/StatusPill';
 import DonutStatusCard from '../Analytics/DonutStatusCard';
 import TrendLineCard from '../Analytics/TrendLineCard';
 import ProgressBarRow from '../Analytics/ProgressBarRow';
@@ -27,7 +31,7 @@ import { useToast, ToastContainer } from '../Toast';
 import PaymentSuccessModal from './PaymentSuccessModal';
 import { useCardOrder } from '../../hooks/useCardOrder';
 import { useAuth } from '../../context/AuthContext';
-import { payCreditCardInvoice } from '../../services/api';
+import { payCreditCardInvoice, getUserByCpf } from '../../services/api';
 import type { User } from '../../types';
 
 interface Props {
@@ -98,12 +102,28 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   const creditCard = user?.creditCard;
   const currentInvoiceTotal = creditCard?.currentInvoiceTotal ?? creditCard?.currentInvoice ?? 0;
   const closedInvoiceTotal = creditCard?.closedInvoice ?? 0;
+
+  // Faixa de atraso (velvet-skipping-dream.md): 1-7d só aviso, 8-90d bloqueado, 90+ lista
+  // negra. isBlocked/isBlacklisted vêm do backend (billingValidation.js); daysOverdue > 0
+  // sem nenhum dos dois flags é a faixa de aviso (1-7d), que não tem flag própria.
+  const overdueTier = creditCard?.isBlacklisted
+    ? 'perda'
+    : creditCard?.isBlocked
+      ? 'bloqueado'
+      : (creditCard?.daysOverdue ?? 0) > 0
+        ? 'atrasado'
+        : null;
   const limit = creditCard?.totalLimit ?? 5000;
   const availableLimit = creditCard?.availableLimit ?? limit;
   const usedLimit = Math.max(0, limit - availableLimit);
 
   // Valor da fatura efetivamente selecionada nas subtabs (Aberta/Fechada) — usado no card de valor e nas ações
   const selectedInvoiceTotal = faturaTab === 'fechada' ? closedInvoiceTotal : currentInvoiceTotal;
+  // Fatura fechada ainda não existe (primeiro ciclo, nunca fechou) quando o valor
+  // é 0 e não há fatura paga registrada — nesse caso não faz sentido permitir
+  // pagar/parcelar uma fatura que não existe.
+  const closedInvoiceExists = closedInvoiceTotal > 0 || !!creditCard?.closedInvoiceIsPaid;
+  const disablePayActions = faturaTab === 'fechada' && !closedInvoiceExists;
 
   const mainNavSections: AllureSection<MainNavKey>[] = useMemo(() => {
     const list: AllureSection<MainNavKey>[] = [
@@ -212,7 +232,17 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
     try {
       const res = await payCreditCardInvoice(user.cpf, pin, pendingPaymentAmount);
       if (res && res.success) {
-        if (res.user) updateUser(res.user);
+        // Revalida os dados no backend; se falhar, usa o user da resposta do pagamento.
+        try {
+          const refreshed = await getUserByCpf(user.cpf);
+          if (refreshed.success && refreshed.user) {
+            updateUser(refreshed.user);
+          } else if (res.user) {
+            updateUser(res.user);
+          }
+        } catch {
+          if (res.user) updateUser(res.user);
+        }
         setPaymentSuccessAmount(pendingPaymentAmount);
         setIsPasswordModalOpen(false);
         setPendingPaymentAmount(null);
@@ -249,18 +279,22 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
           { key: 'historico', label: 'Histórico Completo', paid: false },
         ].map((tab) => {
           const active = faturaTab === tab.key;
+          const tabDisabled = tab.key === 'fechada' && !closedInvoiceExists;
           return (
             <button
               key={tab.key}
-              onClick={() => setFaturaTab(tab.key as any)}
+              onClick={() => !tabDisabled && setFaturaTab(tab.key as any)}
+              disabled={tabDisabled}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-                active
-                  ? isMidnight
-                    ? 'bg-volt-surface text-volt-green border border-volt-green/40'
-                    : 'bg-black text-volt-yellow border-2 border-black'
-                  : isMidnight
-                    ? 'bg-volt-dark/60 text-on-surface-variant hover:text-on-surface'
-                    : 'bg-gray-100 text-black/60 hover:text-black'
+                tabDisabled
+                  ? 'opacity-40 pointer-events-none ' + (isMidnight ? 'bg-volt-dark/60 text-on-surface-variant' : 'bg-gray-100 text-black/60')
+                  : active
+                    ? isMidnight
+                      ? 'bg-volt-surface text-volt-green border border-volt-green/40'
+                      : 'bg-black text-volt-yellow border-2 border-black'
+                    : isMidnight
+                      ? 'bg-volt-dark/60 text-on-surface-variant hover:text-on-surface'
+                      : 'bg-gray-100 text-black/60 hover:text-black'
               }`}
             >
               <span>{tab.label}</span>
@@ -287,9 +321,34 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
         <p className="text-3xl font-black mt-1">
           {faturaTab === 'historico' ? formatBRL(currentInvoiceTotal + closedInvoiceTotal) : formatBRL(selectedInvoiceTotal)}
         </p>
-        {faturaTab === 'aberta' && (
+        {faturaTab === 'aberta' && (() => {
+          const rawDue = creditCard?.invoiceDueDate || '';
+          const dueStr = rawDue ? rawDue.split('T')[0] : '';
+          // Data de corte vem pronta do backend (fonte única: utils/billing.js) —
+          // o front nunca recalcula quantos dias antes do vencimento é o corte.
+          const corteDt = creditCard?.currentInvoiceCutoffDate ? creditCard.currentInvoiceCutoffDate.split('T')[0] : '';
+          return (
+            <div className={`text-xs mt-1 font-bold ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'} space-y-0.5`}>
+              <p>Vencimento em {dueStr || '10/10'}</p>
+              {corteDt && <p className="opacity-75">Melhor dia de compra: até {corteDt}</p>}
+            </div>
+          );
+        })()}
+        {faturaTab === 'fechada' && creditCard?.closedInvoiceDueDate && (
           <p className={`text-xs mt-1 font-bold ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
-            Vencimento em {creditCard?.invoiceDueDate || '10/10'}
+            Vencimento em {creditCard.closedInvoiceDueDate.split('T')[0]}
+          </p>
+        )}
+        {overdueTier && (
+          <p className="mt-2">
+            <StatusPill variant={overdueTier === 'atrasado' ? 'warning' : overdueTier === 'bloqueado' ? 'error' : 'default'}>
+              {overdueTier === 'atrasado' && <AlertTriangle size={12} />}
+              {overdueTier === 'bloqueado' && <Lock size={12} />}
+              {overdueTier === 'perda' && <ShieldOff size={12} />}
+              {overdueTier === 'atrasado' && `Atrasado há ${creditCard?.daysOverdue}d`}
+              {overdueTier === 'bloqueado' && 'Cartão bloqueado por atraso'}
+              {overdueTier === 'perda' && 'Lista negra — pague ou renegocie'}
+            </StatusPill>
           </p>
         )}
         {faturaTab === 'fechada' && creditCard?.closedInvoiceIsPaid && (
@@ -303,7 +362,11 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
 
       {/* Ações — formato simples, sem sombra pesada */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <button onClick={() => openPaymentPicker(selectedInvoiceTotal)} className={quickActionClass}>
+        <button
+          onClick={() => openPaymentPicker(selectedInvoiceTotal)}
+          disabled={disablePayActions}
+          className={`${quickActionClass} ${disablePayActions ? 'opacity-40 pointer-events-none' : ''}`}
+        >
           <CreditCard size={16} /> Pagar Fatura
         </button>
         {openPixModal && (
@@ -319,7 +382,11 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
         <button onClick={() => setActiveSection('lancamentos')} className={quickActionClass}>
           <List size={16} /> Ver Lançamentos
         </button>
-        <button onClick={() => onNavigate('installmentOptions')} className={quickActionClass}>
+        <button
+          onClick={() => onNavigate('installmentOptions')}
+          disabled={disablePayActions}
+          className={`${quickActionClass} ${disablePayActions ? 'opacity-40 pointer-events-none' : ''}`}
+        >
           <Calendar size={16} /> Parcelar
         </button>
         <button onClick={() => setShowSummarySheet(true)} className={quickActionClass}>

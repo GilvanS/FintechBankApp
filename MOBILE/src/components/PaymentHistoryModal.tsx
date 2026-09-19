@@ -16,7 +16,7 @@ type PaymentFilter = 'ALL' | 'TOTAL' | 'MINIMO' | 'PARCIAL';
 type PeriodFilter = 'ALL' | '7D' | '30D' | '90D';
 
 const MONTHS_PT: Record<string, string> = {
-    '01': 'Janeiro', '02': 'Fevereiro', '03': 'MarÃ§o', '04': 'Abril',
+    '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
     '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto',
     '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro',
 };
@@ -49,7 +49,7 @@ const paymentTypeConfig = {
     desc: 'Fatura quitada integralmente',
   },
   MINIMO: {
-    label: 'Pagamento MÃ­nimo',
+    label: 'Pagamento Mínimo',
     icon: AlertTriangle,
     color: 'amber',
     desc: 'Multa e juros de mora estacionados',
@@ -74,7 +74,7 @@ const paymentTypeDotClass = (type: string) => {
 const paymentTypeLabel = (type: string) => {
     switch (type) {
         case 'TOTAL': return 'Total';
-        case 'MINIMO': return 'MÃ­nimo';
+        case 'MINIMO': return 'Mínimo';
         case 'PARCIAL': return 'Parcial';
         default: return type;
     }
@@ -119,7 +119,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
       }
   }, [open]);
 
-  // Filtra primeiro por perÃ­odo, depois por tipo de pagamento
+  // Filtra primeiro por período, depois por tipo de pagamento
   const periodFilteredPayments = useMemo(() => {
     if (periodFilter === 'ALL') return payments;
     const daysMap = { '7D': 7, '30D': 30, '90D': 90 };
@@ -139,7 +139,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const totalPago = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
   const pctPago = totalDue && totalDue > 0 ? Math.round((totalPago / totalDue) * 100) : 0;
 
-  // Contagens baseadas no perÃ­odo ATIVO (nÃ£o no total)
+  // Contagens baseadas no período ATIVO (não no total)
   const filterCounts = useMemo(() => ({
     TOTAL: periodFilteredPayments.filter(p => p.paymentType === 'TOTAL').length,
     MINIMO: periodFilteredPayments.filter(p => p.paymentType === 'MINIMO').length,
@@ -175,7 +175,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
       return counts;
   }, [payments]);
 
-  // â”€â”€ CSV Export â”€â”€
+  // ── CSV Export ──
   const generateCSV = () => {
       const BOM = '\uFEFF';
       const header = 'sep=,\r\n"Data","Hora","Valor","Tipo","Descricao","%Fatura"\r\n';
@@ -231,7 +231,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
               <div className="flex items-center gap-2">
                 <DollarSign size={18} className={isMidnight ? 'text-[#00ff9d]' : 'text-black'} />
                 <h3 className={`font-bold text-base ${isMidnight ? 'text-white' : 'text-black'}`}>
-                  HistÃ³rico de Pagamentos
+                  Histórico de Pagamentos
                 </h3>
               </div>
               <button
@@ -266,7 +266,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                 </div>
             )}
 
-            {/* Filter chips â€” shared component */}
+            {/* Filter chips — shared component */}
             {periodFilteredPayments.length > 1 && (
               <div className="mb-2">                  <PaymentTypeFilter
                   activeFilter={paymentFilter}
@@ -283,7 +283,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
             {payments.length > 1 && (
               <div className="flex gap-1.5 mb-4 overflow-x-auto hide-scrollbar">
                 {([
-                  { key: 'ALL' as PeriodFilter, label: 'Todo perÃ­odo' },
+                  { key: 'ALL' as PeriodFilter, label: 'Todo período' },
                   { key: '7D' as PeriodFilter, label: '7 dias' },
                   { key: '30D' as PeriodFilter, label: '30 dias' },
                   { key: '90D' as PeriodFilter, label: '90 dias' },
@@ -383,7 +383,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                             isMidnight ? 'bg-zinc-900 border-zinc-800' : 'bg-gray-50 border-gray-200'
                         }`}>
                             <p className={`text-[9px] font-bold ${isMidnight ? 'opacity-40' : 'opacity-50'}`}>
-                                +{groupedPayments.length - 4} mÃªs(es)
+                                +{groupedPayments.length - 4} mês(es)
                             </p>
                         </div>
                     )}
@@ -400,20 +400,20 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
               <div className="py-12 text-center">
                 <Calendar size={24} className={`mx-auto mb-2 ${isMidnight ? 'text-zinc-500' : 'text-black/30'}`} />
                 <p className={`text-sm font-bold ${isMidnight ? 'text-zinc-400' : 'text-black/60'}`}>
-                  Nenhum pagamento neste perÃ­odo.
+                  Nenhum pagamento neste período.
                 </p>
                 <button
                   onClick={() => setPeriodFilter('ALL')}
                   className={`mt-2 text-xs font-black underline ${isMidnight ? 'text-[#00ff9d]' : 'text-black'}`}
                 >
-                  Ver todo o perÃ­odo
+                  Ver todo o período
                 </button>
               </div>
             ) : filteredPayments.length === 0 ? (
               <div className="py-12 text-center">
                 <Filter size={24} className={`mx-auto mb-2 ${isMidnight ? 'text-zinc-500' : 'text-black/30'}`} />
                 <p className={`text-sm font-bold ${isMidnight ? 'text-zinc-400' : 'text-black/60'}`}>
-                  Nenhum pagamento do tipo selecionado neste perÃ­odo.
+                  Nenhum pagamento do tipo selecionado neste período.
                 </p>
                 <button
                   onClick={() => { setPaymentFilter('ALL'); setPeriodFilter('ALL'); }}
@@ -433,7 +433,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                     }
                     const typeSummary = [
                         monthTypeCount.TOTAL > 0 && `${monthTypeCount.TOTAL}x Total`,
-                        monthTypeCount.MINIMO > 0 && `${monthTypeCount.MINIMO}x MÃ­nimo`,
+                        monthTypeCount.MINIMO > 0 && `${monthTypeCount.MINIMO}x Mínimo`,
                         monthTypeCount.PARCIAL > 0 && `${monthTypeCount.PARCIAL}x Parcial`,
                     ].filter(Boolean).join(', ');
 
@@ -531,7 +531,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                                                                 isMidnight ? 'text-zinc-400' : 'text-black/60'
                                                             }`}>
                                                                 <Calendar size={10} />
-                                                                {fmtDate(payment.date)} Ã s {fmtTime(payment.date)}
+                                                                {fmtDate(payment.date)} às {fmtTime(payment.date)}
                                                             </p>
                                                             <p className={`text-[10px] mt-0.5 ${
                                                                 isMidnight ? 'text-zinc-500' : 'text-black/50'
@@ -605,7 +605,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                                     ? 'bg-zinc-800 hover:bg-zinc-700 text-emerald-400 border border-zinc-700'
                                     : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300'
                             }`}
-                            title="Exportar histÃ³rico como CSV"
+                            title="Exportar histórico como CSV"
                         >
                             <Download size={14} />
                             CSV

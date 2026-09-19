@@ -12,6 +12,7 @@ export interface Transaction {
     merchant?: string;
     /** Categoria derivada da descrição pela API (refeicao, mobilidade, cultura, saude, moradia, compras, educacao, outros) */
     category?: string;
+    paymentType?: "TOTAL" | "MINIMO" | "PARCIAL";
 }
 
 export interface CardTransaction {
@@ -25,6 +26,7 @@ export interface CardTransaction {
     currentInstallment?: number;
     totalAmount?: number;
     category?: string;
+    paymentType?: "TOTAL" | "MINIMO" | "PARCIAL";
     cardNumber?: string;
     cardLast4?: string;
     authorizationCode?: string;
@@ -46,12 +48,15 @@ export interface CreditCard {
     dueDate: string;
     invoiceDueDate: string;
     closedInvoiceDueDate?: string; // Added to track due date for closed invoices
+    currentInvoiceCutoffDate?: string; // Data de corte (melhor dia de compra) da fatura aberta, calculada no backend
+    closedInvoiceCutoffDate?: string; // Idem para a fatura fechada — só existe se a fatura fechada existir
     currentInvoice: number;
     closedInvoice: number;
     availableLimit: number;
     totalLimit: number;
     pointsBalance: number;
     isBlocked: boolean;
+    isBlacklisted?: boolean;
     deliveryStatus?: 'manufacturing' | 'shipping' | 'tracking' | 'delivered' | 'unlocked';
     isActivated?: boolean;
     daysOverdue?: number;
@@ -130,6 +135,7 @@ export interface AppNotification {
 export interface PurchasedItem {
     originalPrice?: number;
     category?: string;
+    paymentType?: "TOTAL" | "MINIMO" | "PARCIAL";
     cashback?: string;
     rating?: number;
     reviews?: number;

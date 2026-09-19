@@ -423,7 +423,7 @@ module.exports = function registerShopRoutes({
             if (qty >= 2) {
                 const _due = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
                 const _firstDue = new Date(_due);
-                _firstDue.setDate(_firstDue.getDate() - 7);
+                _firstDue.setDate(_firstDue.getDate() - 5);
                 _firstDue.setUTCHours(23, 59, 59, 999);
                 const _parcela = totalParcelado / qty;
                 for (let i = 0; i < qty; i++) {
@@ -456,7 +456,7 @@ module.exports = function registerShopRoutes({
 
                 // O corte da fatura (data da primeira parcela) é 7 dias antes do vencimento
                 const firstDue = new Date(userDueDate);
-                firstDue.setDate(firstDue.getDate() - 7);
+                firstDue.setDate(firstDue.getDate() - 5);
                 firstDue.setUTCHours(23, 59, 59, 999);
 
                 const parcela = totalParcelado / qty;
