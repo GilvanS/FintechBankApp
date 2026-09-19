@@ -7,7 +7,15 @@
  * globais/vinculados, compras em aberto e encargos herdados sem N+1 queries.
  *
  * REGRA DE PARIDADE WEB/CSV:
- *  - fatura_fechada  = valor residual da fatura FECHADA mais recente (unpaid) OU 0 se paga/inexistente
+ *  - fatura_fechada  = valor RESIDUAL ainda devido da fatura FECHADA mais recente, 0 se
+ *    paga/inexistente. É a coluna que TBL_CENARIOS usa pra elegibilidade de massa
+ *    (testPlanningRules.cjs: CT03.2/CT03.3 exigem fatura_fechada > 0 = "ainda deve a
+ *    fechada") — por isso ela ZERA quando quitada, de propósito. NÃO trocar essa
+ *    semântica por "valor original", ou massa já paga volta a parecer elegível.
+ *  - fatura_fechada_valor_original = valor ORIGINAL da fatura fechada (imutável,
+ *    valor_total da invoice), sempre exposto, pago ou não — pra quem precisa ver
+ *    "quanto era a fatura" na planilha mesmo depois de quitada. Mesma regra que a
+ *    tela Web/Admin já aplicam via _closedInvoiceValorTotal.
  *  - fatura_aberta   = soma de compras do ciclo ATUAL (após corte da fechada) + encargos pending
  *  - status_fatura_fechada = 'PAGA' | 'ABERTA' | 'INEXISTENTE'
  *  Estas colunas espelham o que o backend calcula em enrichUserCreditCardData (index.cjs).
@@ -83,6 +91,12 @@ fechada_calculada AS (
                 WHERE f2.cpf = f.cpf AND f2.rn = 1
             )
         END as valor_fechada_exibicao,
+        -- Valor ORIGINAL imutável (valor_total da invoice), sempre exposto — não zera
+        -- quando paga. Ver nota "REGRA DE PARIDADE WEB/CSV" no topo do arquivo.
+        (
+            SELECT valor_total FROM fechadas f2
+            WHERE f2.cpf = f.cpf AND f2.rn = 1
+        ) as valor_fechada_original,
         (
             SELECT due_date FROM fechadas f2
             WHERE f2.cpf = f.cpf AND f2.rn = 1
@@ -158,6 +172,7 @@ todas_massas AS (
         (u.credit_card_total_limit - u.credit_card_available_limit) AS limite_utilizado,
         u.credit_card_available_limit                               AS limite_disponivel,
         COALESCE(fc.valor_fechada_exibicao, 0)                      AS fatura_fechada,
+        COALESCE(fc.valor_fechada_original, 0)                      AS fatura_fechada_valor_original,
         (COALESCE(cc.total, 0) + COALESCE(fc.residual_total_fechadas, 0) + COALESCE(eh.total, 0)) AS fatura_aberta,
         COALESCE(fc.status_fechada, 'INEXISTENTE')                 AS status_fatura_fechada,
         CASE
@@ -222,7 +237,7 @@ todas_massas AS (
     WHERE u.role IN ('customer', 'user')
 )
 SELECT id_massa, cpf, dia_vencimento, nome_completo, saldo_conta, limite_utilizado,
-       limite_disponivel, fatura_fechada, fatura_aberta, status_fatura_fechada, dias_atraso, status, cartao_fisico_numero,
+       limite_disponivel, fatura_fechada, fatura_fechada_valor_original, fatura_aberta, status_fatura_fechada, dias_atraso, status, cartao_fisico_numero,
        cartao_fisico_cvv, cartao_virtual_numero, cartao_virtual_cvv, "data_criação", tbl_ven, tbl_corte, tbl_schema,
        tbl_pf_valor_parcela, tbl_pf_saldo_financiado, tbl_pf_iof_total, tbl_pf_iof_adicional, tbl_pf_cet_anual, tbl_pf_prazo, tbl_pf_data_contratacao,
        tbl_pa_valor_pagamento, tbl_pa_minimo, tbl_pa_piso, tbl_pa_valor_parcela, tbl_pa_saldo_financiado, tbl_pa_iof_total, tbl_pa_cet_anual, tbl_pa_data_contratacao,
