@@ -350,6 +350,36 @@ const GridRevealBackdrop: React.FC<Props> = ({
             image: null,
         };
 
+        // Buffer de dither: o passe ASCII (getImageData + fillText por célula)
+        // rodando toda hora NA RESOLUÇÃO REAL da tela (até ~3840x2160 num
+        // desktop 4K) foi o que deixou a navegação lenta — dezenas de milhares
+        // de fillText por frame, 60x/s, pra sempre (o mosaico nunca para). O
+        // dither já reduz tudo a blocos grandes, então detalhe em resolução
+        // real é desperdiçado: desenha a cena numa tela pequena e fixa,
+        // aplica o dither nela (poucas centenas de células) e amplia com um
+        // único drawImage (barato) pra tela real. Também throttla a
+        // recomputação do dither (o split/clock de baixo continuam fluidos).
+        const DITHER_MAX_DIM = 400;
+        const DITHER_INTERVAL_MS = 90;
+        let ditherCanvas: HTMLCanvasElement | null = null;
+        let ditherCtx: CanvasRenderingContext2D | null = null;
+        let bufferScene: Scene | null = null;
+        let ditherW = 0;
+        let ditherH = 0;
+        let lastDitherAt = -1;
+        if (dither) {
+            ditherCanvas = document.createElement('canvas');
+            ditherCtx = ditherCanvas.getContext('2d');
+            if (ditherCtx) {
+                bufferScene = {
+                    ctx: ditherCtx, root,
+                    width: 0, height: 0, scale: 1,
+                    dark: false, clock: 0, split: 0, fade: 0,
+                    hasColors: false, image: null,
+                };
+            }
+        }
+
         let loadedAt = -1;
         let cancelled = false;
         const effectiveSrc = failed ? null : src;
@@ -359,16 +389,40 @@ const GridRevealBackdrop: React.FC<Props> = ({
             // lido por frame — trocar de tema no painel recolore o mosaico sem remontar
             scene.dark = document.body.classList.contains('theme-midnight');
             scene.fade = loadedAt < 0 ? 0 : smoothstep(0, COLOR_MS, now - loadedAt);
-            drawScene(scene);
-            if (dither) {
-                // Passe final: converte o que acabou de ser desenhado (mosaico +
-                // foto, se revelada) em caracteres ASCII por luminância — mesma
-                // animação de split/reveal, visual de dither em cima.
-                applyAsciiHalftone(ctx, scene.width, scene.height, {
-                    cellSize: ditherCellSize,
-                    bg: ditherBg,
-                    color: ditherColor,
-                });
+
+            if (bufferScene && ditherCanvas && ditherCtx && scene.width && scene.height) {
+                const aspect = scene.width / scene.height;
+                const w = aspect >= 1 ? DITHER_MAX_DIM : Math.max(1, Math.round(DITHER_MAX_DIM * aspect));
+                const h = aspect >= 1 ? Math.max(1, Math.round(DITHER_MAX_DIM / aspect)) : DITHER_MAX_DIM;
+                if (w !== ditherW || h !== ditherH) {
+                    ditherW = w; ditherH = h;
+                    ditherCanvas.width = w; ditherCanvas.height = h;
+                    bufferScene.width = w; bufferScene.height = h;
+                    lastDitherAt = -1; // força redesenho no novo tamanho
+                }
+                if (lastDitherAt < 0 || now - lastDitherAt >= DITHER_INTERVAL_MS) {
+                    lastDitherAt = now;
+                    bufferScene.split = split;
+                    bufferScene.dark = scene.dark;
+                    bufferScene.fade = scene.fade;
+                    bufferScene.clock = scene.clock;
+                    bufferScene.hasColors = scene.hasColors;
+                    bufferScene.image = scene.image;
+                    drawScene(bufferScene);
+                    // Passe final: converte o mosaico pequeno em caracteres ASCII
+                    // por luminância — mesma animação de split/reveal, visual de
+                    // dither em cima, custo limitado ao tamanho do buffer.
+                    applyAsciiHalftone(ditherCtx, ditherW, ditherH, {
+                        cellSize: ditherCellSize,
+                        bg: ditherBg,
+                        color: ditherColor,
+                    });
+                }
+                ctx.imageSmoothingEnabled = false;
+                ctx.clearRect(0, 0, scene.width, scene.height);
+                ctx.drawImage(ditherCanvas, 0, 0, ditherW, ditherH, 0, 0, scene.width, scene.height);
+            } else {
+                drawScene(scene);
             }
         };
 

@@ -55,10 +55,20 @@ export default function AsciiHalftoneBackground({ className, style, cellSize = 8
         let lastDraw = 0;
         const FRAME_MS = 1000 / 15; // 15fps já é suficiente pro efeito, poupa CPU
 
+        // O canvas roda numa resolução interna PEQUENA e fixa, sempre — o
+        // dither já reduz tudo a blocos, então desenhar + rodar
+        // getImageData/fillText do applyAsciiHalftone na resolução real da
+        // tela (antes: largura/altura * até 2x DPR, podendo passar de 3000px
+        // num desktop) era caro à toa e deixava a navegação lenta. O CSS
+        // (width/height: 100% no elemento) estica esse buffer pequeno pra
+        // preencher o container de qualquer tamanho, sem custo extra.
+        const MAX_DIM = 400;
         const resize = () => {
-            const dpr = Math.min(window.devicePixelRatio || 1, 2);
-            const w = Math.max(1, Math.round(root.clientWidth * dpr));
-            const h = Math.max(1, Math.round(root.clientHeight * dpr));
+            const rw = root.clientWidth || 1;
+            const rh = root.clientHeight || 1;
+            const aspect = rw / rh;
+            const w = aspect >= 1 ? MAX_DIM : Math.max(1, Math.round(MAX_DIM * aspect));
+            const h = aspect >= 1 ? Math.max(1, Math.round(MAX_DIM / aspect)) : MAX_DIM;
             if (canvas.width !== w || canvas.height !== h) {
                 canvas.width = w;
                 canvas.height = h;
@@ -116,7 +126,7 @@ export default function AsciiHalftoneBackground({ className, style, cellSize = 8
 
     return (
         <div ref={rootRef} className={className} style={{ position: 'relative', width: '100%', height: '100%', ...style }}>
-            <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
+            <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', imageRendering: 'pixelated' }} />
         </div>
     );
 }
