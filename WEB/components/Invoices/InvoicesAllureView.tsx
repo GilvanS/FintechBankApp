@@ -101,7 +101,14 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
 
   const creditCard = user?.creditCard;
   const currentInvoiceTotal = creditCard?.currentInvoiceTotal ?? creditCard?.currentInvoice ?? 0;
-  const closedInvoiceTotal = creditCard?.closedInvoice ?? 0;
+  // Fatura fechada é imutável: uma vez paga, closedInvoice vira o SALDO RESIDUAL (0),
+  // não mais o valor original. Sem isso a tela mostrava R$ 0,00 em vez do valor
+  // que foi realmente cobrado (mesma regra já aplicada em ClosedInvoice.tsx).
+  const isClosedInvoicePaid = Boolean(creditCard?.closedInvoiceIsPaid)
+    && (creditCard as any)?._closedInvoiceValorTotal > 0;
+  const closedInvoiceTotal = isClosedInvoicePaid
+    ? (creditCard as any)._closedInvoiceValorTotal
+    : (creditCard?.closedInvoice ?? 0);
 
   // Faixa de atraso (velvet-skipping-dream.md): 1-7d só aviso, 8-90d bloqueado, 90+ lista
   // negra. isBlocked/isBlacklisted vêm do backend (billingValidation.js); daysOverdue > 0
