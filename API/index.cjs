@@ -6906,6 +6906,81 @@ apiRouter.get('/admin/audit-consistency', bearerAuth(), authenticateAdmin, async
     });
 }));
 
+// —— Auditoria CSV × Backend: valida se tblDeMassasExport (fonte do botão "Exportar
+// CSV" do Admin e do script standalone) bate com o que enrichUserCreditCardData
+// REALMENTE calcula pro usuário (mesmo motor que Web/Admin usam pra exibir fatura
+// aberta/fechada). Pega regressão de verdade na query do CSV — sem dar falso
+// positivo em "fechada == aberta" sozinho, que às vezes é matematicamente correto
+// (massa recém-fechada sem pagamento/compra/encargo ainda: aberta = fechada + 0 + 0,
+// ver CPF 43833239107 2026-09-20). Motivada por bug real encontrado no mesmo dia:
+// fatura_fechada pegava só a invoice mais recente (não somava fechadas empilhadas)
+// e o fallback de conta legado disparava pra contas em dia — ambos corrigidos em
+// utils/tblDeMassasExport.cjs, essa auditoria é a rede de segurança pra não voltar.
+async function runCsvConsistencyAuditQuery(cpfFilter, limit) {
+    const { buildQuery } = require('./utils/tblDeMassasExport.cjs');
+    const csvRows = await dbService.executeQuery(buildQuery({ cpf: cpfFilter || undefined }));
+    const sample = cpfFilter ? csvRows : csvRows.slice(0, limit);
+
+    const details = [];
+    let consistent = 0, divergent = 0;
+    for (const row of sample) {
+        const userRow = await usersRepo.findByCpf(row.cpf);
+        if (!userRow) continue;
+        const tempUser = normalizeUser(userRow);
+        await enrichUserCreditCardData(tempUser, row.cpf);
+        const cc = tempUser.creditCard || {};
+
+        // Massa PAGA: closedInvoiceTotal/closedInvoice zeram por design (saldo residual
+        // = 0), o valor ORIGINAL imutável fica em _closedInvoiceValorTotal — mesma regra
+        // condicional que InvoicesAllureView.tsx aplica na tela (ver commit 8f68b317).
+        // Sem replicar essa condição aqui, TODA massa paga vira falso positivo.
+        const isPaid = Boolean(cc.closedInvoiceIsPaid) && (cc._closedInvoiceValorTotal ?? 0) > 0;
+        const csvFechada = round2(parseFloat(row.fatura_fechada || 0));
+        const csvAberta = round2(parseFloat(row.fatura_aberta || 0));
+        const realFechada = round2(isPaid ? cc._closedInvoiceValorTotal : (cc.closedInvoiceTotal ?? cc.closedInvoice ?? 0));
+        const realAberta = round2(cc.currentInvoiceTotal ?? 0);
+        const diffFechada = round2(csvFechada - realFechada);
+        const diffAberta = round2(csvAberta - realAberta);
+        const isConsistent = Math.abs(diffFechada) <= 0.02 && Math.abs(diffAberta) <= 0.02;
+
+        if (isConsistent) {
+            consistent++;
+        } else {
+            divergent++;
+            details.push({
+                cpf: row.cpf,
+                name: row.nome_completo,
+                statusCsv: row.status_fatura_fechada,
+                csvFechada, realFechada, diffFechada,
+                csvAberta, realAberta, diffAberta,
+            });
+        }
+    }
+
+    return {
+        summary: { totalScanned: sample.length, consistent, divergent },
+        details: details.slice(0, 50),
+    };
+}
+
+apiRouter.get('/admin/audit-csv-consistency', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const rawCpf = typeof req.query?.cpf === 'string' ? req.query.cpf.replace(/\D/g, '') : '';
+    const filterCpf = rawCpf.length === 11 ? rawCpf : null;
+    const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
+    const limit = !isNaN(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 200) : 100;
+
+    const result = await runCsvConsistencyAuditQuery(filterCpf, limit);
+    res.json({
+        success: true,
+        summary: result.summary,
+        details: result.details,
+        filters: { cpf: filterCpf || null, limit },
+        tip: result.summary.divergent > 0
+            ? 'CSV de massas (fatura_fechada/fatura_aberta) diverge do cálculo real do backend — provável regressão em utils/tblDeMassasExport.cjs. Reveja a query antes de confiar no CSV pra escolher massas de teste.'
+            : undefined
+    });
+}));
+
 // —— Auditoria de double-counting: pagamentos (INVOICE_PAYMENT) vs valor_pago das invoices ——
 // Lógica extraída de scripts/audit_completo.js::runDoubleCountAudit (somente leitura, sem --fix,
 // sem console.log). Para cada CPF com INVOICE_PAYMENT, compara soma dos pagamentos com a soma de

@@ -39,6 +39,24 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
         }
     }, [isOpen]);
 
+    // Status progressivo durante a espera da confirmação — puramente cosmético
+    // (a chamada à API já é a mesma de sempre; o comprovante Telegram/PDF roda em
+    // background no backend e NÃO bloqueia essa resposta). Sem isso o botão ficava
+    // com um spinner mudo por vários segundos, parecendo travado.
+    const PROCESSING_STAGES = ['Verificando PIN…', 'Processando pagamento…', 'Confirmando com o banco…'];
+    const [stageIndex, setStageIndex] = useState(0);
+
+    useEffect(() => {
+        if (!isLoading) {
+            setStageIndex(0);
+            return;
+        }
+        const interval = setInterval(() => {
+            setStageIndex(i => Math.min(i + 1, PROCESSING_STAGES.length - 1));
+        }, 2200);
+        return () => clearInterval(interval);
+    }, [isLoading]);
+
     const isPinComplete = (p: string[]) => p.every(d => d !== '');
 
     // Handle physical keyboard typing
@@ -241,7 +259,17 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
                                 }`}
                             >
                                 {isLoading ? (
-                                    <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                                    <>
+                                        {/* Spinner em 3 anéis concêntricos, velocidades diferentes — em vez do
+                                            anel único mudo de antes, comunica "ainda processando" durante a
+                                            espera da confirmação. */}
+                                        <span className="relative w-5 h-5 shrink-0">
+                                            <span className="absolute inset-0 rounded-full border-2 border-black/15 border-t-black animate-spin" />
+                                            <span className="absolute inset-[3px] rounded-full border-2 border-black/10 border-t-black/70 animate-spin [animation-duration:0.6s]" />
+                                            <span className="absolute inset-[6px] rounded-full border-2 border-black/10 border-t-black/40 animate-spin [animation-duration:1.4s] [animation-direction:reverse]" />
+                                        </span>
+                                        <span>{PROCESSING_STAGES[stageIndex]}</span>
+                                    </>
                                 ) : (
                                     'Confirmar'
                                 )}

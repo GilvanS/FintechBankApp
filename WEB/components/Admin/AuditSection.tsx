@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
-import { adminAuditConsistency, adminAuditDoubleCount } from '../../services/api';
+import { adminAuditConsistency, adminAuditDoubleCount, adminAuditCsvConsistency } from '../../services/api';
 
-type AuditSubTab = 'consistency' | 'double-count';
+type AuditSubTab = 'consistency' | 'double-count' | 'csv-consistency';
 
 // Mesmo base path hardcoded em index.tsx (BrowserRouter basename="/FintechBankApp"
 // e vite.config base) — os dashboards HTML ficam em WEB/public/audit/, servidos
@@ -39,6 +39,7 @@ const AuditSection: React.FC = () => {
 
     const [consistency, setConsistency] = useState<Awaited<ReturnType<typeof adminAuditConsistency>> | null>(null);
     const [doubleCount, setDoubleCount] = useState<Awaited<ReturnType<typeof adminAuditDoubleCount>> | null>(null);
+    const [csvConsistency, setCsvConsistency] = useState<Awaited<ReturnType<typeof adminAuditCsvConsistency>> | null>(null);
     const [loading, setLoading] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
 
@@ -46,9 +47,10 @@ const AuditSection: React.FC = () => {
         setLoading(true);
         setStatusMessage('Consultando auditorias...');
         try {
-            const [c, d] = await Promise.all([adminAuditConsistency(), adminAuditDoubleCount()]);
+            const [c, d, cc] = await Promise.all([adminAuditConsistency(), adminAuditDoubleCount(), adminAuditCsvConsistency()]);
             setConsistency(c);
             setDoubleCount(d);
+            setCsvConsistency(cc);
             setStatusMessage('Auditorias atualizadas.');
         } catch {
             setStatusMessage('Falha ao consultar auditorias.');
@@ -64,6 +66,7 @@ const AuditSection: React.FC = () => {
     const subTabs: { id: AuditSubTab; label: string }[] = [
         { id: 'consistency', label: 'Consistência' },
         { id: 'double-count', label: 'Double-Counting' },
+        { id: 'csv-consistency', label: 'CSV × Backend' },
     ];
 
     const cardCls = `p-5 rounded-3xl border ${isMidnight ? 'bg-[#151515] border-white/10 text-white' : 'bg-white border-black/10 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'}`;
@@ -207,6 +210,50 @@ const AuditSection: React.FC = () => {
                                     {doubleCount.tip}
                                 </p>
                             )}
+                        </>
+                    )}
+                </section>
+            )}
+            {subTab === 'csv-consistency' && (
+                <section className={cardCls} aria-labelledby="audit-csv-consistency-title">
+                    <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                        <h2 id="audit-csv-consistency-title" className="text-sm font-black uppercase tracking-tight">
+                            CSV de Massas × Backend
+                        </h2>
+                        <a
+                            href={reportUrl('audit_csv_consistency_dashboard.html')}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`flex items-center gap-1.5 text-xs font-bold underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${isMidnight ? 'text-volt-green focus-visible:outline-volt-green' : 'text-black focus-visible:outline-black'}`}
+                        >
+                            Abrir relatório completo <ExternalLink size={12} />
+                        </a>
+                    </div>
+
+                    {!csvConsistency ? (
+                        <p className="text-xs opacity-60">{loading ? 'Carregando…' : 'Sem dados.'}</p>
+                    ) : csvConsistency.success === false ? (
+                        <p className="text-xs text-red-500 font-bold flex items-center gap-1.5">
+                            <AlertTriangle size={14} /> {csvConsistency.message || 'Erro ao consultar.'}
+                        </p>
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                                <KpiCard label="Massas Escaneadas" value={csvConsistency.summary?.totalScanned ?? 0} tone="neutral" isMidnight={isMidnight} />
+                                <KpiCard label="Consistentes" value={csvConsistency.summary?.consistent ?? 0} tone="good" isMidnight={isMidnight} />
+                                <KpiCard
+                                    label="Divergentes"
+                                    value={csvConsistency.summary?.divergent ?? 0}
+                                    tone={(csvConsistency.summary?.divergent ?? 0) > 0 ? 'bad' : 'good'}
+                                    isMidnight={isMidnight}
+                                />
+                            </div>
+                            <p className="text-xs opacity-70 flex items-start gap-1.5">
+                                {(csvConsistency.summary?.divergent ?? 0) === 0
+                                    ? <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-500" />
+                                    : <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" />}
+                                {csvConsistency.tip ?? 'Compara fatura_fechada/fatura_aberta do CSV de massas (botão "Exportar CSV") contra o cálculo real do backend (enrichUserCreditCardData) — pega regressão na query do CSV antes que vire massa de teste ruim.'}
+                            </p>
                         </>
                     )}
                 </section>

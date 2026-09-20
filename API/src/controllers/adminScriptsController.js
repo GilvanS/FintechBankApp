@@ -214,6 +214,27 @@ module.exports = function createAdminScriptsController(deps) {
         }
     };
 
+    // POST /admin/scripts/uti-recuperacao — roda uti_massa.cjs --confirm --json
+    // (+ --cpf= opcional: sem ele, roda contra TODA massa em
+    // tbl_cemiterio_teste com status 'precisa_massa_nova'). Força a correção
+    // (apaga/regera billing_charges, consolida fatura duplicada, etc.) das
+    // massas que a auditoria diária não sabe curar sozinha — ver
+    // scripts/uti_massa.cjs para a lista de anomalias tratadas.
+    const utiRecuperacao = async (req, res) => {
+        const cpf = cleanCpf(req.body?.cpf);
+        const args = ['--confirm', '--json'];
+        if (cpf.length === 11) args.push(`--cpf=${cpf}`);
+        try {
+            const output = await runNodeScript('uti_massa.cjs', args, 60000);
+            let result;
+            try { result = JSON.parse(output); } catch { result = { log: output }; }
+            auditLog(req, 'admin_script_uti_recuperacao', 'info', { cpf: cpf || 'ALL' });
+            res.json({ success: true, data: result, executedAt: new Date().toISOString() });
+        } catch (err) {
+            res.status(500).json({ success: false, message: 'Erro ao rodar uti_massa.cjs: ' + err.message });
+        }
+    };
+
     return {
         auditFix,
         syncOverdueDays,
@@ -223,5 +244,6 @@ module.exports = function createAdminScriptsController(deps) {
         activatePendingCards,
         exportMassasCsv,
         recalcularLimite,
+        utiRecuperacao,
     };
 };

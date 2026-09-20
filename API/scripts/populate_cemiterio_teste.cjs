@@ -87,6 +87,22 @@ async function main() {
     }
 
     console.log(`✅ ${ok} massa(s) inserida(s) em tbl_cemiterio_teste (precisam de massa nova).`);
+
+    // Encadeamento com o UTI de recuperação: só dispara se ESTA rodada achou
+    // massa NOVA no cemitério (ok > 0) — se nada novo entrou, não tem por que
+    // gastar tempo/consultas rodando o UTI de novo sobre o que já foi visto.
+    // Sempre em dry-run aqui: o UTI só GRAVA de verdade quando alguém roda
+    // `node scripts/uti_massa.cjs --confirm` (terminal) ou aciona o botão
+    // "Rodar UTI de Recuperação" no painel Admin — encadear não pula essa
+    // revisão humana antes de forçar escrita em massa.
+    if (ok > 0) {
+        console.log(`\n🏥 ${ok} massa(s) nova(s) no cemitério — rodando UTI de recuperação em dry-run pra já mostrar o plano de correção...`);
+        const { runUti } = require('./uti_massa.cjs');
+        const relatorio = await runUti({ confirm: false, db });
+        console.log(`UTI (dry-run): ${relatorio.totalProcessadas} massas no cemitério | ${relatorio.resumo.semAnomaliaAtual} já saudáveis | ${relatorio.resumo.semHandler} sem handler | por tipo: ${JSON.stringify(relatorio.resumo.porTipo)}`);
+        console.log('Rode "node scripts/uti_massa.cjs --confirm" (ou o botão "Rodar UTI de Recuperação" no Admin) pra aplicar de verdade.');
+    }
+
     process.exit(0);
 }
 

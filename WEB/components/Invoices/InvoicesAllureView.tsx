@@ -225,7 +225,10 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
         return;
       }
       // Sem teto: valor acima da fatura é aceito e o excedente vira saldo credor (regra de negócio da fatura).
-      amt = parsed;
+      // Moeda tem só 2 casas decimais — arredonda antes de mandar pro backend (defesa
+      // extra além da máscara do input, caso o valor chegue de outra fonte com ruído
+      // de ponto flutuante).
+      amt = Math.round(parsed * 100) / 100;
     }
     setCustomError('');
     setIsPaymentPickerOpen(false);
@@ -791,9 +794,18 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-black opacity-50">R$</span>
                   <input
                     type="number"
+                    step="0.01"
                     autoFocus
                     value={customAmount}
-                    onChange={(e) => setCustomAmount(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      // Moeda: no máximo 2 casas decimais. Sem essa máscara, um valor
+                      // com ruído de ponto flutuante (ex: colado de outra fonte) ou
+                      // dígitos extras digitados entra sem filtro no campo.
+                      if (v === '' || /^\d*(\.\d{0,2})?$/.test(v)) {
+                        setCustomAmount(v);
+                      }
+                    }}
                     placeholder="Ex: 150,00"
                     className={`w-full pl-8 pr-3 py-2.5 rounded-lg border text-xs font-bold outline-none ${
                       isMidnight ? 'bg-volt-dark border-white/10 focus:border-volt-green' : 'bg-gray-50 border-black/20 focus:border-black'

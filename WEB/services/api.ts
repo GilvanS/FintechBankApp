@@ -1185,6 +1185,40 @@ export const adminAuditConsistency = async (options?: { cpf?: string; limit?: nu
   }
 };
 
+export const adminAuditCsvConsistency = async (options?: { cpf?: string; limit?: number }): Promise<{
+  success: boolean;
+  message?: string;
+  summary?: {
+    totalScanned: number;
+    consistent: number;
+    divergent: number;
+  };
+  details?: Array<{
+    cpf: string;
+    name: string;
+    statusCsv: string;
+    csvFechada: number;
+    realFechada: number;
+    diffFechada: number;
+    csvAberta: number;
+    realAberta: number;
+    diffAberta: number;
+  }>;
+  filters?: { cpf: string | null; limit: number };
+  tip?: string;
+}> => {
+  try {
+    const params = new URLSearchParams();
+    if (options?.cpf) params.set('cpf', options.cpf);
+    if (options?.limit) params.set('limit', String(options.limit));
+    const qs = params.toString();
+    const result = await apiCall<any>(`/admin/audit-csv-consistency${qs ? '?'+qs : ''}`);
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao auditar CSV de massas' };
+  }
+};
+
 export const adminAuditDoubleCount = async (options?: { cpf?: string; limit?: number }): Promise<{
   success: boolean;
   message?: string;
@@ -1569,6 +1603,17 @@ export const adminRecalcularLimiteDisponivel = async (cpf?: string): Promise<{ s
         });
     } catch (error: any) {
         return { success: false, message: error.message || 'Erro ao recalcular limite disponível.' };
+    }
+};
+
+export const adminUtiRecuperacao = async (cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+    try {
+        return await apiCall(`/admin/scripts/uti-recuperacao`, {
+            method: 'POST',
+            body: JSON.stringify(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}),
+        });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao rodar UTI de recuperação.' };
     }
 };
 

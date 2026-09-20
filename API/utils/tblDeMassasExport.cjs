@@ -7,10 +7,13 @@
  * globais/vinculados, compras em aberto e encargos herdados sem N+1 queries.
  *
  * REGRA DE PARIDADE WEB/CSV:
- *  - fatura_fechada  = valor ORIGINAL imutável da fatura FECHADA mais recente
- *    (valor_total da invoice). NÃO zera quando paga — a fatura fechou, o valor não
- *    muda mais (mesma regra que Web/Admin aplicam via _closedInvoiceValorTotal). Pra
- *    saber se ainda deve, use status_fatura_fechada ('PAGA' | 'ABERTA'), não o valor.
+ *  - fatura_fechada  = SOMA do valor ORIGINAL imutável de TODAS as faturas FECHADA do
+ *    CPF (valor_total de cada invoice, não só a mais recente — massa com 2+ fechadas
+ *    empilhadas, ex. cliente que ficou vários meses sem pagar, tinha o valor
+ *    subestimado quando pegava só a última; confirmado 2026-09-20, 243 massas
+ *    afetadas). NÃO zera quando paga — a fatura fechou, o valor não muda mais (mesma
+ *    regra que Web/Admin aplicam via _closedInvoiceValorTotal, que também soma).
+ *    Pra saber se ainda deve, use status_fatura_fechada ('PAGA' | 'ABERTA'), não o valor.
  *  - fatura_aberta   = soma de compras do ciclo ATUAL (após corte da fechada) + encargos pending
  *  - status_fatura_fechada = 'PAGA' | 'ABERTA' | 'INEXISTENTE'
  *  Estas colunas espelham o que o backend calcula em enrichUserCreditCardData (index.cjs).
@@ -40,6 +43,12 @@ fechadas_invoices AS (
     WHERE status = 'FECHADA'
 ),
 tx_fechadas_fallback AS (
+    -- Só entra aqui quem está REALMENTE em atraso (days_overdue > 0) e não tem
+    -- registro em invoices (conta legado pré-migration). Sem esse filtro, compras
+    -- comuns do ciclo aberto de uma conta NOVA (dentro do próprio mês, sem nenhuma
+    -- fatura jamais fechada) caíam aqui só por terem mais de ~8 dias — sintetizando
+    -- uma "fatura fechada" fantasma idêntica à fatura aberta e status ABERTA em vez
+    -- de INEXISTENTE (confirmado 2026-09-20, CPFs 72395319538 e 03265071758).
     SELECT
         t.cpf,
         (DATE_TRUNC('month', CURRENT_DATE) + (COALESCE(u.credit_card_due_day, 10) - 1) * INTERVAL '1 day')::timestamp AS due_date,
@@ -49,6 +58,7 @@ tx_fechadas_fallback AS (
     INNER JOIN fintech.users u ON u.cpf = t.cpf
     WHERE t.type IN ('SHOP_CREDIT', 'CREDIT', 'SUBSCRIPTION', 'INVOICE_INSTALLMENT')
       AND t.cpf NOT IN (SELECT cpf FROM fechadas_invoices)
+      AND COALESCE(u.days_overdue, 0) > 0
       AND t.date <= (DATE_TRUNC('month', CURRENT_DATE) + (COALESCE(u.credit_card_due_day, 10) - 8) * INTERVAL '1 day')
     GROUP BY t.cpf, u.credit_card_due_day
     HAVING SUM(ABS(t.amount)) > 0
@@ -79,12 +89,10 @@ fechada_calculada AS (
             WHEN f.total_fechadas IS NULL THEN 'INEXISTENTE'
             ELSE 'ABERTA'
         END as status_fechada,
-        -- Valor ORIGINAL imutável (valor_total da invoice) — nunca zera, mesmo paga.
-        -- Ver nota "REGRA DE PARIDADE WEB/CSV" no topo do arquivo.
-        (
-            SELECT valor_total FROM fechadas f2
-            WHERE f2.cpf = f.cpf AND f2.rn = 1
-        ) as valor_fechada_exibicao,
+        -- Valor ORIGINAL imutável = SOMA de todas as fechadas (não só a mais recente
+        -- — massa com 2+ fechadas empilhadas subestimava o valor real). Nunca zera,
+        -- mesmo paga. Ver nota "REGRA DE PARIDADE WEB/CSV" no topo do arquivo.
+        f.total_fechadas as valor_fechada_exibicao,
         (
             SELECT due_date FROM fechadas f2
             WHERE f2.cpf = f.cpf AND f2.rn = 1
@@ -93,12 +101,18 @@ fechada_calculada AS (
     LEFT JOIN pagos_totais pt ON pt.cpf = f.cpf
 ),
 compras_ciclo AS (
+    -- Sem fatura fechada real (fc.due_date_ancora IS NULL — conta nova, nunca fechou
+    -- ciclo nenhum): TODA a transação da conta é do ciclo aberto, sem corte nenhum.
+    -- O corte genérico "mês atual, dia_vencimento-8" que existia aqui antes excluía
+    -- compras normais só por serem >8 dias antigas relativas a HOJE — mesma classe de
+    -- bug do tx_fechadas_fallback (confirmado 2026-09-20, CPFs 72395319538/03265071758
+    -- ficavam com fatura_aberta=0 ou subestimada depois de tirar a fechada fantasma).
     SELECT t.cpf, SUM(ABS(t.amount)) AS total
     FROM fintech.transactions t
     LEFT JOIN fechada_calculada fc ON fc.cpf = t.cpf
     INNER JOIN fintech.users u ON u.cpf = t.cpf
     WHERE t.type IN ('SHOP_CREDIT', 'CREDIT', 'SUBSCRIPTION', 'INVOICE_INSTALLMENT')
-      AND t.date > COALESCE(fc.due_date_ancora, (DATE_TRUNC('month', CURRENT_DATE) + (COALESCE(u.credit_card_due_day, 10) - 8) * INTERVAL '1 day'))
+      AND (fc.due_date_ancora IS NULL OR t.date > fc.due_date_ancora)
     GROUP BY t.cpf
 ),
 encargos_herdados AS (

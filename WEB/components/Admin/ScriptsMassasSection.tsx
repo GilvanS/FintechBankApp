@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { Wrench, RefreshCw, FileText, BarChart3, CreditCard, AlertTriangle, Download, Scale } from 'lucide-react';
+import { Wrench, RefreshCw, FileText, BarChart3, CreditCard, AlertTriangle, Download, Scale, HeartPulse } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import {
     adminAuditFix, adminSyncOverdueDays, adminInvoicePdfPreview, adminMassaReport,
     adminActivatePendingCards, adminExportMassasCsv, adminRecalcularLimiteDisponivel,
+    adminUtiRecuperacao,
 } from '../../services/api';
 import ScriptActionModal, { ScriptActionResult } from './ScriptActionModal';
 
-type ScriptKey = 'audit-fix' | 'sync-overdue' | 'pdf-preview' | 'report' | 'activate-cards' | 'export-csv' | 'recalcular-limite' | null;
+type ScriptKey = 'audit-fix' | 'sync-overdue' | 'pdf-preview' | 'report' | 'activate-cards' | 'export-csv' | 'recalcular-limite' | 'uti-recuperacao' | null;
 
 /** Cards de ação que rodam scripts de API/scripts/ direto do painel Admin —
  *  mesma lógica dos scripts de terminal, sem precisar abrir shell. */
@@ -82,6 +83,15 @@ const ScriptsMassasSection: React.FC = () => {
             description: 'Corrige credit_card_available_limit com a fórmula canônica (limite total − dívida real). Pode resultar em negativo de propósito quando o limite foi estourado de verdade. CPF opcional: vazio roda em todas as massas.',
             cpfMode: 'optional' as const,
             onClick: () => setActiveScript('recalcular-limite'),
+        },
+        {
+            key: 'uti-recuperacao' as const,
+            icon: HeartPulse,
+            iconBg: 'bg-red-500',
+            title: 'UTI de Recuperação',
+            description: 'Força a correção de massas presas no cemitério de teste (billing_charges dessincronizado, fatura duplicada, etc.) usando a mesma fórmula de uma massa saudável como molde. CPF opcional: vazio roda em todas as massas do cemitério.',
+            cpfMode: 'optional' as const,
+            onClick: () => setActiveScript('uti-recuperacao'),
         },
     ];
 
@@ -204,6 +214,18 @@ const ScriptsMassasSection: React.FC = () => {
                 isMidnight={isMidnight}
                 onClose={() => setActiveScript(null)}
                 onExecute={async (cpf): Promise<ScriptActionResult> => adminRecalcularLimiteDisponivel(cpf)}
+            />
+
+            <ScriptActionModal
+                isOpen={activeScript === 'uti-recuperacao'}
+                title="UTI de Recuperação"
+                icon={HeartPulse}
+                confirmLabel="Rodar UTI"
+                description="Escolhe dinamicamente uma massa saudável (adimplente e inadimplente) como molde e força a correção de quem está no cemitério de teste: regera billing_charges órfãos, consolida faturas duplicadas e relinka os encargos. Sem CPF, roda em todas as massas com status 'precisa_massa_nova'."
+                cpfMode="optional"
+                isMidnight={isMidnight}
+                onClose={() => setActiveScript(null)}
+                onExecute={async (cpf): Promise<ScriptActionResult> => adminUtiRecuperacao(cpf)}
             />
         </div>
     );

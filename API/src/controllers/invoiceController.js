@@ -929,8 +929,11 @@ module.exports = function createInvoiceController(deps) {
                 // Admin vê as ABAIXO via GET /admin/notifications/abaixo (rota dedicada).
                 actionUrl: '/dashboard'
             });
-            // Comprovante PDF no tópico da massa (pagamento mínimo/parcial)
-            await sendPaymentReceipt(cpf, user, {
+            // Comprovante PDF no tópico da massa (pagamento mínimo/parcial) — processo
+            // interno (Telegram/PDF): dispara em background e NÃO bloqueia a resposta
+            // ao web. Pagamento já foi persistido acima; sendPaymentReceipt já engole
+            // os próprios erros (try/catch interno), nunca rejeita.
+            sendPaymentReceipt(cpf, user, {
                 valorPago: payAmount,
                 tipo: isMinimo ? 'MINIMO' : 'PARCIAL',
                 saldoRestante: remaining,
@@ -1048,8 +1051,11 @@ module.exports = function createInvoiceController(deps) {
             ].join('\n'),
             actionUrl: '/dashboard'
         });
-        // Comprovante PDF no tópico da massa (pagamento total)
-        await sendPaymentReceipt(cpf, user, {
+        // Comprovante PDF no tópico da massa (pagamento total) — processo interno
+        // (Telegram/PDF): dispara em background e NÃO bloqueia a resposta ao web.
+        // Pagamento já foi persistido acima; sendPaymentReceipt já engole os
+        // próprios erros (try/catch interno), nunca rejeita.
+        sendPaymentReceipt(cpf, user, {
             valorPago: payAmount,
             tipo: 'TOTAL',
             saldoRestante: 0,

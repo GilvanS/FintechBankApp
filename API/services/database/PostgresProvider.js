@@ -50,7 +50,14 @@ class PostgresProvider extends DatabaseInterface {
                 connectionString: this.config.connectionString,
                 ssl: this.config.ssl ? { rejectUnauthorized: false } : false,
                 connectionTimeoutMillis: 10000,
-                idleTimeoutMillis: 30000,
+                // 0 = nunca derruba conexão ociosa. Com 30s (padrão do driver), qualquer
+                // gap sem request (comum entre passos de E2E, ou uso manual da tela) fazia
+                // o pool fechar a conexão; a próxima query pagava handshake TCP + auth do
+                // zero, e se isso passasse de connectionTimeoutMillis a resposta chegava
+                // malformada no front ("Request failed" — visto tanto no login quanto no
+                // pagamento de fatura, 2026-09-20).
+                idleTimeoutMillis: 0,
+                keepAlive: true,
                 max: 20,
                 options: '-c timezone=America/Sao_Paulo'
             });
