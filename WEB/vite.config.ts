@@ -13,7 +13,27 @@ export default defineConfig(() => {
         proxy: {
           '/api': {
             target: 'http://localhost:3001',
-            changeOrigin: true
+            changeOrigin: true,
+            // Quando a API está fora do ar / derruba a conexão, o proxy respondia
+            // 500 com corpo VAZIO em text/plain. O front faz response.json() nesse
+            // corpo, quebra, e cai no fallback genérico "Request failed" — sem
+            // status, sem causa, e (pior) sem o usuário saber se o pagamento foi
+            // processado. Aqui devolvemos SEMPRE JSON, com a causa real.
+            timeout: 30000,
+            proxyTimeout: 30000,
+            configure: (proxy) => {
+              proxy.on('error', (err, _req, res) => {
+                const payload = JSON.stringify({
+                  success: false,
+                  code: 'API_UNREACHABLE',
+                  message: `Não foi possível falar com a API (${err.code || err.message}). A operação pode NÃO ter sido processada — confira antes de tentar de novo.`,
+                });
+                if (res && 'writeHead' in res && !res.headersSent) {
+                  res.writeHead(502, { 'Content-Type': 'application/json' });
+                }
+                if (res && 'end' in res) res.end(payload);
+              });
+            },
           }
         }
       },

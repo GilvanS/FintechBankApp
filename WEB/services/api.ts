@@ -47,7 +47,14 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
+    // Corpo não-JSON aqui significa que a resposta NÃO veio do app: é o proxy do
+    // Vite/servidor devolvendo erro em texto puro porque a API caiu ou derrubou a
+    // conexão. O fallback antigo ('Request failed') escondia isso — sem status,
+    // sem causa, e sem avisar que a operação pode ter sido processada mesmo assim
+    // (num pagamento, isso é a diferença entre "tentar de novo" e cobrar 2×).
+    const error = await response.json().catch(() => ({
+      message: `Falha de comunicação com o servidor (HTTP ${response.status}). A operação pode NÃO ter sido processada — confira o resultado antes de tentar novamente.`,
+    }));
     // Se for 403/Acesso negado em endpoint admin, notificar o AdminDashboard
     // para que ele possa mostrar um modal de re-login.
     if (response.status === 403 && (endpoint.startsWith('/admin') || endpoint.startsWith('/debug'))) {

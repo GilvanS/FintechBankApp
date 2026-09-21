@@ -835,6 +835,46 @@ module.exports = function createInvoiceController(deps) {
         const requestedAmount = typeof amount === 'number' && amount > 0 ? amount : totalDueComplete;
         const payAmount = requestedAmount;
 
+        // ── Guarda de idempotência ────────────────────────────────────────────
+        // Quando a resposta se perde no caminho (API reiniciando, proxy do Vite
+        // devolvendo erro, conexão caindo), o usuário vê o modal de PIN ainda
+        // aberto com uma mensagem de falha e clica Confirmar de novo — mas o
+        // débito do primeiro envio JÁ foi persistido. Sem esta guarda, cobra 2×
+        // (caso real observado: limite subiu +1000 = 2 × 500).
+        // Chave natural cpf+valor+janela curta: não exige coluna nova nem que o
+        // front mande idempotency key. Trade-off assumido: dois pagamentos
+        // legítimos de valor idêntico em menos de 90s são tratados como reenvio —
+        // para pagamento de fatura, esse é o lado seguro do erro.
+        // A janela de tempo é comparada em JS, NÃO em SQL: a coluna `date` é
+        // `timestamp without time zone` e a comparação com now()/ISO faz o Postgres
+        // converter fuso implicitamente, descartando linhas válidas (o mesmo erro
+        // derrubou uma query de diagnóstico nesta investigação).
+        const IDEMPOTENCY_WINDOW_MS = 90000;
+        const candidatosIdem = await dbService.executeQuery(`
+            SELECT id, date FROM ${dbService.fq('transactions')}
+            WHERE cpf = ${esc(cpf)}
+              AND type = 'INVOICE_PAYMENT'
+              AND ABS(CAST(amount AS DECIMAL(15,2)) + ${payAmount.toFixed(2)}) < 0.02
+            ORDER BY date DESC LIMIT 1
+        `);
+        const pagamentoRecenteIgual = candidatosIdem.filter(r => {
+            const quando = new Date(r.date).getTime();
+            return Number.isFinite(quando) && (Date.now() - quando) < IDEMPOTENCY_WINDOW_MS;
+        });
+        if (pagamentoRecenteIgual.length > 0) {
+            console.warn(`[pay][idempotencia] CPF ${cpf}: pagamento de R$ ${payAmount.toFixed(2)} já registrado há instantes (tx ${pagamentoRecenteIgual[0].id}) — reenvio ignorado, NÃO cobrando de novo.`);
+            const freshRowIdem = await usersRepo.findByCpf(cpf);
+            const freshUserIdem = normalizeUser(freshRowIdem);
+            await enrichUserCreditCardData(freshUserIdem, cpf);
+            return res.json({
+                success: true,
+                idempotent: true,
+                message: 'Pagamento já processado.',
+                amountPaid: payAmount,
+                user: freshUserIdem,
+            });
+        }
+
         // Valor mínimo é apenas sugestão de UI — o usuário pode pagar menos, mais, ou o total.
         // Pagar abaixo do mínimo mantém saldo devedor e encargos via fluxo de pagamento parcial abaixo.
         if (balance < payAmount) return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
