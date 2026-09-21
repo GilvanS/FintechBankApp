@@ -260,7 +260,17 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
         showError(res?.message || 'Não foi possível concluir o pagamento.');
       }
     } catch (err: any) {
-      showError(err?.message || 'Não foi possível concluir o pagamento.');
+      if (err?.code === 'API_UNREACHABLE') {
+        // Falha de comunicação de verdade (API caiu/proxy sem resposta) — não é
+        // recusa de negócio. Dá pra tentar de novo AQUI (sem fechar o modal),
+        // em vez de deixar o usuário adivinhar clicando Confirmar sozinho.
+        showError(err.message, {
+          title: 'Falha de comunicação',
+          action: { label: 'Tentar novamente', onClick: () => handleConfirmPassword(pin) },
+        });
+      } else {
+        showError(err?.message || 'Não foi possível concluir o pagamento.');
+      }
     } finally {
       setIsPaying(false);
     }

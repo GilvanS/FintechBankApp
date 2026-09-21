@@ -2,18 +2,33 @@ import React from 'react';
 
 export type ToastType = 'success' | 'error' | 'info';
 
+export interface ToastAction {
+    label: string;
+    onClick: () => void;
+}
+
 export interface ToastMessage {
     type: ToastType;
     text: string;
+    /** Título curto e em destaque — quando ausente, `text` ocupa o lugar do título sozinho (comportamento antigo). */
+    title?: string;
+    /** Ex.: "Tentar novamente" numa falha de comunicação. Opcional — a maioria dos toasts não precisa. */
+    action?: ToastAction;
+}
+
+export interface ToastOptions {
+    title?: string;
+    action?: ToastAction;
 }
 
 export function useToast() {
     const [toast, setToast] = React.useState<ToastMessage | null>(null);
 
-    const show = (type: ToastType, text: string) => setToast({ type, text });
-    const showSuccess = (text: string) => show('success', text);
-    const showError = (text: string) => show('error', text);
-    const showInfo = (text: string) => show('info', text);
+    const show = (type: ToastType, text: string, options?: ToastOptions) =>
+        setToast({ type, text, title: options?.title, action: options?.action });
+    const showSuccess = (text: string, options?: ToastOptions) => show('success', text, options);
+    const showError = (text: string, options?: ToastOptions) => show('error', text, options);
+    const showInfo = (text: string, options?: ToastOptions) => show('info', text, options);
     const hide = () => setToast(null);
 
     return { toast, showSuccess, showError, showInfo, hide };
@@ -50,14 +65,29 @@ export const ToastContainer: React.FC<{ toast: ToastMessage | null; onClose: () 
                         {toast.type === 'info' && <Info className="text-blue-500" size={24} />}
                     </div>
 
-                    <div 
-                        className="flex-1 text-sm font-semibold leading-tight test-toast-message"
-                        id="toast-message"
-                        data-testid="toast-message"
-                        data-cy="toast-message"
-                        data-playwright="toast-message"
-                    >
-                        {toast.text}
+                    <div className="flex-1 min-w-0">
+                        {toast.title && (
+                            <div className="text-sm font-black leading-tight mb-0.5">{toast.title}</div>
+                        )}
+                        <div
+                            className={`text-xs leading-relaxed test-toast-message ${toast.title ? 'text-white/70 font-medium' : 'text-sm font-semibold'}`}
+                            id="toast-message"
+                            data-testid="toast-message"
+                            data-cy="toast-message"
+                            data-playwright="toast-message"
+                        >
+                            {toast.text}
+                        </div>
+                        {toast.action && (
+                            <button
+                                type="button"
+                                onClick={toast.action.onClick}
+                                className="mt-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 transition-colors test-toast-action"
+                                data-testid="toast-action"
+                            >
+                                {toast.action.label}
+                            </button>
+                        )}
                     </div>
 
                     <button 

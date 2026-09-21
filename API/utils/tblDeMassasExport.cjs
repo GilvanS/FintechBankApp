@@ -13,9 +13,19 @@
  *    subestimado quando pegava só a última; confirmado 2026-09-20, 243 massas
  *    afetadas). NÃO zera quando paga — a fatura fechou, o valor não muda mais (mesma
  *    regra que Web/Admin aplicam via _closedInvoiceValorTotal, que também soma).
- *    Pra saber se ainda deve, use status_fatura_fechada ('PAGA' | 'ABERTA'), não o valor.
+ *    Pra saber se ainda deve, use status_fatura_fechada — nunca o valor:
+*      'ABERTA'      → sem fatura fechada nenhuma (só ciclo aberto corrente) — nome
+*                       trocado de 'INEXISTENTE' (2026-09-20): não é erro/dado
+*                       faltando, é estado normal de conta nova/em dia.
+*      'VIGENTE'      → fechada existe e NUNCA recebeu pagamento (único estado seguro
+*                       pra escolher massa nova de teste sem examinar histórico antes)
+*                       — nome trocado do antigo 'ABERTA', que ficava ambíguo com o
+*                       'ABERTA' acima (aberta de quê?).
+*      'PAGO_PARCIAL'→ recebeu pagamento, mas abaixo do mínimo (10%)
+*      'PAGO_MIN'    → recebeu pelo menos o mínimo, mas não o total
+*      'PAGO_TOTAL'  → quitada (equivalente ao antigo 'PAGA')
  *  - fatura_aberta   = soma de compras do ciclo ATUAL (após corte da fechada) + encargos pending
- *  - status_fatura_fechada = 'PAGA' | 'ABERTA' | 'INEXISTENTE'
+ *  - status_fatura_fechada = 'ABERTA' | 'VIGENTE' | 'PAGO_PARCIAL' | 'PAGO_MIN' | 'PAGO_TOTAL'
  *  Estas colunas espelham o que o backend calcula em enrichUserCreditCardData (index.cjs).
  */
 
@@ -84,10 +94,17 @@ fechada_calculada AS (
         COALESCE(pt.total_pago, 0) as total_pago,
         f.total_fechadas,
         GREATEST(0, f.total_fechadas - COALESCE(pt.total_pago, 0)) as residual_total_fechadas,
+        -- Granularidade pedida 2026-09-20 (caso real 71040451128: massa recebeu um
+        -- pagamento Mínimo e DEPOIS um Total, que cobra o valor ORIGINAL de novo —
+        -- excedente de R$187,63 gerado por pegar massa já tocada). 'VIGENTE' significa
+        -- SÓ "nunca recebeu pagamento nenhum" — é a única condição segura pra rodar
+        -- CT03.x do zero sem examinar o histórico primeiro.
         CASE
-            WHEN COALESCE(pt.total_pago, 0) >= f.total_fechadas THEN 'PAGA'
-            WHEN f.total_fechadas IS NULL THEN 'INEXISTENTE'
-            ELSE 'ABERTA'
+            WHEN f.total_fechadas IS NULL THEN 'ABERTA'
+            WHEN COALESCE(pt.total_pago, 0) <= 0 THEN 'VIGENTE'
+            WHEN COALESCE(pt.total_pago, 0) >= f.total_fechadas THEN 'PAGO_TOTAL'
+            WHEN COALESCE(pt.total_pago, 0) >= f.total_fechadas * 0.10 THEN 'PAGO_MIN'
+            ELSE 'PAGO_PARCIAL'
         END as status_fechada,
         -- Valor ORIGINAL imutável = SOMA de todas as fechadas (não só a mais recente
         -- — massa com 2+ fechadas empilhadas subestimava o valor real). Nunca zera,
@@ -175,9 +192,9 @@ todas_massas AS (
         u.credit_card_available_limit                               AS limite_disponivel,
         COALESCE(fc.valor_fechada_exibicao, 0)                      AS fatura_fechada,
         (COALESCE(cc.total, 0) + COALESCE(fc.residual_total_fechadas, 0) + COALESCE(eh.total, 0)) AS fatura_aberta,
-        COALESCE(fc.status_fechada, 'INEXISTENTE')                 AS status_fatura_fechada,
+        COALESCE(fc.status_fechada, 'ABERTA')                      AS status_fatura_fechada,
         CASE
-            WHEN fc.status_fechada = 'PAGA' THEN 0
+            WHEN fc.status_fechada = 'PAGO_TOTAL' THEN 0
             ELSE COALESCE(u.days_overdue, 0)
         END                                                         AS dias_atraso,
         u.account_status                                            AS status,

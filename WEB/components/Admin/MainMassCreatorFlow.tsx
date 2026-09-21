@@ -9,6 +9,7 @@ import {
     GeneratedMassData,
     OVERDUE_TIERS,
     OVERDUE_TIER_KEYS,
+    sortearValorTier,
     OverdueState,
     CycleStatus,
     buildMassPayload,
@@ -259,7 +260,7 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
             daysOverdue: cicloAtualInadimplente ? tier.days : 0,
             // Backend ancora o ciclo atual no último dueDay com pelo menos `minOverdueDays` de atraso.
             minOverdueDays: cicloAtualInadimplente ? tier.days : 0,
-            overdueAmount: temInadimplencia ? tier.amount : 0,
+            overdueAmount: temInadimplencia ? sortearValorTier(tier) : 0,
             birthDate: dados.birthDate,
             age: dados.age,
             hasTutor: false,
@@ -566,7 +567,7 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
                                                 }`}
                                             >
                                                 <span className="font-black">{t.short} · ≥{t.days}d</span>
-                                                <span className="opacity-70 font-mono">R$ {t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                <span className="opacity-70 font-mono text-[10px]">R$ {t.amountMin.toLocaleString('pt-BR')}–{t.amountMax.toLocaleString('pt-BR')}</span>
                                             </button>
                                         );
                                     })}

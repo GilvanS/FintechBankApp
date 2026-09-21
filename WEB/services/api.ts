@@ -63,7 +63,12 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
         window.dispatchEvent(new CustomEvent('admin-auth-failed', { detail: { message: msg, endpoint } }));
       }, 0);
     }
-    throw new Error(error.message || `HTTP ${response.status}`);
+    const httpError = new Error(error.message || `HTTP ${response.status}`) as Error & { code?: string; status?: number };
+    // `code` sobrevive no objeto — quem chama pode diferenciar "API inalcançável"
+    // (mostra botão Tentar novamente) de um erro de negócio normal (Saldo insuficiente etc).
+    httpError.code = error.code;
+    httpError.status = response.status;
+    throw httpError;
   }
 
   return response.json();

@@ -402,17 +402,30 @@ const Login: React.FC<LoginProps> = ({ onNavigateToSignUp, onNavigateToPreLogin,
                             )}
                         </div>
                         
-                        {error && (
-                            <span 
-                                className="alert block p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-center gap-2"
-                                data-testid="login-error-message"
-                                role="alert"
-                                aria-live="assertive"
-                            >
-                                <AlertCircle size={16} aria-hidden="true" />
-                                {error}
-                            </span>
-                        )}
+                        {error && (() => {
+                            // Falha de comunicação (proxy/API fora do ar) tem causa técnica no
+                            // texto — separa em título + descrição em vez de uma linha só, igual
+                            // ao padrão do Toast. Erro de credencial continua uma linha simples.
+                            const isConnFailure = /não foi possível falar com a api|falha de comunicação/i.test(error);
+                            return (
+                                <span
+                                    className="alert block p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-start gap-2"
+                                    data-testid="login-error-message"
+                                    role="alert"
+                                    aria-live="assertive"
+                                >
+                                    <AlertCircle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+                                    {isConnFailure ? (
+                                        <span>
+                                            <span className="block font-black mb-0.5">Falha de comunicação</span>
+                                            <span className="block text-xs font-medium text-red-300/90">{error}</span>
+                                        </span>
+                                    ) : (
+                                        error
+                                    )}
+                                </span>
+                            );
+                        })()}
                         {resetPasswordMessage && (
                             <div 
                                 className="p-3 bg-volt-green/10 rounded-lg text-center"

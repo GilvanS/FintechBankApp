@@ -163,12 +163,22 @@ export function buildMassPayload<T extends { cycles?: CycleStatus[]; accountStat
  * Cenários de massa EM ATRASO oferecidos pelo gerador. Cada nível define os dias
  * de atraso e o valor (principal) da fatura fechada vencida a ser gerada no PGDB.
  */
-export const OVERDUE_TIERS: Record<Exclude<OverdueState, 'EM_DIA'>, { days: number; amount: number; label: string; short: string; desc: string }> = {
-    EM_ATRASO_7D: { days: 7, amount: 1250.00, label: 'Atraso Leve (≥7 dias)', short: 'Leve', desc: 'Fatura fechada vencida de R$ 1.250,00 com pelo menos 7 dias de atraso (ancorada no dia de vencimento do cartão)' },
-    EM_ATRASO_15D: { days: 15, amount: 3870.86, label: 'Atraso Médio (≥15 dias)', short: 'Médio', desc: 'Fatura fechada vencida de R$ 3.870,86 com pelo menos 15 dias de atraso (ancorada no dia de vencimento do cartão)' },
-    EM_ATRASO_30D: { days: 30, amount: 7500.00, label: 'Atraso Grave (≥30 dias)', short: 'Grave', desc: 'Fatura fechada vencida de R$ 7.500,00 com pelo menos 30 dias de atraso (ancorada no dia de vencimento do cartão)' },
+// amountMin/amountMax (não mais um valor fixo): pedido 2026-09-20 — o valor fixo
+// (ex.: sempre R$ 3.870,86 no tier Médio) fazia toda massa "Atraso Médio" nascer
+// com a MESMA fatura fechada, dificultando escolher massa nova sem examinar
+// histórico. montarPayload() sorteia dentro da faixa a cada massa criada.
+export const OVERDUE_TIERS: Record<Exclude<OverdueState, 'EM_DIA'>, { days: number; amountMin: number; amountMax: number; label: string; short: string; desc: string }> = {
+    EM_ATRASO_7D: { days: 7, amountMin: 800.00, amountMax: 1800.00, label: 'Atraso Leve (≥7 dias)', short: 'Leve', desc: 'Fatura fechada vencida entre R$ 800,00 e R$ 1.800,00 com pelo menos 7 dias de atraso (ancorada no dia de vencimento do cartão)' },
+    EM_ATRASO_15D: { days: 15, amountMin: 2500.00, amountMax: 5000.00, label: 'Atraso Médio (≥15 dias)', short: 'Médio', desc: 'Fatura fechada vencida entre R$ 2.500,00 e R$ 5.000,00 com pelo menos 15 dias de atraso (ancorada no dia de vencimento do cartão)' },
+    EM_ATRASO_30D: { days: 30, amountMin: 5500.00, amountMax: 9500.00, label: 'Atraso Grave (≥30 dias)', short: 'Grave', desc: 'Fatura fechada vencida entre R$ 5.500,00 e R$ 9.500,00 com pelo menos 30 dias de atraso (ancorada no dia de vencimento do cartão)' },
 };
 export const OVERDUE_TIER_KEYS = Object.keys(OVERDUE_TIERS) as Array<Exclude<OverdueState, 'EM_DIA'>>;
+
+/** Sorteia um valor dentro da faixa do tier — chamar UMA vez por massa criada (não no render). */
+export function sortearValorTier(tier: { amountMin: number; amountMax: number }): number {
+    const v = tier.amountMin + Math.random() * (tier.amountMax - tier.amountMin);
+    return Math.round(v * 100) / 100;
+}
 
 /** Piso de dias de atraso do ciclo ATUAL inadimplente — espelho de MIN_DIAS_ATRASO_CICLO_ATUAL (API). */
 export const MIN_OVERDUE_DAYS_CURRENT_CYCLE = 7;
