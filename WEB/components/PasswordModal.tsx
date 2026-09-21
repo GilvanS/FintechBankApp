@@ -43,7 +43,17 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
     // (a chamada à API já é a mesma de sempre; o comprovante Telegram/PDF roda em
     // background no backend e NÃO bloqueia essa resposta). Sem isso o botão ficava
     // com um spinner mudo por vários segundos, parecendo travado.
-    const PROCESSING_STAGES = ['Verificando PIN…', 'Processando pagamento…', 'Confirmando com o banco…'];
+    // 5 estagios espacados em 3s cada = ~15s de progressao visual; depois disso
+    // fica parado no ultimo texto ate a resposta chegar (isLoading fica true por
+    // ate ~60s em casos lentos — ver PinModalComponent.ts no poc-fintech-playwright,
+    // timeout do teste subiu de 30s->60s em 2026-09-21 pelo mesmo motivo).
+    const PROCESSING_STAGES = [
+        'Verificando PIN…',
+        'Processando pagamento…',
+        'Confirmando com o banco…',
+        'Quase lá…',
+        'Só mais um instante…'
+    ];
     const [stageIndex, setStageIndex] = useState(0);
 
     useEffect(() => {
@@ -53,7 +63,7 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, onConfir
         }
         const interval = setInterval(() => {
             setStageIndex(i => Math.min(i + 1, PROCESSING_STAGES.length - 1));
-        }, 2200);
+        }, 3000);
         return () => clearInterval(interval);
     }, [isLoading]);
 
