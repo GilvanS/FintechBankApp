@@ -207,7 +207,14 @@ const Dashboard: React.FC = () => {
 
         refreshUserIfNeeded();
         return () => { cancelled = true; };
-    }, [currentView, user, updateUser]);
+        // Apenas cpf (nao o objeto `user` inteiro): updateUser() sempre cria um
+        // objeto novo (App.tsx handleUpdateUser -> setUser({...prevUser, ...})),
+        // entao ter `user` aqui reexecuta este efeito a cada resposta -> refetch
+        // -> novo objeto -> reexecuta de novo, num loop sem fim de GET /users/:cpf
+        // (visto ao vivo: ~150 chamadas/min saturando o event loop e atrasando o
+        // POST de pagamento em paralelo por 20-27s, 2026-09-21).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentView, user?.cpf, updateUser]);
 
     // Refresh quando modal de cards abre
     useEffect(() => {
@@ -217,7 +224,9 @@ const Dashboard: React.FC = () => {
             if (r.success && r.user && !cancelled) updateUser(r.user);
         });
         return () => { cancelled = true; };
-    }, [currentView, user]);
+        // Mesmo motivo do efeito acima: só cpf, não o objeto `user`.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentView, user?.cpf]);
 
     // Refresh extrato quando a view de statement abre
     useEffect(() => {
