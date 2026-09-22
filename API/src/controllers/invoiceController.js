@@ -961,21 +961,33 @@ module.exports = function createInvoiceController(deps) {
                     ? '<blockquote>Pagamento abaixo do mínimo: segue inadimplente, os dias de atraso continuam contando e os encargos continuam incidindo sobre o saldo devedor restante.</blockquote>'
                     : '<blockquote>Pagamento mínimo registrado: dias de atraso zerados, mas os encargos continuam acumulando sobre o saldo residual até o pagamento total.</blockquote>'
             ].join('\n');
-            await notificationsRepo.addNotification({
+            // Responde JÁ — o pagamento (persistPaymentDistribution/updateBalance/limite/
+            // status acima) está gravado e é tudo que o cliente precisa saber. O que falta
+            // abaixo (notificação, comprovante, SSE) não bloqueia mais a resposta: nenhum
+            // dos 4 call-sites do front (WEB: Dashboard/CardDashboard/InvoicesAllureView/
+            // InvoicesView; MOBILE: mesmos 4) depende de `user` vir aqui — todos já refazem
+            // getUserByCpf() após sucesso, com fallback pro `user` desta resposta só se
+            // esse refetch falhar. Isso tira o enrichUserCreditCardData (825 linhas,
+            // múltiplas queries) do caminho síncrono: era o gargalo real por trás do
+            // ECONNRESET pós-PIN com pagamento já efetivado — o proxy do Vite corta a
+            // conexão em 30s e o enrich, sob carga de dados de teste acumulados, passava
+            // disso (2026-09-22).
+            res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining });
+
+            // .catch() obrigatório em cada uma: uma rejeição aqui viraria unhandledRejection
+            // e (sem handler) derrubaria o processo — mas agora a resposta já foi enviada,
+            // então o pior caso é só perder a notificação/comprovante, não mais ECONNRESET.
+            notificationsRepo.addNotification({
                 cpf,
                 title: notifTitle,
                 message: notifMessage,
                 // actionUrl sempre /dashboard para notificações do usuário final.
                 // Admin vê as ABAIXO via GET /admin/notifications/abaixo (rota dedicada).
                 actionUrl: '/dashboard'
-            });
+            }).catch((erro) => console.error('[pay] notificação parcial falhou (ignorado):', erro && erro.message));
             // Comprovante PDF no tópico da massa (pagamento mínimo/parcial) — processo
-            // interno (Telegram/PDF): dispara em background e NÃO bloqueia a resposta
-            // ao web. Pagamento já foi persistido acima; sendPaymentReceipt já engole
-            // os próprios erros (try/catch interno), nunca rejeita.
-            // .catch() obrigatório: uma rejeição aqui (rede/PDF/Telegram) viraria
-            // unhandledRejection e DERRUBARIA o processo — com o pagamento já
-            // gravado e a resposta ainda não enviada, o cliente levava ECONNRESET.
+            // interno (Telegram/PDF); sendPaymentReceipt já engole os próprios erros
+            // (try/catch interno), nunca rejeita.
             Promise.resolve(sendPaymentReceipt(cpf, user, {
                 valorPago: payAmount,
                 tipo: isMinimo ? 'MINIMO' : 'PARCIAL',
@@ -986,7 +998,7 @@ module.exports = function createInvoiceController(deps) {
                     ? 'Pagamento abaixo do mínimo. Segue inadimplente, dias de atraso continuam contando e encargos continuam incidindo sobre o saldo devedor restante.'
                     : 'Pagamento mínimo registrado. Dias de atraso zerados, mas os encargos continuam acumulando sobre o saldo residual até o pagamento total.'
             })).catch((erro) => console.error('[pay] comprovante parcial falhou (ignorado):', erro && erro.message));
-            // SSE: notificar frontend em tempo real
+            // SSE: notificar frontend em tempo real (best-effort)
             try {
                 const sse = require('../../services/sseService');
                 sse.sendToClient(cpf, 'payment.completed', {
@@ -998,16 +1010,7 @@ module.exports = function createInvoiceController(deps) {
                     timestamp: new Date().toISOString(),
                 });
             } catch (_sseErr) { /* SSE é fire-and-forget */ }
-            // user fresco (mesmo bloco canônico de enrichUserCreditCardData): sem isso o
-            // frontend não tinha como saber que a fatura mudou — InvoicesAllureView.
-            // handleConfirmPassword só chama updateUser(res.user) quando `user` vem na
-            // resposta. Faltando, a tela ficava "congelada" no estado pré-pagamento
-            // (valor, ícone de PAGA e o lançamento do pagamento em Lançamentos, todos
-            // stale) até um reload manual ou navegação que refizesse o fetch.
-            const freshRowParcial = await usersRepo.findByCpf(cpf);
-            const freshUserParcial = normalizeUser(freshRowParcial);
-            await enrichUserCreditCardData(freshUserParcial, cpf);
-            return res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining, user: freshUserParcial });
+            return;
         }
     
         // Pagamento total: registrar o valor REALMENTE pago (payAmount, não o devido),
@@ -1075,7 +1078,13 @@ module.exports = function createInvoiceController(deps) {
             // (enrichUserCreditCardData -> closedInvoiceCharges -> currentInvoiceTotal).
             console.log(`[pay] ${cpf} pagou R$ ${payAmount.toFixed(2)} (principal), deixando R$ ${(totalDueComplete - payAmount).toFixed(2)} de encargos pending para a fatura aberta.`);
         }
-        await notificationsRepo.addNotification({
+        // Responde JÁ — mesmo raciocínio do branch parcial acima (ver comentário lá):
+        // enrichUserCreditCardData sai do caminho síncrono, front sempre refaz
+        // getUserByCpf() após sucesso, nenhum call-site depende de `user` aqui.
+        res.json({ success: true, message: 'Fatura paga com sucesso.' });
+
+        // Pós-resposta: fire-and-forget, .catch() obrigatório (mesmo motivo do branch parcial).
+        notificationsRepo.addNotification({
             cpf,
             title: 'Pagamento de fatura',
             message: [
@@ -1093,12 +1102,10 @@ module.exports = function createInvoiceController(deps) {
                 '<blockquote>Limite de crédito reestabelecido e conta regularizada com sucesso.</blockquote>'
             ].join('\n'),
             actionUrl: '/dashboard'
-        });
+        }).catch((erro) => console.error('[pay] notificação total falhou (ignorado):', erro && erro.message));
         // Comprovante PDF no tópico da massa (pagamento total) — processo interno
-        // (Telegram/PDF): dispara em background e NÃO bloqueia a resposta ao web.
-        // Pagamento já foi persistido acima; sendPaymentReceipt já engole os
-        // próprios erros (try/catch interno), nunca rejeita.
-        // .catch() obrigatório — mesmo motivo do branch parcial acima.
+        // (Telegram/PDF); sendPaymentReceipt já engole os próprios erros (try/catch
+        // interno), nunca rejeita.
         Promise.resolve(sendPaymentReceipt(cpf, user, {
             valorPago: payAmount,
             tipo: 'TOTAL',
@@ -1107,7 +1114,7 @@ module.exports = function createInvoiceController(deps) {
             vencimento: cutoffIso,
             nota: 'Limite de crédito reestabelecido e conta regularizada com sucesso.'
         })).catch((erro) => console.error('[pay] comprovante total falhou (ignorado):', erro && erro.message));
-        // SSE: notificar frontend em tempo real
+        // SSE: notificar frontend em tempo real (best-effort)
         try {
             const sse = require('../../services/sseService');
             sse.sendToClient(cpf, 'payment.completed', {
@@ -1117,12 +1124,6 @@ module.exports = function createInvoiceController(deps) {
                 timestamp: new Date().toISOString(),
             });
         } catch (_sseErr) { /* SSE é fire-and-forget */ }
-        // user fresco — mesmo motivo do branch parcial acima: sem isso o frontend não
-        // atualiza (valor, ícone de PAGA, lançamento em Lançamentos ficam stale).
-        const freshRowTotal = await usersRepo.findByCpf(cpf);
-        const freshUserTotal = normalizeUser(freshRowTotal);
-        await enrichUserCreditCardData(freshUserTotal, cpf);
-        res.json({ success: true, message: 'Fatura paga com sucesso.', user: freshUserTotal });
     };
     
     const summary = async (req, res) => {
