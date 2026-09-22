@@ -271,61 +271,19 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
         // manualmente), mas os billing_charges pending ainda refletem o days_overdue
         // antigo/errado, porque a invoice não entra mais no filtro da Anomalia 8 acima
         // (due_date já bate com o dueDay) e por isso nunca seria regerada sem este passo.
-        const encargosOrfaos = await db.executeQuery(`
-            SELECT i.id, i.cpf, i.valor_total, i.dias_atraso, u.full_name,
-                   MAX(bc.days_overdue) AS charge_days_overdue
-            FROM ${db.fq('invoices')} i
-            JOIN ${db.fq('users')} u ON u.cpf = i.cpf
-            JOIN ${db.fq('billing_charges')} bc ON bc.cpf = i.cpf AND bc.invoice_amount = i.valor_total AND bc.status = 'pending'
-            WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
-            GROUP BY i.id, i.cpf, i.valor_total, i.dias_atraso, u.full_name
-            HAVING MAX(bc.days_overdue) != i.dias_atraso
-            ORDER BY i.updated_at ASC
-            LIMIT 150
-        `);
-
-        for (const inv of encargosOrfaos) {
-            const principal = round2(Number(inv.valor_total));
-            const daysOverdueCorreto = Number(inv.dias_atraso);
-
-            await db.executeQuery(`
-                DELETE FROM ${db.fq('billing_charges')}
-                WHERE cpf = '${inv.cpf}' AND invoice_amount = ${principal} AND status = 'pending'
-            `);
-            const multa = round2(principal * 0.02);
-            const jurosMora = round2(principal * 0.000333 * daysOverdueCorreto);
-            const jurosRem = round2(principal * 0.00513 * daysOverdueCorreto);
-            const iof = round2(principal * 0.0038 + principal * 0.000082 * daysOverdueCorreto);
-            const ref = nowDb().slice(0, 7);
-            const chargesNovos = [['multa', multa], ['juros_mora', jurosMora], ['juros_remuneratorios', jurosRem], ['iof', iof]];
-            for (const [type, amount] of chargesNovos) {
-                const chargeId = db.generateUUID ? db.generateUUID() : `chg-${inv.cpf}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-                try {
-                    await db.executeQuery(`
-                        INSERT INTO ${db.fq('billing_charges')}
-                        (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount, created_at, status)
-                        VALUES ('${chargeId}', '${inv.cpf}', '${ref}', '${type}', ${amount}, ${daysOverdueCorreto}, ${principal}, CURRENT_TIMESTAMP, 'pending')
-                    `);
-                } catch (insErr) {
-                    // Guarda TOCTOU (mesmo padrão de billingValidation.js): duas faturas
-                    // FECHADA do mesmo cpf com o mesmo valor_total colidem aqui, porque
-                    // o join acima casa billing_charges<->invoice por valor, não por id —
-                    // a 2a linha tenta inserir a mesma tupla que a 1a já inseriu. Não é
-                    // corrupção de dado, é o unique index billing_charges_daily_unique
-                    // fazendo o trabalho dele — trata como "já inserido" e segue.
-                    if (insErr && (insErr.code === '23505' || /duplicate key/i.test(insErr.message || ''))) {
-                        console.warn(`[Audit] ${inv.cpf}: encargo ${type} (${daysOverdueCorreto}d, ref ${ref}) já inserido por outro processo/fatura — ignorado.`);
-                        continue;
-                    }
-                    throw insErr;
-                }
-            }
-
+        // Lógica em services/chargesProactiveFix.js — reusada pelo botão do admin
+        // (POST /admin/fix-charges-proactive) e por script manual, sem duplicar a
+        // fórmula aqui. Escopo cobre FECHADA + ABERTA (corrige antes do próximo
+        // corte/vencimento reforçar o erro num novo ciclo).
+        const { runChargesProactiveFix } = require('./chargesProactiveFix');
+        const chargesFixResult = await runChargesProactiveFix(db, { limit: 150 });
+        for (const d of chargesFixResult.details) {
+            if (d.action !== 'regenerated') continue;
             errors.push({
-                cpf: inv.cpf,
-                name: inv.full_name,
+                cpf: d.cpf,
+                name: d.name,
                 type: 'ENCARGOS_ORFAOS_REGERADOS',
-                details: `Encargos pending estavam calculados com ${inv.charge_days_overdue}d de atraso, mas a fatura já está com ${daysOverdueCorreto}d — regerados do zero.`
+                details: `Encargos pending estavam calculados com ${d.oldDaysOverdue}d de atraso, mas a fatura já está com ${d.correctDaysOverdue}d — regerados do zero.`
             });
         }
 

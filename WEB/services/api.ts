@@ -1344,6 +1344,44 @@ export const adminFixOrphanPayments = async (): Promise<{
   }
 };
 
+// Backfill de installment_plans para transações INVOICE_INSTALLMENT órfãs
+// (anomalia TRANSACAO_ORFA). services/orphanInstallmentFix.js no backend.
+export const adminFixOrphanInstallments = async (cpf?: string): Promise<{
+  success: boolean;
+  message?: string;
+  summary?: { orphansFound: number; fixed: number; skipped: number };
+  details?: any[];
+}> => {
+  try {
+    const result = await apiCall<{ success: boolean; summary?: any; details?: any[] }>('/admin/fix-orphan-installments', {
+      method: 'POST',
+      body: JSON.stringify({ confirm: true, cpf }),
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao corrigir parcelas órfãs' };
+  }
+};
+
+// Regera billing_charges pending divergentes do days_overdue real (FECHADA +
+// ABERTA, corrige antes do próximo corte/vencimento). services/chargesProactiveFix.js.
+export const adminFixChargesProactive = async (cpf?: string): Promise<{
+  success: boolean;
+  message?: string;
+  summary?: { invoicesFound: number; fixed: number; skipped: number };
+  details?: any[];
+}> => {
+  try {
+    const result = await apiCall<{ success: boolean; summary?: any; details?: any[] }>('/admin/fix-charges-proactive', {
+      method: 'POST',
+      body: JSON.stringify({ confirm: true, cpf }),
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao corrigir encargos' };
+  }
+};
+
 export interface SimulateMassPayload {
     count: number;
     purchaseType?: 'all' | 'avista' | 'parcelado_sem_juros' | 'parcelado_com_juros' | 'internacional_avista' | 'internacional_parcelado';

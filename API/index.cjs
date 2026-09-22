@@ -19,6 +19,36 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 // after tests are done").
 const IS_TEST = process.env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
 
+// Rejeição assíncrona sem .catch() DERRUBA o processo no Node 15+ — e sem handler
+// isso acontece sem deixar rastro: o servidor some, o `node --watch` sobe outro, e
+// quem estava no meio de uma requisição recebe ECONNRESET. Foi exatamente o que
+// travava o pagamento de fatura: a transação era gravada, o processo morria ~1s
+// depois (crash em efeito colateral fire-and-forget: PDF/Telegram) e a resposta
+// nunca saía — o modal de PIN ficava aberto até o timeout do teste (2026-09-21).
+// Registrar em arquivo é o que dá visibilidade: o stdout do dev server raramente
+// está sendo capturado quando o crash acontece.
+if (!IS_TEST) {
+    const fs = require('fs');
+    const registrarCrash = (tipo, erro) => {
+        const linha = `\n[${new Date().toISOString()}] ${tipo}\n${erro && erro.stack ? erro.stack : String(erro)}\n`;
+        try {
+            fs.mkdirSync(path.join(__dirname, 'logs'), { recursive: true });
+            fs.appendFileSync(path.join(__dirname, 'logs', 'crash.log'), linha);
+        } catch { /* log de crash nunca pode causar outro crash */ }
+        console.error(`❌ [${tipo}]`, erro);
+    };
+    // unhandledRejection: apenas registra e SEGUE. Efeito colateral que falhou
+    // (comprovante, notificação) não justifica derrubar a API no meio de um
+    // pagamento já persistido.
+    process.on('unhandledRejection', (erro) => registrarCrash('unhandledRejection', erro));
+    // uncaughtException: registra e deixa o processo morrer — estado do processo
+    // é indeterminado depois dela, seguir em frente seria pior.
+    process.on('uncaughtException', (erro) => {
+        registrarCrash('uncaughtException', erro);
+        process.exit(1);
+    });
+}
+
 const express = require('express');
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
@@ -234,6 +264,8 @@ const { runEngine } = require('./services/invoiceEngine');
 const { runDailyAudit } = require('./services/dailyAudit');
 const { runInvoiceImmutabilityHealth, resolveOrphanCutoff } = require('./services/invoiceImmutabilityHealth');
 const { assertTimezone } = require('./utils/timezone');
+const { runOrphanInstallmentFix } = require('./services/orphanInstallmentFix');
+const { runChargesProactiveFix } = require('./services/chargesProactiveFix');
 
 // Agendar verificação diariamente à meia-noite (horário de Brasília)
 const MAX_CPFS_NO_ALERTA = 20;
@@ -4654,6 +4686,7 @@ async function runBillingValidationInner(opts) {
         if (residual <= 0.005) continue;
         if (!closedDueByCpf.has(row.cpf)) {
             closedDueByCpf.set(row.cpf, {
+                id: row.id,
                 dueDate: row.due_date,
                 amount: residual,
                 valorTotal,
@@ -4732,6 +4765,7 @@ async function runBillingValidationInner(opts) {
             // efetivamente falta pagar — NÃO sobre o valor_total bruto.
             // O residual é definido em closedDueByCpf.set(..., { amount: residual, ... }) na linha 4060.
             const invoiceAmount = Math.max(0, parseFloat(closedInvoiceData.amount || 0));
+            const invoiceId = closedInvoiceData.id || null;
             if (invoiceAmount > 0) {
                 // —— REGRA DE ACUMULAÇÃO DE ENCARGOS (INCREMENTO DIÁRIO) ——
                 // NÃO deletar encargos antigos! Cada execução do billing ADICIONA
@@ -4803,12 +4837,17 @@ async function runBillingValidationInner(opts) {
                 // pode ainda não existir em ambientes que não rodaram a limpeza.
                 const insertCharge = async (chargeType, amount) => {
                     const idBase = `${u.cpf}_${stableRef}_${Date.now()}_${chargeType}`;
+                    // invoice_id (quando disponível) é a correlação forte encargo<->fatura —
+                    // (cpf, invoice_amount) sozinho é ambíguo quando o CPF tem 2+ invoices com
+                    // o mesmo valor_total (169 CPFs confirmados, 2026-09-21). chargesProactiveFix.js
+                    // usa invoice_id quando presente, cai pro valor só em dado legado (NULL).
+                    const invoiceIdSql = invoiceId ? `'${invoiceId}'` : 'NULL';
                     try {
                         await dbService.executeQuery(`
                             INSERT INTO ${dbService.fq('billing_charges')}
-                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount)
+                            (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount, invoice_id)
                             VALUES
-                            ('${idBase}', '${u.cpf}', '${stableRef}', '${chargeType}', ${amount}, ${daysOverdue}, ${invoiceAmount})
+                            ('${idBase}', '${u.cpf}', '${stableRef}', '${chargeType}', ${amount}, ${daysOverdue}, ${invoiceAmount}, ${invoiceIdSql})
                         `);
                         return true;
                     } catch (err) {
@@ -7535,6 +7574,53 @@ apiRouter.post('/admin/fix-orphan-payments', bearerAuth(), authenticateAdmin, as
         cpfFilter,
         onComplete: (s) => {
             auditLog(req, 'admin.fix-orphan-payments', 'warn', s);
+        }
+    });
+
+    res.json(result);
+}));
+
+// POST /admin/fix-orphan-installments — backfill de installment_plans para
+// transações INVOICE_INSTALLMENT órfãs (anomalia TRANSACAO_ORFA, dailyAudit.js).
+// Lógica em services/orphanInstallmentFix.js.
+apiRouter.post('/admin/fix-orphan-installments', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf: cpfFilter, confirm } = req.body || {};
+
+    if (confirm !== true) {
+        return res.status(400).json({
+            success: false,
+            message: 'Confirmação necessária. Envie { "confirm": true } no body para aplicar correções.'
+        });
+    }
+
+    const result = await runOrphanInstallmentFix(dbService, {
+        cpfFilter,
+        onComplete: (s) => {
+            auditLog(req, 'admin.fix-orphan-installments', 'warn', s);
+        }
+    });
+
+    res.json(result);
+}));
+
+// POST /admin/fix-charges-proactive — regera billing_charges pending divergentes
+// do days_overdue real, cobrindo FECHADA + ABERTA (corrige antes do próximo
+// corte/vencimento). Anomalia ENCARGOS_ORFAOS_REGERADOS, dailyAudit.js.
+// Lógica em services/chargesProactiveFix.js (mesma usada pelo cron a cada 2h).
+apiRouter.post('/admin/fix-charges-proactive', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf: cpfFilter, confirm } = req.body || {};
+
+    if (confirm !== true) {
+        return res.status(400).json({
+            success: false,
+            message: 'Confirmação necessária. Envie { "confirm": true } no body para aplicar correções.'
+        });
+    }
+
+    const result = await runChargesProactiveFix(dbService, {
+        cpfFilter,
+        onComplete: (s) => {
+            auditLog(req, 'admin.fix-charges-proactive', 'warn', s);
         }
     });
 

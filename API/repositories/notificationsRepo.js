@@ -62,7 +62,13 @@ async function addNotification({ cpf, title, message, actionUrl }) {
     // Comprovantes já trazem o próprio cabeçalho — repetir o title vira "🔔 X" + "💵 X".
     // Cobre emojis usados como cabeçalho de seção em comprovantes/avisos (💵⚠️✅💰📄📋).
     const jaTemCabecalho = /^\s*(💵|⚠️|✅|💰|📄|📋|🔔)/.test(message);
-    telegramService.alertUser(cpf, jaTemCabecalho ? message : `🔔 ${title}\n${message}`, null, 'notification');
+    // .catch() obrigatório: sem ele uma falha de rede aqui vira unhandledRejection
+    // e DERRUBA o processo (Node 15+), matando a requisição em andamento — o
+    // pagamento de fatura ficava gravado mas a resposta nunca saía (ECONNRESET).
+    // Espelhar no Telegram é acessório: falhar aqui não pode afetar a operação.
+    Promise.resolve(
+        telegramService.alertUser(cpf, jaTemCabecalho ? message : `🔔 ${title}\n${message}`, null, 'notification')
+    ).catch((erro) => console.error('[notificationsRepo] Telegram falhou (ignorado):', erro && erro.message));
 }
 
 module.exports = { listByCpf, markRead, ensureSeed, addNotification };

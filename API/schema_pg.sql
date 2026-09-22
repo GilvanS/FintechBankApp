@@ -206,6 +206,15 @@ CREATE TABLE IF NOT EXISTS billing_charges (
     amount DECIMAL(15,2) NOT NULL,
     days_overdue INTEGER NOT NULL DEFAULT 0,
     invoice_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+    -- Nullable de propósito: correlação legada era só por (cpf, invoice_amount),
+    -- ambígua quando o CPF tem 2+ invoices com o mesmo valor_total (comum em
+    -- massa com ciclo inadimplente longo — 169 CPFs afetados, 2026-09-21).
+    -- Novos registros gravam invoice_id; JOINs preferem invoice_id e caem pro
+    -- valor só quando NULL (dado legado ainda não migrado). VARCHAR(255), não
+    -- UUID: invoices.id é character varying, não uuid — tipo tem que casar
+    -- pro JOIN funcionar (erro real pego ao testar: "operator does not exist:
+    -- uuid = character varying").
+    invoice_id VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status VARCHAR(20) NOT NULL DEFAULT 'pending' -- pending | applied | cancelled
 );

@@ -21,9 +21,14 @@
 *                       pra escolher massa nova de teste sem examinar histórico antes)
 *                       — nome trocado do antigo 'ABERTA', que ficava ambíguo com o
 *                       'ABERTA' acima (aberta de quê?).
-*      'PAGO_PARCIAL'→ recebeu pagamento, mas abaixo do mínimo (10%)
-*      'PAGO_MIN'    → recebeu pelo menos o mínimo, mas não o total
-*      'PAGO_TOTAL'  → quitada (equivalente ao antigo 'PAGA')
+*      'PAGO_MIN'    → pagou EXATAMENTE o valor mínimo (± 0.01), nem mais nem menos
+*      'PAGO_TOTAL'  → pagou EXATAMENTE o total (± 0.01), quitada (antigo 'PAGA')
+*      'PAGO_PARCIAL'→ qualquer outro valor pago: menor que o mínimo, entre o
+*                       mínimo e o total ("maior que o mínimo"), ou acima do total
+*                       (excedente/saldo credor) — regra fechada em 2026-09-21:
+*                       só o valor EXATO conta como MIN/TOTAL, tudo o resto é
+*                       parcial, mesmo pagamentos "família parcial" (CT03.4/3.5
+*                       do poc-fintech-playwright) que passam perto do mínimo.
  *  - fatura_aberta   = soma de compras do ciclo ATUAL (após corte da fechada) + encargos pending
  *  - status_fatura_fechada = 'ABERTA' | 'VIGENTE' | 'PAGO_PARCIAL' | 'PAGO_MIN' | 'PAGO_TOTAL'
  *  Estas colunas espelham o que o backend calcula em enrichUserCreditCardData (index.cjs).
@@ -99,11 +104,19 @@ fechada_calculada AS (
         -- excedente de R$187,63 gerado por pegar massa já tocada). 'VIGENTE' significa
         -- SÓ "nunca recebeu pagamento nenhum" — é a única condição segura pra rodar
         -- CT03.x do zero sem examinar o histórico primeiro.
+        -- PAGO_MIN e PAGO_TOTAL só quando o valor pago bate EXATO (± 0.01 de folga
+        -- de ponto flutuante) com o mínimo ou o total da fatura — qualquer outro
+        -- valor é PAGO_PARCIAL, incluindo "menor que o mínimo", "maior que o
+        -- mínimo" (entre o mínimo e o total) e excedente (pagou MAIS que o total,
+        -- vira saldo credor — não é "quitação normal", merece aparecer como caso
+        -- especial em vez de se disfarçar de PAGO_TOTAL). Mínimo usa o mesmo piso
+        -- de R$10 do backend (invoiceController.js: Math.max(total*0.10, 10)),
+        -- senão fatura pequena (<R$100) diverge do que o app realmente cobra.
         CASE
             WHEN f.total_fechadas IS NULL THEN 'ABERTA'
             WHEN COALESCE(pt.total_pago, 0) <= 0 THEN 'VIGENTE'
-            WHEN COALESCE(pt.total_pago, 0) >= f.total_fechadas THEN 'PAGO_TOTAL'
-            WHEN COALESCE(pt.total_pago, 0) >= f.total_fechadas * 0.10 THEN 'PAGO_MIN'
+            WHEN ABS(COALESCE(pt.total_pago, 0) - f.total_fechadas) < 0.01 THEN 'PAGO_TOTAL'
+            WHEN ABS(COALESCE(pt.total_pago, 0) - GREATEST(f.total_fechadas * 0.10, 10)) < 0.01 THEN 'PAGO_MIN'
             ELSE 'PAGO_PARCIAL'
         END as status_fechada,
         -- Valor ORIGINAL imutável = SOMA de todas as fechadas (não só a mais recente

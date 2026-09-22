@@ -973,7 +973,10 @@ module.exports = function createInvoiceController(deps) {
             // interno (Telegram/PDF): dispara em background e NÃO bloqueia a resposta
             // ao web. Pagamento já foi persistido acima; sendPaymentReceipt já engole
             // os próprios erros (try/catch interno), nunca rejeita.
-            sendPaymentReceipt(cpf, user, {
+            // .catch() obrigatório: uma rejeição aqui (rede/PDF/Telegram) viraria
+            // unhandledRejection e DERRUBARIA o processo — com o pagamento já
+            // gravado e a resposta ainda não enviada, o cliente levava ECONNRESET.
+            Promise.resolve(sendPaymentReceipt(cpf, user, {
                 valorPago: payAmount,
                 tipo: isMinimo ? 'MINIMO' : 'PARCIAL',
                 saldoRestante: remaining,
@@ -982,7 +985,7 @@ module.exports = function createInvoiceController(deps) {
                 nota: isPaymentAbaixo
                     ? 'Pagamento abaixo do mínimo. Segue inadimplente, dias de atraso continuam contando e encargos continuam incidindo sobre o saldo devedor restante.'
                     : 'Pagamento mínimo registrado. Dias de atraso zerados, mas os encargos continuam acumulando sobre o saldo residual até o pagamento total.'
-            });
+            })).catch((erro) => console.error('[pay] comprovante parcial falhou (ignorado):', erro && erro.message));
             // SSE: notificar frontend em tempo real
             try {
                 const sse = require('../../services/sseService');
@@ -1095,14 +1098,15 @@ module.exports = function createInvoiceController(deps) {
         // (Telegram/PDF): dispara em background e NÃO bloqueia a resposta ao web.
         // Pagamento já foi persistido acima; sendPaymentReceipt já engole os
         // próprios erros (try/catch interno), nunca rejeita.
-        sendPaymentReceipt(cpf, user, {
+        // .catch() obrigatório — mesmo motivo do branch parcial acima.
+        Promise.resolve(sendPaymentReceipt(cpf, user, {
             valorPago: payAmount,
             tipo: 'TOTAL',
             saldoRestante: 0,
             dataPagamento: nowDb(),
             vencimento: cutoffIso,
             nota: 'Limite de crédito reestabelecido e conta regularizada com sucesso.'
-        });
+        })).catch((erro) => console.error('[pay] comprovante total falhou (ignorado):', erro && erro.message));
         // SSE: notificar frontend em tempo real
         try {
             const sse = require('../../services/sseService');

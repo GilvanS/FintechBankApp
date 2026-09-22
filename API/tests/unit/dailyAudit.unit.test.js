@@ -89,6 +89,13 @@ describe('dailyAudit service unit tests', () => {
 
     test('deve identificar anomalia 4: encargos zerados com saldo devedor positivo', async () => {
         mockDb.executeQuery.mockImplementation(async (query) => {
+            // Query de chargesProactiveFix.js (Anomalia 8b, chamada por runDailyAudit)
+            // também referencia "billing_charges" — precisa casar ANTES do match
+            // genérico abaixo (que é específico da Anomalia 4), senão o retorno
+            // {total:0} é interpretado como invoice candidata (cpf undefined).
+            if (query.includes('LATERAL')) {
+                return []; // Nenhuma invoice com encargo divergente — Anomalia 8b não dispara aqui.
+            }
             if (query.includes('FROM "users"') && query.includes('account_status = \'inadimplente\'')) {
                 return [{
                     cpf: '12345678901',

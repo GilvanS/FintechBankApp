@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShieldCheck, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, Wrench } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
-import { adminAuditConsistency, adminAuditDoubleCount, adminAuditCsvConsistency } from '../../services/api';
+import { adminAuditConsistency, adminAuditDoubleCount, adminAuditCsvConsistency, adminFixOrphanInstallments, adminFixChargesProactive } from '../../services/api';
 
-type AuditSubTab = 'consistency' | 'double-count' | 'csv-consistency';
+type AuditSubTab = 'consistency' | 'double-count' | 'csv-consistency' | 'corrections';
 
 // Mesmo base path hardcoded em index.tsx (BrowserRouter basename="/FintechBankApp"
 // e vite.config base) — os dashboards HTML ficam em WEB/public/audit/, servidos
@@ -43,6 +43,33 @@ const AuditSection: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
 
+    const [fixingOrphans, setFixingOrphans] = useState(false);
+    const [fixingCharges, setFixingCharges] = useState(false);
+    const [orphansResult, setOrphansResult] = useState<Awaited<ReturnType<typeof adminFixOrphanInstallments>> | null>(null);
+    const [chargesResult, setChargesResult] = useState<Awaited<ReturnType<typeof adminFixChargesProactive>> | null>(null);
+
+    const runFixOrphans = useCallback(async () => {
+        if (!window.confirm('Corrigir transações INVOICE_INSTALLMENT órfãs? Vai criar o installment_plans que falta pra cada uma (backfill), sem alterar as transações.')) return;
+        setFixingOrphans(true);
+        try {
+            const r = await adminFixOrphanInstallments();
+            setOrphansResult(r);
+        } finally {
+            setFixingOrphans(false);
+        }
+    }, []);
+
+    const runFixCharges = useCallback(async () => {
+        if (!window.confirm('Corrigir encargos (billing_charges) pending divergentes do days_overdue real? Regera multa/juros/IOF de cada fatura afetada (FECHADA + ABERTA) com o valor correto.')) return;
+        setFixingCharges(true);
+        try {
+            const r = await adminFixChargesProactive();
+            setChargesResult(r);
+        } finally {
+            setFixingCharges(false);
+        }
+    }, []);
+
     const fetchAll = useCallback(async () => {
         setLoading(true);
         setStatusMessage('Consultando auditorias...');
@@ -67,6 +94,7 @@ const AuditSection: React.FC = () => {
         { id: 'consistency', label: 'Consistência' },
         { id: 'double-count', label: 'Double-Counting' },
         { id: 'csv-consistency', label: 'CSV × Backend' },
+        { id: 'corrections', label: 'Correções' },
     ];
 
     const cardCls = `p-5 rounded-3xl border ${isMidnight ? 'bg-[#151515] border-white/10 text-white' : 'bg-white border-black/10 text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'}`;
@@ -256,6 +284,84 @@ const AuditSection: React.FC = () => {
                             </p>
                         </>
                     )}
+                </section>
+            )}
+            {subTab === 'corrections' && (
+                <section className={cardCls} aria-labelledby="audit-corrections-title">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Wrench size={16} className={isMidnight ? 'text-volt-green' : 'text-black'} />
+                        <h2 id="audit-corrections-title" className="text-sm font-black uppercase tracking-tight">
+                            Correções de Anomalia
+                        </h2>
+                    </div>
+
+                    <div className="space-y-5">
+                        <div>
+                            <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wide">Transações Órfãs</p>
+                                    <p className="text-xs opacity-60">TRANSACAO_ORFA — cria o installment_plans que falta pra parcelas sem plano correspondente. Não altera as transações.</p>
+                                </div>
+                                <button
+                                    onClick={runFixOrphans}
+                                    disabled={fixingOrphans}
+                                    className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 ${
+                                        isMidnight
+                                            ? 'bg-volt-green text-black focus-visible:outline-volt-green'
+                                            : 'bg-black text-white focus-visible:outline-black'
+                                    }`}
+                                >
+                                    <RefreshCw size={14} className={fixingOrphans ? 'animate-spin motion-reduce:animate-none' : ''} />
+                                    {fixingOrphans ? 'Corrigindo…' : 'Corrigir Órfãs'}
+                                </button>
+                            </div>
+                            {orphansResult && (
+                                orphansResult.success === false ? (
+                                    <p className="text-xs text-red-500 font-bold flex items-center gap-1.5">
+                                        <AlertTriangle size={14} /> {orphansResult.message || 'Erro ao corrigir.'}
+                                    </p>
+                                ) : (
+                                    <p className="text-xs opacity-80 flex items-center gap-1.5">
+                                        <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
+                                        {orphansResult.summary?.orphansFound ?? 0} órfã(s) encontrada(s), {orphansResult.summary?.fixed ?? 0} corrigida(s), {orphansResult.summary?.skipped ?? 0} pulada(s).
+                                    </p>
+                                )
+                            )}
+                        </div>
+
+                        <div className={`border-t pt-5 ${isMidnight ? 'border-white/10' : 'border-black/10'}`}>
+                            <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wide">Encargos Divergentes</p>
+                                    <p className="text-xs opacity-60">ENCARGOS_ORFAOS_REGERADOS — regera multa/juros/IOF pending com o days_overdue real (FECHADA + ABERTA), antes do próximo corte/vencimento. Mesma correção que roda sozinha a cada 2h.</p>
+                                </div>
+                                <button
+                                    onClick={runFixCharges}
+                                    disabled={fixingCharges}
+                                    className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 ${
+                                        isMidnight
+                                            ? 'bg-volt-green text-black focus-visible:outline-volt-green'
+                                            : 'bg-black text-white focus-visible:outline-black'
+                                    }`}
+                                >
+                                    <RefreshCw size={14} className={fixingCharges ? 'animate-spin motion-reduce:animate-none' : ''} />
+                                    {fixingCharges ? 'Corrigindo…' : 'Corrigir Encargos'}
+                                </button>
+                            </div>
+                            {chargesResult && (
+                                chargesResult.success === false ? (
+                                    <p className="text-xs text-red-500 font-bold flex items-center gap-1.5">
+                                        <AlertTriangle size={14} /> {chargesResult.message || 'Erro ao corrigir.'}
+                                    </p>
+                                ) : (
+                                    <p className="text-xs opacity-80 flex items-center gap-1.5">
+                                        <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
+                                        {chargesResult.summary?.invoicesFound ?? 0} fatura(s) divergente(s), {chargesResult.summary?.fixed ?? 0} corrigida(s), {chargesResult.summary?.skipped ?? 0} pulada(s).
+                                    </p>
+                                )
+                            )}
+                        </div>
+                    </div>
                 </section>
             )}
         </div>
