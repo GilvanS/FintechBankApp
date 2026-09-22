@@ -23,6 +23,7 @@ import {
 } from '../../utils/massGenerator';
 import { useButtonAnimation } from '../../hooks/useGsapMotion';
 import TiltCard from '../shared/TiltCard';
+import { MassCreationTodoSheet, MassCreationTodoSnapshot } from './MassCreationTodoSheet';
 import {
     User as UserIcon,
     CreditCard as CardIcon,
@@ -37,6 +38,7 @@ import {
     History,
     Minus,
     Plus,
+    ListTodo,
     X as CloseIcon
 } from 'lucide-react';
 
@@ -88,6 +90,12 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
     const [quantity, setQuantity] = useState<number>(1);
     const [isSaving, setIsSaving] = useState(false);
     const [cardFlipped, setCardFlipped] = useState(false);
+    // Preview visual (2026-09-22): lista de tarefas animada mostrando os blocos de dados
+    // sendo gravados. Snapshot próprio (não `formData` ao vivo) porque handleFinalSubmit
+    // troca `formData` para uma nova massa aleatória assim que o pagamento real termina —
+    // sem isso, os rótulos mudariam no meio da animação.
+    const [todoSheetOpen, setTodoSheetOpen] = useState(false);
+    const [todoSnapshot, setTodoSnapshot] = useState<MassCreationTodoSnapshot | null>(null);
 
     const gridRef = useRef<HTMLDivElement>(null);
     const dicesBtn = useButtonAnimation();
@@ -276,8 +284,18 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
 
     const MAX_TENTATIVAS_NOME = 5;
 
+    const buildTodoSnapshot = (dados: GeneratedMassData, ciclos: CycleStatus[]): MassCreationTodoSnapshot => ({
+        fullName: dados.fullName,
+        cardBrand: dados.creditCard.brand,
+        dueDay: dados.creditCard.dueDay,
+        adimplente: cycleFromState(dados.overdueState) === 'adimplente',
+        cycleCount: ciclos.length
+    });
+
     const handleFinalSubmit = async () => {
         setIsSaving(true);
+        setTodoSnapshot(buildTodoSnapshot(formData, cycles));
+        setTodoSheetOpen(true);
         let currentData = { ...formData };
         let iteracoes = quantity > 0 ? quantity : 1;
         let sucessos = 0;
@@ -373,6 +391,19 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
                     >
                         <Dices className="w-4 h-4 animate-spin-slow" />
                         <span>Gerar Aleatório</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setTodoSnapshot(buildTodoSnapshot(formData, cycles));
+                            setTodoSheetOpen(true);
+                        }}
+                        className={`px-3 py-2.5 rounded-2xl text-xs flex items-center gap-2 cursor-pointer ${secondaryBtnClass}`}
+                        title="Ver preview da lista de tarefas (visual, não é o envio real)"
+                    >
+                        <ListTodo className="w-4 h-4" />
+                        <span className="hidden sm:inline">Preview Todo List</span>
                     </button>
 
                     <button
@@ -923,6 +954,13 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
                     </div>
                 </div>
             </div>
+
+            <MassCreationTodoSheet
+                open={todoSheetOpen}
+                onClose={() => setTodoSheetOpen(false)}
+                isMidnight={isMidnight}
+                snapshot={todoSnapshot}
+            />
         </div>
     );
 };
