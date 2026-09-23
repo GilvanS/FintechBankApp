@@ -493,7 +493,13 @@ async function setTempPassword(cpf, tempPassword) {
     `);
 }
 
-async function createMassUser(payload) {
+async function createMassUser(payload, { onStep } = {}) {
+    // Progresso real pro painel do gerador (Todo List): o chamador decide pra onde
+    // manda (SSE). Falha do callback nunca pode derrubar a criação da massa.
+    const step = (id, status, detail) => {
+        if (typeof onStep !== 'function') return;
+        try { onStep(id, status, detail); } catch { /* best-effort */ }
+    };
     const db = getDb();
     const cleanCpf = (payload.cpf || '').replace(/\D/g, '');
     const id = db.generateUUID ? db.generateUUID() : `user-${cleanCpf}`;
@@ -513,6 +519,7 @@ async function createMassUser(payload) {
     const cycles = normalizeMassCycles(payload.cycles, payload.accountStatus);
     const accountStatus = cycles[cycles.length - 1];
 
+    step('cadastro', 'running');
     await db.executeQuery(`
         INSERT INTO ${db.fq('users')}
         (
@@ -630,12 +637,14 @@ async function createMassUser(payload) {
     } catch (pixErr) {
         console.warn('⚠️ Erro ao gerar chaves PIX da massa:', pixErr.message);
     }
+    step('cadastro', 'done', `${payload.fullName} • ${(payload.cardBrand || 'MASTERCARD').toUpperCase()}`);
 
     // Geração de compras + fatura SEMPRE roda — independente da ativação do cartão.
     // A ativação do cartão é sobre uso futuro (novas compras); a fatura fechada
     // (histórico) deve existir para a conta aparecer no Painel de Massas em Atraso
     // mesmo quando o cartão está "AWAITING_ACTIVATION". Misturar os dois fazia
     // ~50% das massas inadimplentes caírem no else e nunca ganharem fatura.
+    step('ciclos', 'running');
     try {
         await seedMassBilling(db, cleanCpf, {
             cycles,
@@ -644,8 +653,11 @@ async function createMassUser(payload) {
             dueDay,
             minOverdueDays: Number(payload.minOverdueDays ?? payload.daysOverdue ?? 0),
         });
+        const inadimplentes = cycles.filter(c => c === 'inadimplente').length;
+        step('ciclos', 'done', `${cycles.length} ciclo(s) • ${inadimplentes} inadimplente(s)`);
     } catch (billingErr) {
         console.warn('⚠️ Erro ao gerar faturamento da massa:', billingErr.message);
+        step('ciclos', 'error', billingErr.message);
     }
 
     // T7: valida que a massa nasceu na forma canônica (ver validarInvarianteMassa).

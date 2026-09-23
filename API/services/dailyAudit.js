@@ -533,7 +533,8 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
 }
 
 async function checkOrphanInstallments(db, cpf = null) {
-    const cpfFilter = cpf ? " AND t.cpf = '$cpf'" : '';
+    const cpfDigits = cpf ? String(cpf).replace(/\D/g, '') : '';
+    const cpfFilter = cpfDigits ? ` AND t.cpf = '${cpfDigits}'` : '';
     const orphanTxs = await db.executeQuery(`
         SELECT t.cpf, t.id, t.description, t.amount, t.date, u.full_name
         FROM ${db.fq('transactions')} t
@@ -545,14 +546,13 @@ async function checkOrphanInstallments(db, cpf = null) {
           )
           ${cpfFilter}
     `);
-    const { toDateOnly } = require('../utils/timezone');
     const errors = [];
     for (const tx of orphanTxs) {
         errors.push({
             cpf: tx.cpf,
             name: tx.full_name,
             type: 'TRANSACAO_ORFA',
-            details: `"Parcela de fatura Ûrf„ detectada: R$ ${Math.abs(parseFloat(tx.amount)).toFixed(2)} (${tx.description}) em ${toDateOnly(tx.date)} sem plano de parcelamento correspondente.`"
+            details: `Parcela de fatura √≥rf√£ detectada: R$ ${Math.abs(parseFloat(tx.amount)).toFixed(2)} (${tx.description}) em ${toDateOnly(tx.date)} sem plano de parcelamento correspondente.`
         });
     }
     return errors;

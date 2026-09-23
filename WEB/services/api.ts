@@ -1,5 +1,5 @@
 // Real API implementation that connects to the backend
-import { User, PasswordResetRequest, LimitIncreaseRequest, AppNotification, PixKey, PixContact, Transaction, PurchasedItem, CreditCard, CardTransaction } from '../types';
+import { User, PasswordResetRequest, LimitIncreaseRequest, AppNotification, PixKey, PixContact, Transaction, PurchasedItem, CreditCard, CardTransaction, MassProgressStep, LimiteRecalculoReport } from '../types';
 
 const API_BASE = '/api'; // Vite proxy will forward to http://localhost:3001
 
@@ -63,11 +63,12 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
         window.dispatchEvent(new CustomEvent('admin-auth-failed', { detail: { message: msg, endpoint } }));
       }, 0);
     }
-    const httpError = new Error(error.message || `HTTP ${response.status}`) as Error & { code?: string; status?: number };
+    const httpError = new Error(error.message || `HTTP ${response.status}`) as Error & { code?: string; status?: number; body?: unknown };
     // `code` sobrevive no objeto — quem chama pode diferenciar "API inalcançável"
     // (mostra botão Tentar novamente) de um erro de negócio normal (Saldo insuficiente etc).
     httpError.code = error.code;
     httpError.status = response.status;
+    httpError.body = error;
     throw httpError;
   }
 
@@ -1645,11 +1646,11 @@ export const adminActivatePendingCards = async (cpf?: string): Promise<{ success
     }
 };
 
-export const adminRecalcularLimiteDisponivel = async (cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+export const adminRecalcularLimiteDisponivel = async (cpf?: string, dryRun = false): Promise<{ success: boolean; data?: LimiteRecalculoReport; message?: string }> => {
     try {
         return await apiCall(`/admin/scripts/recalcular-limite`, {
             method: 'POST',
-            body: JSON.stringify(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}),
+            body: JSON.stringify({ ...(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}), dryRun }),
         });
     } catch (error: any) {
         return { success: false, message: error.message || 'Erro ao recalcular limite disponível.' };
@@ -1752,15 +1753,18 @@ export const adminCloseInvoice = async (cpf: string): Promise<{ success: boolean
     }
 };
 
-export const adminCreateMassUser = async (payload: any): Promise<{ success: boolean; message: string; user?: User }> => {
+export const adminCreateMassUser = async (payload: any): Promise<{ success: boolean; message: string; user?: User; steps?: MassProgressStep[] }> => {
     try {
-        const result = await apiCall<{ success: boolean; message: string; user?: User }>('/admin/users/mass', {
+        const result = await apiCall<{ success: boolean; message: string; user?: User; steps?: MassProgressStep[] }>('/admin/users/mass', {
             method: 'POST',
             body: JSON.stringify(payload),
         });
         return result;
     } catch (error: any) {
-        return { success: false, message: error.message || 'Erro ao criar massa.' };
+        // 422 do pre-flight audit traz as etapas no corpo — sem isso o Todo List não
+        // mostraria EM QUAL etapa a massa foi reprovada.
+        const steps = (error?.body as { steps?: MassProgressStep[] } | undefined)?.steps;
+        return { success: false, message: error.message || 'Erro ao criar massa.', steps };
     }
 };
 

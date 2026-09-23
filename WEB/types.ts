@@ -228,3 +228,38 @@ export interface User {
     pendingCharges?: number;
     billingCycle?: BillingCycle;
 }
+
+/** Etapas reais da criação de massa (POST /admin/users/mass → evento SSE mass.progress). */
+export type MassProgressStepId = 'cadastro' | 'ciclos' | 'auditoria' | 'validacao';
+/** `uti` = auditoria achou anomalia não-bloqueante (🏥); `error` = etapa falhou. */
+export type MassProgressStatus = 'pending' | 'running' | 'done' | 'uti' | 'error';
+
+export interface MassProgressStep {
+    id: MassProgressStepId;
+    status: MassProgressStatus;
+    detail?: string | null;
+}
+
+/** Uma massa no recálculo de limite (POST /admin/scripts/recalcular-limite). `erro` = falhou ao calcular. */
+export interface LimiteRecalculoItem {
+    cpf: string;
+    fullName?: string;
+    totalLimit?: number;
+    currentInvoiceTotal?: number;
+    limiteAnterior?: number;
+    limiteNovo?: number;
+    alterado?: boolean;
+    estourado?: boolean;
+    erro?: string;
+}
+
+export interface LimiteRecalculoReport {
+    modo: 'SIMULACAO' | 'APLICADO';
+    cpfFiltro: string;
+    totalVerificado: number;
+    divergentes: number;
+    estourados: number;
+    erros: number;
+    /** Só as massas que mudam (ou mudariam) e as que deram erro. */
+    detalhes: LimiteRecalculoItem[];
+}

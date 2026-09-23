@@ -21,6 +21,7 @@ const TOPICS = {
     'invoice.updated': 'owner',
     'user.updated': 'owner',
     'mass.created': 'admin',
+    'mass.progress': 'admin',
 };
 
 let started = false;

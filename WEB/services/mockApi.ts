@@ -2071,7 +2071,7 @@ export const adminSyncOverdueDays = async (_cpf: string): Promise<{ success: boo
 export const adminInvoicePdfPreview = async (_cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminMassaReport = async (_cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminActivatePendingCards = async (_cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
-export const adminRecalcularLimiteDisponivel = async (_cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
+export const adminRecalcularLimiteDisponivel = async (_cpf?: string, _dryRun?: boolean): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminExportMassasCsv = async (_cpf?: string): Promise<{ success: boolean; data?: { csv: string; count: number }; message?: string }> => demoFail();
 
 // --- Planejamento de testes (TestPlanningSection) ---

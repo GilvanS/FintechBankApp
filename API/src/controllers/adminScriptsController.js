@@ -16,7 +16,7 @@ const SCRIPTS_DIR = path.join(__dirname, '..', '..', 'scripts');
 const cleanCpf = (cpf) => String(cpf || '').replace(/\D/g, '');
 
 module.exports = function createAdminScriptsController(deps) {
-    const { dbService, repoContext, cardEngine, auditLog } = deps;
+    const { dbService, repoContext, cardEngine, auditLog, recalcularLimiteDisponivel, listUsers } = deps;
 
     // IMPORTANTE: execFile assíncrono, NUNCA execFileSync — vários desses
     // scripts fazem login via HTTP contra a própria API (localhost:3001).
@@ -194,23 +194,54 @@ module.exports = function createAdminScriptsController(deps) {
         }
     };
 
-    // POST /admin/scripts/recalcular-limite — roda recalcular_limite_disponivel.cjs
-    // --fix --confirm (+ --cpf= opcional: sem ele, roda contra a base inteira).
+    // POST /admin/scripts/recalcular-limite — body { cpf?, dryRun? }.
     // Corrige credit_card_available_limit com a mesma fórmula canônica do
     // "Próxima Fatura" (limite_total - currentInvoiceTotal) — pode resultar em
     // negativo de propósito quando a dívida real excede o limite total.
+    // Roda DENTRO da API (não via recalcular_limite_disponivel.cjs): o script
+    // imprime os logs do Postgres no stdout antes do JSON, então o parse falhava
+    // e o painel recebia um blob de log; e o timeout de 60s do processo filho não
+    // cobre a base inteira. dryRun=true só simula (mesma conta, sem UPDATE).
+    const LIMITE_CONCORRENCIA = 5;
     const recalcularLimite = async (req, res) => {
         const cpf = cleanCpf(req.body?.cpf);
-        const args = ['--fix', '--confirm', '--json'];
-        if (cpf.length === 11) args.push(`--cpf=${cpf}`);
+        const dryRun = req.body?.dryRun === true;
         try {
-            const output = await runNodeScript('recalcular_limite_disponivel.cjs', args, 60000);
-            let result;
-            try { result = JSON.parse(output); } catch { result = { log: output }; }
-            auditLog(req, 'admin_script_recalcular_limite', 'info', { cpf: cpf || 'ALL' });
-            res.json({ success: true, data: result, executedAt: new Date().toISOString() });
+            const alvos = cpf.length === 11
+                ? [cpf]
+                : (await listUsers()).filter(u => u.role !== 'admin').map(u => u.cpf);
+
+            const resultados = [];
+            let proximo = 0;
+            const worker = async () => {
+                while (proximo < alvos.length) {
+                    const alvo = alvos[proximo++];
+                    try {
+                        const r = await recalcularLimiteDisponivel(alvo, { persist: !dryRun });
+                        if (r) resultados.push(r);
+                    } catch (err) {
+                        resultados.push({ cpf: alvo, erro: err.message });
+                    }
+                }
+            };
+            await Promise.all(Array.from({ length: Math.min(LIMITE_CONCORRENCIA, alvos.length) }, worker));
+
+            const divergentes = resultados.filter(r => r.alterado);
+            const erros = resultados.filter(r => r.erro);
+            const data = {
+                modo: dryRun ? 'SIMULACAO' : 'APLICADO',
+                cpfFiltro: cpf.length === 11 ? cpf : 'TODAS',
+                totalVerificado: resultados.length,
+                divergentes: divergentes.length,
+                estourados: divergentes.filter(r => r.estourado).length,
+                erros: erros.length,
+                // Só o que interessa ao painel: quem muda e quem falhou.
+                detalhes: [...divergentes, ...erros],
+            };
+            if (!dryRun) auditLog(req, 'admin_script_recalcular_limite', 'info', { cpf: cpf || 'ALL', corrigidos: divergentes.length });
+            res.json({ success: true, data, executedAt: new Date().toISOString() });
         } catch (err) {
-            res.status(500).json({ success: false, message: 'Erro ao rodar recalcular_limite_disponivel.cjs: ' + err.message });
+            res.status(500).json({ success: false, message: 'Erro ao recalcular limite disponível: ' + err.message });
         }
     };
 

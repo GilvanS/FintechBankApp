@@ -2909,6 +2909,8 @@ const adminScriptsController = createAdminScriptsController({
     repoContext,
     cardEngine,
     auditLog,
+    recalcularLimiteDisponivel,
+    listUsers: () => usersRepo.listUsers(),
 });
 registerAdminScriptsRoutes({ apiRouter, bearerAuth, authenticateAdmin, asyncHandler, controller: adminScriptsController });
 
@@ -7801,7 +7803,42 @@ if (!IS_TEST) {
             if (!payload || !payload.cpf || !payload.fullName) {
                 return res.status(400).json({ success: false, message: 'Dados incompletos para criação da massa.' });
             }
-            const created = await usersRepo.createMassUser(payload);
+            // Progresso real por etapa pro Todo List do Gerador: vai ao vivo via SSE
+            // (mass.progress, só admins) e o estado final volta autoritativo em `steps`
+            // na resposta — o front não depende do SSE ter chegado.
+            const progressCpf = String(payload.cpf).replace(/\D/g, '');
+            const stepState = {};
+            const onStep = (id, status, detail) => {
+                stepState[id] = { id, status, detail: detail || null };
+                require('./services/eventBus').publish('mass.progress', {
+                    cpf: progressCpf, id, status, detail: detail || null,
+                }).catch(() => {});
+            };
+
+            const created = await usersRepo.createMassUser(payload, { onStep });
+
+            // O INSERT nasce com disponível = limite total e o seedMassBilling lança
+            // compras sem descontar nada — sem este recálculo toda massa nascia com
+            // "limite utilizado 0" mesmo com fatura aberta (ex.: 74693636371).
+            let limite = null;
+            let limiteErro = null;
+            try {
+                limite = await recalcularLimiteDisponivel(created.cpf);
+            } catch (limErr) {
+                limiteErro = limErr.message;
+                console.warn(`⚠️ [mass] recálculo de limite falhou para ${created.cpf}:`, limErr.message);
+            }
+
+            const { runMassPreflight } = require('./services/massPreflight');
+            const preflight = await runMassPreflight(dbService, { ...created, limite, limiteErro }, { onStep });
+            if (!preflight.ok) {
+                return res.status(422).json({
+                    success: false,
+                    message: `Pre-flight audit reprovou a massa ${created.fullName} (CPF ${created.cpf}): ${preflight.motivo}. Enviada ao cemitério de teste — gere outra.`,
+                    steps: Object.values(stepState),
+                    preflight,
+                });
+            }
             // Sem ensureTopic aqui de proposito: criar o topico do Telegram na hora
             // gera notificacao nativa do proprio Telegram (fora do nosso controle de
             // toggles). Massa de teste nao precisa de topico ja pronto — send() cria
@@ -7820,7 +7857,9 @@ if (!IS_TEST) {
             return res.json({
                 success: true,
                 message: `Massa ${created.fullName} (CPF ${created.cpf}) gravada com sucesso no PostgreSQL!`,
-                user: created
+                user: created,
+                steps: Object.values(stepState),
+                preflight,
             });
         } catch (err) {
             console.error('❌ Erro ao gravar massa no PostgreSQL:', err);
@@ -7886,7 +7925,8 @@ if (!IS_TEST) {
  * Backoffice já trata availableLimit<0 como estado válido, com ícone/cor
  * próprios — ver BackofficeInvoiceSection.tsx).
  */
-async function recalcularLimiteDisponivel(cpf) {
+// `persist: false` = simulação (painel Admin "Simular") — mesma conta, sem UPDATE.
+async function recalcularLimiteDisponivel(cpf, { persist = true } = {}) {
     const { esc } = repoContext;
     const userRow = await usersRepo.findByCpf(cpf);
     if (!userRow) return null;
@@ -7900,7 +7940,7 @@ async function recalcularLimiteDisponivel(cpf) {
     const limiteNovo = round2(totalLimit - currentInvoiceTotal);
     const alterado = Math.abs(limiteNovo - limiteAnterior) > 0.005;
 
-    if (alterado) {
+    if (alterado && persist) {
         await dbService.executeQuery(`
             UPDATE ${dbService.fq('users')}
             SET credit_card_available_limit = ${limiteNovo.toFixed(2)}, updated_at = CURRENT_TIMESTAMP

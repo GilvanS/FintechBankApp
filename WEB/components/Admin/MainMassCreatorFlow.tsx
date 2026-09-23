@@ -23,7 +23,9 @@ import {
 } from '../../utils/massGenerator';
 import { useButtonAnimation } from '../../hooks/useGsapMotion';
 import TiltCard from '../shared/TiltCard';
-import { MassCreationTodoSheet, MassCreationTodoSnapshot } from './MassCreationTodoSheet';
+import { MassCreationTodoSheet, MassTodoItem } from './MassCreationTodoSheet';
+import { useRealtimeEvents } from '../../hooks/useRealtimeEvents';
+import { MassProgressStatus, MassProgressStep } from '../../types';
 import {
     User as UserIcon,
     CreditCard as CardIcon,
@@ -76,6 +78,38 @@ const CARD_RING_COLORS: Record<GeneratedMassData['creditCard']['brand'], [string
     HIPERCARD: ['#B91C1C', '#F59E0B']
 };
 
+const IS_DEMO = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_USE_MOCK_API === 'true';
+
+// Todo List de progresso: 4 etapas REAIS do POST /admin/users/mass (ver API/index.cjs e
+// services/massPreflight.js). Detalhes locais aparecem quando a etapa começa; o backend
+// sobrescreve com o detalhe real.
+const buildTodoItems = (dados: GeneratedMassData, ciclos: CycleStatus[]): MassTodoItem[] => {
+    const inadimplentes = ciclos.filter((c) => c === 'inadimplente').length;
+    return [
+        { id: 'cadastro', title: 'Criar cadastro base e cartão', status: 'pending', detail: `${dados.fullName} • ${dados.creditCard.brand}` },
+        { id: 'ciclos', title: `Injetar ${ciclos.length} ciclo(s) de fatura`, status: 'pending', detail: `${inadimplentes} inadimplente(s)` },
+        { id: 'auditoria', title: 'Pre-flight audit (dailyAudit)', status: 'pending', detail: null },
+        { id: 'validacao', title: 'Validação final da massa', status: 'pending', detail: null },
+    ];
+};
+
+// SSE pode chegar DEPOIS da resposta autoritativa do POST — sem o ranking, um
+// "running" atrasado regrediria uma etapa já concluída.
+const STATUS_RANK: Record<MassProgressStatus, number> = { pending: 0, running: 1, done: 2, uti: 2, error: 2 };
+
+const applyStep = (items: MassTodoItem[], step: MassProgressStep, force = false): MassTodoItem[] =>
+    items.map((it) => {
+        if (it.id !== step.id) return it;
+        if (!force && STATUS_RANK[step.status] < STATUS_RANK[it.status]) return it;
+        return { ...it, status: step.status, detail: step.detail ?? it.detail };
+    });
+
+// Falha sem etapas no corpo (rede, 409 de e-mail duplicado): marca a etapa em curso.
+const markFailure = (items: MassTodoItem[], message: string): MassTodoItem[] => {
+    const idx = items.findIndex((it) => it.status === 'running' || it.status === 'pending');
+    return idx < 0 ? items : items.map((it, i) => (i === idx ? { ...it, status: 'error', detail: message } : it));
+};
+
 // Cada caractere de cardNumberMasked (dígitos ou •) vira um "slot" que desliza
 // pra revelar o valor — puramente visual, o dado já vem mascarado do gerador.
 const buildCardNumberSlots = (masked: string) => masked.split('').map((ch, idx) => ({ ch, idx }));
@@ -90,12 +124,23 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
     const [quantity, setQuantity] = useState<number>(1);
     const [isSaving, setIsSaving] = useState(false);
     const [cardFlipped, setCardFlipped] = useState(false);
-    // Preview visual (2026-09-22): lista de tarefas animada mostrando os blocos de dados
-    // sendo gravados. Snapshot próprio (não `formData` ao vivo) porque handleFinalSubmit
-    // troca `formData` para uma nova massa aleatória assim que o pagamento real termina —
-    // sem isso, os rótulos mudariam no meio da animação.
+    // Itens próprios (não derivados de `formData` ao vivo): handleFinalSubmit troca
+    // `formData` pra próxima massa assim que a atual termina.
     const [todoSheetOpen, setTodoSheetOpen] = useState(false);
-    const [todoSnapshot, setTodoSnapshot] = useState<MassCreationTodoSnapshot | null>(null);
+    const [todoItems, setTodoItems] = useState<MassTodoItem[]>([]);
+    const [todoTitle, setTodoTitle] = useState('Processo de Criação da Massa');
+    const activeMassCpfRef = useRef<string | null>(null);
+
+    useRealtimeEvents({
+        enabled: !IS_DEMO,
+        tokenSource: 'admin',
+        onEvent: (event) => {
+            if (event.type !== 'mass.progress') return;
+            const data = event.data as { cpf?: string; id?: MassProgressStep['id']; status?: MassProgressStatus; detail?: string | null };
+            if (!data.cpf || !data.id || !data.status || data.cpf !== activeMassCpfRef.current) return;
+            setTodoItems((prev) => applyStep(prev, { id: data.id!, status: data.status!, detail: data.detail }));
+        },
+    });
 
     const gridRef = useRef<HTMLDivElement>(null);
     const dicesBtn = useButtonAnimation();
@@ -284,17 +329,8 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
 
     const MAX_TENTATIVAS_NOME = 5;
 
-    const buildTodoSnapshot = (dados: GeneratedMassData, ciclos: CycleStatus[]): MassCreationTodoSnapshot => ({
-        fullName: dados.fullName,
-        cardBrand: dados.creditCard.brand,
-        dueDay: dados.creditCard.dueDay,
-        adimplente: cycleFromState(dados.overdueState) === 'adimplente',
-        cycleCount: ciclos.length
-    });
-
     const handleFinalSubmit = async () => {
         setIsSaving(true);
-        setTodoSnapshot(buildTodoSnapshot(formData, cycles));
         setTodoSheetOpen(true);
         let currentData = { ...formData };
         let iteracoes = quantity > 0 ? quantity : 1;
@@ -304,7 +340,17 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
             for (let i = 0; i < iteracoes; i++) {
                 let salvo = false;
                 for (let tentativa = 1; tentativa <= MAX_TENTATIVAS_NOME; tentativa++) {
+                    activeMassCpfRef.current = currentData.cpf.replace(/\D/g, '');
+                    setTodoTitle(iteracoes > 1 ? `Processo de Criação da Massa (${i + 1}/${iteracoes})` : 'Processo de Criação da Massa');
+                    setTodoItems(applyStep(buildTodoItems(currentData, cycles), { id: 'cadastro', status: 'running' }));
+
                     const result = await adminCreateMassUser(montarPayload(currentData, cycles));
+                    const finalSteps = result.steps;
+                    if (finalSteps && finalSteps.length > 0) {
+                        setTodoItems((prev) => finalSteps.reduce((acc, s) => applyStep(acc, s, true), prev));
+                    } else if (!result.success) {
+                        setTodoItems((prev) => markFailure(prev, result.message || 'Falha ao gravar a massa.'));
+                    }
 
                     if (result.success) {
                         sucessos++;
@@ -396,14 +442,15 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
                     <button
                         type="button"
                         onClick={() => {
-                            setTodoSnapshot(buildTodoSnapshot(formData, cycles));
-                            setTodoSheetOpen(true);
+                            if (!todoSheetOpen && todoItems.length === 0) setTodoItems(buildTodoItems(formData, cycles));
+                            setTodoSheetOpen((aberto) => !aberto);
                         }}
+                        aria-expanded={todoSheetOpen}
                         className={`px-3 py-2.5 rounded-2xl text-xs flex items-center gap-2 cursor-pointer ${secondaryBtnClass}`}
-                        title="Ver preview da lista de tarefas (visual, não é o envio real)"
+                        title="Mostrar/ocultar as etapas reais da geração (cadastro, ciclos, pre-flight audit, validação)"
                     >
                         <ListTodo className="w-4 h-4" />
-                        <span className="hidden sm:inline">Preview Todo List</span>
+                        <span className="hidden sm:inline">{todoSheetOpen ? 'Ocultar Progresso' : 'Mostrar Progresso'}</span>
                     </button>
 
                     <button
@@ -430,6 +477,15 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
                     )}
                 </div>
             </div>
+
+            {/* Logo abaixo da toolbar e no fluxo normal: ao abrir, empurra a grade pra baixo. */}
+            <MassCreationTodoSheet
+                open={todoSheetOpen}
+                onClose={() => setTodoSheetOpen(false)}
+                isMidnight={isMidnight}
+                title={todoTitle}
+                items={todoItems}
+            />
 
             {/* No desktop: Perfil + Financeiro à esquerda, Cartão + Endereço à direita.
                 Em tela estreita tudo vira uma coluna na ordem Perfil → Cartão → Financeiro → Endereço.
@@ -954,13 +1010,6 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
                     </div>
                 </div>
             </div>
-
-            <MassCreationTodoSheet
-                open={todoSheetOpen}
-                onClose={() => setTodoSheetOpen(false)}
-                isMidnight={isMidnight}
-                snapshot={todoSnapshot}
-            />
         </div>
     );
 };

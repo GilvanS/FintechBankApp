@@ -15,6 +15,10 @@
  * Rodar (dentro da pasta API):
  *   node scripts/populate_cemiterio_teste.cjs
  */
+// NODE_ENV=test antes de carregar index.cjs (pro recálculo de limite abaixo): o
+// guard IS_TEST impede bootstrap()/app.listen()/crons neste processo — mesmo
+// padrão de scripts/recalcular_limite_disponivel.cjs.
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 const dotenv = require('dotenv');
 const path = require('path');
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -55,8 +59,14 @@ async function main() {
     };
 
     const { runDailyAudit } = require('../services/dailyAudit');
+    // Sem o recálculo injetado, a auditoria cai no fallback antigo que trata limite
+    // negativo como anomalia (LIMITE_EXCEDIDO) — mandava pro cemitério massa com
+    // estouro LEGÍTIMO e deixava limite divergente sem corrigir. Com ele, a cura
+    // corrige na hora (LIMITE_DIVERGENTE), igual ao cron de 2h do index.cjs.
+    const api = require('../index.cjs');
+    await api.dbService.connect();
     console.log('🔎 Rodando auditoria diária completa...');
-    const result = await runDailyAudit(db, auditLogStub, null);
+    const result = await runDailyAudit(db, auditLogStub, api.recalcularLimiteDisponivel);
     console.log(`Auditoria encontrou ${result.count} anomalia(s) no total.`);
 
     // Agrupa por CPF (uma massa pode ter mais de uma anomalia).

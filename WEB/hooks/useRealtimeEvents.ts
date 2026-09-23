@@ -15,7 +15,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 export interface RealtimeEvent {
-    type: 'purchase.completed' | 'payment.completed' | 'invoice.updated' | 'user.updated' | 'connected';
+    type: 'purchase.completed' | 'payment.completed' | 'invoice.updated' | 'user.updated' | 'mass.progress' | 'connected';
     data: Record<string, unknown>;
     timestamp: string;
 }
@@ -27,6 +27,19 @@ interface UseRealtimeEventsOptions {
     reconnectInterval?: number;
     /** Callback when event is received */
     onEvent?: (event: RealtimeEvent) => void;
+    /** false = não abre conexão (ex.: modo demo, sem backend). Default: true */
+    enabled?: boolean;
+    /** 'admin' usa o token da sessão admin — eventos admin-only (mass.*) só chegam nela. */
+    tokenSource?: 'user' | 'admin';
+}
+
+function readToken(source: 'user' | 'admin'): string | null {
+    if (source === 'admin') {
+        return sessionStorage.getItem('sessionAdminToken')
+            || localStorage.getItem('adminToken')
+            || localStorage.getItem('authToken');
+    }
+    return localStorage.getItem('authToken');
 }
 
 interface UseRealtimeEventsReturn {
@@ -47,15 +60,21 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}): UseRe
         autoReconnect = true,
         reconnectInterval = 3000,
         onEvent,
+        enabled = true,
+        tokenSource = 'user',
     } = options;
 
     const [connected, setConnected] = useState(false);
     const [lastEvent, setLastEvent] = useState<RealtimeEvent | null>(null);
     const [events, setEvents] = useState<RealtimeEvent[]>([]);
-    
+
     const eventSourceRef = useRef<EventSource | null>(null);
     const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
     const mountedRef = useRef(true);
+    // Ref, não dependência do connect: callback inline do chamador muda a cada render
+    // e derrubaria/reabriria o EventSource em loop.
+    const onEventRef = useRef(onEvent);
+    onEventRef.current = onEvent;
 
     const cleanup = useCallback(() => {
         if (reconnectTimerRef.current) {
@@ -69,8 +88,8 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}): UseRe
     }, []);
 
     const connect = useCallback(() => {
-        // Não conectar se não há token
-        const token = localStorage.getItem('authToken');
+        if (!enabled) return;
+        const token = readToken(tokenSource);
         if (!token) return;
 
         cleanup();
@@ -83,7 +102,7 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}): UseRe
         };
 
         // Escutar eventos específicos
-        const eventTypes = ['purchase.completed', 'payment.completed', 'invoice.updated', 'user.updated', 'connected'];
+        const eventTypes = ['purchase.completed', 'payment.completed', 'invoice.updated', 'user.updated', 'mass.progress', 'connected'];
         
         for (const eventType of eventTypes) {
             es.addEventListener(eventType, ((e: MessageEvent) => {
@@ -97,7 +116,7 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}): UseRe
                     };
                     setLastEvent(event);
                     setEvents(prev => [...prev.slice(-49), event]); // Manter últimos 50
-                    onEvent?.(event);
+                    onEventRef.current?.(event);
                 } catch (_err) { /* evento malformado */ }
             }) as EventListener);
         }
@@ -111,7 +130,7 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions = {}): UseRe
                 reconnectTimerRef.current = setTimeout(connect, reconnectInterval);
             }
         };
-    }, [cleanup, autoReconnect, reconnectInterval, onEvent]);
+    }, [cleanup, autoReconnect, reconnectInterval, enabled, tokenSource]);
 
     useEffect(() => {
         mountedRef.current = true;

@@ -3,10 +3,10 @@ import { Wrench, RefreshCw, FileText, BarChart3, CreditCard, AlertTriangle, Down
 import { useAppState } from '../../contexts/AppStateContext';
 import {
     adminAuditFix, adminSyncOverdueDays, adminInvoicePdfPreview, adminMassaReport,
-    adminActivatePendingCards, adminExportMassasCsv, adminRecalcularLimiteDisponivel,
-    adminUtiRecuperacao,
+    adminActivatePendingCards, adminExportMassasCsv, adminUtiRecuperacao,
 } from '../../services/api';
 import ScriptActionModal, { ScriptActionResult } from './ScriptActionModal';
+import LimiteDisponivelModal from './LimiteDisponivelModal';
 
 type ScriptKey = 'audit-fix' | 'sync-overdue' | 'pdf-preview' | 'report' | 'activate-cards' | 'export-csv' | 'recalcular-limite' | 'uti-recuperacao' | null;
 
@@ -80,7 +80,7 @@ const ScriptsMassasSection: React.FC = () => {
             icon: Scale,
             iconBg: 'bg-indigo-500',
             title: 'Recalcular Limite Disponível',
-            description: 'Corrige credit_card_available_limit com a fórmula canônica (limite total − dívida real). Pode resultar em negativo de propósito quando o limite foi estourado de verdade. CPF opcional: vazio roda em todas as massas.',
+            description: 'Simula primeiro e mostra quem está com limite errado (banco × correto) pela fórmula canônica (limite total − fatura aberta); só grava quando você aplicar. Negativo é válido quando o limite estourou de verdade. CPF opcional: vazio verifica todas as massas.',
             cpfMode: 'optional' as const,
             onClick: () => setActiveScript('recalcular-limite'),
         },
@@ -204,16 +204,10 @@ const ScriptsMassasSection: React.FC = () => {
                 onExecute={async (cpf): Promise<ScriptActionResult> => adminExportMassasCsv(cpf)}
             />
 
-            <ScriptActionModal
+            <LimiteDisponivelModal
                 isOpen={activeScript === 'recalcular-limite'}
-                title="Recalcular Limite Disponível"
-                icon={Scale}
-                confirmLabel="Recalcular"
-                description="Recalcula credit_card_available_limit = limite_total − currentInvoiceTotal (mesma fonte do 'Próxima Fatura'). O resultado pode ficar negativo — significa que a dívida real excede o limite total, um estado válido que deixa de ser escondido. Sem CPF, afeta todas as massas com divergência."
-                cpfMode="optional"
                 isMidnight={isMidnight}
                 onClose={() => setActiveScript(null)}
-                onExecute={async (cpf): Promise<ScriptActionResult> => adminRecalcularLimiteDisponivel(cpf)}
             />
 
             <ScriptActionModal
