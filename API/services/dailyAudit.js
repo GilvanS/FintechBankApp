@@ -177,6 +177,9 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
         // telegram_message_log. Cobre os dois furos possíveis: falha silenciosa na geração
         // do PDF (nem chega a logar) e falha de envio ao Telegram (loga ok=false). Janela de
         // 48h evita reprocessar pagamentos antigos a cada rodada.
+        // Desconta o comprovante que a UTI já reenviou (histórico uti_curas): o log do
+        // reenvio tem a data do reenvio, fora da janela do pagamento.
+        await require('./utiCuraLog').garantirTabela(db);
         const paymentsSemComprovante = await db.executeQuery(`
             SELECT t.cpf, t.id, t.amount, t.date, u.full_name
             FROM ${db.fq('transactions')} t
@@ -186,6 +189,10 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
                   SELECT 1 FROM ${db.fq('telegram_message_log')} l
                   WHERE l.cpf = t.cpf AND l.category = 'payment_receipt' AND l.ok = true
                     AND l.created_at BETWEEN t.date - INTERVAL '10' MINUTE AND t.date + INTERVAL '30' MINUTE
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM ${db.fq('uti_curas')} c
+                  WHERE c.tipo = 'PAGAMENTO_SEM_COMPROVANTE' AND c.ref_id = CAST(t.id AS VARCHAR)
               )
         `);
 

@@ -319,3 +319,41 @@ export interface DiscrepanciasReport {
     /** Pagamentos legados sem invoice_id — só informativo, sem correção. */
     pagamentosSemFatura?: { transacoes: number; massas: number; valor: number };
 }
+
+/** Plano de cura de UMA anomalia na UTI (scripts/uti_massa.cjs). */
+export interface UtiPlano {
+    acao: string;
+    insere?: string[];
+    apaga?: string[];
+    /** Precisa de análise humana — nada é aplicado (ex.: FATURA_DUPLICADA). */
+    manual?: boolean;
+    /** Tentou aplicar e não conseguiu (ex.: Telegram não confirmou o comprovante). */
+    falhou?: boolean;
+    erro?: string;
+}
+
+export interface UtiMassa {
+    cpf: string;
+    nome: string | null;
+    status: 'ja_saudavel' | 'com_plano' | 'curada' | 'falhou' | 'nao_verificavel';
+    anomalias: { type: string; detail: string; plano: UtiPlano | null; semHandler?: boolean }[];
+}
+
+export interface UtiReport {
+    modo: 'dry-run' | 'confirm';
+    totalProcessadas: number;
+    resumo: { curadas: number; semAnomaliaAtual: number; semHandler: number; falhas?: number; porTipo: Record<string, number> };
+    relatorio: UtiMassa[];
+}
+
+/** Uma cura aplicada e gravada em uti_curas (histórico permanente). */
+export interface UtiCura {
+    id: string;
+    cpf: string;
+    full_name: string | null;
+    tipo: string;
+    acao: string;
+    ref_id: string | null;
+    aplicado_por: string | null;
+    aplicado_em: string;
+}

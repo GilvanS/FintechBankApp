@@ -30,9 +30,20 @@ const DatabaseFactory = require('../services/database/DatabaseFactory');
 const {
     calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIof, round2,
 } = require('../utils/invoiceMath');
-// Reusa a MESMA fórmula canônica do botão "Recalcular Limite Disponível" —
-// não reinventa o cálculo de limite aqui.
-const { simularSemPersistir, recalcularEmLote } = require('./recalcular_limite_disponivel.cjs');
+const { esc } = require('../repositories/context');
+const { runOrphanInstallmentFix } = require('../services/orphanInstallmentFix');
+const { registrarCura, garantirTabela } = require('../services/utiCuraLog');
+
+// Limite: MESMA fórmula canônica do botão "Recalcular Limite Disponível".
+// Dentro da API (painel) vem injetada — recalcularLimiteDisponivel do index.cjs.
+// No terminal, cai no recalcular_limite_disponivel.cjs, carregado SÓ aqui: ele
+// força NODE_ENV=test ao ser requerido e não pode entrar no processo da API.
+async function recalcularLimitePadraoCli(cpf, { persist }) {
+    const { recalcularEmLote } = require('./recalcular_limite_disponivel.cjs');
+    const [r] = await recalcularEmLote({ cpf, persist });
+    if (r && r.erro) throw new Error(r.erro);
+    return r || null;
+}
 
 function genId(db) {
     return db.generateUUID ? db.generateUUID() : `chg-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
@@ -42,7 +53,10 @@ function genId(db) {
 // Mesmas regras de services/dailyAudit.js, mas WHERE cpf = X em vez de rodar
 // na base inteira — o UTI só toca em quem está listado no cemitério.
 
-async function checkAnomalias(db, cpf) {
+// ctx.recalcularLimite(cpf, { persist }) — fórmula canônica do limite (ver topo).
+// ctx.desde — início da janela de pagamentos sem comprovante (entrada no cemitério − 48h).
+async function checkAnomalias(db, cpf, ctx = {}) {
+    const recalcularLimite = ctx.recalcularLimite || recalcularLimitePadraoCli;
     const anomalias = [];
 
     const invoicesFechadas = await db.executeQuery(`
@@ -119,7 +133,46 @@ async function checkAnomalias(db, cpf) {
     // não reimplementada. limitePreview.estourado=true é ESTADO VÁLIDO (dívida
     // real > limite total), não é a anomalia em si; a anomalia é o valor
     // GRAVADO divergir do que a fórmula diz que deveria ser.
-    const limitePreview = await simularSemPersistir(cpf);
+    // TRANSACAO_ORFA: mesmo critério do dailyAudit.js (Anomalia 5), escopado no CPF.
+    const orfas = await runOrphanInstallmentFix(db, { cpfFilter: cpf, dryRun: true });
+    if (orfas.summary.orphansFound > 0) {
+        anomalias.push({
+            type: 'TRANSACAO_ORFA',
+            detail: `${orfas.summary.orphansFound} parcela(s) INVOICE_INSTALLMENT sem plano de parcelamento vinculado.`,
+            orfas: orfas.details,
+        });
+    }
+
+    // PAGAMENTO_SEM_COMPROVANTE: mesma regra do dailyAudit.js (Anomalia 7) — comprovante
+    // 'payment_receipt' entregue perto do pagamento — mas na janela desde a entrada no
+    // cemitério (a do dailyAudit é "últimas 48h") e descontando o que a UTI já reenviou.
+    const desde = ctx.desde ? new Date(ctx.desde) : new Date(Date.now() - 48 * 3600 * 1000);
+    await garantirTabela(db);
+    const semComprovante = await db.executeQuery(`
+        SELECT t.id, t.amount, t.date, t.description
+        FROM fintech.transactions t
+        WHERE t.cpf = ${esc(cpf)} AND t.type = 'INVOICE_PAYMENT'
+          AND t.date >= ${esc(desde.toISOString())}
+          AND NOT EXISTS (
+              SELECT 1 FROM fintech.telegram_message_log l
+              WHERE l.cpf = t.cpf AND l.category = 'payment_receipt' AND l.ok = true
+                AND l.created_at BETWEEN t.date - INTERVAL '10' MINUTE AND t.date + INTERVAL '30' MINUTE
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM fintech.uti_curas c
+              WHERE c.tipo = 'PAGAMENTO_SEM_COMPROVANTE' AND c.ref_id = CAST(t.id AS VARCHAR)
+          )
+        ORDER BY t.date
+    `);
+    if (semComprovante.length > 0) {
+        anomalias.push({
+            type: 'PAGAMENTO_SEM_COMPROVANTE',
+            detail: `${semComprovante.length} pagamento(s) sem comprovante entregue no Telegram: ${semComprovante.map((p) => `R$ ${Math.abs(parseFloat(p.amount)).toFixed(2)} em ${new Date(p.date).toISOString().slice(0, 10)}`).join(', ')}.`,
+            pagamentos: semComprovante,
+        });
+    }
+
+    const limitePreview = await recalcularLimite(cpf, { persist: false });
     if (limitePreview && limitePreview.alterado) {
         anomalias.push({
             type: 'LIMITE_EXCEDIDO',
@@ -133,7 +186,7 @@ async function checkAnomalias(db, cpf) {
 
 // ─── Massa-molde: escolhida a cada execução, prova o invariante estrutural ──
 
-async function acharMassaModelo(db, perfil) {
+async function acharMassaModelo(db, perfil, ctx = {}) {
     const candidatos = await db.executeQuery(`
         SELECT cpf FROM fintech.users
         WHERE account_status = '${perfil}' AND role NOT IN ('admin')
@@ -142,7 +195,7 @@ async function acharMassaModelo(db, perfil) {
         LIMIT 30
     `);
     for (const c of candidatos) {
-        const anomalias = await checkAnomalias(db, c.cpf);
+        const anomalias = await checkAnomalias(db, c.cpf, ctx);
         if (anomalias.length === 0) return c.cpf;
     }
     return null;
@@ -247,14 +300,56 @@ async function corrigirFaturaDuplicada(db, cpf, anomalia, _confirm) {
     };
 }
 
-async function corrigirLimiteExcedido(db, cpf, anomalia, confirm) {
+async function corrigirLimiteExcedido(db, cpf, anomalia, confirm, ctx = {}) {
     const p = anomalia.limitePreview;
     const plano = {
         acao: `Recalcular credit_card_available_limit: R$ ${p.limiteAnterior.toFixed(2)} → R$ ${p.limiteNovo.toFixed(2)} (fórmula: limite total ${p.totalLimit.toFixed(2)} − dívida atual ${p.currentInvoiceTotal.toFixed(2)})`
             + (p.estourado ? ' — fica negativo de propósito, dívida real excede o limite total (mesma regra do botão "Recalcular Limite Disponível").' : ''),
     };
     if (confirm) {
-        await recalcularEmLote({ cpf, persist: true });
+        await (ctx.recalcularLimite || recalcularLimitePadraoCli)(cpf, { persist: true });
+    }
+    return plano;
+}
+
+// TRANSACAO_ORFA: vincula cada parcela órfã a um plano ENCERRADO com o valor já
+// cobrado (services/orphanInstallmentFix.js) — sem parcelas futuras, sem mexer em
+// fatura, limite ou saldo.
+async function corrigirTransacaoOrfa(db, cpf, anomalia, confirm) {
+    const itens = anomalia.orfas.map((o) => `${o.description || 'Parcela'} — R$ ${o.valorCobrado.toFixed(2)}`);
+    const plano = {
+        acao: `Vincular ${anomalia.orfas.length} parcela(s) órfã(s) a plano ENCERRADO com o valor já cobrado (sem parcelas futuras; fatura, limite e saldo não mudam).`,
+        insere: itens,
+    };
+    if (confirm) {
+        const r = await runOrphanInstallmentFix(db, { cpfFilter: cpf, dryRun: false });
+        if (r.summary.errors > 0) {
+            plano.falhou = true;
+            plano.erro = r.details.filter((d) => d.action === 'error').map((d) => d.error).join('; ');
+        }
+    }
+    return plano;
+}
+
+// PAGAMENTO_SEM_COMPROVANTE: gera a 2ª via do comprovante e envia ao tópico da massa.
+// Só roda dentro da API (precisa do PDF + Telegram do processo da API); no terminal
+// vira análise manual. Só conta como curado se o Telegram CONFIRMAR a entrega.
+async function corrigirPagamentoSemComprovante(db, cpf, anomalia, confirm, ctx = {}) {
+    const lista = anomalia.pagamentos.map((p) => `R$ ${Math.abs(parseFloat(p.amount)).toFixed(2)} em ${new Date(p.date).toISOString().slice(0, 10)} (${p.description || 'Pagamento'})`);
+    if (!ctx.reenviarComprovante) {
+        return { manual: true, acao: `Reenviar ${lista.length} comprovante(s) — disponível só pelo painel Admin (UTI de Recuperação), que tem o PDF e o Telegram.`, insere: lista };
+    }
+    const plano = { acao: `Gerar a 2ª via do comprovante e enviar ao tópico da massa no Telegram: ${lista.join('; ')}.`, insere: lista, enviados: [] };
+    if (confirm) {
+        for (const tx of anomalia.pagamentos) {
+            const r = await ctx.reenviarComprovante(cpf, tx);
+            if (r && r.sent) {
+                plano.enviados.push(tx.id);
+            } else {
+                plano.falhou = true;
+                plano.erro = `Telegram não confirmou o envio (${(r && (r.reason || r.error)) || 'sem resposta'})`;
+            }
+        }
     }
     return plano;
 }
@@ -265,6 +360,8 @@ const HANDLERS = {
     INADIMPLENTE_SEM_ENCARGOS: corrigirInadimplenteSemEncargos,
     FATURA_DUPLICADA: corrigirFaturaDuplicada,
     LIMITE_EXCEDIDO: corrigirLimiteExcedido,
+    TRANSACAO_ORFA: corrigirTransacaoOrfa,
+    PAGAMENTO_SEM_COMPROVANTE: corrigirPagamentoSemComprovante,
 };
 
 // Tipos que services/dailyAudit.js já corrige DE FORMA INCONDICIONAL dentro da
@@ -283,24 +380,49 @@ const AUTO_CURADAS_PELO_DAILY_AUDIT = new Set([
 
 // ─── Orquestração (reaproveitável — chamada pelo CLI e por outros scripts) ──
 
-async function runUti({ confirm = false, cpfFilter = null, db: dbInjetado = null } = {}) {
+/**
+ * @param {object} opts
+ * @param {boolean} opts.confirm  false = simula (nada é gravado)
+ * @param {string|null} opts.cpfFilter  só essa massa do cemitério
+ * @param {object} opts.db  dbService já conectado (painel) — sem ele, conecta um próprio (terminal)
+ * @param {Function} opts.recalcularLimite  (cpf, {persist}) — injetado pela API
+ * @param {Function} opts.reenviarComprovante  (cpf, tx) → {sent} — só existe dentro da API
+ * @param {string} opts.aplicadoPor  CPF do admin (vai para o histórico uti_curas)
+ */
+async function runUti({
+    confirm = false, cpfFilter = null, db: dbInjetado = null,
+    recalcularLimite = null, reenviarComprovante = null, aplicadoPor = null,
+} = {}) {
     const db = dbInjetado || DatabaseFactory.createDatabaseService();
     if (!dbInjetado) await db.connect();
+    const ctxBase = { recalcularLimite: recalcularLimite || recalcularLimitePadraoCli, reenviarComprovante };
 
-    const modeloAdimplente = await acharMassaModelo(db, 'adimplente');
-    const modeloInadimplente = await acharMassaModelo(db, 'inadimplente');
+    const modeloAdimplente = await acharMassaModelo(db, 'adimplente', ctxBase);
+    const modeloInadimplente = await acharMassaModelo(db, 'inadimplente', ctxBase);
 
-    const where = cpfFilter
-        ? `WHERE status = 'precisa_massa_nova' AND cpf = '${cpfFilter}'`
+    const cpfLimpo = cpfFilter ? String(cpfFilter).replace(/\D/g, '') : null;
+    const where = cpfLimpo
+        ? `WHERE status = 'precisa_massa_nova' AND cpf = ${esc(cpfLimpo)}`
         : `WHERE status = 'precisa_massa_nova'`;
-    const cemiterio = await db.executeQuery(`SELECT cpf, nome_completo, tipos_anomalia FROM fintech.tbl_cemiterio_teste ${where} ORDER BY data_entrada ASC`);
+    const cemiterio = await db.executeQuery(`SELECT cpf, nome_completo, tipos_anomalia, data_entrada FROM fintech.tbl_cemiterio_teste ${where} ORDER BY data_entrada ASC`);
 
-    const resumo = { curadas: 0, semAnomaliaAtual: 0, semHandler: 0, porTipo: {} };
+    if (confirm) {
+        await garantirTabela(db);
+        await db.executeQuery(`ALTER TABLE fintech.tbl_cemiterio_teste ADD COLUMN IF NOT EXISTS curada_em TIMESTAMP`);
+    }
+    const marcarCurada = (cpf) => db.executeQuery(`UPDATE fintech.tbl_cemiterio_teste SET status = 'curada_uti', curada_em = CURRENT_TIMESTAMP WHERE cpf = ${esc(cpf)}`);
+    const historico = (cpf, tipo, acao, extra = {}) => registrarCura(db, { cpf, tipo, acao, aplicadoPor, ...extra });
+
+    const resumo = { curadas: 0, semAnomaliaAtual: 0, semHandler: 0, falhas: 0, porTipo: {} };
     const relatorio = [];
 
     for (const row of cemiterio) {
         const { cpf, nome_completo: nome, tipos_anomalia: tiposRegistrados } = row;
-        const anomalias = await checkAnomalias(db, cpf);
+        // Janela de pagamento sem comprovante: 48h antes de entrar no cemitério (a mesma
+        // janela em que o dailyAudit acusou) até agora.
+        const desde = row.data_entrada ? new Date(new Date(row.data_entrada).getTime() - 48 * 3600 * 1000) : null;
+        const ctx = { ...ctxBase, desde };
+        const anomalias = await checkAnomalias(db, cpf, ctx);
 
         if (anomalias.length === 0) {
             // checkAnomalias() vazio só é confiável se TODO tipo registrado nesta
@@ -332,7 +454,8 @@ async function runUti({ confirm = false, cpfFilter = null, db: dbInjetado = null
 
             resumo.semAnomaliaAtual++;
             if (confirm) {
-                await db.executeQuery(`UPDATE fintech.tbl_cemiterio_teste SET status = 'curada_uti' WHERE cpf = '${cpf}'`);
+                await marcarCurada(cpf);
+                await historico(cpf, 'JA_SAUDAVEL', 'Nenhuma anomalia detectável na conferência — status atualizado para curada_uti.');
             }
             relatorio.push({ cpf, nome, status: 'ja_saudavel', anomalias: [] });
             continue;
@@ -340,6 +463,7 @@ async function runUti({ confirm = false, cpfFilter = null, db: dbInjetado = null
 
         const itens = [];
         let todasTratadas = true;
+        let falhou = false;
         for (const anomalia of anomalias) {
             resumo.porTipo[anomalia.type] = (resumo.porTipo[anomalia.type] || 0) + 1;
             const handler = HANDLERS[anomalia.type];
@@ -349,22 +473,41 @@ async function runUti({ confirm = false, cpfFilter = null, db: dbInjetado = null
                 itens.push({ type: anomalia.type, detail: anomalia.detail, plano: null, semHandler: true });
                 continue;
             }
-            const plano = await handler(db, cpf, anomalia, confirm);
-            // Plano manual (ex.: FATURA_DUPLICADA) não corrige nada — a massa não pode virar curada_uti.
-            if (plano && plano.manual) todasTratadas = false;
+            let plano;
+            try {
+                plano = await handler(db, cpf, anomalia, confirm, ctx);
+            } catch (err) {
+                plano = { acao: 'Falhou ao aplicar a correção.', falhou: true, erro: err.message };
+            }
+            // Plano manual (ex.: FATURA_DUPLICADA) ou que falhou não corrige — a massa não pode virar curada_uti.
+            if (plano && (plano.manual || plano.falhou)) todasTratadas = false;
+            if (plano && plano.falhou) falhou = true;
+
+            // Histórico permanente do que foi APLICADO (nada é gravado na simulação).
+            if (confirm && plano && !plano.manual) {
+                if (anomalia.type === 'PAGAMENTO_SEM_COMPROVANTE') {
+                    for (const txId of plano.enviados || []) {
+                        await historico(cpf, anomalia.type, 'Comprovante (2ª via) reenviado ao Telegram.', { refId: txId });
+                    }
+                } else if (!plano.falhou) {
+                    await historico(cpf, anomalia.type, plano.acao, { detalhes: { insere: plano.insere, apaga: plano.apaga } });
+                }
+            }
             itens.push({ type: anomalia.type, detail: anomalia.detail, plano });
         }
+        if (falhou) resumo.falhas++;
 
         let curada = false;
         if (confirm && todasTratadas) {
-            const restante = await checkAnomalias(db, cpf);
+            const restante = await checkAnomalias(db, cpf, ctx);
             if (restante.length === 0) {
-                await db.executeQuery(`UPDATE fintech.tbl_cemiterio_teste SET status = 'curada_uti' WHERE cpf = '${cpf}'`);
+                await marcarCurada(cpf);
+                await historico(cpf, 'CURADA_UTI', `Massa curada: ${anomalias.map((a) => a.type).join(', ')}.`);
                 curada = true;
                 resumo.curadas++;
             }
         }
-        relatorio.push({ cpf, nome, status: curada ? 'curada' : 'com_plano', anomalias: itens });
+        relatorio.push({ cpf, nome, status: curada ? 'curada' : (falhou ? 'falhou' : 'com_plano'), anomalias: itens });
     }
 
     if (!dbInjetado) await db.disconnect?.().catch(() => {});

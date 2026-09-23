@@ -1,5 +1,5 @@
 // Real API implementation that connects to the backend
-import { User, PasswordResetRequest, LimitIncreaseRequest, AppNotification, PixKey, PixContact, Transaction, PurchasedItem, CreditCard, CardTransaction, MassProgressStep, LimiteRecalculoReport, DiscrepanciasReport } from '../types';
+import { User, PasswordResetRequest, LimitIncreaseRequest, AppNotification, PixKey, PixContact, Transaction, PurchasedItem, CreditCard, CardTransaction, MassProgressStep, LimiteRecalculoReport, DiscrepanciasReport, UtiReport, UtiCura } from '../types';
 
 const API_BASE = '/api'; // Vite proxy will forward to http://localhost:3001
 
@@ -1657,14 +1657,23 @@ export const adminRecalcularLimiteDisponivel = async (cpf?: string, dryRun = fal
     }
 };
 
-export const adminUtiRecuperacao = async (cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+export const adminUtiRecuperacao = async (cpf?: string, dryRun = false): Promise<{ success: boolean; data?: UtiReport; message?: string }> => {
     try {
         return await apiCall(`/admin/scripts/uti-recuperacao`, {
             method: 'POST',
-            body: JSON.stringify(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}),
+            body: JSON.stringify({ ...(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}), dryRun }),
         });
     } catch (error: any) {
         return { success: false, message: error.message || 'Erro ao rodar UTI de recuperação.' };
+    }
+};
+
+export const adminUtiHistorico = async (cpf?: string): Promise<{ success: boolean; data?: UtiCura[]; message?: string }> => {
+    try {
+        const qs = cpf ? `?cpf=${cpf.replace(/\D/g, '')}` : '';
+        return await apiCall(`/admin/scripts/uti-historico${qs}`, { method: 'GET' });
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Erro ao ler o histórico da UTI.' };
     }
 };
 

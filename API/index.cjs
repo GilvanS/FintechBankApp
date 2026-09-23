@@ -2911,6 +2911,9 @@ const adminScriptsController = createAdminScriptsController({
     auditLog,
     recalcularLimiteDisponivel,
     listUsers: () => usersRepo.listUsers(),
+    // UTI: 2ª via do comprovante de pagamento (PAGAMENTO_SEM_COMPROVANTE).
+    reenviarComprovante: (cpf, tx) => require('./services/paymentReceipt')
+        .reenviarComprovanteDePagamento({ db: dbService, esc: repoContext.esc, cpf, tx }),
 });
 registerAdminScriptsRoutes({ apiRouter, bearerAuth, authenticateAdmin, asyncHandler, controller: adminScriptsController });
 

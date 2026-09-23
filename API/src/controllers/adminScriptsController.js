@@ -15,19 +15,8 @@ const execFileAsync = util.promisify(execFile);
 const SCRIPTS_DIR = path.join(__dirname, '..', '..', 'scripts');
 const cleanCpf = (cpf) => String(cpf || '').replace(/\D/g, '');
 
-// Scripts com --json ainda imprimem o log do PostgresProvider no stdout antes do
-// JSON: pega o ÚLTIMO bloco que começa numa linha com "{" e faz o parse dele.
-// Sem JSON válido, devolve o log cru (comportamento anterior).
-function extrairJson(output) {
-    const texto = String(output || '');
-    for (let i = texto.lastIndexOf('\n{'); i >= 0; i = texto.lastIndexOf('\n{', i - 1)) {
-        try { return JSON.parse(texto.slice(i + 1)); } catch { /* tenta o bloco anterior */ }
-    }
-    try { return JSON.parse(texto); } catch { return { log: texto }; }
-}
-
 module.exports = function createAdminScriptsController(deps) {
-    const { dbService, repoContext, cardEngine, auditLog, recalcularLimiteDisponivel, listUsers } = deps;
+    const { dbService, repoContext, cardEngine, auditLog, recalcularLimiteDisponivel, listUsers, reenviarComprovante = null } = deps;
 
     // IMPORTANTE: execFile assíncrono, NUNCA execFileSync — vários desses
     // scripts fazem login via HTTP contra a própria API (localhost:3001).
@@ -221,7 +210,7 @@ module.exports = function createAdminScriptsController(deps) {
     // imprime os logs do Postgres no stdout antes do JSON, então o parse falhava
     // e o painel recebia um blob de log; e o timeout de 60s do processo filho não
     // cobre a base inteira. dryRun=true só simula (mesma conta, sem UPDATE).
-    const LIMITE_CONCORRENCIA = 5;
+    const LIMITE_CONCORRENCIA = 10; // pool do Postgres tem 20 conexões
     const recalcularLimite = async (req, res) => {
         const cpf = cleanCpf(req.body?.cpf);
         const dryRun = req.body?.dryRun === true;
@@ -264,23 +253,41 @@ module.exports = function createAdminScriptsController(deps) {
         }
     };
 
-    // POST /admin/scripts/uti-recuperacao — roda uti_massa.cjs --confirm --json
-    // (+ --cpf= opcional: sem ele, roda contra TODA massa em
-    // tbl_cemiterio_teste com status 'precisa_massa_nova'). Força a correção
-    // (apaga/regera billing_charges, consolida fatura duplicada, etc.) das
-    // massas que a auditoria diária não sabe curar sozinha — ver
-    // scripts/uti_massa.cjs para a lista de anomalias tratadas.
+    // POST /admin/scripts/uti-recuperacao — body { cpf?, dryRun? }. Mesmo fluxo do
+    // recalcular-limite: dryRun=true SIMULA (lista as massas do cemitério e o que
+    // seria feito em cada anomalia); sem dryRun aplica e grava o histórico em
+    // uti_curas. Roda DENTRO da API (runUti com o dbService já conectado): precisa do
+    // PDF + Telegram do processo para reenviar comprovante, e o script filho misturava
+    // o log do Postgres com o JSON. Lista de curas em scripts/uti_massa.cjs.
     const utiRecuperacao = async (req, res) => {
+        const { runUti } = require('../../scripts/uti_massa.cjs');
         const cpf = cleanCpf(req.body?.cpf);
-        const args = ['--confirm', '--json'];
-        if (cpf.length === 11) args.push(`--cpf=${cpf}`);
+        const dryRun = req.body?.dryRun === true;
         try {
-            const output = await runNodeScript('uti_massa.cjs', args, 60000);
-            const result = extrairJson(output);
-            auditLog(req, 'admin_script_uti_recuperacao', 'info', { cpf: cpf || 'ALL' });
-            res.json({ success: true, data: result, executedAt: new Date().toISOString() });
+            const data = await runUti({
+                confirm: !dryRun,
+                cpfFilter: cpf.length === 11 ? cpf : null,
+                db: dbService,
+                recalcularLimite: recalcularLimiteDisponivel,
+                reenviarComprovante,
+                aplicadoPor: req.user?.cpf || null,
+            });
+            if (!dryRun) auditLog(req, 'admin_script_uti_recuperacao', 'info', { cpf: cpf || 'ALL', curadas: data.resumo.curadas, falhas: data.resumo.falhas });
+            res.json({ success: true, data, executedAt: new Date().toISOString() });
         } catch (err) {
-            res.status(500).json({ success: false, message: 'Erro ao rodar uti_massa.cjs: ' + err.message });
+            res.status(500).json({ success: false, message: 'Erro ao rodar a UTI de Recuperação: ' + err.message });
+        }
+    };
+
+    // GET /admin/scripts/uti-historico?cpf= — o que a UTI já aplicou (tabela uti_curas).
+    const utiHistorico = async (req, res) => {
+        const { listarCuras } = require('../../services/utiCuraLog');
+        const cpf = cleanCpf(req.query?.cpf);
+        try {
+            const curas = await listarCuras(dbService, { cpf: cpf.length === 11 ? cpf : null, limite: req.query?.limite });
+            res.json({ success: true, data: curas });
+        } catch (err) {
+            res.status(500).json({ success: false, message: 'Erro ao ler o histórico da UTI: ' + err.message });
         }
     };
 
@@ -294,7 +301,6 @@ module.exports = function createAdminScriptsController(deps) {
         exportMassasCsv,
         recalcularLimite,
         utiRecuperacao,
+        utiHistorico,
     };
 };
-
-module.exports.extrairJson = extrairJson;

@@ -287,14 +287,27 @@ async function sendTable(cpf, title, headers, rows, category) {
     });
 }
 
+// Fire-and-forget: devolve na hora (res.sent vira true só quando a fila enviar).
 async function sendDocument(cpf, buffer, filename, category) {
-    if (!ENABLED || !db) return { sent: false, reason: 'service_disabled' };
+    return (await enviarDocumento(cpf, buffer, filename, category)).res;
+}
+
+// Mesmo envio, mas ESPERA a fila terminar — res.sent é a confirmação real do
+// Telegram. Usado onde a entrega precisa ser verificada (reenvio de comprovante pela UTI).
+async function sendDocumentAguardando(cpf, buffer, filename, category) {
+    const { res, pronto } = await enviarDocumento(cpf, buffer, filename, category);
+    await pronto;
+    return res;
+}
+
+async function enviarDocumento(cpf, buffer, filename, category) {
+    if (!ENABLED || !db) return { res: { sent: false, reason: 'service_disabled' }, pronto: Promise.resolve() };
     if (category && !(await isCategoryActive(category))) {
         console.debug(`[telegram:skip] category=${category} reason=disabled (sendDocument cpf=${cpf})`);
-        return { sent: false, reason: 'disabled' };
+        return { res: { sent: false, reason: 'disabled' }, pronto: Promise.resolve() };
     }
     const res = { sent: false };
-    enqueue(async () => {
+    const pronto = enqueue(async () => {
         let topicId;
         try {
             topicId = await getOrCreateTopic(cpf);
@@ -360,7 +373,7 @@ async function sendDocument(cpf, buffer, filename, category) {
             await logSend({ cpf, topicId, category, destination: 'cpf', messageType: 'document', messageId: null, ok: false, error: res.error || 'unknown' });
         }
     });
-    return res;
+    return { res, pronto };
 }
 
 // ===== WRAPPER send(category, payload) — toggle-gated multi-destination =====
@@ -585,6 +598,6 @@ async function isCategoryActive(category) {
 
 module.exports = {
     init, alertUser, alertGroup, alertTopic, ensureTopic, deleteTopic, listTopics, getStatus,
-    formatCpf, sendTable, sendDocument, send, isExpiringSoon, invalidateSettingCache,
+    formatCpf, sendTable, sendDocument, sendDocumentAguardando, send, isExpiringSoon, invalidateSettingCache,
     isCategoryActive, _enabled: ENABLED, _resetQueue: () => { queue = Promise.resolve(); }
 };
