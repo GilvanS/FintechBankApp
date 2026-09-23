@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { Wrench, RefreshCw, FileText, BarChart3, CreditCard, AlertTriangle, Download, Scale, HeartPulse } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import {
-    adminAuditFix, adminSyncOverdueDays, adminInvoicePdfPreview, adminMassaReport,
+    adminSyncOverdueDays, adminInvoicePdfPreview, adminMassaReport,
     adminActivatePendingCards, adminExportMassasCsv, adminUtiRecuperacao,
 } from '../../services/api';
 import ScriptActionModal, { ScriptActionResult } from './ScriptActionModal';
 import LimiteDisponivelModal from './LimiteDisponivelModal';
+import DiscrepanciasModal from './DiscrepanciasModal';
 
 type ScriptKey = 'audit-fix' | 'sync-overdue' | 'pdf-preview' | 'report' | 'activate-cards' | 'export-csv' | 'recalcular-limite' | 'uti-recuperacao' | null;
 
@@ -26,7 +27,7 @@ const ScriptsMassasSection: React.FC = () => {
             icon: Wrench,
             iconBg: 'bg-amber-500',
             title: 'Corrigir Discrepâncias',
-            description: 'Roda audit --fix nas 3 auditorias (dupla cobrança, saldo negativo, pagamentos órfãos). CPF opcional: vazio roda em todas as massas.',
+            description: 'Simula primeiro e mostra o antes × depois de cada correção (dupla cobrança, pagamento excessivo, saldo negativo, limite negativo); só grava quando você aplicar. CPF opcional: vazio verifica todas as massas.',
             cpfMode: 'optional' as const,
             onClick: () => setActiveScript('audit-fix'),
         },
@@ -136,15 +137,10 @@ const ScriptsMassasSection: React.FC = () => {
                 </div>
             </div>
 
-            <ScriptActionModal
+            <DiscrepanciasModal
                 isOpen={activeScript === 'audit-fix'}
-                title="Corrigir Discrepâncias"
-                icon={Wrench}
-                description="Roda as 3 auditorias com --fix: dupla cobrança, saldo negativo e pagamentos órfãos. Sem CPF, afeta todas as massas com discrepância encontrada."
-                cpfMode="optional"
                 isMidnight={isMidnight}
                 onClose={() => setActiveScript(null)}
-                onExecute={async (cpf): Promise<ScriptActionResult> => adminAuditFix(cpf)}
             />
 
             <ScriptActionModal

@@ -263,3 +263,55 @@ export interface LimiteRecalculoReport {
     /** Só as massas que mudam (ou mudariam) e as que deram erro. */
     detalhes: LimiteRecalculoItem[];
 }
+
+/** Tipos de correção do "Corrigir Discrepâncias" (POST /admin/scripts/audit-fix). */
+export type DiscrepanciaTipo = 'DUPLA_COBRANCA' | 'PAGAMENTO_EXCESSIVO' | 'SALDO_NEGATIVO' | 'LIMITE_NEGATIVO';
+
+/** Uma correção: o que muda (ou mudaria, na simulação) — antes × depois. */
+export interface DiscrepanciaCorrecao {
+    tipo: DiscrepanciaTipo;
+    cpf: string;
+    fullName: string | null;
+    /** Ex.: "Fatura <id>", "Saldo da conta", "Limite disponível". */
+    alvo: string;
+    campo: string;
+    antes: number;
+    depois: number;
+    motivo: string;
+    estourado?: boolean;
+}
+
+/** Discrepância detectada que NÃO é corrigida automaticamente (exige análise manual). */
+export interface DiscrepanciaPulada {
+    tipo: DiscrepanciaTipo;
+    cpf: string;
+    fullName: string | null;
+    motivo: string;
+}
+
+/** Só informativo — estado válido ou sem correção automática. */
+export interface DiscrepanciaAlerta {
+    tipo: 'LIMITE_ESTOURADO' | 'SALDO_INSUFICIENTE' | 'SALDO_ZERADO_COM_DIVIDA';
+    cpf: string;
+    fullName: string | null;
+    saldo: number;
+    divida: number;
+    motivo: string;
+}
+
+export interface DiscrepanciasReport {
+    modo: 'SIMULACAO' | 'APLICADO';
+    cpfFiltro: string;
+    /** Massas com INVOICE_PAYMENT checadas na auditoria de dupla cobrança. */
+    verificadas: number;
+    anomalias: number;
+    resolvidasAntes: number;
+    totalCorrecoes: number;
+    totalPulados: number;
+    totalAlertas: number;
+    totalErros: number;
+    correcoes: DiscrepanciaCorrecao[];
+    pulados: DiscrepanciaPulada[];
+    alertas: DiscrepanciaAlerta[];
+    erros: { cpf: string; etapa: string; erro: string }[];
+}

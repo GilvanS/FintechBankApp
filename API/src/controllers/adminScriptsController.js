@@ -33,20 +33,27 @@ module.exports = function createAdminScriptsController(deps) {
         return stdout;
     }
 
-    // POST /admin/scripts/audit-fix — roda audit_completo.js --fix --confirm
-    // (+ --cpf= opcional: sem ele, roda contra a base inteira, como antes).
+    // POST /admin/scripts/audit-fix — body { cpf?, dryRun? }. Mesma detecção/correção
+    // do audit_completo.js --fix, mas DENTRO da API (services/discrepanciasAudit.js),
+    // pelo mesmo motivo do recalcular-limite: o script filho imprimia o log antes do
+    // JSON (parse falhava) e, na base toda, estourava o timeout de 30s do proxy do
+    // DESKTOP. dryRun=true só simula (mesma conta, sem UPDATE).
     const auditFix = async (req, res) => {
+        const { runDiscrepanciasAudit } = require('../../services/discrepanciasAudit');
         const cpf = cleanCpf(req.body?.cpf);
-        const args = ['--fix', '--confirm', '--json'];
-        if (cpf.length === 11) args.push(`--cpf=${cpf}`);
+        const dryRun = req.body?.dryRun === true;
         try {
-            const output = await runNodeScript('audit_completo.js', args, 60000);
-            let result;
-            try { result = JSON.parse(output); } catch { result = { log: output }; }
-            auditLog(req, 'admin_script_audit_fix', 'info', { cpf: cpf || 'ALL' });
-            res.json({ success: true, data: result, executedAt: new Date().toISOString() });
+            const data = await runDiscrepanciasAudit({
+                db: dbService,
+                esc: repoContext.esc,
+                cpf: cpf.length === 11 ? cpf : null,
+                dryRun,
+                recalcularLimiteDisponivel,
+            });
+            if (!dryRun) auditLog(req, 'admin_script_audit_fix', 'info', { cpf: cpf || 'ALL', corrigidas: data.totalCorrecoes });
+            res.json({ success: true, data, executedAt: new Date().toISOString() });
         } catch (err) {
-            res.status(500).json({ success: false, message: 'Erro ao rodar audit_completo.js --fix: ' + err.message });
+            res.status(500).json({ success: false, message: 'Erro ao corrigir discrepâncias: ' + err.message });
         }
     };
 

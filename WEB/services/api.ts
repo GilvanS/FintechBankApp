@@ -1,5 +1,5 @@
 // Real API implementation that connects to the backend
-import { User, PasswordResetRequest, LimitIncreaseRequest, AppNotification, PixKey, PixContact, Transaction, PurchasedItem, CreditCard, CardTransaction, MassProgressStep, LimiteRecalculoReport } from '../types';
+import { User, PasswordResetRequest, LimitIncreaseRequest, AppNotification, PixKey, PixContact, Transaction, PurchasedItem, CreditCard, CardTransaction, MassProgressStep, LimiteRecalculoReport, DiscrepanciasReport } from '../types';
 
 const API_BASE = '/api'; // Vite proxy will forward to http://localhost:3001
 
@@ -1582,11 +1582,11 @@ export const adminUpdateUserPassword = async (cpf: string, newPassword: string):
 };
 
 // --- Scripts & Massas (painel Admin) ---
-export const adminAuditFix = async (cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => {
+export const adminAuditFix = async (cpf?: string, dryRun = false): Promise<{ success: boolean; data?: DiscrepanciasReport; message?: string }> => {
     try {
         return await apiCall(`/admin/scripts/audit-fix`, {
             method: 'POST',
-            body: JSON.stringify(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}),
+            body: JSON.stringify({ ...(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}), dryRun }),
         });
     } catch (error: any) {
         return { success: false, message: error.message || 'Erro ao corrigir discrepâncias.' };
