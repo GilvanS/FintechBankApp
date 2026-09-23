@@ -30,6 +30,11 @@ const VERBOSE = process.argv.includes('--verbose');
 const SKIP_DOUBLE_COUNT = process.argv.includes('--skip-double-count');
 const SKIP_NEGATIVE = process.argv.includes('--skip-negative');
 
+// Com --json o stdout tem que ser SÓ o JSON: o PostgresProvider (e o index.cjs, se o
+// recálculo de limite o carregar) loga cada query com console.log. Esse ruído vai
+// para o stderr; o JSON sai por process.stdout.write no fim.
+if (JSON_OUTPUT) console.log = (...args) => console.error(...args);
+
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
