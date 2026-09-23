@@ -15,6 +15,17 @@ const execFileAsync = util.promisify(execFile);
 const SCRIPTS_DIR = path.join(__dirname, '..', '..', 'scripts');
 const cleanCpf = (cpf) => String(cpf || '').replace(/\D/g, '');
 
+// Scripts com --json ainda imprimem o log do PostgresProvider no stdout antes do
+// JSON: pega o ÚLTIMO bloco que começa numa linha com "{" e faz o parse dele.
+// Sem JSON válido, devolve o log cru (comportamento anterior).
+function extrairJson(output) {
+    const texto = String(output || '');
+    for (let i = texto.lastIndexOf('\n{'); i >= 0; i = texto.lastIndexOf('\n{', i - 1)) {
+        try { return JSON.parse(texto.slice(i + 1)); } catch { /* tenta o bloco anterior */ }
+    }
+    try { return JSON.parse(texto); } catch { return { log: texto }; }
+}
+
 module.exports = function createAdminScriptsController(deps) {
     const { dbService, repoContext, cardEngine, auditLog, recalcularLimiteDisponivel, listUsers } = deps;
 
@@ -265,8 +276,7 @@ module.exports = function createAdminScriptsController(deps) {
         if (cpf.length === 11) args.push(`--cpf=${cpf}`);
         try {
             const output = await runNodeScript('uti_massa.cjs', args, 60000);
-            let result;
-            try { result = JSON.parse(output); } catch { result = { log: output }; }
+            const result = extrairJson(output);
             auditLog(req, 'admin_script_uti_recuperacao', 'info', { cpf: cpf || 'ALL' });
             res.json({ success: true, data: result, executedAt: new Date().toISOString() });
         } catch (err) {
@@ -286,3 +296,5 @@ module.exports = function createAdminScriptsController(deps) {
         utiRecuperacao,
     };
 };
+
+module.exports.extrairJson = extrairJson;
