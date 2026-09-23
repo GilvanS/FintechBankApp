@@ -1,23 +1,26 @@
 #!/usr/bin/env node
 /**
- * Script de Auditoria COMPLETA — Unifica os dois auditores em sequência
+ * Auditoria Completa — FintechBankApp
  *
- * Executa:
- *   1. audit_invoice_double_counting.js  → Integridade de Pagamentos de Fatura
- *   2. audit_negative_balance.js         → Saldo Negativo / Pagamento Excessivo
+ * Duas auditorias:
+ *   1. Dupla cobrança — INVOICE_PAYMENT × invoices.valor_pago
+ *   2. Saldo negativo / pagamento excessivo / limite negativo / saldo insuficiente
  *
- * Produz um relatório unificado com resumo de ambos.
+ * A detecção e a correção vivem em services/discrepanciasAudit.js — FONTE ÚNICA,
+ * a mesma do botão "Corrigir Discrepâncias" do painel Admin. Este script só
+ * formata a saída (texto ou JSON legado consumido por audit_scheduler.js e
+ * run_audit_all.js). Com --cpf, TUDO fica restrito ao CPF, inclusive as correções.
  *
- * ⚠️ READ-ONLY por padrão. Use --fix --confirm para alterar dados.
+ * ⚠️ READ-ONLY por padrão (simula e mostra o que seria corrigido).
  *
  * Uso:
- *   node scripts/audit_completo.js                      # apenas auditoria
- *   node scripts/audit_completo.js --fix --confirm       # corrige discrepâncias
- *   node scripts/audit_completo.js --cpf=XXX             # audit específico
- *   node scripts/audit_completo.js --verbose             # mostra detalhes
- *   node scripts/audit_completo.js --json                # output JSON
- *   node scripts/audit_completo.js --skip-double-count   # pula auditoria 1
- *   node scripts/audit_completo.js --skip-negative       # pula auditoria 2
+ *   node scripts/audit_completo.js                        # auditoria + prévia das correções
+ *   node scripts/audit_completo.js --fix --confirm        # corrige discrepâncias
+ *   node scripts/audit_completo.js --cpf=XXX              # audit específico
+ *   node scripts/audit_completo.js --verbose              # detalhes de quem tem saldo negativo
+ *   node scripts/audit_completo.js --json                 # só o JSON (sem log)
+ *   node scripts/audit_completo.js --skip-double-count    # pula a Auditoria 1
+ *   node scripts/audit_completo.js --skip-negative        # pula a Auditoria 2
  */
 
 const ALLOW_FIX = process.argv.includes('--fix') && process.argv.includes('--confirm');
@@ -32,551 +35,216 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const DatabaseFactory = require('../services/database/DatabaseFactory');
 const { esc } = require('../repositories/context');
+const { runDiscrepanciasAudit } = require('../services/discrepanciasAudit');
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const round2 = n => Math.round(n * 100) / 100;
+const fmt = v => `R$ ${Number(v || 0).toFixed(2)}`;
+const log = (...args) => { if (!JSON_OUTPUT) console.log(...args); };
 
-// Bruto da fatura em SQL: compras do ciclo + saldo anterior + encargos consolidados.
-// Mesma definição de API/utils/invoiceMath.js (computeInvoiceGross) — divergir aqui faz
-// a auditoria acusar como excesso o dinheiro que pagou encargos devidos.
-const GROSS_SQL = `(COALESCE(i.valor_total,0) + COALESCE(i.saldo_anterior,0)
-                  + COALESCE(i.valor_iof,0) + COALESCE(i.valor_multa,0)
-                  + COALESCE(i.valor_juros_remuneratorios,0) + COALESCE(i.valor_juros_mora,0))`;
-const fmt = v => `R$ ${v.toFixed(2)}`;
+// Limite negativo usa a fórmula canônica de index.cjs via recalcular_limite_disponivel.cjs.
+// Require preguiçoso: index.cjs só é carregado se houver massa com limite negativo.
+async function recalcularLimite(cpf, { persist }) {
+    const { recalcularEmLote } = require('./recalcular_limite_disponivel.cjs');
+    const [r] = await recalcularEmLote({ cpf, persist });
+    if (r && r.erro) throw new Error(r.erro);
+    return r || null;
+}
 
-// ─── Relatório Unificado ──────────────────────────────────────────────────────
-const unifiedReport = {
-    ranAt: new Date().toISOString(),
-    flags: { allowFix: ALLOW_FIX, cpf: CPF_FILTER, verbose: VERBOSE },
-    doubleCount: null,
-    negativeBalance: null,
-    totalIssues: 0,
-    totalFixed: 0,
-    totalErrors: 0,
-};
+// ─── JSON legado (mesma forma do script antigo) ──────────────────────────────
+// audit_scheduler.js lê doubleCount.details[].status e negativeBalance.categories[].users;
+// run_audit_all.js lê doubleCount.scanned/discrepancies.
+function toLegacyReport(r) {
+    const doTipo = (lista, tipo) => lista.filter(x => x.tipo === tipo || x.etapa === tipo);
+    const aplicado = r.modo === 'APLICADO';
+    const TIPOS_AUD2 = ['PAGAMENTO_EXCESSIVO', 'SALDO_NEGATIVO', 'LIMITE_NEGATIVO'];
 
+    const doubleCount = SKIP_DOUBLE_COUNT ? null : {
+        scanned: r.verificadas,
+        withPayments: r.duplaCobranca.filter(d => d.status !== 'error').length,
+        discrepancies: r.duplaCobranca.filter(d => ['discrepancy', 'orphan_payments', 'resolvido'].includes(d.status)).length,
+        fixed: aplicado ? doTipo(r.correcoes, 'DUPLA_COBRANCA').length : 0,
+        errors: doTipo(r.erros, 'DUPLA_COBRANCA').length,
+        details: r.duplaCobranca,
+    };
+
+    const categoria = (label, users) => ({ label, count: users.length, users });
+    const erroUser = e => ({ cpf: e.cpf, erro: e.erro });
+    const saldoBaixo = r.alertas.filter(a => a.tipo === 'SALDO_INSUFICIENTE' || a.tipo === 'SALDO_ZERADO_COM_DIVIDA');
+    const negativeBalance = SKIP_NEGATIVE ? null : {
+        categories: {
+            negativeBalance: categoria('Saldo (balance) negativo', [
+                ...doTipo(r.correcoes, 'SALDO_NEGATIVO').map(c => ({ cpf: c.cpf, name: c.fullName, balance: c.antes })),
+                ...doTipo(r.erros, 'SALDO_NEGATIVO').map(erroUser),
+            ]),
+            negativeCreditLimit: categoria('Limite disponível negativo', [
+                ...doTipo(r.correcoes, 'LIMITE_NEGATIVO').map(c => ({ cpf: c.cpf, name: c.fullName, availableLimit: c.antes, recalculado: c.depois })),
+                ...doTipo(r.alertas, 'LIMITE_ESTOURADO').map(a => ({ cpf: a.cpf, name: a.fullName, availableLimit: a.saldo, estourado: true })),
+                ...doTipo(r.erros, 'LIMITE_NEGATIVO').map(erroUser),
+            ]),
+            overpayment: categoria('Valor pago > valor total da invoice', [
+                ...doTipo(r.correcoes, 'PAGAMENTO_EXCESSIVO').map(c => ({ cpf: c.cpf, name: c.fullName, invoiceId: c.invoiceId, valorPago: c.antes, excess: Math.round((c.antes - c.depois) * 100) / 100 })),
+                ...doTipo(r.erros, 'PAGAMENTO_EXCESSIVO').map(erroUser),
+            ]),
+            insufficientBalance: categoria('Saldo insuficiente para quitar fatura pendente',
+                saldoBaixo.map(a => ({ cpf: a.cpf, name: a.fullName, balance: a.saldo, remainingDebt: a.divida }))),
+            zeroBalanceWithDebt: categoria('Saldo zerado mas com fatura não paga',
+                doTipo(r.alertas, 'SALDO_ZERADO_COM_DIVIDA').map(a => ({ cpf: a.cpf, name: a.fullName, balance: a.saldo, remainingDebt: a.divida }))),
+        },
+        fixed: aplicado ? r.correcoes.filter(c => TIPOS_AUD2.includes(c.tipo)).length : 0,
+        errors: r.erros.filter(e => TIPOS_AUD2.includes(e.etapa)).length,
+    };
+
+    const totalIssues = (doubleCount?.discrepancies || 0) +
+        Object.values(negativeBalance?.categories || {}).reduce((s, c) => s + c.count, 0);
+    return {
+        ranAt: new Date().toISOString(),
+        flags: { allowFix: ALLOW_FIX, cpf: CPF_FILTER, verbose: VERBOSE },
+        doubleCount,
+        negativeBalance,
+        totalIssues,
+        totalFixed: (doubleCount?.fixed || 0) + (negativeBalance?.fixed || 0),
+        totalErrors: (doubleCount?.errors || 0) + (negativeBalance?.errors || 0),
+        // Relatório completo do serviço (antes × depois de cada correção, pulados, alertas).
+        discrepancias: { ...r, duplaCobranca: undefined },
+    };
+}
+
+// ─── Saída em texto ──────────────────────────────────────────────────────────
 function printSection(title, sub) {
     const w = 60;
     const pad = Math.max(0, Math.floor((w - title.length - 2) / 2));
-    console.log('');
-    console.log('+' + '='.repeat(w) + '+');
-    console.log('|' + ' '.repeat(pad) + title + ' '.repeat(w - pad - title.length) + '|');
-    console.log('+' + '='.repeat(w) + '+');
-    if (sub) console.log(`  ${sub}`);
-    console.log('');
+    log('');
+    log('+' + '='.repeat(w) + '+');
+    log('|' + ' '.repeat(pad) + title + ' '.repeat(Math.max(0, w - pad - title.length)) + '|');
+    log('+' + '='.repeat(w) + '+');
+    if (sub) log(`  ${sub}`);
+    log('');
 }
 
-// ===============================================================================
-//  AUDITORIA 1 — Double-Counting de Pagamentos de Fatura
-// ===============================================================================
-async function runDoubleCountAudit(db) {
-    const fq = t => db.fq(t);
-    const report = {
-        scanned: 0, withPayments: 0, discrepancies: 0, fixed: 0, errors: 0,
-        details: []
-    };
-
-    // ── 1. Buscar todos os usuários com INVOICE_PAYMENT ──
-    let query = `SELECT DISTINCT t.cpf, u.full_name
-        FROM ${fq('transactions')} t
-        LEFT JOIN ${fq('users')} u ON t.cpf = u.cpf
-        WHERE t.type = 'INVOICE_PAYMENT'`;
-    if (CPF_FILTER) query += ` AND t.cpf = ${esc(CPF_FILTER)}`;
-
-    const users = await db.executeQuery(query);
-    report.scanned = users.length;
-    console.log(`📊 Encontrados ${users.length} usuário(s) com INVOICE_PAYMENT.\n`);
-
-    for (const user of users) {
-        const cpf = user.cpf;
-        const name = user.full_name || '(sem nome)';
-        const detail = { cpf, name, payments: [], invoices: [], status: 'ok' };
-
-        try {
-            const paymentRows = await db.executeQuery(`
-                SELECT id, amount, description, date
-                FROM ${fq('transactions')}
-                WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT'
-                    AND (status IS NULL OR status <> 'cancelled')
-                ORDER BY date ASC
-            `);
-            const paymentTotal = paymentRows.reduce((s, r) => s + Math.abs(parseFloat(r.amount || 0)), 0);
-            const paymentCount = paymentRows.length;
-
-            detail.payments = paymentRows.map(r => ({
-                id: r.id,
-                amount: Math.abs(parseFloat(r.amount || 0)),
-                description: (r.description || '').trim(),
-                date: r.date
-            }));
-
-            const invoiceRows = await db.executeQuery(`
-                SELECT id, due_date, status, valor_total, valor_pago, data_pagamento
-                FROM ${fq('invoices')}
-                WHERE cpf = ${esc(cpf)} AND COALESCE(valor_pago, 0) > 0
-                ORDER BY due_date DESC
-            `);
-            const invoiceTotalPago = invoiceRows.reduce((s, r) => s + parseFloat(r.valor_pago || 0), 0);
-            const invoiceCount = invoiceRows.length;
-
-            detail.invoices = invoiceRows.map(r => ({
-                id: r.id, dueDate: r.due_date, status: r.status,
-                valorTotal: parseFloat(r.valor_total || 0),
-                valorPago: parseFloat(r.valor_pago || 0),
-                dataPagamento: r.data_pagamento
-            }));
-
-            const diff = round2(Math.abs(paymentTotal - invoiceTotalPago));
-            const isDiscrepancy = diff > 0.02;
-
-            if (paymentCount > 0 || invoiceCount > 0) {
-                report.withPayments++;
-                const icon = isDiscrepancy ? '❌' : '✅';
-                console.log(`  ${icon} ${name} (${cpf})`);
-                console.log(`      Pagamentos: ${paymentCount}x = ${fmt(paymentTotal)}`);
-                console.log(`      Valor pago: ${invoiceCount}x = ${fmt(invoiceTotalPago)}`);
-
-                if (isDiscrepancy) {
-                    report.discrepancies++;
-                    detail.status = 'discrepancy';
-                    console.log(`      ⚠️  DISCREPÂNCIA: ${fmt(diff)}`);
-                } else {
-                    console.log(`      ✓ OK (diff: ${fmt(diff)})`);
-                }
-
-                // Pagamentos sem invoice
-                if (paymentCount > 0 && invoiceCount === 0) {
-                    console.log(`      ⚠️  Pagamentos SEM registro em invoices`);
-                    detail.status = 'orphan_payments';
-                }
-
-                // valor_pago > 0 sem data_pagamento
-                const missingDate = invoiceRows.filter(r => !r.data_pagamento && parseFloat(r.valor_pago || 0) > 0);
-                if (missingDate.length > 0) {
-                    console.log(`      ⚠️  ${missingDate.length} invoice(s) com valor_pago > 0 mas SEM data_pagamento`);
-                }
-
-                // RESOLVIDO check
-                if (isDiscrepancy && invoiceTotalPago > paymentTotal + 0.02) {
-                    const allPaidAndCorrected = invoiceRows.every(inv => {
-                        const vp = parseFloat(inv.valor_pago || 0);
-                        if (vp <= 0) return true;
-                        if (!inv.data_pagamento) return false;
-                        const vt = parseFloat(inv.valor_total || 0);
-                        return vp <= vt + 0.02;
-                    });
-
-                    if (allPaidAndCorrected) {
-                        console.log(`      🔵 Discrepância residual de ${fmt(diff)} — já corrigida anteriormente`);
-                        detail.status = 'resolvido';
-                    } else {
-                        console.log(`      ⚠️  Discrepância ativa — requer correção`);
-                    }
-                }
-
-                // Fix
-                if (ALLOW_FIX && isDiscrepancy && detail.status !== 'resolvido') {
-                    if (invoiceTotalPago > paymentTotal + 0.02) {
-                        const excess = round2(invoiceTotalPago - paymentTotal);
-                        const excessPct = paymentTotal > 0 ? (excess / paymentTotal) * 100 : 100;
-                        console.log(`      🔧 Excesso: ${fmt(excess)} (${excessPct.toFixed(1)}%)`);
-
-                        if (excessPct > 50 && paymentTotal > 0) {
-                            console.log(`      ⚠️  Discrepância > 50% — PULANDO`);
-                        } else if (invoiceRows.length > 0) {
-                            const inv = invoiceRows[0];
-                            const newPago = round2(parseFloat(inv.valor_pago || 0) - excess);
-                            await db.executeQuery(`
-                                UPDATE ${fq('invoices')}
-                                SET valor_pago = ${Math.max(0, newPago).toFixed(2)}, updated_at = CURRENT_TIMESTAMP
-                                WHERE id = ${esc(inv.id)}
-                            `);
-                            console.log(`      ✅ Invoice ${inv.id}: valor_pago ${fmt(parseFloat(inv.valor_pago || 0))} → ${fmt(Math.max(0, newPago))}`);
-                            report.fixed++;
-                        }
-                    } else if (paymentTotal > invoiceTotalPago + 0.02) {
-                        const missing = round2(paymentTotal - invoiceTotalPago);
-                        console.log(`      🔧 Pagamentos excedem valor_pago em ${fmt(missing)}`);
-                        const recent = await db.executeQuery(`
-                            SELECT id, valor_pago FROM ${fq('invoices')}
-                            WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
-                            ORDER BY due_date DESC LIMIT 1
-                        `);
-                        if (recent.length > 0) {
-                            const inv = recent[0];
-                            const newPago = round2(parseFloat(inv.valor_pago || 0) + missing);
-                            await db.executeQuery(`
-                                UPDATE ${fq('invoices')}
-                                SET valor_pago = ${newPago.toFixed(2)}, updated_at = CURRENT_TIMESTAMP
-                                WHERE id = ${esc(inv.id)}
-                            `);
-                            console.log(`      ✅ Invoice ${inv.id}: valor_pago ${fmt(parseFloat(inv.valor_pago || 0))} → ${fmt(newPago)}`);
-                            report.fixed++;
-                        } else {
-                            console.log(`      ⚠️  Nenhuma invoice não paga encontrada`);
-                        }
-                    }
-                }
-                console.log('');
-            }
-        } catch (err) {
-            report.errors++;
-            detail.status = 'error';
-            console.error(`  ❌ Erro ao processar ${cpf}: ${err.message}\n`);
-        }
-        report.details.push(detail);
+function printCorrecoes(lista) {
+    if (lista.length === 0) { log('  ✅ Nada a corrigir.'); return; }
+    const verbo = ALLOW_FIX ? '✅' : '🔧';
+    for (const c of lista) {
+        const tag = c.estourado ? ' (limite estourado — dívida real acima do total, estado válido)' : '';
+        log(`  ${verbo} ${c.fullName || '(sem nome)'} (${c.cpf}) — ${c.alvo}: ${c.campo} ${fmt(c.antes)} → ${fmt(c.depois)}${tag}`);
+        log(`      ${c.motivo}`);
     }
-
-    return report;
 }
 
-// ===============================================================================
-//  AUDITORIA 2 — Saldo Negativo / Pagamento Excessivo
-// ===============================================================================
-async function runNegativeBalanceAudit(db) {
-    const fq = t => db.fq(t);
-    const report = {
-        categories: {
-            negativeBalance: { label: 'Saldo (balance) negativo', count: 0, users: [] },
-            negativeCreditLimit: { label: 'Limite disponível negativo', count: 0, users: [] },
-            overpayment: { label: 'Valor pago > valor total da invoice', count: 0, users: [] },
-            insufficientBalance: { label: 'Saldo insuficiente para quitar fatura pendente', count: 0, users: [] },
-            zeroBalanceWithDebt: { label: 'Saldo zerado mas com fatura não paga', count: 0, users: [] }
-        },
-        fixed: 0, errors: 0
-    };
-
-    // ── [1/5] Saldo Negativo ──
-    console.log('📊 [1/5] Verificando saldo negativo...\n');
-    let q = `SELECT cpf, full_name, balance, credit_card_available_limit, credit_card_total_limit, credit_card_is_blocked
-        FROM ${fq('users')} WHERE balance IS NOT NULL AND balance < 0`;
-    if (CPF_FILTER) q += ` AND cpf = ${esc(CPF_FILTER)}`;
-    q += ' ORDER BY balance ASC';
-
-    for (const u of await db.executeQuery(q)) {
-        report.categories.negativeBalance.count++;
-        report.categories.negativeBalance.users.push({
-            cpf: u.cpf, name: u.full_name, balance: parseFloat(u.balance),
-            availableLimit: parseFloat(u.credit_card_available_limit || 0)
-        });
-        console.log(`  ❌ ${u.full_name} (${u.cpf}) — balance: ${fmt(parseFloat(u.balance || 0))} (NEGATIVO!)`);
+function printTexto(r, legacy) {
+    if (!SKIP_DOUBLE_COUNT) {
+        printSection('Auditoria 1', 'Double-Counting de Pagamentos de Fatura');
+        const dc = legacy.doubleCount;
+        log(`  Usuários com INVOICE_PAYMENT:  ${dc.scanned}`);
+        log(`  Discrepâncias ativas:          ${dc.discrepancies - r.resolvidasAntes}`);
+        log(`  Resolvidas (correção ant.):    ${r.resolvidasAntes}`);
+        log('');
+        printCorrecoes(r.correcoes.filter(c => c.tipo === 'DUPLA_COBRANCA'));
     }
-    if (report.categories.negativeBalance.count === 0) console.log('  ✅ Nenhum.');
 
-    // ── [2/5] Limite Negativo ──
-    console.log('\n📊 [2/5] Verificando limite disponível negativo...\n');
-    q = `SELECT cpf, full_name, balance, credit_card_available_limit, credit_card_total_limit
-        FROM ${fq('users')} WHERE credit_card_available_limit IS NOT NULL AND credit_card_available_limit < 0`;
-    if (CPF_FILTER) q += ` AND cpf = ${esc(CPF_FILTER)}`;
-    q += ' ORDER BY credit_card_available_limit ASC';
-
-    for (const u of await db.executeQuery(q)) {
-        report.categories.negativeCreditLimit.count++;
-        report.categories.negativeCreditLimit.users.push({
-            cpf: u.cpf, name: u.full_name,
-            availableLimit: parseFloat(u.credit_card_available_limit),
-            totalLimit: parseFloat(u.credit_card_total_limit || 0)
-        });
-        console.log(`  ❌ ${u.full_name} (${u.cpf}) — limite: ${fmt(parseFloat(u.credit_card_available_limit))} (NEGATIVO!)`);
-    }
-    if (report.categories.negativeCreditLimit.count === 0) console.log('  ✅ Nenhum.');
-
-    // ── [3/5] Pagamento Excessivo (valor_pago > BRUTO da fatura) ──
-    // O bruto inclui saldo anterior e encargos (IOF, multa, juros). Comparar só com
-    // valor_total tratava como excesso o dinheiro que pagou encargos devidos — e o
-    // bloco de --fix abaixo devolvia esse valor ao saldo, criando prejuízo.
-    console.log('\n📊 [3/5] Verificando invoices com pagamento excessivo...\n');
-    q = `SELECT i.cpf, u.full_name, i.id, i.valor_total, i.valor_pago, ${GROSS_SQL} AS gross,
-                i.status, i.due_date, i.data_pagamento
-        FROM ${fq('invoices')} i LEFT JOIN ${fq('users')} u ON i.cpf = u.cpf
-        WHERE i.valor_pago IS NOT NULL AND i.valor_total IS NOT NULL
-          AND i.valor_pago > ${GROSS_SQL} + 0.02`;
-    if (CPF_FILTER) q += ` AND i.cpf = ${esc(CPF_FILTER)}`;
-    q += ` ORDER BY (i.valor_pago - ${GROSS_SQL}) DESC`;
-
-    for (const inv of await db.executeQuery(q)) {
-        report.categories.overpayment.count++;
-        const excess = round2(parseFloat(inv.valor_pago) - parseFloat(inv.gross));
-        report.categories.overpayment.users.push({
-            cpf: inv.cpf, name: inv.full_name, invoiceId: inv.id,
-            valorTotal: parseFloat(inv.valor_total), valorPago: parseFloat(inv.valor_pago),
-            excess, status: inv.status, dataPagamento: inv.data_pagamento
-        });
-        console.log(`  ❌ ${inv.full_name || '(sem nome)'} (${inv.cpf})`);
-        console.log(`      Invoice ${inv.id}: valor_total=${fmt(parseFloat(inv.valor_total))}  valor_pago=${fmt(parseFloat(inv.valor_pago))}  EXCESSO=${fmt(excess)}`);
-    }
-    if (report.categories.overpayment.count === 0) console.log('  ✅ Nenhuma.');
-
-    // ── [4/5] Saldo Insuficiente ──
-    console.log('\n📊 [4/5] Verificando saldo insuficiente para pagamento mínimo...\n');
-    q = `SELECT u.cpf, u.full_name, u.balance, i.id as invoice_id, i.valor_total, i.valor_pago,
-                (COALESCE(i.valor_total,0)-COALESCE(i.valor_pago,0)) AS remaining_debt, i.due_date, i.status
-        FROM ${fq('users')} u INNER JOIN ${fq('invoices')} i ON u.cpf = i.cpf
-        WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
-          AND COALESCE(i.valor_pago,0) < COALESCE(i.valor_total,0)
-          AND u.balance IS NOT NULL
-          AND u.balance < (COALESCE(i.valor_total,0)-COALESCE(i.valor_pago,0)) * 0.10`;
-    if (CPF_FILTER) q += ` AND u.cpf = ${esc(CPF_FILTER)}`;
-    q += ' ORDER BY remaining_debt DESC';
-
-    const seenIS = new Set();
-    for (const u of await db.executeQuery(q)) {
-        if (seenIS.has(u.cpf)) continue;
-        seenIS.add(u.cpf);
-        const remaining = round2(parseFloat(u.valor_total || 0) - parseFloat(u.valor_pago || 0));
-        const minPmt = round2(remaining * 0.10);
-        report.categories.insufficientBalance.count++;
-        report.categories.insufficientBalance.users.push({
-            cpf: u.cpf, name: u.full_name, balance: parseFloat(u.balance), remainingDebt: remaining
-        });
-        console.log(`  ⚠️  ${u.full_name} (${u.cpf}) — balance=${fmt(parseFloat(u.balance))}  mínimo=${fmt(minPmt)}  déficit de ${fmt(round2(minPmt - parseFloat(u.balance || 0)))}`);
-    }
-    if (report.categories.insufficientBalance.count === 0) console.log('  ✅ Nenhum.');
-
-    // ── [5/5] Saldo Zerado com Dívida ──
-    console.log('\n📊 [5/5] Verificando saldo zerado mas com fatura não paga...\n');
-    q = `SELECT u.cpf, u.full_name, u.balance, i.id as invoice_id, i.valor_total, i.valor_pago,
-                (COALESCE(i.valor_total,0)-COALESCE(i.valor_pago,0)) AS remaining_debt, i.due_date, i.status
-        FROM ${fq('users')} u INNER JOIN ${fq('invoices')} i ON u.cpf = i.cpf
-        WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
-          AND COALESCE(i.valor_pago,0) < COALESCE(i.valor_total,0)
-          AND (u.balance IS NULL OR u.balance <= 0)
-          AND u.balance < (COALESCE(i.valor_total,0)-COALESCE(i.valor_pago,0)) * 0.10`;
-    if (CPF_FILTER) q += ` AND u.cpf = ${esc(CPF_FILTER)}`;
-    q += ' ORDER BY remaining_debt DESC';
-
-    const seenZB = new Set();
-    for (const u of await db.executeQuery(q)) {
-        if (seenZB.has(u.cpf)) continue;
-        seenZB.add(u.cpf);
-        const remaining = round2(parseFloat(u.valor_total || 0) - parseFloat(u.valor_pago || 0));
-        const minPmt = round2(remaining * 0.10);
-        report.categories.zeroBalanceWithDebt.count++;
-        report.categories.zeroBalanceWithDebt.users.push({
-            cpf: u.cpf, name: u.full_name, balance: parseFloat(u.balance || 0), remainingDebt: remaining
-        });
-        console.log(`  ⚠️  ${u.full_name} (${u.cpf}) — balance=${fmt(parseFloat(u.balance || 0))}  débito=${fmt(remaining)}  mínimo=${fmt(minPmt)}`);
-    }
-    if (report.categories.zeroBalanceWithDebt.count === 0) console.log('  ✅ Nenhum.');
-
-    // ── FIX (se permitido) ──
-    if (ALLOW_FIX) {
-        console.log('\n🔧 CORREÇÕES\n');
-
-        // Corrigir overpayment
-        const overpaymentRows = await db.executeQuery(`
-            SELECT i.cpf, u.full_name, i.id, i.valor_total, i.valor_pago, ${GROSS_SQL} AS gross
-            FROM ${fq('invoices')} i LEFT JOIN ${fq('users')} u ON i.cpf = u.cpf
-            WHERE i.valor_pago > ${GROSS_SQL} + 0.02
-        `);
-        for (const inv of overpaymentRows) {
-            const excess = round2(parseFloat(inv.valor_pago) - parseFloat(inv.gross));
-            if (excess > 0.02) {
-                try {
-                    // Teto é o bruto: o que passou disso é excedente de verdade e volta ao saldo
-                    const newPago = round2(parseFloat(inv.gross));
-                    await db.executeQuery(`UPDATE ${fq('invoices')} SET valor_pago = ${newPago.toFixed(2)}, updated_at = CURRENT_TIMESTAMP WHERE id = ${esc(inv.id)}`);
-                    await db.executeQuery(`UPDATE ${fq('users')} SET balance = balance + ${excess.toFixed(2)}, updated_at = CURRENT_TIMESTAMP WHERE cpf = ${esc(inv.cpf)}`);
-                    report.fixed++;
-                    console.log(`  ✅ Invoice ${inv.id} (${inv.cpf}): valor_pago ${fmt(parseFloat(inv.valor_pago))} → ${fmt(newPago)} (excesso ${fmt(excess)} estornado ao balance)`);
-                } catch (err) {
-                    report.errors++;
-                    console.log(`  ❌ Erro: ${err.message}`);
-                }
-            }
+    if (!SKIP_NEGATIVE) {
+        printSection('Auditoria 2', 'Saldo Negativo / Pagamento Excessivo');
+        for (const cat of Object.values(legacy.negativeBalance.categories)) {
+            log(`  ${cat.count > 0 ? '⚠️ ' : '✅'} ${cat.label.padEnd(47)} ${cat.count}`);
         }
-
-        // Corrigir saldo negativo
-        const negBalUsers = await db.executeQuery(`
-            SELECT cpf, full_name, balance FROM ${fq('users')} WHERE balance < 0
-        `);
-        for (const u of negBalUsers) {
-            try {
-                const deficit = Math.abs(parseFloat(u.balance || 0));
-                await db.executeQuery(`UPDATE ${fq('users')} SET balance = 0, updated_at = CURRENT_TIMESTAMP WHERE cpf = ${esc(u.cpf)}`);
-                report.fixed++;
-                console.log(`  ✅ ${u.full_name} (${u.cpf}): balance ${fmt(parseFloat(u.balance))} → R$ 0.00`);
-            } catch (err) {
-                report.errors++;
-                console.log(`  ❌ Erro: ${err.message}`);
-            }
-        }
-
-        // Corrigir limite negativo — RECALCULA com a fórmula canônica (limite_total -
-        // currentInvoiceTotal, mesma fonte do "Próxima Fatura") em vez de zerar
-        // cosmeticamente. O resultado PODE continuar negativo — significa que a
-        // dívida real excede o limite total (estado válido, não escondido mais).
-        // recalcularEmLote vem de recalcular_limite_disponivel.cjs (fonte única,
-        // compartilhada com o botão "Recalcular Limite Disponível" do painel).
-        const { recalcularEmLote } = require('./recalcular_limite_disponivel.cjs');
-        const negLimUsers = await db.executeQuery(`
-            SELECT cpf, full_name, credit_card_available_limit FROM ${fq('users')} WHERE credit_card_available_limit < 0
-        `);
-        for (const u of negLimUsers) {
-            try {
-                const [r] = await recalcularEmLote({ cpf: u.cpf, persist: true });
-                if (r && r.erro) throw new Error(r.erro);
-                report.fixed++;
-                const tag = r && r.estourado ? ' (limite estourado — dívida real acima do total, estado válido)' : '';
-                console.log(`  ✅ ${u.full_name} (${u.cpf}): limite ${fmt(parseFloat(u.credit_card_available_limit))} → ${fmt(r ? r.limiteNovo : 0)}${tag}`);
-            } catch (err) {
-                report.errors++;
-                console.log(`  ❌ Erro: ${err.message}`);
-            }
-        }
+        log('');
+        printCorrecoes(r.correcoes.filter(c => c.tipo !== 'DUPLA_COBRANCA'));
     }
 
-    // ── VERBOSE ──
-    if (VERBOSE) {
-        for (const u of await db.executeQuery(`SELECT cpf, full_name, balance, credit_card_available_limit FROM ${fq('users')} WHERE balance < 0`)) {
-            console.log(`\n  ── Detalhes: ${u.full_name} (${u.cpf}) ──`);
-            console.log(`     balance: ${fmt(parseFloat(u.balance || 0))}`);
-            console.log(`     available_limit: ${fmt(parseFloat(u.credit_card_available_limit || 0))}`);
-
-            for (const p of await db.executeQuery(`
-                SELECT amount, description, date FROM ${fq('transactions')}
-                WHERE cpf = ${esc(u.cpf)} AND type = 'INVOICE_PAYMENT'
-                ORDER BY date DESC LIMIT 5
-            `)) {
-                console.log(`     Pagto: ${fmt(Math.abs(parseFloat(p.amount || 0)))}  ${(p.description || '').trim().substring(0, 30)}`);
-            }
-            for (const inv of await db.executeQuery(`
-                SELECT id, valor_total, valor_pago FROM ${fq('invoices')}
-                WHERE cpf = ${esc(u.cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
-                ORDER BY due_date DESC LIMIT 3
-            `)) {
-                const rem = round2(parseFloat(inv.valor_total || 0) - parseFloat(inv.valor_pago || 0));
-                console.log(`     Invoice ${inv.id}: ${fmt(rem)} restante (pago ${fmt(parseFloat(inv.valor_pago || 0))} de ${fmt(parseFloat(inv.valor_total || 0))})`);
-            }
-        }
+    if (r.pulados.length > 0) {
+        log('\n  ⏭️  Exigem análise manual (não alterados):');
+        for (const p of r.pulados) log(`     ${p.fullName || '(sem nome)'} (${p.cpf}) — ${p.motivo}`);
+    }
+    if (r.erros.length > 0) {
+        log('\n  ❌ Erros:');
+        for (const e of r.erros) log(`     ${e.cpf} [${e.etapa}] — ${e.erro}`);
     }
 
-    return report;
-}
-
-// ===============================================================================
-//  RESUMO UNIFICADO
-// ===============================================================================
-function printUnifiedSummary(dc, nb) {
-    const w = 60;
-    console.log('');
-    console.log('+' + '='.repeat(w) + '+');
-    console.log('|' + ' '.repeat(18) + 'RESUMO UNIFICADO' + ' '.repeat(18) + '|');
-    console.log('+' + '='.repeat(w) + '+');
-    console.log('');
-
-    // Auditoria 1
-    if (dc) {
-        const resolved = dc.details.filter(d => d.status === 'resolvido').length;
-        const active = dc.discrepancies - resolved;
-        console.log('  1. Double-Counting de Pagamentos');
-        console.log(`     ${'-'.repeat(42)}`);
-        console.log(`     Usuários com INVOICE_PAYMENT:  ${dc.withPayments}`);
-        console.log(`     Discrepâncias ativas:          ${active}`);
-        console.log(`     Resolvidas (correção ant.):    ${resolved}`);
-        console.log(`     Corrigidas (--fix):            ${dc.fixed}`);
-        console.log(`     Erros:                        ${dc.errors}`);
-        console.log('');
-    }
-
-    // Auditoria 2
-    if (nb) {
-        console.log('  2. Saldo Negativo / Pagamento Excessivo');
-        console.log(`     ${'-'.repeat(42)}`);
-        let anyIssue = false;
-        for (const [key, cat] of Object.entries(nb.categories)) {
-            const icon = cat.count > 0 ? '⚠️' : '✅';
-            console.log(`     ${icon} ${cat.label.padEnd(45)} ${cat.count}`);
-            if (cat.count > 0) anyIssue = true;
-        }
-        console.log(`     🔧 Corrigidos (--fix):            ${nb.fixed}`);
-        console.log(`     ❌ Erros:                        ${nb.errors}`);
-        if (!anyIssue) console.log('');
-        console.log('');
-    }
-
-    // Totais consolidados
-    console.log(`  ${'='.repeat(50)}`);
-    const totalDisc = (dc?.discrepancies || 0) + Object.values(nb?.categories || {}).reduce((s, c) => s + c.count, 0);
-    const totalFixed = (dc?.fixed || 0) + (nb?.fixed || 0);
-    const totalErrors = (dc?.errors || 0) + (nb?.errors || 0);
-
-    if (totalDisc === 0) {
-        console.log('  ✅ NENHUMA ANOMALIA ENCONTRADA. Dados 100% íntegros.');
+    log('');
+    log('+' + '='.repeat(60) + '+');
+    log('|' + ' '.repeat(22) + 'RESUMO UNIFICADO' + ' '.repeat(22) + '|');
+    log('+' + '='.repeat(60) + '+');
+    if (legacy.totalIssues === 0) {
+        log('  ✅ NENHUMA ANOMALIA ENCONTRADA. Dados 100% íntegros.');
     } else {
-        console.log(`  ⚠️  Total de anomalias: ${totalDisc}`);
-        if (!ALLOW_FIX) {
-            console.log('     Execute com --fix --confirm para corrigir automaticamente.');
+        log(`  ⚠️  Total de anomalias: ${legacy.totalIssues}`);
+        if (ALLOW_FIX) {
+            log(`  ✅ ${r.totalCorrecoes} correção(ões) aplicada(s).`);
         } else {
-            console.log(`  ✅ ${totalFixed} correção(ões) aplicada(s).`);
+            log(`  🔧 ${r.totalCorrecoes} correção(ões) prevista(s). Execute com --fix --confirm para aplicar.`);
         }
     }
-    console.log(`  ${'-'.repeat(50)}`);
-    console.log(`  📁 Auditado em: ${new Date().toISOString()}`);
-    console.log(`  🏁 Finalizado com ${totalErrors} erro(s).`);
-    console.log('');
+    log(`  📁 Auditado em: ${legacy.ranAt}`);
+    log(`  🏁 Finalizado com ${legacy.totalErrors} erro(s).`);
+    log('');
 }
 
-// ===============================================================================
-//  MAIN
-// ===============================================================================
+// Somente leitura — detalha quem ainda está com saldo negativo.
+async function printVerbose(db) {
+    const fq = t => db.fq(t);
+    const cpfClause = CPF_FILTER ? ` AND cpf = ${esc(CPF_FILTER)}` : '';
+    for (const u of await db.executeQuery(`SELECT cpf, full_name, balance, credit_card_available_limit FROM ${fq('users')} WHERE balance < 0${cpfClause}`)) {
+        log(`\n  ── Detalhes: ${u.full_name} (${u.cpf}) ──`);
+        log(`     balance: ${fmt(u.balance)}`);
+        log(`     available_limit: ${fmt(u.credit_card_available_limit)}`);
+        for (const p of await db.executeQuery(`
+            SELECT amount, description FROM ${fq('transactions')}
+            WHERE cpf = ${esc(u.cpf)} AND type = 'INVOICE_PAYMENT'
+            ORDER BY date DESC LIMIT 5
+        `)) {
+            log(`     Pagto: ${fmt(Math.abs(parseFloat(p.amount || 0)))}  ${(p.description || '').trim().substring(0, 30)}`);
+        }
+        for (const inv of await db.executeQuery(`
+            SELECT id, valor_total, valor_pago FROM ${fq('invoices')}
+            WHERE cpf = ${esc(u.cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
+            ORDER BY due_date DESC LIMIT 3
+        `)) {
+            const rest = parseFloat(inv.valor_total || 0) - parseFloat(inv.valor_pago || 0);
+            log(`     Invoice ${inv.id}: ${fmt(rest)} restante (pago ${fmt(inv.valor_pago)} de ${fmt(inv.valor_total)})`);
+        }
+    }
+}
+
+// Sai só depois de o stdout drenar: o JSON pode ser grande e o pool do index.cjs
+// (carregado pelo recálculo de limite) manteria o processo vivo.
+function sair(code, texto) {
+    if (texto) process.stdout.write(texto + '\n', () => process.exit(code));
+    else process.exit(code);
+}
+
 async function main() {
-    console.log('');
-    console.log('+' + '='.repeat(60) + '+');
-    console.log('|' + ' '.repeat(12) + 'AUDITORIA COMPLETA — FintechBankApp' + ' '.repeat(12) + '|');
-    console.log('+' + '='.repeat(60) + '+');
-    console.log(`  Modo:       ${ALLOW_FIX ? 'AUDITORIA + CORREÇÃO' : 'APENAS AUDITORIA'}`);
-    console.log(`  CPF:        ${CPF_FILTER || 'TODOS'}`);
-    console.log(`  Output:     ${JSON_OUTPUT ? 'JSON' : 'Tabela'}`);
-    console.log(`  Opções:     ${[SKIP_DOUBLE_COUNT ? '--skip-double-count' : '', SKIP_NEGATIVE ? '--skip-negative' : ''].filter(Boolean).join(', ') || 'nenhuma'}`);
-    console.log('');
+    log('');
+    log('+' + '='.repeat(60) + '+');
+    log('|' + ' '.repeat(12) + 'AUDITORIA COMPLETA — FintechBankApp' + ' '.repeat(13) + '|');
+    log('+' + '='.repeat(60) + '+');
+    log(`  Modo:       ${ALLOW_FIX ? 'AUDITORIA + CORREÇÃO' : 'APENAS AUDITORIA (prévia das correções)'}`);
+    log(`  CPF:        ${CPF_FILTER || 'TODOS'}`);
+    log(`  Opções:     ${[SKIP_DOUBLE_COUNT ? '--skip-double-count' : '', SKIP_NEGATIVE ? '--skip-negative' : ''].filter(Boolean).join(', ') || 'nenhuma'}`);
 
     const db = DatabaseFactory.createDatabaseService();
     await db.connect();
-
-    let dcReport = null;
-    let nbReport = null;
-
     try {
-        // ── Auditoria 1 ──
-        if (!SKIP_DOUBLE_COUNT) {
-            printSection('Auditoria 1', 'Double-Counting de Pagamentos de Fatura');
-            dcReport = await runDoubleCountAudit(db);
-        }
-
-        // ── Auditoria 2 ──
-        if (!SKIP_NEGATIVE) {
-            printSection('Auditoria 2', 'Saldo Negativo / Pagamento Excessivo');
-            nbReport = await runNegativeBalanceAudit(db);
-        }
-
-        // ── Resumo Unificado ──
-        printUnifiedSummary(dcReport, nbReport);
-
-        // Salvar relatório unificado
-        unifiedReport.doubleCount = dcReport;
-        unifiedReport.negativeBalance = nbReport;
-        unifiedReport.totalIssues = (dcReport?.discrepancies || 0) +
-            Object.values(nbReport?.categories || {}).reduce((s, c) => s + c.count, 0);
-        unifiedReport.totalFixed = (dcReport?.fixed || 0) + (nbReport?.fixed || 0);
-        unifiedReport.totalErrors = (dcReport?.errors || 0) + (nbReport?.errors || 0);
-
-        if (JSON_OUTPUT) {
-            // Remove circular / verbose data for JSON
-            const jsonSafe = JSON.parse(JSON.stringify(unifiedReport));
-            console.log(JSON.stringify(jsonSafe, null, 2));
-        }
-
-    } catch (err) {
-        console.error('\n❌ Erro fatal:', err.message);
-        console.error(err.stack);
-        process.exit(1);
+        const r = await runDiscrepanciasAudit({
+            db,
+            esc,
+            cpf: CPF_FILTER,
+            dryRun: !ALLOW_FIX,
+            recalcularLimiteDisponivel: recalcularLimite,
+            duplaCobranca: !SKIP_DOUBLE_COUNT,
+            auditoria2: !SKIP_NEGATIVE,
+        });
+        const legacy = toLegacyReport(r);
+        printTexto(r, legacy);
+        if (VERBOSE) await printVerbose(db);
+        return JSON_OUTPUT ? JSON.stringify(legacy, null, 2) : null;
     } finally {
         try { await db.disconnect(); } catch (_) { }
     }
 }
 
-main().catch(err => {
-    console.error('❌ Fatal:', err);
-    process.exit(1);
-});
+main()
+    .then(json => sair(0, json))
+    .catch(err => {
+        console.error('\n❌ Erro fatal:', err.message);
+        console.error(err.stack);
+        sair(1);
+    });

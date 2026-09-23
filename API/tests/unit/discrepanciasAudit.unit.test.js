@@ -115,6 +115,51 @@ describe('runDiscrepanciasAudit', () => {
         expect(updates).toEqual([expect.stringMatching(/valor_pago = 250\.00,.* WHERE id = 'inv-aberta'/)]);
     });
 
+    test('status por massa da Auditoria 1 usa o vocabulário do audit_completo (ok/discrepancy/resolvido/orphan_payments)', async () => {
+        const { db } = makeDb({
+            comPagamento: ['1', '2', '3', '4'].map((d) => ({ cpf: d.repeat(11), full_name: `M${d}` })),
+            pagamentos: {
+                '11111111111': [{ amount: -100 }],
+                '22222222222': [{ amount: -100 }],
+                '33333333333': [{ amount: -100 }],
+                '44444444444': [{ amount: -100 }],
+            },
+            faturasPagas: {
+                '11111111111': [{ id: 'a', valor_total: 500, valor_pago: 100, data_pagamento: '2026-08-01' }],
+                '22222222222': [{ id: 'b', valor_total: 500, valor_pago: 120, data_pagamento: null }],
+                // Excesso já corrigido antes: pago ≤ total e com data → resíduo.
+                '33333333333': [{ id: 'c', valor_total: 150, valor_pago: 150, data_pagamento: '2026-08-01' }],
+                // 44444444444: pagamento sem fatura com valor_pago.
+            },
+        });
+
+        const r = await runDiscrepanciasAudit({ db, esc, dryRun: true, recalcularLimiteDisponivel: jest.fn() });
+
+        const status = Object.fromEntries(r.duplaCobranca.map((d) => [d.cpf, d.status]));
+        expect(status).toEqual({
+            '11111111111': 'ok',
+            '22222222222': 'discrepancy',
+            '33333333333': 'resolvido',
+            '44444444444': 'orphan_payments',
+        });
+        expect(r.resolvidasAntes).toBe(1);
+    });
+
+    test('duplaCobranca:false e auditoria2:false pulam as etapas (CLI --skip-double-count / --skip-negative)', async () => {
+        const semAud1 = makeDb(cenarioCompleto());
+        const r1 = await runDiscrepanciasAudit({ db: semAud1.db, esc, dryRun: true, recalcularLimiteDisponivel: recalcFake(), duplaCobranca: false });
+        expect(semAud1.selects.some((s) => s.includes('SELECT DISTINCT t.cpf'))).toBe(false);
+        expect(r1.verificadas).toBe(0);
+        expect(r1.correcoes.some((c) => c.tipo === 'DUPLA_COBRANCA')).toBe(false);
+
+        const semAud2 = makeDb(cenarioCompleto());
+        const recalc = recalcFake();
+        const r2 = await runDiscrepanciasAudit({ db: semAud2.db, esc, dryRun: true, recalcularLimiteDisponivel: recalc, auditoria2: false });
+        expect(recalc).not.toHaveBeenCalled();
+        expect(r2.correcoes.map((c) => c.tipo)).toEqual(['DUPLA_COBRANCA']);
+        expect(r2.alertas).toEqual([]);
+    });
+
     test('erro numa massa não derruba as outras', async () => {
         const { db } = makeDb({ limiteNegativo: [{ cpf: '55555555555' }, { cpf: '66666666666' }] });
         const recalc = jest.fn(async (cpf) => {
@@ -149,6 +194,7 @@ describe('POST /admin/scripts/audit-fix', () => {
         await controller.auditFix({ body: { cpf: '', dryRun: true } }, simRes);
         expect(simRes.body.success).toBe(true);
         expect(simRes.body.data.modo).toBe('SIMULACAO');
+        expect(simRes.body.data.duplaCobranca).toBeUndefined();
         expect(updates).toHaveLength(0);
         expect(auditLog).not.toHaveBeenCalled();
 

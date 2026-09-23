@@ -274,6 +274,8 @@ export interface DiscrepanciaCorrecao {
     fullName: string | null;
     /** Ex.: "Fatura <id>", "Saldo da conta", "Limite disponível". */
     alvo: string;
+    /** Só nas correções de fatura (DUPLA_COBRANCA / PAGAMENTO_EXCESSIVO). */
+    invoiceId?: string;
     campo: string;
     antes: number;
     depois: number;

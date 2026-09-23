@@ -43,7 +43,8 @@ module.exports = function createAdminScriptsController(deps) {
         const cpf = cleanCpf(req.body?.cpf);
         const dryRun = req.body?.dryRun === true;
         try {
-            const data = await runDiscrepanciasAudit({
+            // duplaCobranca = status de TODA massa checada (só o CLI usa) — fora da resposta.
+            const { duplaCobranca, ...data } = await runDiscrepanciasAudit({
                 db: dbService,
                 esc: repoContext.esc,
                 cpf: cpf.length === 11 ? cpf : null,

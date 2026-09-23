@@ -55,7 +55,12 @@ async function auditarDuplaCobranca(ctx, user, rel) {
 
     const totalPagamentos = pagamentos.reduce((s, r) => s + Math.abs(num(r.amount)), 0);
     const totalValorPago = faturas.reduce((s, r) => s + num(r.valor_pago), 0);
+    // Status por massa no mesmo vocabulário do audit_completo.js (o audit_scheduler.js
+    // conta as ativas por status === 'discrepancy').
+    const detalhe = { cpf, fullName, status: 'ok', totalPagamentos: round2(totalPagamentos), totalValorPago: round2(totalValorPago) };
+    rel.duplaCobranca.push(detalhe);
     if (round2(Math.abs(totalPagamentos - totalValorPago)) <= 0.02) return;
+    detalhe.status = pagamentos.length > 0 && faturas.length === 0 ? 'orphan_payments' : 'discrepancy';
 
     if (totalValorPago > totalPagamentos + 0.02) {
         // Resíduo de correção anterior: toda fatura com valor_pago já tem data de
@@ -64,7 +69,7 @@ async function auditarDuplaCobranca(ctx, user, rel) {
             const vp = num(f.valor_pago);
             return vp <= 0 || (f.data_pagamento && vp <= num(f.valor_total) + 0.02);
         });
-        if (jaCorrigida) { rel.resolvidas++; return; }
+        if (jaCorrigida) { detalhe.status = 'resolvido'; rel.resolvidas++; return; }
 
         rel.anomalias++;
         const excesso = round2(totalValorPago - totalPagamentos);
@@ -79,7 +84,7 @@ async function auditarDuplaCobranca(ctx, user, rel) {
         if (!dryRun) {
             await db.executeQuery(`UPDATE ${fq('invoices')} SET valor_pago = ${depois.toFixed(2)}, updated_at = CURRENT_TIMESTAMP WHERE id = ${esc(fat.id)}`);
         }
-        rel.correcoes.push({ tipo: 'DUPLA_COBRANCA', cpf, fullName, alvo: `Fatura ${fat.id}`, campo: 'valor_pago', antes, depois, motivo: `Faturas registram ${brl(excesso)} a mais que os pagamentos (INVOICE_PAYMENT).` });
+        rel.correcoes.push({ tipo: 'DUPLA_COBRANCA', cpf, fullName, invoiceId: fat.id, alvo: `Fatura ${fat.id}`, campo: 'valor_pago', antes, depois, motivo: `Faturas registram ${brl(excesso)} a mais que os pagamentos (INVOICE_PAYMENT).` });
         return;
     }
 
@@ -99,7 +104,7 @@ async function auditarDuplaCobranca(ctx, user, rel) {
     if (!dryRun) {
         await db.executeQuery(`UPDATE ${fq('invoices')} SET valor_pago = ${depois.toFixed(2)}, updated_at = CURRENT_TIMESTAMP WHERE id = ${esc(fat.id)}`);
     }
-    rel.correcoes.push({ tipo: 'DUPLA_COBRANCA', cpf, fullName, alvo: `Fatura ${fat.id}`, campo: 'valor_pago', antes, depois, motivo: `Pagamentos (INVOICE_PAYMENT) excedem o valor_pago das faturas em ${brl(faltante)}.` });
+    rel.correcoes.push({ tipo: 'DUPLA_COBRANCA', cpf, fullName, invoiceId: fat.id, alvo: `Fatura ${fat.id}`, campo: 'valor_pago', antes, depois, motivo: `Pagamentos (INVOICE_PAYMENT) excedem o valor_pago das faturas em ${brl(faltante)}.` });
 }
 
 // ── Auditoria 2: pagamento excessivo, saldo negativo, limite negativo ──
@@ -123,7 +128,7 @@ async function corrigirPagamentoExcessivo(ctx, rel) {
                 await db.executeQuery(`UPDATE ${fq('invoices')} SET valor_pago = ${depois.toFixed(2)}, updated_at = CURRENT_TIMESTAMP WHERE id = ${esc(inv.id)}`);
                 await db.executeQuery(`UPDATE ${fq('users')} SET balance = balance + ${excesso.toFixed(2)}, updated_at = CURRENT_TIMESTAMP WHERE cpf = ${esc(inv.cpf)}`);
             }
-            rel.correcoes.push({ tipo: 'PAGAMENTO_EXCESSIVO', cpf: inv.cpf, fullName: inv.full_name || null, alvo: `Fatura ${inv.id}`, campo: 'valor_pago', antes, depois, motivo: `Pago acima do bruto da fatura — excesso de ${brl(excesso)} volta ao saldo.` });
+            rel.correcoes.push({ tipo: 'PAGAMENTO_EXCESSIVO', cpf: inv.cpf, fullName: inv.full_name || null, invoiceId: inv.id, alvo: `Fatura ${inv.id}`, campo: 'valor_pago', antes, depois, motivo: `Pago acima do bruto da fatura — excesso de ${brl(excesso)} volta ao saldo.` });
         } catch (err) {
             rel.erros.push({ cpf: inv.cpf, etapa: 'PAGAMENTO_EXCESSIVO', erro: err.message });
         }
@@ -205,34 +210,45 @@ async function coletarAlertasDeSaldo(ctx, rel) {
  * @param {string|null} opts.cpf  11 dígitos, ou null para todas as massas
  * @param {boolean} opts.dryRun  true = só simula
  * @param {Function} opts.recalcularLimiteDisponivel  fonte única do index.cjs
+ * @param {boolean} [opts.duplaCobranca=true]  false pula a Auditoria 1 (CLI --skip-double-count)
+ * @param {boolean} [opts.auditoria2=true]  false pula a Auditoria 2 (CLI --skip-negative)
  */
-async function runDiscrepanciasAudit({ db, cpf = null, dryRun = false, recalcularLimiteDisponivel, esc = escPadrao }) {
+async function runDiscrepanciasAudit({
+    db, cpf = null, dryRun = false, recalcularLimiteDisponivel, esc = escPadrao,
+    duplaCobranca = true, auditoria2 = true,
+}) {
     const fq = (t) => db.fq(t);
     const ctx = {
         db, esc, fq, dryRun, recalcularLimiteDisponivel,
         cpfClause: (col) => (cpf ? `AND ${col} = ${esc(cpf)}` : ''),
     };
-    const rel = { anomalias: 0, resolvidas: 0, correcoes: [], pulados: [], alertas: [], erros: [] };
+    const rel = { anomalias: 0, resolvidas: 0, correcoes: [], pulados: [], alertas: [], erros: [], duplaCobranca: [] };
 
-    const comPagamento = await db.executeQuery(`
-        SELECT DISTINCT t.cpf, u.full_name
-        FROM ${fq('transactions')} t LEFT JOIN ${fq('users')} u ON t.cpf = u.cpf
-        WHERE t.type = 'INVOICE_PAYMENT' ${ctx.cpfClause('t.cpf')}
-    `);
-    await emParalelo(comPagamento, CONCORRENCIA, async (u) => {
-        try {
-            await auditarDuplaCobranca(ctx, u, rel);
-        } catch (err) {
-            rel.erros.push({ cpf: u.cpf, etapa: 'DUPLA_COBRANCA', erro: err.message });
-        }
-    });
+    let comPagamento = [];
+    if (duplaCobranca) {
+        comPagamento = await db.executeQuery(`
+            SELECT DISTINCT t.cpf, u.full_name
+            FROM ${fq('transactions')} t LEFT JOIN ${fq('users')} u ON t.cpf = u.cpf
+            WHERE t.type = 'INVOICE_PAYMENT' ${ctx.cpfClause('t.cpf')}
+        `);
+        await emParalelo(comPagamento, CONCORRENCIA, async (u) => {
+            try {
+                await auditarDuplaCobranca(ctx, u, rel);
+            } catch (err) {
+                rel.duplaCobranca.push({ cpf: u.cpf, fullName: u.full_name || null, status: 'error' });
+                rel.erros.push({ cpf: u.cpf, etapa: 'DUPLA_COBRANCA', erro: err.message });
+            }
+        });
+    }
 
-    // Mesma ordem do script: o estorno do pagamento excessivo credita o saldo antes
-    // da checagem de saldo negativo.
-    await corrigirPagamentoExcessivo(ctx, rel);
-    await corrigirSaldoNegativo(ctx, rel);
-    await corrigirLimiteNegativo(ctx, rel);
-    await coletarAlertasDeSaldo(ctx, rel);
+    if (auditoria2) {
+        // Mesma ordem do script: o estorno do pagamento excessivo credita o saldo antes
+        // da checagem de saldo negativo.
+        await corrigirPagamentoExcessivo(ctx, rel);
+        await corrigirSaldoNegativo(ctx, rel);
+        await corrigirLimiteNegativo(ctx, rel);
+        await coletarAlertasDeSaldo(ctx, rel);
+    }
 
     return {
         modo: dryRun ? 'SIMULACAO' : 'APLICADO',
@@ -248,6 +264,8 @@ async function runDiscrepanciasAudit({ db, cpf = null, dryRun = false, recalcula
         pulados: rel.pulados,
         alertas: rel.alertas,
         erros: rel.erros,
+        // Status por massa da Auditoria 1 (o painel não usa; o CLI monta o JSON legado com ele).
+        duplaCobranca: rel.duplaCobranca,
     };
 }
 
