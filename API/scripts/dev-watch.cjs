@@ -11,6 +11,11 @@
  *
  * Aqui só reinicia quando o CONTEÚDO muda (hash sha1) ou um arquivo é criado/apagado.
  * Se a API sair sozinha (crash), espera a próxima mudança real, como o node --watch.
+ *
+ * Pausa (para rodar testes / operações longas do Admin sem a API reiniciar no meio):
+ *   npm run dev:pause -- 60    → segura reinícios por 60 min (mudanças ficam pendentes)
+ *   npm run dev:pause -- off   → libera; aplica na hora o que ficou pendente
+ * A pausa só segura reinício de API NO AR — se ela cair, sobe de novo normalmente.
  */
 const { spawn } = require('child_process');
 const crypto = require('crypto');
@@ -21,11 +26,23 @@ const RAIZ = path.join(__dirname, '..');
 const ALVOS = ['index.cjs', 'src', 'services', 'repositories', 'utils', 'middlewares', 'workers', 'config'];
 const IGNORAR = /(^|[\\/])(node_modules|__pycache__|\.git)([\\/]|$)|\.(log|tmp|swp)$|~$/;
 const DEBOUNCE_MS = 300;
+// Fora das pastas vigiadas; conteúdo = ISO de até quando a pausa vale (scripts/dev-pause.cjs).
+const ARQUIVO_PAUSA = path.join(RAIZ, '.dev-watch-pause');
 
 const hashes = new Map(); // caminho absoluto -> sha1 (null = não existe)
 let filho = null;
 let timer = null;
 const pendentes = new Set();
+const adiados = new Set(); // mudanças reais que chegaram durante a pausa
+
+function pausaAte() {
+    try {
+        const ate = Date.parse(fs.readFileSync(ARQUIVO_PAUSA, 'utf8').trim());
+        return Number.isFinite(ate) && ate > Date.now() ? ate : null;
+    } catch {
+        return null;
+    }
+}
 
 function hashDe(arquivo) {
     try {
@@ -87,9 +104,24 @@ function aoEvento(arquivo) {
             }
         }
         pendentes.clear();
-        if (mudaram.length > 0) reiniciar(mudaram);
+        if (mudaram.length === 0) return;
+        const ate = pausaAte();
+        if (ate && filho) {
+            for (const m of mudaram) adiados.add(m);
+            console.log(`\n[dev-watch] Pausa ativa até ${new Date(ate).toLocaleTimeString('pt-BR')} — reinício adiado (${mudaram.join(', ')}).`);
+            return;
+        }
+        reiniciar(mudaram);
     }, DEBOUNCE_MS);
 }
+
+// Fim da pausa (tempo esgotado ou `dev:pause -- off`): aplica o que ficou pendente.
+setInterval(() => {
+    if (adiados.size === 0 || pausaAte()) return;
+    const lista = [...adiados];
+    adiados.clear();
+    reiniciar(lista);
+}, 5000);
 
 for (const alvo of ALVOS) {
     const abs = path.join(RAIZ, alvo);

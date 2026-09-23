@@ -15,6 +15,7 @@ gradle-home-clean/
 
 # API — gerados / runtime / binários
 API/api.log
+API/.dev-watch-pause
 API/token.txt
 API/*.sqlite
 API/newman-report.html
