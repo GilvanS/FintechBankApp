@@ -46,6 +46,9 @@ async function ensureConnected() {
  * index.cjs e não teve motivo pra crescer um parâmetro só usado por este script).
  */
 async function simularSemPersistir(cpf) {
+    // Exportada e chamada direto pelo uti_massa.cjs (sem passar por recalcularEmLote):
+    // sem isto, "Pool não está conectado!" quando a UTI simula o limite primeiro.
+    await ensureConnected();
     const userRow = await usersRepo.findByCpf(cpf);
     if (!userRow) return null;
     const tempUser = normalizeUser(userRow);
