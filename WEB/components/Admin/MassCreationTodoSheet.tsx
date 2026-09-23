@@ -134,37 +134,19 @@ export const MassCreationTodoSheet: React.FC<Props> = ({ open, onClose, isMidnig
     return (
         <AnimatePresence>
             {open && (
-                <div className="fixed inset-0 z-[70] flex items-end justify-center">
-                    <motion.div
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={onClose}
-                    />
-                    <motion.div
-                        className={`relative w-full max-w-lg mx-auto rounded-t-3xl p-5 pb-8 ${sheetClass}`}
-                        initial={{ y: '100%' }}
-                        animate={{ y: 0 }}
-                        exit={{ y: '100%' }}
-                        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                    >
-                        <div className={`w-10 h-1 rounded-full mx-auto mb-4 ${isMidnight ? 'bg-white/20' : 'bg-black/20'}`} />
-
+                <motion.div
+                    className={`mt-4 w-full overflow-hidden rounded-xl border ${sheetClass}`}
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                >
+                    <div className="p-5 pb-6">
                         <div className="flex items-center gap-2 mb-4">
                             <ListTodo className={`size-4 ${isMidnight ? 'text-volt-green' : 'text-black'}`} />
                             <h3 className="flex-1 text-[11px] font-black uppercase tracking-wide opacity-80">
-                                Dados sendo criados
+                                Progresso de Geração
                             </h3>
                             <span className="text-xs font-bold tabular-nums opacity-60">{completedCount}/{tasks.length}</span>
-                            <button
-                                type="button"
-                                onClick={onClose}
-                                className="p-1 rounded-lg opacity-60 hover:opacity-100 cursor-pointer"
-                                title="Fechar"
-                            >
-                                <CloseIcon className="size-4" />
-                            </button>
                         </div>
 
                         <ol className="space-y-1">
@@ -200,14 +182,13 @@ export const MassCreationTodoSheet: React.FC<Props> = ({ open, onClose, isMidnig
 
                         <button
                             type="button"
-                            onClick={() => setRunId((r) => r + 1)}
-                            className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold cursor-pointer ${replayBtnClass}`}
+                            onClick={onClose}
+                            className={`mt-4 ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold cursor-pointer ${replayBtnClass}`}
                         >
-                            <RotateCcw className="size-3" />
-                            <span>Ver de novo</span>
+                            <span>Ocultar Progresso</span>
                         </button>
-                    </motion.div>
-                </div>
+                    </div>
+                </motion.div>
             )}
         </AnimatePresence>
     );
