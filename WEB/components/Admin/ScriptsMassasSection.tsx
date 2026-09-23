@@ -27,7 +27,7 @@ const ScriptsMassasSection: React.FC = () => {
             icon: Wrench,
             iconBg: 'bg-amber-500',
             title: 'Corrigir Discrepâncias',
-            description: 'Simula primeiro e mostra o antes × depois de cada correção (dupla cobrança, pagamento excessivo, saldo negativo, limite negativo); só grava quando você aplicar. CPF opcional: vazio verifica todas as massas.',
+            description: 'Simula primeiro e mostra o antes × depois de cada correção (pago a mais em fatura fechada → volta ao saldo, saldo negativo, limite negativo); só grava quando você aplicar. CPF opcional: vazio verifica todas as massas.',
             cpfMode: 'optional' as const,
             onClick: () => setActiveScript('audit-fix'),
         },

@@ -3,7 +3,8 @@
  * Auditoria Completa — FintechBankApp
  *
  * Duas auditorias:
- *   1. Dupla cobrança — INVOICE_PAYMENT × invoices.valor_pago
+ *   1. Pago a mais em fatura FECHADA — pagamentos vinculados (invoice_id) × devido;
+ *      o excedente volta ao saldo da conta (a fatura fechada é imutável)
  *   2. Saldo negativo / pagamento excessivo / limite negativo / saldo insuficiente
  *
  * A detecção e a correção vivem em services/discrepanciasAudit.js — FONTE ÚNICA,
@@ -62,12 +63,14 @@ function toLegacyReport(r) {
     const aplicado = r.modo === 'APLICADO';
     const TIPOS_AUD2 = ['PAGAMENTO_EXCESSIVO', 'SALDO_NEGATIVO', 'LIMITE_NEGATIVO'];
 
+    // Auditoria 1 agora é por FATURA FECHADA (pago vinculado × devido), não por massa.
     const doubleCount = SKIP_DOUBLE_COUNT ? null : {
         scanned: r.verificadas,
-        withPayments: r.duplaCobranca.filter(d => d.status !== 'error').length,
-        discrepancies: r.duplaCobranca.filter(d => ['discrepancy', 'orphan_payments', 'resolvido'].includes(d.status)).length,
+        withPayments: r.verificadas,
+        discrepancies: r.duplaCobranca.filter(d => ['discrepancy', 'resolvido'].includes(d.status)).length,
         fixed: aplicado ? doTipo(r.correcoes, 'DUPLA_COBRANCA').length : 0,
         errors: doTipo(r.erros, 'DUPLA_COBRANCA').length,
+        orphanPayments: r.pagamentosSemFatura,
         details: r.duplaCobranca,
     };
 
@@ -137,11 +140,13 @@ function printCorrecoes(lista) {
 
 function printTexto(r, legacy) {
     if (!SKIP_DOUBLE_COUNT) {
-        printSection('Auditoria 1', 'Double-Counting de Pagamentos de Fatura');
+        printSection('Auditoria 1', 'Pago a mais em fatura FECHADA (devolução ao saldo)');
         const dc = legacy.doubleCount;
-        log(`  Usuários com INVOICE_PAYMENT:  ${dc.scanned}`);
-        log(`  Discrepâncias ativas:          ${dc.discrepancies - r.resolvidasAntes}`);
-        log(`  Resolvidas (correção ant.):    ${r.resolvidasAntes}`);
+        const sf = r.pagamentosSemFatura;
+        log(`  Faturas FECHADAS com pagamento vinculado:  ${dc.scanned}`);
+        log(`  Pago a mais (a devolver ao saldo):         ${dc.discrepancies - r.resolvidasAntes}`);
+        log(`  Já devolvidas antes:                       ${r.resolvidasAntes}`);
+        log(`  Pagamentos sem fatura vinculada (legado):  ${sf.transacoes} em ${sf.massas} massa(s), ${fmt(sf.valor)} — só informativo`);
         log('');
         printCorrecoes(r.correcoes.filter(c => c.tipo === 'DUPLA_COBRANCA'));
     }

@@ -1,119 +1,138 @@
 /**
- * discrepanciasAudit.js — "Corrigir Discrepâncias" do painel Admin (Scripts & Massas).
+ * discrepanciasAudit.js — "Corrigir Discrepâncias" do painel Admin (Scripts & Massas)
+ * e do CLI scripts/audit_completo.js (fonte única dos dois).
  *
- * Mesma detecção/correção de scripts/audit_completo.js --fix, só que rodando DENTRO
- * da API (igual ao "Recalcular Limite Disponível"): o script filho imprimia o log
- * inteiro antes do JSON (o parse falhava e o painel recebia um blob de texto) e,
- * na base toda, passava do timeout de 30s do proxy do DESKTOP.
+ * Roda DENTRO da API (igual ao "Recalcular Limite Disponível"). dryRun=true SIMULA:
+ * mesma conta, nenhuma escrita — o painel mostra o antes × depois de cada correção
+ * e só aplica quando o admin confirma. Com CPF, TUDO fica restrito a ele.
  *
- * dryRun=true SIMULA: mesma conta, nenhum UPDATE — o painel mostra o antes × depois
- * de cada correção e só aplica quando o admin confirma.
- *
- * Diferença proposital em relação ao script: com CPF informado, as correções da
- * Auditoria 2 (pagamento excessivo, saldo negativo, limite negativo) também ficam
- * restritas a esse CPF — no script elas rodavam na base inteira mesmo com --cpf.
+ * Fatura FECHADA é imutável (trigger invoices_immutability, REGRAS-NEGOCIO-FATURA
+ * §23): nada aqui escreve nela. O pagamento de fatura fechada vive nas transações
+ * vinculadas por transactions.invoice_id — invoices.valor_pago fica 0 de propósito.
  */
+const crypto = require('crypto');
 const { esc: escPadrao } = require('../repositories/context');
 
 const round2 = (n) => Math.round(n * 100) / 100;
 const num = (v) => parseFloat(v || 0);
 const brl = (v) => `R$ ${v.toFixed(2)}`;
-const CONCORRENCIA = 5;
+
+// Marca na descrição do REFUND de devolução: torna a correção idempotente (a próxima
+// rodada desconta o que já foi devolvido) sem vincular por invoice_id — um REFUND
+// com invoice_id poderia ser contado como pagamento da fatura.
+const marcaDevolucao = (invoiceId) => `[excedente-fatura:${invoiceId}]`;
 
 // Bruto da fatura: compras do ciclo + saldo anterior + encargos consolidados.
-// Mesma definição de utils/invoiceMath.js (computeInvoiceGross) e do audit_completo.js.
+// Mesma definição de utils/invoiceMath.js (computeInvoiceGross).
 const GROSS_SQL = `(COALESCE(i.valor_total,0) + COALESCE(i.saldo_anterior,0)
                   + COALESCE(i.valor_iof,0) + COALESCE(i.valor_multa,0)
                   + COALESCE(i.valor_juros_remuneratorios,0) + COALESCE(i.valor_juros_mora,0))`;
 
-async function emParalelo(itens, limite, fn) {
-    let proximo = 0;
-    const worker = async () => {
-        while (proximo < itens.length) await fn(itens[proximo++]);
-    };
-    await Promise.all(Array.from({ length: Math.min(limite, itens.length) }, worker));
+/**
+ * Pagamento a mais em fatura FECHADA — FONTE ÚNICA (também usada pela Anomalia 8c
+ * do services/dailyAudit.js).
+ *
+ * pago     = Σ |INVOICE_PAYMENT + INVOICE_ANTICIPATION| vinculados (invoice_id), não cancelados
+ * devido   = valor_total + saldo_anterior + encargos (billing_charges da fatura)
+ * excedente = pago − devido − já devolvido (REFUND com a marca desta fatura)
+ *
+ * O saldo_anterior entra no devido: sem ele, quem quitou compras + saldo herdado
+ * (ex.: massa 805, 364,97 + 3.870,86) aparecia com "excedente" do saldo herdado.
+ */
+async function listarExcedentesFaturaFechada(db, { cpf = null, esc = escPadrao } = {}) {
+    const fq = (t) => db.fq(t);
+    const rows = await db.executeQuery(`
+        SELECT i.id, i.cpf, u.full_name, u.balance, i.valor_total, i.saldo_anterior, pg.pago,
+            (SELECT COALESCE(SUM(b.amount), 0) FROM ${fq('billing_charges')} b
+              WHERE b.cpf = i.cpf AND b.invoice_amount = i.valor_total) AS encargos,
+            (SELECT COALESCE(SUM(ABS(r.amount)), 0) FROM ${fq('transactions')} r
+              WHERE r.cpf = i.cpf AND r.type = 'REFUND'
+                AND r.description LIKE '%[excedente-fatura:' || i.id || ']%') AS devolvido
+        FROM ${fq('invoices')} i
+        JOIN ${fq('users')} u ON u.cpf = i.cpf
+        JOIN (
+            SELECT invoice_id, SUM(ABS(amount)) AS pago
+            FROM ${fq('transactions')}
+            WHERE type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
+              AND invoice_id IS NOT NULL
+              AND (status IS NULL OR status <> 'cancelled')
+            GROUP BY invoice_id
+        ) pg ON pg.invoice_id = i.id
+        WHERE i.status = 'FECHADA' ${cpf ? `AND i.cpf = ${esc(cpf)}` : ''}
+        ORDER BY i.cpf, i.due_date
+    `);
+    return rows.map((r) => {
+        const principal = round2(num(r.valor_total) + num(r.saldo_anterior));
+        const encargos = round2(num(r.encargos));
+        const devido = round2(principal + encargos);
+        const pago = round2(num(r.pago));
+        const devolvido = round2(num(r.devolvido));
+        return {
+            invoiceId: r.id, cpf: r.cpf, fullName: r.full_name || null, balance: num(r.balance),
+            principal, encargos, devido, pago, devolvido,
+            excedente: round2(pago - devido - devolvido),
+        };
+    });
 }
 
-// ── Auditoria 1: dupla cobrança (INVOICE_PAYMENT × invoices.valor_pago) ──
-async function auditarDuplaCobranca(ctx, user, rel) {
-    const { db, esc, fq, dryRun } = ctx;
-    const cpf = user.cpf;
-    const fullName = user.full_name || null;
+// ── Auditoria 1: pago a mais em fatura FECHADA → devolve ao saldo da conta ──
+// A fatura fechada não muda; o excedente volta ao saldo como lançamento REFUND
+// (aparece no extrato e NÃO entra na fatura aberta — a query do cartão não lê REFUND).
+async function auditarPagamentoExcedente(ctx, rel) {
+    const { db, esc, fq, dryRun, cpf } = ctx;
+    const faturas = await listarExcedentesFaturaFechada(db, { cpf, esc });
+    const saldoCorrente = new Map(); // mesma massa com 2+ faturas: encadeia antes → depois
 
-    const pagamentos = await db.executeQuery(`
-        SELECT amount FROM ${fq('transactions')}
-        WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT'
-            AND (status IS NULL OR status <> 'cancelled')
-    `);
-    const faturas = await db.executeQuery(`
-        SELECT id, valor_total, valor_pago, data_pagamento
-        FROM ${fq('invoices')}
-        WHERE cpf = ${esc(cpf)} AND COALESCE(valor_pago, 0) > 0
-        ORDER BY due_date DESC
-    `);
-    if (pagamentos.length === 0 && faturas.length === 0) return;
-
-    const totalPagamentos = pagamentos.reduce((s, r) => s + Math.abs(num(r.amount)), 0);
-    const totalValorPago = faturas.reduce((s, r) => s + num(r.valor_pago), 0);
-    // Status por massa no mesmo vocabulário do audit_completo.js (o audit_scheduler.js
-    // conta as ativas por status === 'discrepancy').
-    const detalhe = { cpf, fullName, status: 'ok', totalPagamentos: round2(totalPagamentos), totalValorPago: round2(totalValorPago) };
-    rel.duplaCobranca.push(detalhe);
-    if (round2(Math.abs(totalPagamentos - totalValorPago)) <= 0.02) return;
-    detalhe.status = pagamentos.length > 0 && faturas.length === 0 ? 'orphan_payments' : 'discrepancy';
-
-    if (totalValorPago > totalPagamentos + 0.02) {
-        // Resíduo de correção anterior: toda fatura com valor_pago já tem data de
-        // pagamento e não passa do valor_total — não é discrepância ativa.
-        const jaCorrigida = faturas.every((f) => {
-            const vp = num(f.valor_pago);
-            return vp <= 0 || (f.data_pagamento && vp <= num(f.valor_total) + 0.02);
-        });
-        if (jaCorrigida) { detalhe.status = 'resolvido'; rel.resolvidas++; return; }
+    for (const f of faturas) {
+        const status = f.excedente > 0.02 ? 'discrepancy' : (f.devolvido > 0 ? 'resolvido' : 'ok');
+        rel.duplaCobranca.push({ cpf: f.cpf, fullName: f.fullName, invoiceId: f.invoiceId, status, totalPagamentos: f.pago, devido: f.devido, devolvido: f.devolvido });
+        if (status === 'resolvido') rel.resolvidas++;
+        if (status !== 'discrepancy') continue;
 
         rel.anomalias++;
-        const excesso = round2(totalValorPago - totalPagamentos);
-        const pct = totalPagamentos > 0 ? (excesso / totalPagamentos) * 100 : 100;
-        if (pct > 50 && totalPagamentos > 0) {
-            rel.pulados.push({ tipo: 'DUPLA_COBRANCA', cpf, fullName, motivo: `Faturas registram ${brl(excesso)} (${pct.toFixed(1)}%) a mais que os pagamentos — acima de 50%, exige análise manual.` });
-            return;
+        const antes = saldoCorrente.has(f.cpf) ? saldoCorrente.get(f.cpf) : f.balance;
+        const depois = round2(antes + f.excedente);
+        try {
+            if (!dryRun) {
+                const descricao = `Devolução de pagamento excedente — fatura fechada ${f.invoiceId} ${marcaDevolucao(f.invoiceId)}`;
+                await db.executeQuery(`UPDATE ${fq('users')} SET balance = balance + ${f.excedente.toFixed(2)}, updated_at = CURRENT_TIMESTAMP WHERE cpf = ${esc(f.cpf)}`);
+                await db.executeQuery(`
+                    INSERT INTO ${fq('transactions')} (id, cpf, type, amount, description, date)
+                    VALUES (${esc(crypto.randomUUID())}, ${esc(f.cpf)}, 'REFUND', ${f.excedente.toFixed(2)}, ${esc(descricao)}, ${esc(new Date().toISOString())})
+                `);
+            }
+            saldoCorrente.set(f.cpf, depois);
+            rel.correcoes.push({
+                tipo: 'DUPLA_COBRANCA', cpf: f.cpf, fullName: f.fullName, invoiceId: f.invoiceId,
+                alvo: 'Saldo da conta', campo: 'balance', antes, depois,
+                motivo: `Massa já cortada: a fatura FECHADA ${f.invoiceId} (imutável) recebeu ${brl(f.pago)} para ${brl(f.devido)} devidos`
+                    + `${f.devolvido > 0 ? ` (${brl(f.devolvido)} já devolvidos)` : ''} — excedente de ${brl(f.excedente)} volta ao saldo da conta como lançamento.`,
+            });
+        } catch (err) {
+            rel.erros.push({ cpf: f.cpf, etapa: 'DUPLA_COBRANCA', erro: err.message });
         }
-        const fat = faturas[0];
-        const antes = num(fat.valor_pago);
-        const depois = Math.max(0, round2(antes - excesso));
-        if (!dryRun) {
-            await db.executeQuery(`UPDATE ${fq('invoices')} SET valor_pago = ${depois.toFixed(2)}, updated_at = CURRENT_TIMESTAMP WHERE id = ${esc(fat.id)}`);
-        }
-        rel.correcoes.push({ tipo: 'DUPLA_COBRANCA', cpf, fullName, invoiceId: fat.id, alvo: `Fatura ${fat.id}`, campo: 'valor_pago', antes, depois, motivo: `Faturas registram ${brl(excesso)} a mais que os pagamentos (INVOICE_PAYMENT).` });
-        return;
     }
 
-    rel.anomalias++;
-    const faltante = round2(totalPagamentos - totalValorPago);
-    const [fat] = await db.executeQuery(`
-        SELECT id, valor_pago FROM ${fq('invoices')}
-        WHERE cpf = ${esc(cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
-        ORDER BY due_date DESC LIMIT 1
+    // Legado: pagamentos de antes do vínculo invoice_id. Só informativo (sem fatura
+    // não há o que comparar) — agregado para não poluir a lista.
+    const [orf] = await db.executeQuery(`
+        SELECT COUNT(*) AS transacoes, COUNT(DISTINCT cpf) AS massas, COALESCE(SUM(ABS(amount)), 0) AS valor
+        FROM ${fq('transactions')}
+        WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NULL
+          AND (status IS NULL OR status <> 'cancelled') ${ctx.cpfClause('cpf')}
     `);
-    if (!fat) {
-        rel.pulados.push({ tipo: 'DUPLA_COBRANCA', cpf, fullName, motivo: `Pagamentos excedem valor_pago em ${brl(faltante)}, mas não há fatura FECHADA em aberto para receber a diferença.` });
-        return;
-    }
-    const antes = num(fat.valor_pago);
-    const depois = round2(antes + faltante);
-    if (!dryRun) {
-        await db.executeQuery(`UPDATE ${fq('invoices')} SET valor_pago = ${depois.toFixed(2)}, updated_at = CURRENT_TIMESTAMP WHERE id = ${esc(fat.id)}`);
-    }
-    rel.correcoes.push({ tipo: 'DUPLA_COBRANCA', cpf, fullName, invoiceId: fat.id, alvo: `Fatura ${fat.id}`, campo: 'valor_pago', antes, depois, motivo: `Pagamentos (INVOICE_PAYMENT) excedem o valor_pago das faturas em ${brl(faltante)}.` });
+    rel.pagamentosSemFatura = { transacoes: Number(orf?.transacoes || 0), massas: Number(orf?.massas || 0), valor: round2(num(orf?.valor)) };
+    return faturas.length;
 }
 
-// ── Auditoria 2: pagamento excessivo, saldo negativo, limite negativo ──
+// ── Auditoria 2: pagamento excessivo (fatura não fechada), saldo negativo, limite negativo ──
 async function corrigirPagamentoExcessivo(ctx, rel) {
     const { db, esc, fq, dryRun, cpfClause } = ctx;
+    // FECHADA fica de fora: é imutável e o pago a mais dela é a Auditoria 1.
     const rows = await db.executeQuery(`
         SELECT i.cpf, u.full_name, i.id, i.valor_pago, ${GROSS_SQL} AS gross
         FROM ${fq('invoices')} i LEFT JOIN ${fq('users')} u ON i.cpf = u.cpf
-        WHERE i.valor_pago IS NOT NULL AND i.valor_total IS NOT NULL
+        WHERE i.status <> 'FECHADA' AND i.valor_pago IS NOT NULL AND i.valor_total IS NOT NULL
           AND i.valor_pago > ${GROSS_SQL} + 0.02 ${cpfClause('i.cpf')}
     `);
     for (const inv of rows) {
@@ -178,7 +197,7 @@ async function corrigirLimiteNegativo(ctx, rel) {
     }
 }
 
-// Só detecção (o script também não corrige): saldo abaixo do mínimo de fatura FECHADA em aberto.
+// Só detecção: saldo abaixo do mínimo de fatura FECHADA em aberto.
 async function coletarAlertasDeSaldo(ctx, rel) {
     const { db, fq, cpfClause } = ctx;
     const rows = await db.executeQuery(`
@@ -219,31 +238,17 @@ async function runDiscrepanciasAudit({
 }) {
     const fq = (t) => db.fq(t);
     const ctx = {
-        db, esc, fq, dryRun, recalcularLimiteDisponivel,
+        db, esc, fq, dryRun, cpf, recalcularLimiteDisponivel,
         cpfClause: (col) => (cpf ? `AND ${col} = ${esc(cpf)}` : ''),
     };
-    const rel = { anomalias: 0, resolvidas: 0, correcoes: [], pulados: [], alertas: [], erros: [], duplaCobranca: [] };
+    const rel = {
+        anomalias: 0, resolvidas: 0, correcoes: [], pulados: [], alertas: [], erros: [], duplaCobranca: [],
+        pagamentosSemFatura: { transacoes: 0, massas: 0, valor: 0 },
+    };
 
-    let comPagamento = [];
-    if (duplaCobranca) {
-        comPagamento = await db.executeQuery(`
-            SELECT DISTINCT t.cpf, u.full_name
-            FROM ${fq('transactions')} t LEFT JOIN ${fq('users')} u ON t.cpf = u.cpf
-            WHERE t.type = 'INVOICE_PAYMENT' ${ctx.cpfClause('t.cpf')}
-        `);
-        await emParalelo(comPagamento, CONCORRENCIA, async (u) => {
-            try {
-                await auditarDuplaCobranca(ctx, u, rel);
-            } catch (err) {
-                rel.duplaCobranca.push({ cpf: u.cpf, fullName: u.full_name || null, status: 'error' });
-                rel.erros.push({ cpf: u.cpf, etapa: 'DUPLA_COBRANCA', erro: err.message });
-            }
-        });
-    }
+    const verificadas = duplaCobranca ? await auditarPagamentoExcedente(ctx, rel) : 0;
 
     if (auditoria2) {
-        // Mesma ordem do script: o estorno do pagamento excessivo credita o saldo antes
-        // da checagem de saldo negativo.
         await corrigirPagamentoExcessivo(ctx, rel);
         await corrigirSaldoNegativo(ctx, rel);
         await corrigirLimiteNegativo(ctx, rel);
@@ -253,7 +258,8 @@ async function runDiscrepanciasAudit({
     return {
         modo: dryRun ? 'SIMULACAO' : 'APLICADO',
         cpfFiltro: cpf || 'TODAS',
-        verificadas: comPagamento.length,
+        // Faturas FECHADAS com pagamento vinculado checadas na Auditoria 1.
+        verificadas,
         anomalias: rel.anomalias,
         resolvidasAntes: rel.resolvidas,
         totalCorrecoes: rel.correcoes.length,
@@ -264,9 +270,10 @@ async function runDiscrepanciasAudit({
         pulados: rel.pulados,
         alertas: rel.alertas,
         erros: rel.erros,
-        // Status por massa da Auditoria 1 (o painel não usa; o CLI monta o JSON legado com ele).
+        pagamentosSemFatura: rel.pagamentosSemFatura,
+        // Status por fatura da Auditoria 1 (o painel não usa; o CLI monta o JSON legado com ele).
         duplaCobranca: rel.duplaCobranca,
     };
 }
 
-module.exports = { runDiscrepanciasAudit };
+module.exports = { runDiscrepanciasAudit, listarExcedentesFaturaFechada };

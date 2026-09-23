@@ -316,4 +316,6 @@ export interface DiscrepanciasReport {
     pulados: DiscrepanciaPulada[];
     alertas: DiscrepanciaAlerta[];
     erros: { cpf: string; etapa: string; erro: string }[];
+    /** Pagamentos legados sem invoice_id — só informativo, sem correção. */
+    pagamentosSemFatura?: { transacoes: number; massas: number; valor: number };
 }

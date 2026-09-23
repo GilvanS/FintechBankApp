@@ -295,39 +295,17 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
         // Caso real 71040451128 (2026-09-20): Mínimo (R$387,09) + Total (R$3.870,86,
         // valor ORIGINAL de novo, não o residual) pagos na mesma fatura fechada =
         // R$187,63 de excedente por pegar massa que já tinha pagamento anterior.
-        const faturasComPagamentoLigado = await db.executeQuery(`
-            SELECT i.id, i.cpf, i.valor_total, u.full_name
-            FROM ${db.fq('invoices')} i
-            JOIN ${db.fq('users')} u ON u.cpf = i.cpf
-            JOIN ${db.fq('transactions')} t ON t.invoice_id = i.id AND t.type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
-            WHERE i.status = 'FECHADA'
-            GROUP BY i.id, i.cpf, i.valor_total, u.full_name
-        `);
-
-        for (const inv of faturasComPagamentoLigado) {
-            const pagosRows = await db.executeQuery(`
-                SELECT COALESCE(SUM(ABS(amount)), 0) AS total
-                FROM ${db.fq('transactions')}
-                WHERE invoice_id = '${inv.id}' AND type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
-            `);
-            const totalPago = round2(parseFloat(pagosRows[0]?.total || 0));
-
-            const principal = round2(parseFloat(inv.valor_total));
-            const chargesRows = await db.executeQuery(`
-                SELECT COALESCE(SUM(amount), 0) AS total
-                FROM ${db.fq('billing_charges')}
-                WHERE cpf = '${inv.cpf}' AND invoice_amount = ${principal}
-            `);
-            const encargos = round2(parseFloat(chargesRows[0]?.total || 0));
-            const devido = round2(principal + encargos);
-            const excedente = round2(totalPago - devido);
-
-            if (excedente > 0.02) {
+        // Regra em services/discrepanciasAudit.js (fonte única com o "Corrigir
+        // Discrepâncias", que devolve o excedente ao saldo): o devido inclui o
+        // saldo_anterior e desconta o que já foi devolvido.
+        const { listarExcedentesFaturaFechada } = require('./discrepanciasAudit');
+        for (const f of await listarExcedentesFaturaFechada(db)) {
+            if (f.excedente > 0.02) {
                 errors.push({
-                    cpf: inv.cpf,
-                    name: inv.full_name,
+                    cpf: f.cpf,
+                    name: f.fullName,
                     type: 'PAGAMENTO_EXCEDENTE_FATURA_FECHADA',
-                    details: `Fatura fechada de R$ ${principal.toFixed(2)} (+ R$ ${encargos.toFixed(2)} de encargos = R$ ${devido.toFixed(2)} devido) recebeu R$ ${totalPago.toFixed(2)} em pagamentos vinculados — excedente de R$ ${excedente.toFixed(2)}. Provável massa que recebeu pagamento parcial (Mínimo/Parcial) e depois 'Total' (que cobra o valor original de novo, não o residual restante).`
+                    details: `Fatura fechada de R$ ${f.principal.toFixed(2)} (+ R$ ${f.encargos.toFixed(2)} de encargos = R$ ${f.devido.toFixed(2)} devido) recebeu R$ ${f.pago.toFixed(2)} em pagamentos vinculados — excedente de R$ ${f.excedente.toFixed(2)}. Devolver ao saldo pelo "Corrigir Discrepâncias" do Admin (Simular com o CPF antes).`
                 });
             }
         }

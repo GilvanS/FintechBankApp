@@ -15,7 +15,7 @@ const brl = (n?: number) => (n ?? 0).toLocaleString('pt-BR', { style: 'currency'
 const fmtCpf = (cpf: string) => cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
 
 const TIPO_LABEL: Record<DiscrepanciaTipo, string> = {
-    DUPLA_COBRANCA: 'Dupla cobrança',
+    DUPLA_COBRANCA: 'Pago a mais (fechada)',
     PAGAMENTO_EXCESSIVO: 'Pagamento excessivo',
     SALDO_NEGATIVO: 'Saldo negativo',
     LIMITE_NEGATIVO: 'Limite negativo',
@@ -138,6 +138,12 @@ const DiscrepanciasModal: React.FC<Props> = ({ isOpen, isMidnight, onClose }) =>
                     ))}
                 </div>
             )}
+            {(report.pagamentosSemFatura?.transacoes ?? 0) > 0 && (
+                <p className="text-[11px] opacity-60">
+                    {report.pagamentosSemFatura!.transacoes} pagamento(s) antigo(s) sem fatura vinculada em{' '}
+                    {report.pagamentosSemFatura!.massas} massa(s) ({brl(report.pagamentosSemFatura!.valor)}) — só informativo, sem correção.
+                </p>
+            )}
             {report.alertas.length > 0 && (
                 <details className="text-[11px]">
                     <summary className="cursor-pointer font-black uppercase text-[10px] opacity-70">
@@ -185,9 +191,10 @@ const DiscrepanciasModal: React.FC<Props> = ({ isOpen, isMidnight, onClose }) =>
                             {cpfInvalido && <p className="mt-1 text-[11px] text-[#FF5C8D]">CPF precisa de 11 dígitos.</p>}
                         </div>
                         <p className="text-xs opacity-70">
-                            Verifica <b>dupla cobrança</b> (pagamentos × valor pago das faturas), <b>pagamento acima do bruto</b> da
-                            fatura, <b>saldo negativo</b> e <b>limite negativo</b> (recalculado pela fórmula canônica). Primeiro
-                            simula e mostra o antes × depois; só grava quando você aplicar.
+                            Verifica <b>pago a mais em fatura fechada</b> (massa já cortada: a fechada não muda, o excedente
+                            volta ao <b>saldo da conta</b> como lançamento), <b>saldo negativo</b> e <b>limite negativo</b>
+                            (recalculado pela fórmula canônica). Primeiro simula e mostra o antes × depois; só grava quando
+                            você aplicar.
                         </p>
                         <div className="flex gap-2 pt-2">
                             <button onClick={handleClose} className={`flex-1 py-3 rounded-2xl font-bold ${neutralBtnClass}`}>Cancelar</button>

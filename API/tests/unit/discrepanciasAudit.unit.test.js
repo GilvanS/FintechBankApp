@@ -1,45 +1,45 @@
-const { runDiscrepanciasAudit } = require('../../services/discrepanciasAudit');
+const { runDiscrepanciasAudit, listarExcedentesFaturaFechada } = require('../../services/discrepanciasAudit');
 const createAdminScriptsController = require('../../src/controllers/adminScriptsController');
 
 const esc = (v) => `'${String(v).replace(/'/g, "''")}'`;
 
 /**
- * Banco falso: responde por trecho de SQL e guarda todo UPDATE executado.
+ * Banco falso: responde por trecho de SQL e guarda toda escrita (UPDATE/INSERT).
  * `dados` define o retorno de cada consulta do serviço.
  */
 function makeDb(dados = {}) {
-    const updates = [];
+    const writes = [];
     const selects = [];
     const executeQuery = jest.fn(async (sql) => {
         const s = sql.replace(/\s+/g, ' ').trim();
-        if (s.startsWith('UPDATE')) { updates.push(s); return []; }
+        if (s.startsWith('UPDATE') || s.startsWith('INSERT')) { writes.push(s); return []; }
         selects.push(s);
-        if (s.includes('SELECT DISTINCT t.cpf')) return dados.comPagamento || [];
-        if (s.includes("type = 'INVOICE_PAYMENT'")) return (dados.pagamentos || {})[s.match(/cpf = '(\d+)'/)[1]] || [];
-        if (s.includes('COALESCE(valor_pago, 0) > 0')) return (dados.faturasPagas || {})[s.match(/cpf = '(\d+)'/)[1]] || [];
-        if (s.includes("status = 'FECHADA' AND data_pagamento IS NULL ORDER BY due_date DESC LIMIT 1")) return dados.fechadaEmAberto || [];
+        if (s.includes('AS devolvido')) return dados.faturasFechadas || [];
+        if (s.includes('invoice_id IS NULL')) return [dados.semFatura || { transacoes: 0, massas: 0, valor: 0 }];
         if (s.includes('AS gross')) return dados.excessivos || [];
         if (s.includes('balance < 0')) return dados.saldoNegativo || [];
         if (s.includes('credit_card_available_limit < 0')) return dados.limiteNegativo || [];
         if (s.includes('AS divida')) return dados.alertas || [];
         return [];
     });
-    return { db: { executeQuery, fq: (t) => `fintech.${t}` }, updates, selects };
+    return { db: { executeQuery, fq: (t) => `fintech.${t}` }, writes, selects };
 }
 
+// Linha da query de faturas FECHADAS com pagamento vinculado.
+const fechada = (id, cpf, { vt, sa = 0, enc = 0, pago, devolvido = 0, balance = 0, nome = `Massa ${cpf}` }) =>
+    ({ id, cpf, full_name: nome, balance, valor_total: vt, saldo_anterior: sa, encargos: enc, pago, devolvido });
+
 const cenarioCompleto = () => ({
-    comPagamento: [{ cpf: '11111111111', full_name: 'Ana' }, { cpf: '22222222222', full_name: 'Bia' }],
-    pagamentos: {
-        '11111111111': [{ amount: -100 }],
-        '22222222222': [{ amount: -100 }],
-    },
-    faturasPagas: {
-        // Ana: faturas registram 120 para 100 pagos → excesso 20 (20%) → corrige.
-        '11111111111': [{ id: 'inv-a', valor_total: 500, valor_pago: 120, data_pagamento: null }],
-        // Bia: 300 para 100 pagos → 200% → pulado (análise manual).
-        '22222222222': [{ id: 'inv-b', valor_total: 500, valor_pago: 300, data_pagamento: null }],
-    },
-    excessivos: [{ cpf: '33333333333', full_name: 'Caio', id: 'inv-c', valor_pago: 1050, gross: 1000 }],
+    faturasFechadas: [
+        // Ana: devido 500 + 100 de saldo anterior = 600, pagou 700 → devolve 100 ao saldo (50 → 150).
+        fechada('inv-a', '11111111111', { vt: 500, sa: 100, pago: 700, balance: 50, nome: 'Ana' }),
+        // Bia: pagou exatamente o devido (compras + saldo herdado) → ok.
+        fechada('inv-b', '22222222222', { vt: 364.97, sa: 3870.86, pago: 4235.83, nome: 'Bia' }),
+        // Carla: excedente de 100 já devolvido numa rodada anterior → resolvido.
+        fechada('inv-c', '88888888888', { vt: 600, pago: 700, devolvido: 100, nome: 'Carla' }),
+    ],
+    semFatura: { transacoes: 3, massas: 2, valor: 450.5 },
+    excessivos: [{ cpf: '33333333333', full_name: 'Caio', id: 'inv-aberta', valor_pago: 1050, gross: 1000 }],
     saldoNegativo: [{ cpf: '44444444444', full_name: 'Duda', balance: -35.5 }],
     limiteNegativo: [{ cpf: '55555555555', full_name: 'Edu' }, { cpf: '66666666666', full_name: 'Fé' }],
     alertas: [{ cpf: '77777777777', full_name: 'Gil', balance: 0, divida: 800 }],
@@ -49,48 +49,98 @@ const recalcFake = () => jest.fn(async (cpf) => (cpf === '55555555555'
     ? { cpf, fullName: 'Edu', limiteAnterior: -300, limiteNovo: 120, alterado: true, estourado: false, currentInvoiceTotal: 880 }
     : { cpf, fullName: 'Fé', limiteAnterior: -50, limiteNovo: -50, alterado: false, estourado: true, currentInvoiceTotal: 1050 }));
 
+describe('listarExcedentesFaturaFechada', () => {
+    test('devido inclui saldo_anterior e encargos; excedente desconta o já devolvido', async () => {
+        const { db } = makeDb({
+            faturasFechadas: [
+                fechada('x', '1', { vt: 364.97, sa: 3870.86, pago: 4235.83 }),
+                fechada('y', '2', { vt: 3870.86, enc: 199.46, pago: 4257.95 }),
+                fechada('z', '3', { vt: 500, pago: 700, devolvido: 150 }),
+            ],
+        });
+
+        const r = await listarExcedentesFaturaFechada(db, { esc });
+
+        expect(r.map((f) => [f.invoiceId, f.devido, f.excedente])).toEqual([
+            ['x', 4235.83, 0],
+            ['y', 4070.32, 187.63], // caso real 71040451128
+            ['z', 500, 50],
+        ]);
+    });
+});
+
 describe('runDiscrepanciasAudit', () => {
-    test('SIMULACAO não executa nenhum UPDATE e recalcula limite com persist:false', async () => {
-        const { db, updates } = makeDb(cenarioCompleto());
+    test('SIMULACAO não escreve nada e recalcula limite com persist:false', async () => {
+        const { db, writes } = makeDb(cenarioCompleto());
         const recalc = recalcFake();
 
         const r = await runDiscrepanciasAudit({ db, esc, dryRun: true, recalcularLimiteDisponivel: recalc });
 
-        expect(updates).toEqual([]);
+        expect(writes).toEqual([]);
         expect(recalc).toHaveBeenCalledWith('55555555555', { persist: false });
         expect(r.modo).toBe('SIMULACAO');
         expect(r.cpfFiltro).toBe('TODAS');
+        expect(r.verificadas).toBe(3);
         expect(r.correcoes.map((c) => `${c.tipo}:${c.cpf}`).sort()).toEqual([
             'DUPLA_COBRANCA:11111111111',
             'LIMITE_NEGATIVO:55555555555',
             'PAGAMENTO_EXCESSIVO:33333333333',
             'SALDO_NEGATIVO:44444444444',
         ]);
-        expect(r.correcoes.find((c) => c.tipo === 'DUPLA_COBRANCA')).toMatchObject({ antes: 120, depois: 100 });
-        expect(r.correcoes.find((c) => c.tipo === 'PAGAMENTO_EXCESSIVO')).toMatchObject({ antes: 1050, depois: 1000 });
-        expect(r.pulados).toEqual([expect.objectContaining({ cpf: '22222222222', tipo: 'DUPLA_COBRANCA' })]);
+        // Pago a mais na fechada: corrige o SALDO, nunca a fatura.
+        expect(r.correcoes.find((c) => c.tipo === 'DUPLA_COBRANCA')).toMatchObject({
+            alvo: 'Saldo da conta', campo: 'balance', invoiceId: 'inv-a', antes: 50, depois: 150,
+        });
+        expect(r.correcoes.find((c) => c.tipo === 'DUPLA_COBRANCA').motivo).toMatch(/Massa já cortada/);
+        expect(r.resolvidasAntes).toBe(1);
+        expect(r.pagamentosSemFatura).toEqual({ transacoes: 3, massas: 2, valor: 450.5 });
         // Limite negativo que já bate com a fórmula (estourado de verdade) vira alerta, não correção.
         expect(r.alertas.map((a) => a.tipo).sort()).toEqual(['LIMITE_ESTOURADO', 'SALDO_ZERADO_COM_DIVIDA']);
-        expect(r).toMatchObject({ totalCorrecoes: 4, totalPulados: 1, totalAlertas: 2, totalErros: 0 });
+        expect(r).toMatchObject({ totalCorrecoes: 4, totalPulados: 0, totalAlertas: 2, totalErros: 0 });
     });
 
-    test('APLICADO grava as mesmas correções mostradas na simulação', async () => {
-        const { db, updates } = makeDb(cenarioCompleto());
+    test('APLICADO devolve o excedente ao saldo com lançamento REFUND marcado e nunca toca a fatura FECHADA', async () => {
+        const { db, writes } = makeDb(cenarioCompleto());
         const recalc = recalcFake();
 
         const r = await runDiscrepanciasAudit({ db, esc, dryRun: false, recalcularLimiteDisponivel: recalc });
 
         expect(r.modo).toBe('APLICADO');
         expect(recalc).toHaveBeenCalledWith('55555555555', { persist: true });
-        expect(updates).toEqual(expect.arrayContaining([
-            expect.stringMatching(/UPDATE fintech\.invoices SET valor_pago = 100\.00,.* WHERE id = 'inv-a'/),
-            expect.stringMatching(/UPDATE fintech\.invoices SET valor_pago = 1000\.00,.* WHERE id = 'inv-c'/),
+        expect(writes).toEqual(expect.arrayContaining([
+            expect.stringMatching(/UPDATE fintech\.users SET balance = balance \+ 100\.00,.* WHERE cpf = '11111111111'/),
+            expect.stringMatching(/INSERT INTO fintech\.transactions .*'11111111111', 'REFUND', 100\.00, '.*\[excedente-fatura:inv-a\]'/),
+            expect.stringMatching(/UPDATE fintech\.invoices SET valor_pago = 1000\.00,.* WHERE id = 'inv-aberta'/),
             expect.stringMatching(/UPDATE fintech\.users SET balance = balance \+ 50\.00,.* WHERE cpf = '33333333333'/),
-            expect.stringMatching(/UPDATE fintech\.users SET balance = 0, .* WHERE cpf = '44444444444'/),
+            expect.stringMatching(/UPDATE fintech\.users SET balance = 0,.* WHERE cpf = '44444444444'/),
         ]));
-        // Pulado (>50%) nunca é gravado.
-        expect(updates.some((u) => u.includes("'inv-b'"))).toBe(false);
-        expect(updates).toHaveLength(4);
+        expect(writes).toHaveLength(5);
+        for (const id of ['inv-a', 'inv-b', 'inv-c']) {
+            expect(writes.some((w) => w.startsWith('UPDATE fintech.invoices') && w.includes(`'${id}'`))).toBe(false);
+        }
+    });
+
+    test('mesma massa com 2 faturas fechadas encadeia o saldo (antes → depois)', async () => {
+        const { db } = makeDb({
+            faturasFechadas: [
+                fechada('f1', '11111111111', { vt: 100, pago: 130, balance: 10 }),
+                fechada('f2', '11111111111', { vt: 200, pago: 220, balance: 10 }),
+            ],
+        });
+
+        const r = await runDiscrepanciasAudit({ db, esc, dryRun: true, recalcularLimiteDisponivel: jest.fn() });
+
+        expect(r.correcoes.map((c) => [c.invoiceId, c.antes, c.depois])).toEqual([['f1', 10, 40], ['f2', 40, 60]]);
+    });
+
+    test('status por fatura usa o vocabulário lido pelo audit_scheduler (ok/discrepancy/resolvido)', async () => {
+        const { db } = makeDb(cenarioCompleto());
+
+        const r = await runDiscrepanciasAudit({ db, esc, dryRun: true, recalcularLimiteDisponivel: recalcFake() });
+
+        expect(Object.fromEntries(r.duplaCobranca.map((d) => [d.invoiceId, d.status]))).toEqual({
+            'inv-a': 'discrepancy', 'inv-b': 'ok', 'inv-c': 'resolvido',
+        });
     });
 
     test('com CPF, TODAS as consultas (inclusive as de correção) ficam restritas a ele', async () => {
@@ -101,54 +151,10 @@ describe('runDiscrepanciasAudit', () => {
         for (const s of selects) expect(s).toContain("= '12345678900'");
     });
 
-    test('pagamentos acima do valor_pago somam na fatura FECHADA em aberto mais recente', async () => {
-        const { db, updates } = makeDb({
-            comPagamento: [{ cpf: '11111111111', full_name: 'Ana' }],
-            pagamentos: { '11111111111': [{ amount: -300 }] },
-            faturasPagas: { '11111111111': [{ id: 'inv-velha', valor_total: 500, valor_pago: 100, data_pagamento: '2026-08-01' }] },
-            fechadaEmAberto: [{ id: 'inv-aberta', valor_pago: 50 }],
-        });
-
-        const r = await runDiscrepanciasAudit({ db, esc, dryRun: false, recalcularLimiteDisponivel: jest.fn() });
-
-        expect(r.correcoes).toEqual([expect.objectContaining({ alvo: 'Fatura inv-aberta', antes: 50, depois: 250 })]);
-        expect(updates).toEqual([expect.stringMatching(/valor_pago = 250\.00,.* WHERE id = 'inv-aberta'/)]);
-    });
-
-    test('status por massa da Auditoria 1 usa o vocabulário do audit_completo (ok/discrepancy/resolvido/orphan_payments)', async () => {
-        const { db } = makeDb({
-            comPagamento: ['1', '2', '3', '4'].map((d) => ({ cpf: d.repeat(11), full_name: `M${d}` })),
-            pagamentos: {
-                '11111111111': [{ amount: -100 }],
-                '22222222222': [{ amount: -100 }],
-                '33333333333': [{ amount: -100 }],
-                '44444444444': [{ amount: -100 }],
-            },
-            faturasPagas: {
-                '11111111111': [{ id: 'a', valor_total: 500, valor_pago: 100, data_pagamento: '2026-08-01' }],
-                '22222222222': [{ id: 'b', valor_total: 500, valor_pago: 120, data_pagamento: null }],
-                // Excesso já corrigido antes: pago ≤ total e com data → resíduo.
-                '33333333333': [{ id: 'c', valor_total: 150, valor_pago: 150, data_pagamento: '2026-08-01' }],
-                // 44444444444: pagamento sem fatura com valor_pago.
-            },
-        });
-
-        const r = await runDiscrepanciasAudit({ db, esc, dryRun: true, recalcularLimiteDisponivel: jest.fn() });
-
-        const status = Object.fromEntries(r.duplaCobranca.map((d) => [d.cpf, d.status]));
-        expect(status).toEqual({
-            '11111111111': 'ok',
-            '22222222222': 'discrepancy',
-            '33333333333': 'resolvido',
-            '44444444444': 'orphan_payments',
-        });
-        expect(r.resolvidasAntes).toBe(1);
-    });
-
     test('duplaCobranca:false e auditoria2:false pulam as etapas (CLI --skip-double-count / --skip-negative)', async () => {
         const semAud1 = makeDb(cenarioCompleto());
         const r1 = await runDiscrepanciasAudit({ db: semAud1.db, esc, dryRun: true, recalcularLimiteDisponivel: recalcFake(), duplaCobranca: false });
-        expect(semAud1.selects.some((s) => s.includes('SELECT DISTINCT t.cpf'))).toBe(false);
+        expect(semAud1.selects.some((s) => s.includes('AS devolvido'))).toBe(false);
         expect(r1.verificadas).toBe(0);
         expect(r1.correcoes.some((c) => c.tipo === 'DUPLA_COBRANCA')).toBe(false);
 
@@ -158,6 +164,13 @@ describe('runDiscrepanciasAudit', () => {
         expect(recalc).not.toHaveBeenCalled();
         expect(r2.correcoes.map((c) => c.tipo)).toEqual(['DUPLA_COBRANCA']);
         expect(r2.alertas).toEqual([]);
+    });
+
+    test('pagamento excessivo (Auditoria 2) ignora fatura FECHADA', async () => {
+        const { db, selects } = makeDb({});
+        await runDiscrepanciasAudit({ db, esc, dryRun: true, recalcularLimiteDisponivel: jest.fn() });
+
+        expect(selects.find((s) => s.includes('AS gross'))).toContain("i.status <> 'FECHADA'");
     });
 
     test('erro numa massa não derruba as outras', async () => {
@@ -183,7 +196,7 @@ describe('POST /admin/scripts/audit-fix', () => {
     }
 
     test('dryRun=true simula e não registra auditLog; sem dryRun aplica e registra', async () => {
-        const { db, updates } = makeDb(cenarioCompleto());
+        const { db, writes } = makeDb(cenarioCompleto());
         const auditLog = jest.fn();
         const controller = createAdminScriptsController({
             dbService: db, repoContext: { esc }, cardEngine: {}, auditLog,
@@ -195,7 +208,7 @@ describe('POST /admin/scripts/audit-fix', () => {
         expect(simRes.body.success).toBe(true);
         expect(simRes.body.data.modo).toBe('SIMULACAO');
         expect(simRes.body.data.duplaCobranca).toBeUndefined();
-        expect(updates).toHaveLength(0);
+        expect(writes).toHaveLength(0);
         expect(auditLog).not.toHaveBeenCalled();
 
         const apRes = makeRes();
