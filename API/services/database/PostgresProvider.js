@@ -2,6 +2,9 @@ const { Pool } = require('pg');
 const DatabaseInterface = require('./DatabaseInterface');
 const { logPostgresStatus } = require('../../utils/checkPostgresContainers');
 
+// Lido a cada query (não no load): scripts carregam o .env depois de requerer o provider.
+const LOG_QUERIES_ATIVO = () => process.env.DB_LOG_QUERIES === 'true';
+
 class PostgresProvider extends DatabaseInterface {
     constructor(config) {
         super();
@@ -129,12 +132,16 @@ class PostgresProvider extends DatabaseInterface {
         // Simple regex to replace backticks with double quotes:
         pgQuery = pgQuery.replace(/`/g, '"');
 
-        console.log("🔵 [PostgresProvider] Executando Query:", pgQuery);
-        
+        // Log de TODA query só com DB_LOG_QUERIES=true (.env), para depuração. Ligado
+        // sempre, era ~12 SQLs completos por massa no terminal: no Windows o console é
+        // síncrono e o "Recalcular Limite" da base inteira (~23 mil queries) passava de
+        // 300s, contra ~27s sem o log. Erros continuam sempre logados.
+        if (LOG_QUERIES_ATIVO()) console.log("🔵 [PostgresProvider] Executando Query:", pgQuery);
+
         const client = await this.pool.connect();
         try {
             const res = await client.query(pgQuery);
-            console.log(`🔵 [PostgresProvider] Query executada com sucesso. Retornou ${res.rows ? res.rows.length : 0} linha(s)`);
+            if (LOG_QUERIES_ATIVO()) console.log(`🔵 [PostgresProvider] Query executada com sucesso. Retornou ${res.rows ? res.rows.length : 0} linha(s)`);
             return res.rows;
         } catch (error) {
             console.error(`❌ [PostgresProvider] Erro ao executar query:`, error.message);
