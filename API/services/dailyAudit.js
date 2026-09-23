@@ -532,4 +532,30 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
     }
 }
 
-module.exports = { runDailyAudit };
+async function checkOrphanInstallments(db, cpf = null) {
+    const cpfFilter = cpf ? " AND t.cpf = '$cpf'" : '';
+    const orphanTxs = await db.executeQuery(`
+        SELECT t.cpf, t.id, t.description, t.amount, t.date, u.full_name
+        FROM ${db.fq('transactions')} t
+        JOIN ${db.fq('users')} u ON u.cpf = t.cpf
+        WHERE t.type = 'INVOICE_INSTALLMENT'
+          AND NOT EXISTS (
+              SELECT 1 FROM ${db.fq('installment_plans')} p
+              WHERE p.cpf = t.cpf AND p.purchase_tx_id = t.id OR t.description LIKE '%' || p.id || '%'
+          )
+          ${cpfFilter}
+    `);
+    const { toDateOnly } = require('../utils/timezone');
+    const errors = [];
+    for (const tx of orphanTxs) {
+        errors.push({
+            cpf: tx.cpf,
+            name: tx.full_name,
+            type: 'TRANSACAO_ORFA',
+            details: `"Parcela de fatura órfã detectada: R$ ${Math.abs(parseFloat(tx.amount)).toFixed(2)} (${tx.description}) em ${toDateOnly(tx.date)} sem plano de parcelamento correspondente.`"
+        });
+    }
+    return errors;
+}
+
+module.exports = { runDailyAudit, checkOrphanInstallments };

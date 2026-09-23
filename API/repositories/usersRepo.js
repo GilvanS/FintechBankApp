@@ -213,7 +213,10 @@ async function seedMassBilling(db, cpf, options = {}) {
             if (isFirstOfSequence) {
                 sequenceStartDueDate = dueDate;
                 totalInstallments = 10 + Math.floor(Math.random() * 3);
-                const principalTotal = round2(Number(overdueAmountBase) || 0);
+                // Step 1.5: Fuzzing de Valores (+/- 10%)
+                const baseVal = Number(overdueAmountBase) || 0;
+                const fuzzFactor = 0.9 + (Math.random() * 0.2); 
+                const principalTotal = round2(baseVal > 0 ? baseVal * fuzzFactor : 0);
                 installmentValue = round2(principalTotal / totalInstallments);
                 installmentIndex = 1;
 
