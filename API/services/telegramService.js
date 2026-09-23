@@ -125,6 +125,39 @@ async function alertGroup(text, category) {
     enqueue(() => tg('sendMessage', { chat_id: CHAT_ID, text, parse_mode: 'HTML' }));
 }
 
+// Tópico persistente do fórum por NOME (ex.: "🔎 Auditoria · Limite"), guardado via
+// setPersistentTopic. `recriar` descarta o id salvo (tópico apagado no grupo).
+async function getOrCreatePersistentTopic(nome, { recriar = false } = {}) {
+    const repo = getSettingsRepo();
+    if (!recriar) {
+        const row = await repo.getPersistentTopic(nome);
+        if (row && row.topic_id) return row.topic_id;
+    }
+    const created = await tg('createForumTopic', { chat_id: CHAT_ID, name: nome.slice(0, 128) });
+    await repo.setPersistentTopic(nome, created.message_thread_id);
+    return created.message_thread_id;
+}
+
+// Alerta num tópico persistente por nome (critérios da auditoria — services/auditAlerts.js).
+// Fire-and-forget; respeita o toggle da `category`; tópico órfão é recriado 1x.
+async function alertTopic(nomeTopico, text, category) {
+    if (!ENABLED || !db) return;
+    if (category && !(await isCategoryActive(category))) {
+        console.debug(`[telegram:skip] category=${category} reason=disabled (alertTopic ${nomeTopico})`);
+        return;
+    }
+    enqueue(async () => {
+        const enviar = (topicId) => tg('sendMessage', { chat_id: CHAT_ID, message_thread_id: topicId, text, parse_mode: 'HTML' });
+        try {
+            await enviar(await getOrCreatePersistentTopic(nomeTopico));
+        } catch (err) {
+            if (!/message thread not found/i.test(err.message || '')) throw err;
+            console.warn(`[telegram] tópico "${nomeTopico}" órfão — recriando`);
+            await enviar(await getOrCreatePersistentTopic(nomeTopico, { recriar: true }));
+        }
+    });
+}
+
 // Cria o tópico no cadastro da massa (gerador admin ou signup web), com boas-vindas.
 // Fire-and-forget: cadastro nunca falha por causa do Telegram.
 // Respeita toggle da categoria 'welcome' (painel admin): se OFF, não manda a mensagem de boas-vindas
@@ -551,7 +584,7 @@ async function isCategoryActive(category) {
 }
 
 module.exports = {
-    init, alertUser, alertGroup, ensureTopic, deleteTopic, listTopics, getStatus,
+    init, alertUser, alertGroup, alertTopic, ensureTopic, deleteTopic, listTopics, getStatus,
     formatCpf, sendTable, sendDocument, send, isExpiringSoon, invalidateSettingCache,
     isCategoryActive, _enabled: ENABLED, _resetQueue: () => { queue = Promise.resolve(); }
 };

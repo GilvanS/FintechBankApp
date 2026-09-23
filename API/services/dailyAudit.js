@@ -471,10 +471,11 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
             for (const err of errors) {
                 const reqDummy = { user: { cpf: '00000000000', role: 'system' } };
                 await auditLog(reqDummy, 'daily_audit_anomaly', 'error', err);
-
-                // Alerta no grupo geral
-                telegramService.alertGroup(`⚠️ <b>Auditoria de Anomalia [${err.type}]</b>\n\n<b>Cliente:</b> ${err.name} (${telegramService.formatCpf(err.cpf)})\n<b>Detalhes:</b> ${err.details}`, 'daily_anomaly');
             }
+            // 1 mensagem por critério (Pagamentos, PIX, Compras, Faturas/Encargos,
+            // Limite) no tópico dele + 1 resumo no General — antes era 1 mensagem
+            // no General por anomalia, a cada rodada.
+            require('./auditAlerts').enviarAlertasAuditoria(telegramService, errors);
         } else {
             console.log('[Audit] Nenhuma anomalia de faturamento encontrada.');
         }
