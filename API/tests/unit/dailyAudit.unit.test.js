@@ -24,7 +24,9 @@ describe('dailyAudit service unit tests', () => {
             if (query.includes('array_agg') || (query.includes('COUNT(*)') && query.includes('HAVING'))) {
                 return []; // FATURA_DUPLICADA query — sem duplicatas
             }
-            if (query.includes('FROM "invoices"') && query.includes('COALESCE')) {
+            // A Anomalia 8 junta o residual da cascata (sqlResidualFechadas, também com
+            // COALESCE): não é a query da Anomalia 1 e não pode receber esta fatura.
+            if (query.includes('FROM "invoices"') && query.includes('COALESCE') && !query.includes('AS residual')) {
                 return [{
                     id: 'inv-1',
                     cpf: '12345678901',

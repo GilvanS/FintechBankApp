@@ -270,19 +270,34 @@ async function gravarQuitacao(dbService, esc, { quitacao, paymentId, paidAt }) {
 const DESCRICAO_PAGAMENTO_TOTAL = 'Pagamento fatura';
 
 /**
- * Charge pertence ao débito contínuo atual? Pending sempre; quitada por pagamento
- * (payment_id) só se foi paga DEPOIS do último pagamento que quitou tudo. Âncora
- * que não depende da cascata: ancorar no vencimento da fechada mais antiga que ainda
- * deve fazia a multa paga "sumir" quando um parcial quitava a 1ª fechada do débito
- * (A→B) e o motor cobrava uma 2ª multa sobre B.
- * @param {{status:string, payment_id?:string|null, paid_at?:any}} row
+ * Quando uma charge PAGA saiu do débito. Rastreável (payment_id): paid_at. Legado
+ * (paga sem payment_id — gerador de massa, rota antiga): paid_at se houver; sem ele,
+ * o created_at. Encargo não pode ter sido pago antes de existir, e o TOTAL é o único
+ * fim do débito: legado criado DEPOIS do último TOTAL só pode ser do débito que ainda
+ * corre. Criado antes do TOTAL = débito encerrado (não protege nem inibe nada).
+ */
+function momentoDaQuitacao(row) {
+    if (!row || row.status !== 'paid') return null;
+    return row.payment_id ? (row.paid_at || null) : (row.paid_at || row.created_at || null);
+}
+
+/**
+ * Charge pertence ao débito contínuo atual? Pending sempre; paga só se saiu dele
+ * DEPOIS do último pagamento que quitou tudo (momentoDaQuitacao). Âncora que não
+ * depende da cascata: ancorar no vencimento da fechada mais antiga que ainda deve fazia
+ * a multa paga "sumir" quando um parcial quitava a 1ª fechada do débito (A→B) e o motor
+ * cobrava uma 2ª multa sobre B. A paga sem payment_id (legado) também conta: sem ela, o
+ * motor e as rotinas de "regerar do zero" recriavam a multa que o gerador já tinha
+ * dado como paga (10 CPFs com 2ª multa pending em 2026-09-24).
+ * @param {{status:string, payment_id?:string|null, paid_at?:any, created_at?:any}} row
  * @param {Date|string|null} ultimaQuitacaoTotal - data do último DESCRICAO_PAGAMENTO_TOTAL
  */
 function pertenceAoDebitoAtual(row, ultimaQuitacaoTotal) {
     if (!row) return false;
     if (row.status === 'pending') return true;
-    if (row.status !== 'paid' || !row.payment_id || !row.paid_at) return false;
-    const pagoEm = new Date(row.paid_at).getTime();
+    const quitadaEm = momentoDaQuitacao(row);
+    if (!quitadaEm) return false;
+    const pagoEm = new Date(quitadaEm).getTime();
     if (!Number.isFinite(pagoEm)) return false;
     const corte = ultimaQuitacaoTotal ? new Date(ultimaQuitacaoTotal).getTime() : NaN;
     return !Number.isFinite(corte) || pagoEm > corte;
@@ -310,8 +325,8 @@ function sqlDatasQuitacaoTotal(dbService, cpfExpr) {
 }
 
 /**
- * Charges do débito atual do CPF (pending + quitadas por pagamento depois da última
- * quitação total). O motor usa isto na checagem de multa/IOF adicional únicos e na
+ * Charges do débito atual do CPF (pending + pagas depois da última quitação total,
+ * rastreáveis ou legado — pertenceAoDebitoAtual). O motor usa isto na checagem de multa/IOF adicional únicos e na
  * idempotência diária — só com as pending, pagar a multa fazia o motor recriá-la e
  * quitar o incremento de hoje fazia o catch-up reinseri-lo.
  * @param {string} cpfSql - CPF já escapado
@@ -319,26 +334,28 @@ function sqlDatasQuitacaoTotal(dbService, cpfExpr) {
 async function buscarEncargosDoDebitoAtual(dbService, cpfSql) {
     await garantirColunasQuitacao(dbService);
     const rows = await dbService.executeQuery(`
-        SELECT charge_type, amount, invoice_reference, days_overdue, status, payment_id, paid_at
+        SELECT charge_type, amount, invoice_reference, days_overdue, status, payment_id, paid_at, created_at
         FROM ${dbService.fq('billing_charges')}
-        WHERE cpf = ${cpfSql} AND (status = 'pending' OR (status = 'paid' AND payment_id IS NOT NULL))
+        WHERE cpf = ${cpfSql} AND status IN ('pending', 'paid')
     `);
     const ult = await dbService.executeQuery(`SELECT MAX(q.date) AS ultima FROM (${sqlDatasQuitacaoTotal(dbService, cpfSql)}) q`);
     return resumirEncargosDoDebito(rows, ult && ult[0] ? ult[0].ultima : null);
 }
 
 /**
- * Condição SQL (para WHERE): o CPF tem encargo do débito atual já quitado por
- * pagamento. Rotinas que apagam as pending e regeram encargos "do zero"
- * (chargesProactiveFix, Anomalia 8 do dailyAudit) não podem rodar nesses débitos —
- * cobrariam de novo o que o cliente pagou. Independe do due_date (que a Anomalia 8
- * justamente corrige) e da cascata.
+ * Condição SQL (para WHERE): o CPF tem encargo do débito atual já PAGO — por
+ * pagamento rastreável (payment_id) ou legado sem payment_id, com o mesmo critério de
+ * momentoDaQuitacao (legado sem paid_at vale pelo created_at). Rotinas que apagam as
+ * pending e regeram encargos "do zero" (chargesProactiveFix, Anomalia 8 do dailyAudit)
+ * não podem rodar nesses débitos — cobrariam de novo o que o cliente pagou.
+ * Independe do due_date (que a Anomalia 8 justamente corrige) e da cascata.
  */
 function sqlExisteEncargoPagoNoDebito(dbService, cpfExpr) {
     return `EXISTS (
         SELECT 1 FROM ${dbService.fq('billing_charges')} bq
-        WHERE bq.cpf = ${cpfExpr} AND bq.status = 'paid' AND bq.payment_id IS NOT NULL
-          AND bq.paid_at > ALL (${sqlDatasQuitacaoTotal(dbService, cpfExpr)})
+        WHERE bq.cpf = ${cpfExpr} AND bq.status = 'paid' AND CAST(bq.amount AS DECIMAL(15,2)) > 0
+          AND (CASE WHEN bq.payment_id IS NOT NULL THEN bq.paid_at ELSE COALESCE(bq.paid_at, bq.created_at) END)
+              > ALL (${sqlDatasQuitacaoTotal(dbService, cpfExpr)})
     )`;
 }
 
@@ -415,6 +432,7 @@ module.exports = {
     planejarQuitacao,
     planejarPagamento,
     pertenceAoDebitoAtual,
+    momentoDaQuitacao,
     resumirEncargosDoDebito,
     descontarEncargosJaPagos,
     garantirColunasQuitacao,

@@ -69,19 +69,25 @@ function comTabelasSinteticas(sql, tabelas) {
 
 /**
  * dbService falso sobre o Postgres real: fq → fake_x; SELECT/WITH rodam com as tabelas
- * sintéticas; ALTER (garantirColunasQuitacao) é ignorado; qualquer outra escrita falha.
+ * sintéticas; ALTER (garantirColunasQuitacao) é ignorado; qualquer outra escrita falha
+ * — ou, com `{ capturarEscritas: true }`, só é guardada em `escritas` (nunca executada).
  */
-function bancoSintetico(pg, tabelas) {
+function bancoSintetico(pg, tabelas, { capturarEscritas = false } = {}) {
     const sqls = [];
+    const escritas = [];
     return {
         sqls,
+        escritas,
         fq: (t) => `fake_${t}`,
         generateUUID: () => 'uuid-teste',
         async executeQuery(sql) {
             const q = String(sql);
             sqls.push(q);
             if (/^\s*ALTER\s+TABLE/i.test(q)) return [];
-            if (!/^\s*(SELECT|WITH)\b/i.test(q)) throw new Error(`escrita em banco sintético: ${q.trim().slice(0, 80)}`);
+            if (!/^\s*(SELECT|WITH)\b/i.test(q)) {
+                if (capturarEscritas) { escritas.push(q); return []; }
+                throw new Error(`escrita em banco sintético: ${q.trim().slice(0, 80)}`);
+            }
             return pg.executeQuery(comTabelasSinteticas(q, tabelas));
         },
     };
@@ -90,14 +96,15 @@ function bancoSintetico(pg, tabelas) {
 // Colunas usadas pelos serviços de auditoria (só as necessárias para as consultas).
 const COLUNAS = {
     users: [['cpf', 'varchar'], ['full_name', 'text'], ['balance', 'numeric'], ['role', 'varchar'],
-        ['credit_card_due_day', 'int'], ['is_blacklisted', 'boolean']],
+        ['credit_card_due_day', 'int'], ['is_blacklisted', 'boolean'], ['updated_at', 'timestamp']],
     invoices: [['id', 'varchar'], ['cpf', 'varchar'], ['status', 'varchar'], ['due_date', 'timestamp'],
         ['created_at', 'timestamp'], ['updated_at', 'timestamp'], ['valor_total', 'numeric'], ['saldo_anterior', 'numeric'],
-        ['valor_pago', 'numeric'], ['data_pagamento', 'timestamp']],
+        ['valor_pago', 'numeric'], ['data_pagamento', 'timestamp'], ['dias_atraso', 'int']],
     transactions: [['id', 'varchar'], ['cpf', 'varchar'], ['type', 'varchar'], ['amount', 'numeric'],
         ['description', 'text'], ['date', 'timestamp'], ['invoice_id', 'varchar'], ['status', 'varchar']],
     billing_charges: [['id', 'varchar'], ['cpf', 'varchar'], ['charge_type', 'varchar'], ['amount', 'numeric'],
-        ['status', 'varchar'], ['invoice_amount', 'numeric'], ['payment_id', 'varchar'], ['created_at', 'timestamp']],
+        ['status', 'varchar'], ['invoice_amount', 'numeric'], ['payment_id', 'varchar'], ['created_at', 'timestamp'],
+        ['paid_at', 'timestamp'], ['days_overdue', 'int'], ['invoice_id', 'varchar'], ['invoice_reference', 'varchar']],
 };
 
 /** Monta o mapa de tabelas com as colunas padrão. */

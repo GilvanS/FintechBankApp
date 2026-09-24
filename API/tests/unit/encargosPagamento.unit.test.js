@@ -198,8 +198,10 @@ describe('SQL compartilhado da derivação', () => {
 
     test('proteção de "regerar do zero" ancora no último pagamento TOTAL, não em due_date', () => {
         const sql = sqlExisteEncargoPagoNoDebito(db, 'i.cpf');
-        expect(sql).toMatch(/bq\.status = 'paid' AND bq\.payment_id IS NOT NULL/);
-        expect(sql).toMatch(/bq\.paid_at > ALL \(SELECT tq\.date FROM "?fintech\.transactions"? tq/);
+        // Task 4 fix 1: paga SEM payment_id (legado) também protege — sem paid_at, vale o
+        // created_at (momentoDaQuitacao).
+        expect(sql).toMatch(/bq\.status = 'paid' AND CAST\(bq\.amount AS DECIMAL\(15,2\)\) > 0/);
+        expect(sql).toMatch(/CASE WHEN bq\.payment_id IS NOT NULL THEN bq\.paid_at ELSE COALESCE\(bq\.paid_at, bq\.created_at\) END\)\s*> ALL \(SELECT tq\.date FROM "?fintech\.transactions"? tq/);
         expect(sql).toMatch(/tq\.description = 'Pagamento fatura'/);
         expect(sql).not.toMatch(/due_date/);
     });
@@ -235,9 +237,16 @@ describe('débito contínuo — âncora independente da cascata (fix 1)', () => 
         expect(pertenceAoDebitoAtual(multaA, totalEm)).toBe(false);
         expect(pertenceAoDebitoAtual(pagaNoTotal, totalEm)).toBe(false); // o próprio TOTAL
         expect(resumirEncargosDoDebito([multaA, pagaNoTotal], totalEm).existingCharges).toEqual([]);
-        // pending sempre conta; paga sem payment_id (legado) nunca conta
+        // pending sempre conta
         expect(pertenceAoDebitoAtual(pendente, totalEm)).toBe(true);
-        expect(pertenceAoDebitoAtual({ ...multaA, payment_id: null }, null)).toBe(false);
+        // Task 4 fix 1: paga sem payment_id (legado) conta pelo paid_at ou, sem ele, pelo
+        // created_at — antes nunca contava e o motor recriava a multa que o gerador deu
+        // como paga (10 CPFs com 2ª multa pending). Criada antes do TOTAL = débito encerrado.
+        const legado = { ...multaA, payment_id: null, paid_at: null, created_at: '2026-07-11 03:00:00' };
+        expect(pertenceAoDebitoAtual(legado, null)).toBe(true);
+        expect(pertenceAoDebitoAtual(legado, '2026-07-01 12:00:00')).toBe(true);
+        expect(pertenceAoDebitoAtual(legado, totalEm)).toBe(false);
+        expect(pertenceAoDebitoAtual({ ...legado, created_at: null }, null)).toBe(false);
     });
 
     test('buscarEncargosDoDebitoAtual lê as charges e a data do último TOTAL do CPF', async () => {

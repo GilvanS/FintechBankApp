@@ -24,7 +24,7 @@ const { esc: escPadrao } = require('../repositories/context');
 const { round2, TOLERANCIA_QUITACAO } = require('../utils/invoiceMath');
 const { residualEmAberto } = require('./saldoAnterior');
 const {
-    sqlPrincipalPorPagamento, garantirColunasQuitacao, DESCRICAO_PAGAMENTO_TOTAL,
+    sqlPrincipalPorPagamento, garantirColunasQuitacao, DESCRICAO_PAGAMENTO_TOTAL, separarIof,
 } = require('./encargosPagamento');
 
 const DIA = 86400000;
@@ -55,7 +55,7 @@ async function carregarDebitos(db, { cpf, esc }) {
         LEFT JOIN ${db.fq('invoices')} inv ON inv.id = pp.invoice_id
     `);
     const encargos = await db.executeQuery(`
-        SELECT cpf, id, charge_type, amount, status, created_at
+        SELECT cpf, id, charge_type, amount, status, created_at, days_overdue, invoice_amount, invoice_id
         FROM ${db.fq('billing_charges')}
         WHERE created_at IS NOT NULL ${filtro('cpf')}
     `);
@@ -89,34 +89,97 @@ function residualVencidoEm(fechadas, pagamentos, t) {
 const somaValores = (rows) => round2(rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0));
 
 /**
+ * Fatura a que o encargo se refere: pelo invoice_id; no legado (sem invoice_id), a
+ * fechada de valor_total = invoice_amount que venceu por último antes da criação dele.
+ */
+function faturaDoEncargo(c, fechadas) {
+    if (c.invoice_id) return fechadas.find((f) => f.id === c.invoice_id) || null;
+    const base = round2(parseFloat(c.invoice_amount || 0));
+    const candidatas = fechadas.filter((f) => round2(parseFloat(f.valor_total || 0)) === base);
+    const vencidas = candidatas.filter((f) => ms(f.due_date) <= ms(c.created_at));
+    return (vencidas.length ? vencidas[vencidas.length - 1] : candidatas[0]) || null;
+}
+
+/** Multa ou linha de IOF com a parte fixa (adicional 0,38%): cobrança única por atraso. */
+const encargoUnico = (c) => c.charge_type === 'multa'
+    || (c.charge_type === 'iof' && separarIof(c).fixo > TOLERANCIA_QUITACAO);
+
+/**
+ * O encargo criado depois do TOTAL conta um período DEPOIS dele? Período = vencimento
+ * da fatura + days_overdue do encargo. Se não conta (período até o TOTAL), é débito
+ * anterior ao TOTAL recriado com created_at novo (ex.: Anomalia 8b antes do filtro de
+ * residual) — cobrança indevida também, mas não é "encargo que continuou contando".
+ * Multa/IOF adicional não têm período: acusa quando o TOTAL saiu até o vencimento (não
+ * houve atraso para cobrar). Sem fatura identificável não acusa (não dá para provar).
+ * @returns {{fatura: object|null, totalNoPrazo: boolean, acusa: boolean}}
+ */
+function classificarEncargoAposTotal(c, fechadas, totalEm) {
+    const fatura = faturaDoEncargo(c, fechadas);
+    if (!fatura) return { fatura: null, totalNoPrazo: false, acusa: false };
+    const venc = ms(fatura.due_date);
+    const periodo = venc + (parseInt(c.days_overdue, 10) || 0) * DIA;
+    const totalNoPrazo = totalEm <= venc;
+    return { fatura, totalNoPrazo, acusa: periodo > totalEm || (encargoUnico(c) && totalNoPrazo) };
+}
+
+/**
  * Anomalia 8e: encargo criado DEPOIS de um pagamento TOTAL ao vivo sem que houvesse,
  * naquele instante, principal vencido em aberto (nenhuma fatura venceu desde a
- * quitação, ou a que venceu já estava paga). Um débito novo — fatura que venceu depois
- * do TOTAL e não foi paga — tem encargo próprio e NÃO é acusado. Uma linha por CPF.
+ * quitação, ou a que venceu já estava paga) E que conta um período depois do TOTAL
+ * (classificarEncargoAposTotal). Um débito novo — fatura que venceu depois do TOTAL e
+ * não foi paga — tem encargo próprio e NÃO é acusado. Uma linha por CPF, com as faturas.
  */
-async function listarEncargosAposQuitacaoTotal(db, { cpf = null, esc = escPadrao } = {}) {
+/**
+ * Todo encargo criado depois de um TOTAL ao vivo sem principal vencido em aberto
+ * naquele instante — cobrança sem dívida, venha ela de "continuou contando" (acusa) ou
+ * de débito anterior ao TOTAL recriado com created_at novo (a Anomalia 8b antes do
+ * filtro de residual). Base da 8e e da cura (scripts/cura_encargos_apos_total.cjs).
+ * @returns {Promise<Array<{cpf, fullName, encargos: Array}>>}
+ */
+async function listarEncargosSemDebitoAposTotal(db, { cpf = null, esc = escPadrao } = {}) {
     const d = await carregarDebitos(db, { cpf, esc });
-    const achados = [];
+    const porCpf = [];
     for (const [cpfAtual, encargos] of d.encargos) {
         const usuario = d.usuarios.get(cpfAtual);
         const pagamentos = d.pagamentos.get(cpfAtual) || [];
         const totais = pagamentos.filter((p) => p.total).sort((a, b) => a.quando - b.quando);
         if (!usuario || !totais.length) continue;
         const fechadas = d.fechadas.get(cpfAtual) || [];
-        const indevidos = [];
+        const lista = [];
         for (const c of encargos) {
             if (parseFloat(c.amount || 0) <= TOLERANCIA_QUITACAO) continue;
             const criadoEm = ms(c.created_at);
             const ultimoTotal = totais.filter((t) => t.quando < criadoEm).pop();
             if (!ultimoTotal || !ultimoTotal.aoVivo) continue;
             if (residualVencidoEm(fechadas, pagamentos, criadoEm) > TOLERANCIA_QUITACAO) continue;
-            indevidos.push({ ...c, quitacaoTotalEm: ultimoTotal.date });
+            const cls = classificarEncargoAposTotal(c, fechadas, ultimoTotal.quando);
+            lista.push({
+                ...c, quitacaoTotalEm: ultimoTotal.date, invoiceId: cls.fatura ? cls.fatura.id : null,
+                totalNoPrazo: cls.totalNoPrazo, acusa: cls.acusa,
+            });
         }
+        if (lista.length) porCpf.push({ cpf: cpfAtual, fullName: usuario.full_name || null, encargos: lista });
+    }
+    return porCpf;
+}
+
+async function listarEncargosAposQuitacaoTotal(db, opts = {}) {
+    const achados = [];
+    for (const { cpf: cpfAtual, fullName, encargos } of await listarEncargosSemDebitoAposTotal(db, opts)) {
+        const indevidos = encargos.filter((c) => c.acusa);
         if (!indevidos.length) continue;
         indevidos.sort((a, b) => ms(a.created_at) - ms(b.created_at));
         const pendentes = indevidos.filter((c) => c.status === 'pending');
+        const faturas = new Map();
+        for (const c of indevidos) {
+            const f = faturas.get(c.invoiceId) || { invoiceId: c.invoiceId, totalNoPrazo: c.totalNoPrazo, quantidade: 0, valor: 0 };
+            f.quantidade += 1;
+            f.valor = round2(f.valor + parseFloat(c.amount || 0));
+            faturas.set(c.invoiceId, f);
+        }
         achados.push({
-            cpf: cpfAtual, fullName: usuario.full_name || null,
+            cpf: cpfAtual, fullName,
+            faturas: [...faturas.values()],
             quitacaoTotalEm: indevidos[0].quitacaoTotalEm,
             primeiroEncargoEm: indevidos[0].created_at,
             ultimoEncargoEm: indevidos[indevidos.length - 1].created_at,
@@ -168,4 +231,7 @@ async function listarResidualParcialSemEncargo(db, { cpf = null, esc = escPadrao
     return achados;
 }
 
-module.exports = { listarEncargosAposQuitacaoTotal, listarResidualParcialSemEncargo, residualVencidoEm };
+module.exports = {
+    listarEncargosAposQuitacaoTotal, listarResidualParcialSemEncargo, residualVencidoEm,
+    classificarEncargoAposTotal, carregarDebitos, listarEncargosSemDebitoAposTotal,
+};

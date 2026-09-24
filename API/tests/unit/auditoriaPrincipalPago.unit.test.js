@@ -183,12 +183,38 @@ descrever('8e/8f — auditoriaEncargos (regra: só o TOTAL para os encargos)', (
         ...extra,
     });
 
-    test('8e: encargo criado depois do TOTAL sem fatura vencida é acusado', async () => {
+    test('8e: juros de um dia DEPOIS do TOTAL (vencimento + days_overdue > TOTAL) é acusado', async () => {
         const base = quitadoEm20(CPF);
-        base.billing_charges.push(charge('depois', 'juros_mora', 7.5, { created_at: '2026-09-22 03:00:00' }));
+        // Dia 12 de atraso de uma fechada que venceu 10/09 = 22/09, depois do TOTAL de 20/09.
+        base.billing_charges.push(charge('depois', 'juros_mora', 7.5, { created_at: '2026-09-22 03:00:00', days_overdue: 12 }));
         const [achado, ...resto] = await listarEncargosAposQuitacaoTotal(bancoSintetico(pg, tabelasPadrao(base)), { esc });
         expect(resto).toEqual([]);
         expect(achado).toMatchObject({ cpf: CPF, quantidade: 1, valor: 7.5, pendentes: 1, valorPendente: 7.5, chargeIds: ['depois'] });
+        expect(achado.faturas).toEqual([{ invoiceId: `inv-${CPF}`, totalNoPrazo: false, quantidade: 1, valor: 7.5 }]);
+    });
+
+    test('8e: débito ANTERIOR ao TOTAL recriado com created_at novo não é "continuou contando"', async () => {
+        const base = quitadoEm20(CPF);
+        // TOTAL em atraso (20/09 > venc. 10/09): multa e juros do dia 5 (15/09) são do
+        // débito que o TOTAL encerrou — regerados depois (C1), não contam período novo.
+        base.billing_charges.push(charge('multa-de-novo', 'multa', 20, { created_at: '2026-09-21 23:54:00', days_overdue: 0 }));
+        base.billing_charges.push(charge('juros-d5', 'juros_mora', 1.67, { created_at: '2026-09-21 23:54:00', days_overdue: 5 }));
+        expect(await listarEncargosAposQuitacaoTotal(bancoSintetico(pg, tabelasPadrao(base)), { esc })).toEqual([]);
+    });
+
+    test('8e: TOTAL feito até o vencimento — multa e IOF adicional depois dele são acusados', async () => {
+        const base = quitadoEm20(CPF, {});
+        base.transactions[0].date = '2026-09-08 12:00:00'; // pagou antes do vencimento (10/09)
+        base.billing_charges = [
+            charge('multa-no-prazo', 'multa', 20, { created_at: '2026-09-21 23:54:00', days_overdue: 0, invoice_id: `inv-${CPF}` }),
+            // IOF só-diário do dia do vencimento: o período (10/09) já é depois do TOTAL (08/09).
+            charge('iof-dia', 'iof', 0.08, { created_at: '2026-09-21 23:54:00', days_overdue: 0, invoice_id: `inv-${CPF}` }),
+            // Linha combinada: 0,38% de 1.000 (adicional) + diário = cobrança única.
+            charge('iof-adic', 'iof', 3.88, { created_at: '2026-09-21 23:54:00', days_overdue: 0, invoice_id: `inv-${CPF}` }),
+        ];
+        const [achado] = await listarEncargosAposQuitacaoTotal(bancoSintetico(pg, tabelasPadrao(base)), { esc });
+        expect(achado.chargeIds.sort()).toEqual(['iof-adic', 'iof-dia', 'multa-no-prazo']);
+        expect(achado.faturas[0]).toMatchObject({ totalNoPrazo: true, quantidade: 3 });
     });
 
     test('8e: débito NOVO (fatura que venceu depois do TOTAL e não foi paga) não é acusado', async () => {

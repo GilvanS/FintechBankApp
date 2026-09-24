@@ -54,6 +54,39 @@ function momentoDoFechamento(inv) {
     return fechadaPeloMotor(inv) ? new Date(inv.created_at).getTime() : new Date(inv.due_date).getTime() - 10 * DIA;
 }
 
+/**
+ * Subquery `id, cpf, residual`: o que cada FECHADA não paga (data_pagamento IS NULL)
+ * ainda deve pela MESMA regra do motor (billingValidation → closedDueByCpf): o
+ * principal pago do CPF (sqlPrincipalPorPagamento) distribuído da fechada mais antiga
+ * para a mais nova, cada uma com teto em valor_total − valor_pago (planDistribution):
+ *   residual_i = min(devido_i, max(0, Σ_{j<=i} devido_j − pago_cpf))
+ * Rotinas que (re)geram encargo numa fechada filtram `residual > TOLERANCIA_QUITACAO`:
+ * sem isso, a fatura quitada pelo TOTAL ganhava multa/IOF de novo (CPF 42194343806,
+ * 21/09 — Anomalia 8b regerou 77,42 + 14,71 numa fechada paga em 18/08).
+ * @param {object} db
+ * @param {string} [cpfSql] - CPF já escapado para filtrar
+ */
+function sqlResidualFechadas(db, cpfSql) {
+    const filtro = cpfSql ? `AND cpf = ${cpfSql}` : '';
+    return `
+        SELECT f.id, f.cpf,
+               LEAST(f.devido, GREATEST(0,
+                   SUM(f.devido) OVER (PARTITION BY f.cpf ORDER BY f.due_date, f.id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                   - COALESCE(pg.pago, 0))) AS residual
+        FROM (
+            SELECT id, cpf, due_date,
+                   GREATEST(0, CAST(valor_total AS DECIMAL(15,2)) - CAST(COALESCE(valor_pago, 0) AS DECIMAL(15,2))) AS devido
+            FROM ${db.fq('invoices')}
+            WHERE status = 'FECHADA' AND data_pagamento IS NULL ${filtro}
+        ) f
+        LEFT JOIN (
+            SELECT pp.cpf, SUM(pp.principal) AS pago
+            FROM (${sqlPrincipalPorPagamento(db, cpfSql)}) pp
+            GROUP BY pp.cpf
+        ) pg ON pg.cpf = f.cpf
+    `;
+}
+
 /** Saldo anterior para a fatura que está fechando AGORA (fechamento do invoiceEngine). */
 async function calcularSaldoAnterior(db, cpf, esc = escPadrao) {
     const fechadas = await db.executeQuery(`
@@ -117,18 +150,24 @@ async function listarSaldoAnteriorDivergente(db, { cpf = null, esc = escPadrao }
 
     const divergentes = [];
     for (const [cpfAtual, lista] of porCpf) {
-        for (let i = 1; i < lista.length; i++) {
-            const inv = lista[i];
+        for (const inv of lista) {
             // Só fechamentos do MOTOR (regressão do invoiceEngine). Histórico gerado de uma
             // vez pelo gerador antigo paga encargos junto com o principal, e a cascata de
             // quitação (só principal) não sabe separar — comparar ali dá falso positivo.
             if (!fechadaPeloMotor(inv)) continue;
-            const gravado = round2(parseFloat(inv.saldo_anterior || 0));
             const fechouEm = momentoDoFechamento(inv);
+            // "Anteriores" = as que JÁ tinham fechado quando esta fechou (momento do
+            // fechamento), não as de vencimento menor: a Anomalia 8 reescreve due_date
+            // (ex.: fechada de julho que passou a vencer em setembro) e a ordem por
+            // vencimento punha a mais antiga depois da sucessora — "a menos" falso. A
+            // cascata entre elas segue por vencimento (lista já vem ordenada assim).
+            const anteriores = lista.filter((f) => f !== inv && momentoDoFechamento(f) < fechouEm);
+            if (!anteriores.length) continue;
+            const gravado = round2(parseFloat(inv.saldo_anterior || 0));
             const pagoAteFechar = (pagosPorCpf.get(cpfAtual) || [])
                 .filter((p) => new Date(p.date).getTime() < fechouEm)
                 .reduce((s, p) => s + parseFloat(p.valor || 0), 0);
-            const devido = residualEmAberto(lista.slice(0, i), pagoAteFechar);
+            const devido = residualEmAberto(anteriores, pagoAteFechar);
             if (Math.abs(gravado - devido) <= TOLERANCIA_DIVERGENCIA) continue;
             divergentes.push({
                 invoiceId: inv.id, cpf: cpfAtual, fullName: inv.full_name || null,
@@ -149,5 +188,5 @@ async function listarSaldoAnteriorIndevido(db, opts = {}) {
 
 module.exports = {
     calcularSaldoAnterior, listarSaldoAnteriorDivergente, listarSaldoAnteriorIndevido,
-    residualEmAberto, fechadaPeloMotor, momentoDoFechamento,
+    residualEmAberto, fechadaPeloMotor, momentoDoFechamento, sqlResidualFechadas,
 };

@@ -4,6 +4,8 @@ const { toDateOnly } = require('../utils/dateUtils');
 const { computeLastPassedDueDate } = require('../repositories/usersRepo');
 const { computeNextInvoiceDueDate, INVOICE_CUTOFF_DAYS } = require('../utils/billing');
 const encargosPagamento = require('./encargosPagamento');
+const { sqlResidualFechadas } = require('./saldoAnterior');
+const { TOLERANCIA_QUITACAO } = require('../utils/invoiceMath');
 
 async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = null) {
     console.log('[Audit] Iniciando auditoria diária de anomalias...');
@@ -221,10 +223,13 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
             SELECT i.id, i.cpf, i.due_date, i.status, i.valor_total, u.full_name, u.credit_card_due_day
             FROM ${db.fq('invoices')} i
             JOIN ${db.fq('users')} u ON u.cpf = i.cpf
+            -- FECHADA já quitada pela cascata (mesma regra do motor) não ganha encargo
+            -- novo: data_pagamento é nula em toda FECHADA desde a trava de imutabilidade.
+            JOIN (${sqlResidualFechadas(db)}) res ON res.id = i.id AND res.residual > ${TOLERANCIA_QUITACAO}
             WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
               AND u.credit_card_due_day IS NOT NULL
               AND EXTRACT(DAY FROM i.due_date) != u.credit_card_due_day
-              -- Débito com encargo já QUITADO por pagamento (encargos primeiro): regerar
+              -- Débito com encargo já PAGO (encargos primeiro, ou legado sem payment_id): regerar
               -- os encargos do zero cobraria de novo o que o cliente já pagou. Âncora no
               -- último pagamento total, NÃO em i.due_date — essa data é justamente a
               -- errada aqui e, se for posterior ao pagamento, não protegeria nada.
@@ -344,7 +349,7 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
                 cpf: e.cpf,
                 name: e.fullName,
                 type: 'ENCARGO_APOS_QUITACAO_TOTAL',
-                details: `${e.quantidade} encargo(s) (R$ ${e.valor.toFixed(2)}, ${e.pendentes} ainda pending = R$ ${e.valorPendente.toFixed(2)}) criado(s) entre ${toDateOnly(e.primeiroEncargoEm)} e ${toDateOnly(e.ultimoEncargoEm)}, depois do pagamento TOTAL de ${toDateOnly(e.quitacaoTotalEm)}, sem fatura vencida em aberto. O TOTAL encerra o débito — encargo não pode continuar contando.`
+                details: `${e.quantidade} encargo(s) em ${e.faturas.length} fatura(s) (R$ ${e.valor.toFixed(2)}, ${e.pendentes} ainda pending = R$ ${e.valorPendente.toFixed(2)}) criado(s) entre ${toDateOnly(e.primeiroEncargoEm)} e ${toDateOnly(e.ultimoEncargoEm)}, depois do pagamento TOTAL de ${toDateOnly(e.quitacaoTotalEm)}, sem fatura vencida em aberto. O TOTAL encerra o débito — encargo não pode continuar contando.`
             });
         }
         for (const r of await auditoriaEncargos.listarResidualParcialSemEncargo(db)) {

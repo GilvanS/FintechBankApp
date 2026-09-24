@@ -20,7 +20,8 @@ const { runChargesProactiveFix } = require('../../services/chargesProactiveFix')
 const uti = require('../../scripts/uti_massa.cjs');
 
 const CPF = '12345678901';
-const PROTECAO = /NOT EXISTS \(\s*SELECT 1 FROM "billing_charges" bq[\s\S]*bq\.paid_at > ALL \(SELECT tq\.date FROM "transactions" tq[\s\S]*'Pagamento fatura'/;
+// Task 4 fix 1: o momento da quitação inclui o legado pago sem payment_id (created_at).
+const PROTECAO = /NOT EXISTS \(\s*SELECT 1 FROM "billing_charges" bq[\s\S]*COALESCE\(bq\.paid_at, bq\.created_at\) END\)\s*> ALL \(SELECT tq\.date FROM "transactions" tq[\s\S]*'Pagamento fatura'/;
 
 beforeEach(() => {
     mockDb.executeQuery.mockReset();
@@ -113,7 +114,9 @@ describe('UTI — não recria encargo já pago (fix 5)', () => {
         mockDb.executeQuery.mockImplementation(async (sql) => {
             if (/INSERT INTO fintech\.billing_charges/.test(sql)) inserts.push(sql);
             if (/AS ultima/.test(sql)) return [{ ultima: null }];
-            if (/FROM "billing_charges"[\s\S]*payment_id IS NOT NULL/.test(sql)) return pagas;
+            // Task 4 fix 1: a fechada ainda deve pela cascata (senão a UTI não regera nada).
+            if (/AS residual/.test(sql)) return [{ id: 'inv-1', residual: '1000.00' }];
+            if (/FROM "billing_charges"[\s\S]*status IN \('pending', 'paid'\)/.test(sql)) return pagas;
             if (/SELECT days_overdue FROM fintech\.users/.test(sql)) return [{ days_overdue: 10 }];
             return [];
         });

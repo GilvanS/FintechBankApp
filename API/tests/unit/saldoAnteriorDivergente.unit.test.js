@@ -97,6 +97,16 @@ describe('listarSaldoAnteriorDivergente — 8d nas duas direções', () => {
         expect(await listarSaldoAnteriorDivergente(db, { esc })).toEqual([]);
     });
 
+    test('due_date reescrito pela Anomalia 8: a cadeia segue o MOMENTO do fechamento, não o vencimento', async () => {
+        // X fechou em 26/07 (vencia em agosto; a Anomalia 8 reescreveu para 15/09). Y fechou
+        // em 09/08, vence 15/08 e herdou os 1.000 de X. Pela ordem de vencimento, X viria
+        // DEPOIS de Y e "deveria" herdar Y (a menos, falso) — pelo fechamento, X é a 1ª.
+        const X = { ...A, id: 'inv-x', due_date: '2026-09-15T18:00:00Z', created_at: '2026-07-26T00:55:00Z', saldo_anterior: '0' };
+        const Y = { ...A, id: 'inv-y', due_date: '2026-08-15T21:00:00Z', created_at: '2026-08-09T01:36:00Z', valor_total: '300.00', saldo_anterior: '1000.00' };
+        const db = banco({ fechadas: [Y, X] }); // como o SQL devolve: ORDER BY due_date
+        expect(await listarSaldoAnteriorDivergente(db, { esc })).toEqual([]);
+    });
+
     test('listarSaldoAnteriorIndevido (nome antigo) segue devolvendo só a direção A MAIS', async () => {
         const menos = banco({ fechadas: [A, B(0)] });
         expect(await listarSaldoAnteriorIndevido(menos, { esc })).toEqual([]);
@@ -128,7 +138,7 @@ describe('runDailyAudit — emite 8d/8e/8f', () => {
 
     test('tipos novos, detalhe da direção e tópico de Faturas/Encargos', async () => {
         auditoriaEncargos.listarEncargosAposQuitacaoTotal.mockResolvedValueOnce([{
-            cpf: '222', fullName: 'Quitou', quitacaoTotalEm: '2026-09-20T12:00:00Z', primeiroEncargoEm: '2026-09-22T03:00:00Z',
+            cpf: '222', fullName: 'Quitou', faturas: [{ invoiceId: 'f1', totalNoPrazo: false, quantidade: 2, valor: 15 }], quitacaoTotalEm: '2026-09-20T12:00:00Z', primeiroEncargoEm: '2026-09-22T03:00:00Z',
             ultimoEncargoEm: '2026-09-23T03:00:00Z', quantidade: 2, valor: 15, pendentes: 2, valorPendente: 15, chargeIds: ['x', 'y'],
         }]);
         auditoriaEncargos.listarResidualParcialSemEncargo.mockResolvedValueOnce([{
@@ -143,7 +153,7 @@ describe('runDailyAudit — emite 8d/8e/8f', () => {
         const porTipo = Object.fromEntries(r.errors.map((e) => [e.type, e]));
         expect(Object.keys(porTipo).sort()).toEqual(['ENCARGO_APOS_QUITACAO_TOTAL', 'RESIDUAL_PARCIAL_SEM_ENCARGO', 'SALDO_ANTERIOR_DIVERGENTE']);
         expect(porTipo.SALDO_ANTERIOR_DIVERGENTE.details).toMatch(/herdou a menos: R\$ 1000\.00 de principal ainda devido/);
-        expect(porTipo.ENCARGO_APOS_QUITACAO_TOTAL.details).toMatch(/2 encargo\(s\) \(R\$ 15\.00, 2 ainda pending/);
+        expect(porTipo.ENCARGO_APOS_QUITACAO_TOTAL.details).toMatch(/2 encargo\(s\) em 1 fatura\(s\) \(R\$ 15\.00, 2 ainda pending/);
         expect(porTipo.RESIDUAL_PARCIAL_SEM_ENCARGO.details).toMatch(/Residual vencido de R\$ 900\.00/);
         const topicos = telegramService.alertTopic.mock.calls.map(([topico]) => topico);
         expect(topicos).toEqual(['🔎 Auditoria · Faturas e Encargos']);
