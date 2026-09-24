@@ -160,13 +160,11 @@ async function runEngine(targetCpf = null) {
         // 5. Inserir fatura fechada na tabela invoices
         const invoiceId = uuidv4();
 
-        // Buscar saldo anterior (última fatura fechada anterior que não foi paga)
-        const prevUnpaidInvoice = (await db.executeQuery(`
-          SELECT valor_total FROM ${db.fq('invoices')}
-          WHERE cpf = ${esc(user.cpf)} AND status = 'FECHADA' AND data_pagamento IS NULL
-          ORDER BY due_date DESC LIMIT 1
-        `))[0];
-        const saldoAnterior = prevUnpaidInvoice ? parseFloat(prevUnpaidInvoice.valor_total || 0) : 0.00;
+        // Saldo anterior = o que AINDA FALTA da última fechada, pela regra de quitação do
+        // enrich (pagamentos vinculados em cascata). O filtro antigo `data_pagamento IS
+        // NULL` herdava o valor cheio de fatura já paga (a FECHADA nunca recebe
+        // data_pagamento desde a trava de imutabilidade) — ver services/saldoAnterior.js.
+        const saldoAnterior = await require('./saldoAnterior').calcularSaldoAnterior(db, user.cpf, esc);
 
         // Buscar TODAS as charges pendentes geradas APÓS a última fechada para congelar
         // nas colunas da fatura que está fechando. NÃO filtrar por invoice_reference do

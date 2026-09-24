@@ -305,6 +305,20 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
         // Regra em services/discrepanciasAudit.js (fonte única com o "Corrigir
         // Discrepâncias", que devolve o excedente ao saldo): o devido inclui o
         // saldo_anterior e desconta o que já foi devolvido.
+        // Anomalia 8d: fatura FECHADA que herdou saldo_anterior de uma fechada que JÁ
+        // estava paga quando ela fechou (bug do fechamento antigo, que olhava
+        // data_pagamento — nula em toda FECHADA). Não muda o que é cobrado (a quitação
+        // usa só valor_total), mas a tela mostra a fechada inflada (compras + saldo).
+        const { listarSaldoAnteriorIndevido } = require('./saldoAnterior');
+        for (const s of await listarSaldoAnteriorIndevido(db)) {
+            errors.push({
+                cpf: s.cpf,
+                name: s.fullName,
+                type: 'SALDO_ANTERIOR_JA_QUITADO',
+                details: `Fatura fechada ${toDateOnly(s.dueDate)} herdou saldo anterior de R$ ${s.saldoAnteriorGravado.toFixed(2)}, mas a fatura anterior já tinha só R$ ${s.saldoAnteriorCorreto.toFixed(2)} em aberto quando ela fechou (R$ ${s.diferenca.toFixed(2)} já pagos herdados como dívida). A tela mostra a fechada como R$ ${(s.valorTotal + s.saldoAnteriorGravado).toFixed(2)} em vez de R$ ${(s.valorTotal + s.saldoAnteriorCorreto).toFixed(2)}.`
+            });
+        }
+
         const { listarExcedentesFaturaFechada } = require('./discrepanciasAudit');
         for (const f of await listarExcedentesFaturaFechada(db)) {
             if (f.excedente > 0.02) {

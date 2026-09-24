@@ -34,6 +34,7 @@ const CRITERIO_POR_TIPO = {
     ENCARGOS_ORFAOS_REGERADOS: 'faturas',
     FATURA_ABERTA_MES_DIVERGENTE_CORRIGIDO: 'faturas',
     BLACKLIST_DESSINCRONIZADA: 'faturas',
+    SALDO_ANTERIOR_JA_QUITADO: 'faturas',
 };
 
 const LIMITE_MSG = 3800;        // Telegram corta em 4096 — folga para o cabeçalho
