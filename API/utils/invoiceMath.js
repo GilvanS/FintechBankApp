@@ -245,6 +245,65 @@ function calcAllCharges(principal, days) {
 }
 
 /**
+ * Ordem canônica de aplicação de um pagamento de fatura: ENCARGOS PRIMEIRO
+ * (multa, juros de mora, juros remuneratórios, IOF diário) e só depois o
+ * principal. O IOF adicional (0,38%) fica de fora de propósito: é calculado
+ * sobre as compras e não é abatido/recalculado pelo pagamento.
+ */
+const ORDEM_ALOCACAO_PAGAMENTO = Object.freeze([
+    'multa', 'jurosMora', 'jurosRemuneratorios', 'iofDiario', 'principal',
+]);
+
+/** Valor monetário saneado: string numérica aceita (NUMERIC do pg), inválido/negativo = 0. */
+function valorNaoNegativo(v) {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? round2(n) : 0;
+}
+
+/**
+ * Fonte única da regra "encargos primeiro": distribui um pagamento entre os
+ * encargos em aberto e o principal, na ordem de ORDEM_ALOCACAO_PAGAMENTO.
+ * Função pura — não sabe de fatura, status nem banco; quem chama decide o que
+ * fazer com o restante (herança para a aberta) e com o excedente.
+ *
+ * Pagamento que não quita tudo (mínimo, abaixo do mínimo, parcial) NÃO para
+ * os encargos: o restante segue devendo e continua gerando encargos até a
+ * quitação total (regra de negócio de 2026-09-23).
+ *
+ * @param {number|string} valorPago - valor do pagamento em reais
+ * @param {{ principal?: number|string, multa?: number|string, jurosMora?: number|string,
+ *           jurosRemuneratorios?: number|string, iofDiario?: number|string }} [divida]
+ *        saldos em aberto; ausente/negativo/inválido conta como 0
+ * @returns {{
+ *   aplicado: { multa: number, jurosMora: number, jurosRemuneratorios: number, iofDiario: number, principal: number },
+ *   restante: { multa: number, jurosMora: number, jurosRemuneratorios: number, iofDiario: number, principal: number },
+ *   excedente: number, quitouEncargos: boolean, quitouTudo: boolean
+ * }}
+ */
+function alocarPagamento(valorPago, divida = {}) {
+    let disponivel = valorNaoNegativo(valorPago);
+    const aplicado = {};
+    const restante = {};
+    for (const chave of ORDEM_ALOCACAO_PAGAMENTO) {
+        const devido = valorNaoNegativo(divida && divida[chave]);
+        const abate = round2(Math.min(disponivel, devido));
+        aplicado[chave] = abate;
+        restante[chave] = round2(devido - abate);
+        disponivel = round2(disponivel - abate);
+    }
+    const quitouEncargos = ORDEM_ALOCACAO_PAGAMENTO
+        .filter(chave => chave !== 'principal')
+        .every(chave => restante[chave] === 0);
+    return {
+        aplicado,
+        restante,
+        excedente: disponivel,
+        quitouEncargos,
+        quitouTudo: quitouEncargos && restante.principal === 0,
+    };
+}
+
+/**
  * Classifica o status de double-counting para um CPF: compara a soma dos
  * pagamentos (transactions.type = INVOICE_PAYMENT) com a soma de
  * invoices.valor_pago. Usada por GET /admin/audit-double-count e por
@@ -296,6 +355,9 @@ module.exports = {
     calcIofDiario,
     calcIof,
     calcAllCharges,
+    // Alocação de pagamento: encargos primeiro, depois principal
+    ORDEM_ALOCACAO_PAGAMENTO,
+    alocarPagamento,
     buildClosedInvoiceSummary,
     calcEffectiveRates,
 };
