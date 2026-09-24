@@ -3,6 +3,7 @@ const { nowDb } = require('../utils/timezone');
 const { toDateOnly } = require('../utils/dateUtils');
 const { computeLastPassedDueDate } = require('../repositories/usersRepo');
 const { computeNextInvoiceDueDate, INVOICE_CUTOFF_DAYS } = require('../utils/billing');
+const encargosPagamento = require('./encargosPagamento');
 
 async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = null) {
     console.log('[Audit] Iniciando auditoria diária de anomalias...');
@@ -11,7 +12,7 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
 
     try {
         // payment_id/paid_at de billing_charges são lidos na Anomalia 8 (encargos primeiro).
-        await require('./encargosPagamento').garantirColunasQuitacao(db);
+        await encargosPagamento.garantirColunasQuitacao(db);
         // Anomalia 1: Pagamento parcial após vencimento sem novos encargos
         // Se a fatura venceu, houve pagamento parcial (ou nenhum) e não foram gerados encargos (multa/juros)
         const closedUnpaid = await db.executeQuery(`
@@ -224,12 +225,10 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
               AND u.credit_card_due_day IS NOT NULL
               AND EXTRACT(DAY FROM i.due_date) != u.credit_card_due_day
               -- Débito com encargo já QUITADO por pagamento (encargos primeiro): regerar
-              -- os encargos do zero cobraria de novo o que o cliente já pagou.
-              AND NOT EXISTS (
-                  SELECT 1 FROM ${db.fq('billing_charges')} bq
-                  WHERE bq.cpf = i.cpf AND bq.status = 'paid' AND bq.payment_id IS NOT NULL
-                    AND bq.paid_at >= i.due_date
-              )
+              -- os encargos do zero cobraria de novo o que o cliente já pagou. Âncora no
+              -- último pagamento total, NÃO em i.due_date — essa data é justamente a
+              -- errada aqui e, se for posterior ao pagamento, não protegeria nada.
+              AND NOT ${encargosPagamento.sqlExisteEncargoPagoNoDebito(db, 'i.cpf')}
             ORDER BY i.updated_at ASC
             LIMIT 150
         `);

@@ -33,6 +33,7 @@ const {
 const { esc } = require('../repositories/context');
 const { runOrphanInstallmentFix } = require('../services/orphanInstallmentFix');
 const { registrarCura, garantirTabela } = require('../services/utiCuraLog');
+const encargosPagamento = require('../services/encargosPagamento');
 
 // Limite: MESMA fórmula canônica do botão "Recalcular Limite Disponível".
 // Dentro da API (painel) vem injetada — recalcularLimiteDisponivel do index.cjs.
@@ -216,15 +217,19 @@ async function corrigirBillingChargesDessincronizado(db, cpf, anomalia, confirm)
     const dias = Number(u?.days_overdue || 0) || Number(invoiceAlvo.dias_atraso) || 0;
     const invoiceDiasDivergente = Number(invoiceAlvo.dias_atraso) !== dias;
 
-    const novos = [
+    // Regera do zero SEM cobrar de novo o que pagamentos do débito atual já quitaram
+    // (encargos primeiro): desconta por tipo; o que zera (ex.: multa paga) não volta.
+    const pagos = await encargosPagamento.buscarEncargosPagosNoDebito(db, `'${cpf}'`);
+    const novos = encargosPagamento.descontarEncargosJaPagos([
         ['multa', calcMulta(principal)],
         ['juros_mora', calcJurosMora(principal, dias)],
         ['juros_remuneratorios', calcJurosRemuneratorios(principal, dias)],
         ['iof', calcIof(principal, dias)],
-    ];
+    ], pagos);
 
     const plano = {
-        acao: `Apagar ${anomalia.pendingCharges.length} billing_charges pending órfãos e regerar 4 do zero ancorados na fatura vigente (valor_total=${principal}, dias_atraso=${dias} via users.days_overdue)`
+        acao: `Apagar ${anomalia.pendingCharges.length} billing_charges pending órfãos e regerar ${novos.length} do zero ancorados na fatura vigente (valor_total=${principal}, dias_atraso=${dias} via users.days_overdue)`
+            + (Object.keys(pagos).length ? ` — descontado o já quitado por pagamento (${Object.entries(pagos).map(([t, v]) => `${t} R$${v}`).join(', ')})` : '')
             + (invoiceDiasDivergente ? ` — também realinha invoices.dias_atraso (estava ${invoiceAlvo.dias_atraso}, também obsoleto pós-consolidação)` : ''),
         apaga: anomalia.pendingCharges.map((c) => `${c.charge_type} R$${c.amount} (invoice_amount=${c.invoice_amount})`),
         insere: novos.map(([tipo, valor]) => `${tipo} R$${valor} (invoice_amount=${principal}, days_overdue=${dias})`),
@@ -260,13 +265,20 @@ async function corrigirInadimplenteSemEncargos(db, cpf, anomalia, confirm) {
     const invoiceAlvo = anomalia.invoicesFechadas[0];
     const principal = round2(parseFloat(invoiceAlvo.valor_total));
     const dias = Number(anomalia.userRow.days_overdue) || Number(invoiceAlvo.dias_atraso) || 0;
-    const novos = [
+    // "Sem encargo pending" pode ser porque um pagamento parcial quitou todos
+    // (encargos primeiro): desconta o que o débito atual já pagou por tipo.
+    const pagos = await encargosPagamento.buscarEncargosPagosNoDebito(db, `'${cpf}'`);
+    const novos = encargosPagamento.descontarEncargosJaPagos([
         ['multa', calcMulta(principal)],
         ['juros_mora', calcJurosMora(principal, dias)],
         ['juros_remuneratorios', calcJurosRemuneratorios(principal, dias)],
         ['iof', calcIof(principal, dias)],
-    ];
-    const plano = { acao: `Seed de 4 billing_charges (principal=${principal}, dias=${dias}) — inadimplente sem nenhum encargo`, insere: novos.map(([t, v]) => `${t} R$${v}`) };
+    ], pagos);
+    const plano = {
+        acao: `Seed de ${novos.length} billing_charges (principal=${principal}, dias=${dias}) — inadimplente sem nenhum encargo pending`
+            + (Object.keys(pagos).length ? ` — descontado o já quitado por pagamento (${Object.entries(pagos).map(([t, v]) => `${t} R$${v}`).join(', ')})` : ''),
+        insere: novos.map(([t, v]) => `${t} R$${v}`),
+    };
     if (confirm) {
         const ref = invoiceAlvo.due_date ? new Date(invoiceAlvo.due_date).toISOString().slice(0, 7) : new Date().toISOString().slice(0, 7);
         for (const [tipo, valor] of novos) {
@@ -522,7 +534,12 @@ async function runUti({
     };
 }
 
-module.exports = { runUti };
+module.exports = {
+    runUti,
+    // Expostas para teste unitário (proteção de encargo já pago por pagamento).
+    corrigirBillingChargesDessincronizado,
+    corrigirInadimplenteSemEncargos,
+};
 
 // ─── CLI ─────────────────────────────────────────────────────────────────
 

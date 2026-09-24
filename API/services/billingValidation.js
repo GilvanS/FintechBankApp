@@ -331,16 +331,11 @@ async function runBillingValidationInner(opts) {
                 // sem filtro de invoice_reference — qualquer multa/IOF pending do CPF já
                 // inibe nova inserção. Com o filtro por ref instável, cada troca de ref
                 // criava multa duplicada (77,42 em 2026-07 E em 2026-08 na massa 805).
-                // Conta também o que um pagamento parcial DESTE débito já quitou (encargos
-                // primeiro): sem isso, pagar a multa fazia o motor recriá-la amanhã.
-                const _vencYmd = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}-${String(dueDate.getDate()).padStart(2, '0')}`;
-                const _filtroDebito = encargosPagamento.sqlEncargoDoDebitoAtual(_vencYmd);
-                const existingCharges = await dbService.executeQuery(`
-                    SELECT charge_type, COALESCE(SUM(amount), 0) AS total
-                    FROM ${dbService.fq('billing_charges')}
-                    WHERE cpf = '${u.cpf}' AND ${_filtroDebito}
-                    GROUP BY charge_type
-                `);
+                // Conta também o que pagamento parcial DESTE débito contínuo já quitou
+                // (encargos primeiro) — desde o último pagamento total, sem depender da
+                // cascata: sem isso, pagar a multa fazia o motor recriá-la amanhã.
+                const _encargosDebito = await encargosPagamento.buscarEncargosDoDebitoAtual(dbService, `'${u.cpf}'`);
+                const existingCharges = _encargosDebito.existingCharges;
                 const getExisting = (type) => {
                     const row = existingCharges.find(e => e.charge_type === type);
                     return row ? parseFloat(row.total) : 0;
@@ -357,11 +352,7 @@ async function runBillingValidationInner(opts) {
                 // continuam no check global acima (uma única vez por débito).
                 // Inclui o dia já QUITADO por pagamento parcial deste débito: o incremento
                 // de hoje pago de manhã não pode ser reinserido pelo catch-up da tarde.
-                const existingDayRows = await dbService.executeQuery(`
-                    SELECT invoice_reference, charge_type, days_overdue
-                    FROM ${dbService.fq('billing_charges')}
-                    WHERE cpf = '${u.cpf}' AND ${_filtroDebito}
-                `);
+                const existingDayRows = _encargosDebito.linhas;
                 // A chave usa o invoice_reference REAL de cada linha existente (não o
                 // stableRef corrente): linhas legadas de refs antigas (ex.: 2026-09 com
                 // dias 1-27 do período de base errada) NÃO bloqueiam o incremento correto
@@ -749,6 +740,10 @@ const syncInvoiceDiasAtraso = async () => {
         // do DB (0 na pós-005) nem do vínculo por invoice_id isolado. Busca as fechadas
         // não pagas com o total por CPF, distribui da mais antiga para a mais nova e
         // zera dias das quitadas/mínimo; as demais seguem real-time.
+        // PRINCIPAL pago (INVOICE_PAYMENT − encargos que cada um quitou), igual ao
+        // motor: com o |amount| cheio, sync e motor discordavam sobre mínimo/quitada
+        // e invoices.dias_atraso ficava alternando entre 0 e o real.
+        await encargosPagamento.garantirColunasQuitacao(dbService);
         const invRowsSync = await dbService.executeQuery(`
             SELECT i.id, i.cpf, i.due_date, i.valor_total,
                    COALESCE(i.valor_pago, 0) AS valor_pago,
@@ -757,15 +752,13 @@ const syncInvoiceDiasAtraso = async () => {
                    COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
             FROM ${dbService.fq('invoices')} i
             LEFT JOIN (
-                SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
-                FROM ${dbService.fq('transactions')}
-                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+                SELECT invoice_id, SUM(principal) AS total
+                FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
                 GROUP BY invoice_id
             ) pagos ON pagos.invoice_id = i.id
             LEFT JOIN (
-                SELECT cpf, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
-                FROM ${dbService.fq('transactions')}
-                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+                SELECT cpf, SUM(principal) AS total
+                FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
                 GROUP BY cpf
             ) pagos_cpf ON pagos_cpf.cpf = i.cpf
             WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL

@@ -79,7 +79,7 @@ function montar({ charges = chargesPadrao(), principalJaPago = 0 } = {}) {
 const idsQuitados = (sql) => (sql.match(/id IN \(([^)]*)\)/) || [, ''])[1].split(',').map(s => s.trim().replace(/'/g, '')).filter(Boolean);
 
 describe('invoiceController.pay — encargos primeiro', () => {
-    beforeEach(() => jest.spyOn(console, 'log').mockImplementation(() => {}));
+    beforeEach(() => { jest.spyOn(console, 'log').mockImplementation(() => {}); jest.spyOn(console, 'warn').mockImplementation(() => {}); });
     afterEach(() => jest.restoreAllMocks());
 
     test('TOTAL: quita principal + todas as charges (inclusive o IOF adicional) com payment_id', async () => {
@@ -114,8 +114,9 @@ describe('invoiceController.pay — encargos primeiro', () => {
         expect(idsQuitados(quita).sort()).toEqual(['i2', 'i3', 'jm1', 'jm2', 'jm3', 'jr1', 'jr2', 'jr3', 'm1']);
         // Linha combinada de IOF: quita o diário (filha 'paid') e o adicional fica pending.
         const [filha] = t.achar(/INSERT INTO fintech\.billing_charges/);
-        expect(filha).toMatch(/SELECT 'i1:q:pay-1', cpf, invoice_reference, charge_type, 0\.08,[\s\S]*'paid'/);
-        expect(t.achar(/SET amount = 3\.80[\s\S]*id = 'i1'/)).toHaveLength(1);
+        expect(filha).toMatch(/WITH mae AS \(\s*UPDATE fintech\.billing_charges SET amount = amount - 0\.08\s*WHERE id = 'i1' AND status = 'pending' AND amount > 0\.08[\s\S]*SELECT mae\.id \|\| ':q:pay-1', cpf, invoice_reference, charge_type, 0\.08,[\s\S]*'paid'/);
+        // Mãe (fica com o adicional 3,80) e filha (diário 0,08) no MESMO statement.
+        expect(t.achar(/SET amount = 3\.80/)).toEqual([]);
         expect(t.achar(/credit_card_available_limit = 3100\.00/)).toHaveLength(1);
         expect(t.achar(/SET account_status = 'adimplente', days_overdue = 0/)).toHaveLength(1);
         expect(t.achar(/(UPDATE|INSERT INTO|DELETE FROM) fintech\.invoices/)).toEqual([]);
@@ -143,8 +144,7 @@ describe('invoiceController.pay — encargos primeiro', () => {
         const [quita] = t.achar(/SET status = 'paid'/);
         expect(idsQuitados(quita).sort()).toEqual(['jm1', 'jm2', 'jm3', 'jr1', 'm1']);
         // jr2 (5,13) coberto em 3,88: filha 'paid' + mãe pending com 1,25.
-        expect(t.achar(/SELECT 'jr2:q:pay-1', [\s\S]*3\.88,/)).toHaveLength(1);
-        expect(t.achar(/SET amount = 1\.25[\s\S]*id = 'jr2'/)).toHaveLength(1);
+        expect(t.achar(/amount = amount - 3\.88\s*WHERE id = 'jr2' AND status = 'pending' AND amount > 3\.88[\s\S]*SELECT mae\.id \|\| ':q:pay-1', [\s\S]*3\.88,/)).toHaveLength(1);
         expect(t.achar(/credit_card_available_limit = 3000\.00/)).toHaveLength(1);
         expect(t.achar(/SET account_status = 'adimplente'/)).toEqual([]);
     });
@@ -180,7 +180,7 @@ describe('invoiceController.pay — encargos primeiro', () => {
         expect(body.message).toBe('Fatura paga com sucesso.');
         const [quita] = t.achar(/SET status = 'paid'/);
         expect(idsQuitados(quita)).not.toContain('i1');
-        expect(t.achar(/SET amount = 3\.80[\s\S]*id = 'i1'/)).toHaveLength(1);
+        expect(t.achar(/amount = amount - 0\.08\s*WHERE id = 'i1'/)).toHaveLength(1);
         expect(t.achar(/credit_card_available_limit = 4000\.00/)).toHaveLength(1);
     });
 

@@ -10,8 +10,13 @@ const {
     montarDividaEncargos,
     planejarQuitacao,
     planejarPagamento,
-    sqlEncargoDoDebitoAtual,
     sqlPrincipalPorPagamento,
+    sqlExisteEncargoPagoNoDebito,
+    pertenceAoDebitoAtual,
+    resumirEncargosDoDebito,
+    descontarEncargosJaPagos,
+    buscarEncargosDoDebitoAtual,
+    gravarQuitacao,
 } = require('../../services/encargosPagamento');
 
 // Débito de referência: fatura de R$ 1.000,00, 3 dias de atraso, gravado como o motor
@@ -176,10 +181,116 @@ describe('SQL compartilhado da derivação', () => {
         expect(sql).toMatch(/t\.cpf = '12345678901'/);
     });
 
-    test('filtro do débito atual inclui o que foi quitado depois do vencimento', () => {
-        expect(sqlEncargoDoDebitoAtual('2026-07-10'))
-            .toBe("(status = 'pending' OR (status = 'paid' AND payment_id IS NOT NULL AND paid_at >= '2026-07-10'))");
-        // Entrada fora do formato não entra no SQL.
-        expect(sqlEncargoDoDebitoAtual("2026-07-10' OR 1=1 --")).toBe("status = 'pending'");
+    test('proteção de "regerar do zero" ancora no último pagamento TOTAL, não em due_date', () => {
+        const sql = sqlExisteEncargoPagoNoDebito(db, 'i.cpf');
+        expect(sql).toMatch(/bq\.status = 'paid' AND bq\.payment_id IS NOT NULL/);
+        expect(sql).toMatch(/bq\.paid_at > ALL \(SELECT tq\.date FROM "?fintech\.transactions"? tq/);
+        expect(sql).toMatch(/tq\.description = 'Pagamento fatura'/);
+        expect(sql).not.toMatch(/due_date/);
+    });
+});
+
+// ── Fix round 1 ───────────────────────────────────────────────────────────────
+
+describe('débito contínuo — âncora independente da cascata (fix 1)', () => {
+    // Débito contínuo: A vence 10/07, B vence 10/08. Parcial em 20/07 quita a multa de A
+    // (e parte do principal); parcial em 20/08 termina o principal de A (a cascata passa a
+    // apontar para B). Nenhum pagamento TOTAL ("Pagamento fatura") no meio.
+    const multaA = { charge_type: 'multa', amount: '20.00', invoice_reference: '2026-07', days_overdue: 1, status: 'paid', payment_id: 'pay-2007', paid_at: '2026-07-20 10:00:00' };
+    const jurosHoje = { charge_type: 'juros_mora', amount: '0.30', invoice_reference: '2026-07', days_overdue: 45, status: 'paid', payment_id: 'pay-2408', paid_at: '2026-08-24 09:00:00' };
+    const pendente = { charge_type: 'juros_remuneratorios', amount: '4.00', invoice_reference: '2026-07', days_overdue: 45, status: 'pending' };
+
+    test('multa paga por parcial segue contando depois que a cascata quita A (sem 2ª multa em B)', () => {
+        const r = resumirEncargosDoDebito([multaA, jurosHoje, pendente], null);
+        expect(r.existingCharges).toEqual(expect.arrayContaining([{ charge_type: 'multa', total: 20 }]));
+        // idempotência diária também enxerga o dia já pago
+        expect(r.linhas.map(l => `${l.charge_type}|${l.days_overdue}`)).toContain('juros_mora|45');
+    });
+
+    test('âncora antiga (vencimento da fechada mais antiga devendo) perderia a multa — a nova não', () => {
+        // Com a âncora 10/08 (B), paid_at 20/07 < 10/08 tirava a multa do filtro.
+        expect(new Date(multaA.paid_at) < new Date('2026-08-10')).toBe(true);
+        expect(pertenceAoDebitoAtual(multaA, null)).toBe(true);
+        expect(pertenceAoDebitoAtual(multaA, '2026-06-15 12:00:00')).toBe(true);
+    });
+
+    test('depois de um pagamento TOTAL começa débito novo: multa antiga não inibe a nova', () => {
+        const totalEm = '2026-09-25 14:00:00';
+        const pagaNoTotal = { ...multaA, payment_id: 'pay-total', paid_at: totalEm };
+        expect(pertenceAoDebitoAtual(multaA, totalEm)).toBe(false);
+        expect(pertenceAoDebitoAtual(pagaNoTotal, totalEm)).toBe(false); // o próprio TOTAL
+        expect(resumirEncargosDoDebito([multaA, pagaNoTotal], totalEm).existingCharges).toEqual([]);
+        // pending sempre conta; paga sem payment_id (legado) nunca conta
+        expect(pertenceAoDebitoAtual(pendente, totalEm)).toBe(true);
+        expect(pertenceAoDebitoAtual({ ...multaA, payment_id: null }, null)).toBe(false);
+    });
+
+    test('buscarEncargosDoDebitoAtual lê as charges e a data do último TOTAL do CPF', async () => {
+        const sqls = [];
+        const dbFake = {
+            fq: t => `fintech.${t}`,
+            executeQuery: jest.fn(async (sql) => {
+                sqls.push(sql);
+                if (/AS ultima/.test(sql)) return [{ ultima: '2026-06-01 08:00:00' }];
+                if (/FROM fintech\.billing_charges/.test(sql)) return [multaA, pendente];
+                return [];
+            }),
+        };
+        const r = await buscarEncargosDoDebitoAtual(dbFake, "'12345678901'");
+        expect(r.existingCharges).toEqual([{ charge_type: 'multa', total: 20 }, { charge_type: 'juros_remuneratorios', total: 4 }]);
+        expect(sqls.find(s => /AS ultima/.test(s))).toMatch(/tq\.cpf = '12345678901'[\s\S]*'Pagamento fatura'/);
+    });
+});
+
+describe('gravarQuitacao — divisão atômica (fix 3)', () => {
+    const montarDb = (respostas = {}) => {
+        const sqls = [];
+        return {
+            sqls,
+            fq: t => `fintech.${t}`,
+            executeQuery: jest.fn(async (sql) => {
+                sqls.push(sql);
+                if (/WITH mae AS/.test(sql)) return respostas.split || [];
+                if (/SET status = 'paid'/.test(sql)) return respostas.inteiras || [];
+                return [];
+            }),
+        };
+    };
+    const esc = v => `'${v}'`;
+
+    test('mãe e filha num ÚNICO statement, com guarda de pending e de saldo suficiente', async () => {
+        const db = montarDb({ split: [{ id: 'jr2:q:pay-1', amount: '3.88' }] });
+        const r = await gravarQuitacao(db, esc, { quitacao: { quitarInteiras: [], dividir: [{ id: 'jr2', pago: 3.88, resta: 1.25 }], totalQuitado: 3.88 }, paymentId: 'pay-1', paidAt: '2026-07-20 10:00:00' });
+        expect(db.sqls).toHaveLength(1);
+        const [sql] = db.sqls;
+        expect(sql).toMatch(/WITH mae AS \(\s*UPDATE fintech\.billing_charges SET amount = amount - 3\.88/);
+        expect(sql).toMatch(/WHERE id = 'jr2' AND status = 'pending' AND amount > 3\.88/);
+        expect(sql).toMatch(/INSERT INTO fintech\.billing_charges[\s\S]*SELECT mae\.id \|\| ':q:pay-1'[\s\S]*FROM mae/);
+        expect(r.quitado).toBe(3.88);
+    });
+
+    test('se a mãe já mudou (outro pagamento/processo), nada é gravado e o desvio é logado', async () => {
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        const db = montarDb({ split: [] });
+        const r = await gravarQuitacao(db, esc, { quitacao: { quitarInteiras: [], dividir: [{ id: 'jr2', pago: 3.88, resta: 1.25 }], totalQuitado: 3.88 }, paymentId: 'pay-2', paidAt: 'x' });
+        expect(r.quitado).toBe(0);
+        expect(warn).toHaveBeenCalled();
+        warn.mockRestore();
+    });
+
+    test('quitação inteira devolve o que realmente saiu de pending', async () => {
+        const db = montarDb({ inteiras: [{ id: 'm1', amount: '20.00' }, { id: 'jm1', amount: '0.33' }] });
+        const r = await gravarQuitacao(db, esc, { quitacao: { quitarInteiras: ['m1', 'jm1'], dividir: [], totalQuitado: 20.33 }, paymentId: 'pay-1', paidAt: 'x' });
+        expect(db.sqls[0]).toMatch(/RETURNING id, amount/);
+        expect(r.quitado).toBe(20.33);
+    });
+});
+
+describe('descontarEncargosJaPagos — regerar sem cobrar de novo (fix 5)', () => {
+    test('tipo totalmente pago não volta; parcialmente pago volta só a diferença', () => {
+        const novos = [['multa', 20], ['juros_mora', 1.5], ['juros_remuneratorios', 23.09], ['iof', 4.17]];
+        expect(descontarEncargosJaPagos(novos, { multa: 20, juros_mora: 0.99, iof: 0.24 }))
+            .toEqual([['juros_mora', 0.51], ['juros_remuneratorios', 23.09], ['iof', 3.93]]);
+        expect(descontarEncargosJaPagos(novos, {})).toEqual(novos);
     });
 });

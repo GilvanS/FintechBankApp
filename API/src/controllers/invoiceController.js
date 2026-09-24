@@ -1045,7 +1045,8 @@ module.exports = function createInvoiceController(deps) {
             invoices: closedDebt?.invoices || [],
             payAmount,
             dateIso: paidAtTotal,
-            description: 'Pagamento fatura'
+            // Marca o fim do débito contínuo (encargosPagamento.pertenceAoDebitoAtual).
+            description: encargosPagamento.DESCRICAO_PAGAMENTO_TOTAL
         });
         // — PAGAMENTO TOTAL (principal + TODAS as pending): PARA os encargos e os dias
         // de atraso — todas as charges lidas acima viram 'paid' com payment_id.

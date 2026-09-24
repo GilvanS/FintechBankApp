@@ -23,6 +23,7 @@
  * por grupo (cpf, valor) no primeiro fix daquele grupo, nunca duplicados.
  */
 const nowDb = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+const encargosPagamento = require('./encargosPagamento');
 const round2 = n => Math.round(n * 100) / 100;
 
 /**
@@ -41,7 +42,7 @@ async function runChargesProactiveFix(dbService, { cpfFilter = null, limit = 150
     const filterCpf = allowed ? cpfFilter.replace(/\D/g, '') : null;
     const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 150;
     // payment_id/paid_at são lidos no filtro abaixo (script standalone também chama aqui).
-    await require('./encargosPagamento').garantirColunasQuitacao(dbService);
+    await encargosPagamento.garantirColunasQuitacao(dbService);
 
     // bc_own: charges JÁ vinculados a ESTA invoice por id (correlação forte).
     // bc_legacy: existe ALGO relacionado por valor, mesmo sem invoice_id ainda
@@ -69,13 +70,11 @@ async function runChargesProactiveFix(dbService, { cpfFilter = null, limit = 150
               WHERE bc2.status = 'pending'
                 AND (bc2.invoice_id = i.id OR (bc2.invoice_id IS NULL AND bc2.cpf = i.cpf AND bc2.invoice_amount = i.valor_total))
           )
-          -- Débito com encargo já QUITADO por pagamento depois do vencimento (encargos
-          -- primeiro): regerar "do zero" cobraria de novo a multa/juros já pagos.
-          AND NOT EXISTS (
-              SELECT 1 FROM ${dbService.fq('billing_charges')} bq
-              WHERE bq.cpf = i.cpf AND bq.status = 'paid' AND bq.payment_id IS NOT NULL
-                AND bq.paid_at >= i.due_date
-          )
+          -- Débito com encargo já QUITADO por pagamento (encargos primeiro): regerar
+          -- "do zero" cobraria de novo a multa/juros já pagos. Âncora no último
+          -- pagamento total (não em i.due_date: ABERTA vence no futuro e a Anomalia 8
+          -- corrige due_date errado — nos dois casos a proteção sumiria).
+          AND NOT ${encargosPagamento.sqlExisteEncargoPagoNoDebito(dbService, 'i.cpf')}
     `;
     if (filterCpf) sql += ` AND i.cpf = '${filterCpf}'`;
     sql += ` ORDER BY i.updated_at ASC LIMIT ${safeLimit}`;

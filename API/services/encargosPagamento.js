@@ -218,26 +218,147 @@ async function buscarEncargosDoCpf(dbService, esc, cpf) {
 /** Grava a quitação planejada, amarrada à transação INVOICE_PAYMENT `paymentId`. */
 async function gravarQuitacao(dbService, esc, { quitacao, paymentId, paidAt }) {
     const bc = dbService.fq('billing_charges');
+    let quitado = 0;
     if (quitacao.quitarInteiras.length) {
-        await dbService.executeQuery(`
+        const rows = await dbService.executeQuery(`
             UPDATE ${bc}
             SET status = 'paid', paid_at = ${esc(paidAt)}, payment_id = ${esc(paymentId)}
             WHERE status = 'pending' AND id IN (${quitacao.quitarInteiras.map(id => esc(id)).join(', ')})
+            RETURNING id, amount
         `);
+        quitado = round2((rows || []).reduce((s, r) => s + valor(r.amount), 0));
     }
     for (const d of quitacao.dividir) {
-        const idFilha = `${d.id}${SUFIXO_QUITACAO}${paymentId}`;
-        await dbService.executeQuery(`
+        // UM statement (atômico): a mãe só perde `pago` se ainda estiver pending e
+        // tiver mais que isso, e a filha só nasce da linha que o UPDATE devolveu. Em
+        // dois passos, falha entre eles cobrava em dobro (filha paga + mãe cheia) e
+        // dois pagamentos simultâneos podiam gerar filhas somando mais que a charge.
+        const pago = d.pago.toFixed(2);
+        const rows = await dbService.executeQuery(`
+            WITH mae AS (
+                UPDATE ${bc} SET amount = amount - ${pago}
+                WHERE id = ${esc(d.id)} AND status = 'pending' AND amount > ${pago}
+                RETURNING id, cpf, invoice_reference, charge_type, days_overdue, invoice_amount, invoice_id, created_at
+            )
             INSERT INTO ${bc}
             (id, cpf, invoice_reference, charge_type, amount, days_overdue, invoice_amount, invoice_id, created_at, status, paid_at, payment_id)
-            SELECT ${esc(idFilha)}, cpf, invoice_reference, charge_type, ${d.pago.toFixed(2)}, days_overdue, invoice_amount, invoice_id, created_at, 'paid', ${esc(paidAt)}, ${esc(paymentId)}
-            FROM ${bc} WHERE id = ${esc(d.id)} AND status = 'pending'
+            SELECT mae.id || ${esc(SUFIXO_QUITACAO + paymentId)}, cpf, invoice_reference, charge_type, ${pago}, days_overdue, invoice_amount, invoice_id, created_at, 'paid', ${esc(paidAt)}, ${esc(paymentId)}
+            FROM mae
+            RETURNING id, amount
         `);
-        await dbService.executeQuery(`
-            UPDATE ${bc} SET amount = ${d.resta.toFixed(2)}
-            WHERE id = ${esc(d.id)} AND status = 'pending'
-        `);
+        quitado = round2(quitado + (rows || []).reduce((s, r) => s + valor(r.amount), 0));
     }
+    if (Math.abs(quitado - quitacao.totalQuitado) > 0.005) {
+        // Outro processo mexeu nas charges entre a leitura e a escrita: vale o que foi
+        // gravado (a derivação conta a diferença como principal — lado do cliente).
+        console.warn(`[encargosPagamento] pagamento ${paymentId}: planejado R$ ${quitacao.totalQuitado.toFixed(2)} de encargos, gravado R$ ${quitado.toFixed(2)}.`);
+    }
+    return { quitado };
+}
+
+// ── Débito contínuo: o que já foi quitado dele ────────────────────────────────
+
+/**
+ * Descrição da transação que QUITA o débito (branch de pagamento total da rota pay,
+ * cardRepo e gerador de massa; tipoPelaDescricao a lê como TOTAL). Depois dela
+ * começa um débito novo — com multa própria.
+ */
+const DESCRICAO_PAGAMENTO_TOTAL = 'Pagamento fatura';
+
+/**
+ * Charge pertence ao débito contínuo atual? Pending sempre; quitada por pagamento
+ * (payment_id) só se foi paga DEPOIS do último pagamento que quitou tudo. Âncora
+ * que não depende da cascata: ancorar no vencimento da fechada mais antiga que ainda
+ * deve fazia a multa paga "sumir" quando um parcial quitava a 1ª fechada do débito
+ * (A→B) e o motor cobrava uma 2ª multa sobre B.
+ * @param {{status:string, payment_id?:string|null, paid_at?:any}} row
+ * @param {Date|string|null} ultimaQuitacaoTotal - data do último DESCRICAO_PAGAMENTO_TOTAL
+ */
+function pertenceAoDebitoAtual(row, ultimaQuitacaoTotal) {
+    if (!row) return false;
+    if (row.status === 'pending') return true;
+    if (row.status !== 'paid' || !row.payment_id || !row.paid_at) return false;
+    const pagoEm = new Date(row.paid_at).getTime();
+    if (!Number.isFinite(pagoEm)) return false;
+    const corte = ultimaQuitacaoTotal ? new Date(ultimaQuitacaoTotal).getTime() : NaN;
+    return !Number.isFinite(corte) || pagoEm > corte;
+}
+
+/** Totais por tipo + linhas do débito atual (entrada do motor diário). */
+function resumirEncargosDoDebito(rows, ultimaQuitacaoTotal) {
+    const linhas = (rows || []).filter(r => pertenceAoDebitoAtual(r, ultimaQuitacaoTotal));
+    const porTipo = new Map();
+    for (const r of linhas) porTipo.set(r.charge_type, round2((porTipo.get(r.charge_type) || 0) + valor(r.amount)));
+    return {
+        existingCharges: [...porTipo].map(([charge_type, total]) => ({ charge_type, total })),
+        linhas,
+    };
+}
+
+/**
+ * Subquery: datas dos pagamentos que quitaram o débito do CPF. Usada como
+ * `paid_at > ALL (...)` (conjunto vazio = nenhum TOTAL ainda = tudo conta).
+ */
+function sqlDatasQuitacaoTotal(dbService, cpfExpr) {
+    return `SELECT tq.date FROM ${dbService.fq('transactions')} tq
+        WHERE tq.cpf = ${cpfExpr} AND tq.type = 'INVOICE_PAYMENT'
+          AND tq.description = '${DESCRICAO_PAGAMENTO_TOTAL}' AND tq.date IS NOT NULL`;
+}
+
+/**
+ * Charges do débito atual do CPF (pending + quitadas por pagamento depois da última
+ * quitação total). O motor usa isto na checagem de multa/IOF adicional únicos e na
+ * idempotência diária — só com as pending, pagar a multa fazia o motor recriá-la e
+ * quitar o incremento de hoje fazia o catch-up reinseri-lo.
+ * @param {string} cpfSql - CPF já escapado
+ */
+async function buscarEncargosDoDebitoAtual(dbService, cpfSql) {
+    await garantirColunasQuitacao(dbService);
+    const rows = await dbService.executeQuery(`
+        SELECT charge_type, amount, invoice_reference, days_overdue, status, payment_id, paid_at
+        FROM ${dbService.fq('billing_charges')}
+        WHERE cpf = ${cpfSql} AND (status = 'pending' OR (status = 'paid' AND payment_id IS NOT NULL))
+    `);
+    const ult = await dbService.executeQuery(`SELECT MAX(q.date) AS ultima FROM (${sqlDatasQuitacaoTotal(dbService, cpfSql)}) q`);
+    return resumirEncargosDoDebito(rows, ult && ult[0] ? ult[0].ultima : null);
+}
+
+/**
+ * Condição SQL (para WHERE): o CPF tem encargo do débito atual já quitado por
+ * pagamento. Rotinas que apagam as pending e regeram encargos "do zero"
+ * (chargesProactiveFix, Anomalia 8 do dailyAudit) não podem rodar nesses débitos —
+ * cobrariam de novo o que o cliente pagou. Independe do due_date (que a Anomalia 8
+ * justamente corrige) e da cascata.
+ */
+function sqlExisteEncargoPagoNoDebito(dbService, cpfExpr) {
+    return `EXISTS (
+        SELECT 1 FROM ${dbService.fq('billing_charges')} bq
+        WHERE bq.cpf = ${cpfExpr} AND bq.status = 'paid' AND bq.payment_id IS NOT NULL
+          AND bq.paid_at > ALL (${sqlDatasQuitacaoTotal(dbService, cpfExpr)})
+    )`;
+}
+
+/** Quanto do débito atual já foi quitado por pagamento, por charge_type. */
+async function buscarEncargosPagosNoDebito(dbService, cpfSql) {
+    const { linhas } = await buscarEncargosDoDebitoAtual(dbService, cpfSql);
+    const pagos = {};
+    for (const r of linhas) {
+        if (r.status !== 'paid') continue;
+        pagos[r.charge_type] = round2((pagos[r.charge_type] || 0) + valor(r.amount));
+    }
+    return pagos;
+}
+
+/**
+ * Regerar encargos "do zero" sem cobrar de novo o que já foi pago: desconta de cada
+ * tipo o que pagamentos do débito atual já quitaram; o que zerar não é recriado.
+ * @param {Array<[string, number]>} novos - [charge_type, valor calculado]
+ * @param {Object<string, number>} pagos - saída de buscarEncargosPagosNoDebito
+ */
+function descontarEncargosJaPagos(novos, pagos = {}) {
+    return (novos || [])
+        .map(([tipo, v]) => [tipo, round2(Math.max(0, valor(v) - valor(pagos && pagos[tipo])))])
+        .filter(([, v]) => v > 0.005);
 }
 
 // ── SQL compartilhado (derivação da quitação) ─────────────────────────────────
@@ -267,30 +388,24 @@ function sqlPrincipalPorPagamento(dbService, cpfSql) {
     `;
 }
 
-/**
- * Filtro de billing_charges "do débito atual" para o motor: pending OU quitadas por
- * pagamento feito depois do vencimento da fechada mais antiga ainda devendo. Sem as
- * quitadas, pagar a multa (cobrança única) fazia o motor recriá-la no dia seguinte e
- * quitar o incremento de hoje fazia o motor reinseri-lo. Pagamento feito ANTES desse
- * vencimento pertence a um débito anterior (o TOTAL quita todas as fechadas).
- * @param {string} vencimentoYmd - 'YYYY-MM-DD'
- */
-function sqlEncargoDoDebitoAtual(vencimentoYmd) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(vencimentoYmd))) return `status = 'pending'`;
-    return `(status = 'pending' OR (status = 'paid' AND payment_id IS NOT NULL AND paid_at >= '${vencimentoYmd}'))`;
-}
-
 module.exports = {
     CHAVE_POR_CHARGE_TYPE,
     SUFIXO_QUITACAO,
+    DESCRICAO_PAGAMENTO_TOTAL,
     idMaeDaQuitacao,
     separarIof,
     montarDividaEncargos,
     planejarQuitacao,
     planejarPagamento,
+    pertenceAoDebitoAtual,
+    resumirEncargosDoDebito,
+    descontarEncargosJaPagos,
     garantirColunasQuitacao,
     buscarEncargosDoCpf,
     gravarQuitacao,
+    buscarEncargosDoDebitoAtual,
+    buscarEncargosPagosNoDebito,
     sqlPrincipalPorPagamento,
-    sqlEncargoDoDebitoAtual,
+    sqlDatasQuitacaoTotal,
+    sqlExisteEncargoPagoNoDebito,
 };
