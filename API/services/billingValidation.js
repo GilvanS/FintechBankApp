@@ -4,7 +4,7 @@
 const DatabaseFactory = require('../services/database/DatabaseFactory');
 const dbService = DatabaseFactory.createDatabaseService();
 const notificationsRepo = require('../repositories/notificationsRepo');
-const { planDistribution } = require('../utils/invoiceMath');
+const { planDistribution, TOLERANCIA_QUITACAO } = require('../utils/invoiceMath');
 const encargosPagamento = require('./encargosPagamento');
 
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
@@ -174,7 +174,7 @@ async function runBillingValidationInner(opts) {
         // O `continue` precisa vir ANTES do has(): sem ele, a fatura quitada (mais antiga,
         // por causa do ORDER BY ASC) ocuparia o slot do CPF e mascararia uma fatura
         // seguinte legitimamente em aberto.
-        if (residual <= 0.005) continue;
+        if (residual <= TOLERANCIA_QUITACAO) continue;
         if (!closedDueByCpf.has(row.cpf)) {
             closedDueByCpf.set(row.cpf, {
                 dueDate: row.due_date,
@@ -680,7 +680,7 @@ async function runBillingValidationInner(opts) {
                     : parseFloat(row.valor_pago || 0));
             const residual = Math.max(0, valorTotal - pago);
             const pagMin = pago >= Math.max(valorTotal * 0.10, 10) - 0.01;
-            if (residual <= 0.005 || pagMin) _zeroIds.add(row.id);
+            if (residual <= TOLERANCIA_QUITACAO || pagMin) _zeroIds.add(row.id);
         }
         if (_zeroIds.size) {
             await dbService.executeQuery(`
@@ -789,7 +789,7 @@ const syncInvoiceDiasAtraso = async () => {
                     : parseFloat(row.valor_pago || 0));
             const residual = Math.max(0, valorTotal - pago);
             const pagMin = pago >= Math.max(valorTotal * 0.10, 10) - 0.01;
-            if (residual <= 0.005 || pagMin) _zeroIdsSync.add(row.id);
+            if (residual <= TOLERANCIA_QUITACAO || pagMin) _zeroIdsSync.add(row.id);
         }
         if (_zeroIdsSync.size) {
             await dbService.executeQuery(`

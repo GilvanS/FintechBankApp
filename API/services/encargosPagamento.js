@@ -19,7 +19,7 @@
  * fixo (adicional/câmbio) é calculado sobre as compras, não é abatido pela ordem e só
  * sai de 'pending' no pagamento TOTAL (separarIof).
  */
-const { round2, calcIofDiario, alocarPagamento, ORDEM_ALOCACAO_PAGAMENTO } = require('../utils/invoiceMath');
+const { round2, calcIofDiario, alocarPagamento, ORDEM_ALOCACAO_PAGAMENTO, TOLERANCIA_QUITACAO } = require('../utils/invoiceMath');
 
 // charge_type do banco → chave de alocarPagamento. Mapa EXPLÍCITO de propósito:
 // alocarPagamento trata chave ausente como dívida 0 sem aviso, então tipo com nome
@@ -34,7 +34,9 @@ const CHAVE_POR_CHARGE_TYPE = Object.freeze({
 
 const ENCARGOS_NA_ORDEM = ORDEM_ALOCACAO_PAGAMENTO.filter(chave => chave !== 'principal');
 const SUFIXO_QUITACAO = ':q:';
-const TOLERANCIA = 0.01;
+// Só para reconhecer a linha de IOF só-diário (arredondamento do motor). A decisão
+// TOTAL / principal quitado usa TOLERANCIA_QUITACAO — a mesma do motor diário.
+const TOLERANCIA_IOF = 0.01;
 
 const valor = v => {
     const n = Number(v);
@@ -64,7 +66,7 @@ function separarIof(row, jaQuitado = 0) {
     const base = valor(row && row.invoice_amount);
     const dias = Math.max(0, parseInt(row && row.days_overdue, 10) || 0);
     const umDia = calcIofDiario(base, 1);
-    const soDiario = umDia > 0 && Math.abs(original - umDia) <= TOLERANCIA;
+    const soDiario = umDia > 0 && Math.abs(original - umDia) <= TOLERANCIA_IOF;
     const diarioOriginal = soDiario ? original : Math.min(original, calcIofDiario(base, dias));
     const diario = round2(Math.min(amount, Math.max(0, diarioOriginal - quitado)));
     return { diario, fixo: round2(amount - diario) };
@@ -160,7 +162,9 @@ function planejarPagamento(payAmount, principalDevido, encargos) {
     const pago = valor(payAmount);
     const principal = valor(principalDevido);
     const totalDevido = round2(principal + encargos.total);
-    const isTotal = pago >= totalDevido - TOLERANCIA;
+    // Mesma tolerância do motor (TOLERANCIA_QUITACAO): Total − R$ 0,01 NÃO é TOTAL —
+    // senão a rota encerrava o débito e o motor, vendo 0,01 devendo, criava 2ª multa.
+    const isTotal = pago >= totalDevido - TOLERANCIA_QUITACAO;
     const alocacao = alocarPagamento(pago, { ...encargos.divida, principal });
     if (isTotal) {
         return {
@@ -175,7 +179,7 @@ function planejarPagamento(payAmount, principalDevido, encargos) {
     const quitacao = planejarQuitacao(encargos.linhas, alocacao.aplicado);
     return {
         isTotal,
-        principalQuitado: alocacao.restante.principal <= TOLERANCIA,
+        principalQuitado: alocacao.restante.principal <= TOLERANCIA_QUITACAO,
         alocacao,
         principalAplicado: alocacao.aplicado.principal,
         encargosQuitados: quitacao.totalQuitado,

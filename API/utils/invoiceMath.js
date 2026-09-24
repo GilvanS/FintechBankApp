@@ -18,6 +18,15 @@ function calcEffectiveRates(rate, installments) {
 
 const round2 = n => Math.round(n * 100) / 100;
 
+/**
+ * Resíduo máximo (R$) para uma dívida contar como QUITADA. Fonte única entre a rota
+ * de pagamento (TOTAL / principal quitado) e o motor diário (fatura sai do débito):
+ * com tolerâncias diferentes, pagar Total − R$ 0,01 era TOTAL na rota (charges pagas,
+ * débito encerrado) e dívida de 0,01 no motor — que criava 2ª multa e 2º IOF adicional.
+ * 1 centavo a menos é pagamento parcial/mínimo e continua devendo 0,01.
+ */
+const TOLERANCIA_QUITACAO = 0.005;
+
 // Compras do ciclo + saldo anterior + encargos consolidados no fechamento.
 const INVOICE_GROSS_FIELDS = [
     'valor_total',
@@ -335,6 +344,7 @@ function classifyDoubleCount({ paymentTotal, invoiceTotalPago, invoiceRows, hasP
 
 module.exports = {
     round2,
+    TOLERANCIA_QUITACAO,
     classifyDoubleCount,
     INVOICE_GROSS_FIELDS,
     computeInvoiceGross,

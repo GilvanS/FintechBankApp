@@ -78,7 +78,7 @@ const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequeste
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate, computeCutoffDate, INVOICE_CUTOFF_DAYS } = require('./utils/billing');
 const cardEngine = require('./utils/cardEngine');
-const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates, classifyDoubleCount } = require('./utils/invoiceMath');
+const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates, classifyDoubleCount, TOLERANCIA_QUITACAO } = require('./utils/invoiceMath');
 const encargosPagamento = require('./services/encargosPagamento');
 
 // art. 52 CDC — payload único de encargos de juros exposto nas rotas de compra
@@ -4692,7 +4692,7 @@ async function runBillingValidationInner(opts) {
         // O `continue` precisa vir ANTES do has(): sem ele, a fatura quitada (mais antiga,
         // por causa do ORDER BY ASC) ocuparia o slot do CPF e mascararia uma fatura
         // seguinte legitimamente em aberto.
-        if (residual <= 0.005) continue;
+        if (residual <= TOLERANCIA_QUITACAO) continue;
         if (!closedDueByCpf.has(row.cpf)) {
             closedDueByCpf.set(row.cpf, {
                 id: row.id,
@@ -5043,7 +5043,7 @@ async function runBillingValidationInner(opts) {
                     : parseFloat(row.valor_pago || 0));
             const residual = Math.max(0, valorTotal - pago);
             const pagMin = pago >= Math.max(valorTotal * 0.10, 10) - 0.01;
-            if (residual <= 0.005 || pagMin) _zeroIds.add(row.id);
+            if (residual <= TOLERANCIA_QUITACAO || pagMin) _zeroIds.add(row.id);
         }
         if (_zeroIds.size) {
             await dbService.executeQuery(`
@@ -5152,7 +5152,7 @@ const syncInvoiceDiasAtraso = async () => {
                     : parseFloat(row.valor_pago || 0));
             const residual = Math.max(0, valorTotal - pago);
             const pagMin = pago >= Math.max(valorTotal * 0.10, 10) - 0.01;
-            if (residual <= 0.005 || pagMin) _zeroIdsSync.add(row.id);
+            if (residual <= TOLERANCIA_QUITACAO || pagMin) _zeroIdsSync.add(row.id);
         }
         if (_zeroIdsSync.size) {
             await dbService.executeQuery(`

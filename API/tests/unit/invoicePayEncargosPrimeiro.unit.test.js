@@ -184,6 +184,51 @@ describe('invoiceController.pay — encargos primeiro', () => {
         expect(t.achar(/credit_card_available_limit = 4000\.00/)).toHaveLength(1);
     });
 
+    // ── Fix round 2: mesma tolerância de quitação do motor (TOLERANCIA_QUITACAO = 0,005) ──
+    const semIofFixo = () => chargesPadrao().filter(c => c.id !== 'i1'); // encargos 36,54, Total 1.036,54
+
+    test('Total − R$ 0,01 NÃO é TOTAL: não grava "Pagamento fatura" e o débito continua (0,01 devendo)', async () => {
+        const t = montar({ charges: semIofFixo() });
+        await t.pagar(1036.53);
+
+        const body = t.res.json.mock.calls[0][0];
+        expect(body.message).toBe('Pagamento parcial realizado.');
+        expect(body.allocation.principal).toBe(999.99);
+        expect(body.remainingBalance).toBe(0.01);
+        expect(t.achar(/'Pagamento fatura'/)).toEqual([]);
+        expect(t.achar(/INSERT INTO fintech\.transactions/)[0]).toMatch(/'-1036\.53', 'Pagamento minimo de fatura'/);
+        // Não passa pelo ramo de quitação: parcelas não são apagadas e o limite não volta cheio.
+        expect(t.achar(/DELETE FROM fintech\.transactions[\s\S]*INVOICE_INSTALLMENT/)).toEqual([]);
+        expect(t.achar(/credit_card_available_limit = 3999\.99/)).toHaveLength(1);
+        // Os encargos saem primeiro (regra), mas pelo pagamento PARCIAL — continuam no
+        // débito atual (sem 'Pagamento fatura' depois), então o motor não recria a multa.
+    });
+
+    test('Total − R$ 0,004 é TOTAL (arredonda para o Total): quita todas as charges', async () => {
+        const t = montar();
+        await t.pagar(1040.416);
+
+        expect(t.res.json.mock.calls[0][0].message).toBe('Fatura paga com sucesso.');
+        expect(t.achar(/'INVOICE_PAYMENT', '-1040\.42', 'Pagamento fatura'/)).toHaveLength(1);
+        const [quita] = t.achar(/SET status = 'paid'/);
+        expect(idsQuitados(quita).sort()).toEqual(chargesPadrao().map(c => c.id).sort());
+    });
+
+    test('principal com R$ 0,01 restante NÃO encerra o débito (antes: <= 0,01 contava como quitado)', async () => {
+        const t = montar();
+        await t.pagar(1036.61); // encargos diários 36,62 + principal 999,99; adicional 3,80 fora
+
+        const body = t.res.json.mock.calls[0][0];
+        expect(body.message).toBe('Pagamento parcial realizado.');
+        expect(body.allocation.principal).toBe(999.99);
+        expect(t.achar(/'Pagamento fatura'/)).toEqual([]);
+        expect(t.achar(/DELETE FROM fintech\.transactions[\s\S]*INVOICE_INSTALLMENT/)).toEqual([]);
+        // Charges NÃO ficam todas pagas: a linha combinada só perde o diário, o adicional segue pending.
+        const [quita] = t.achar(/SET status = 'paid'/);
+        expect(idsQuitados(quita)).not.toContain('i1');
+        expect(t.achar(/amount = amount - 0\.08\s*WHERE id = 'i1'/)).toHaveLength(1);
+    });
+
     test('dívida do principal desconta os encargos que pagamentos anteriores quitaram', async () => {
         const t = montar({ principalJaPago: 100 });
         await t.pagar(940.42); // Total = 900 + 40,42

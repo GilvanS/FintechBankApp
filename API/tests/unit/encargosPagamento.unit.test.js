@@ -162,6 +162,21 @@ describe('planejarPagamento — tipos de pagamento (principal 1.000,00, encargos
         expect(p.principalQuitado).toBe(false);
     });
 
+    test('fix round 2 — tolerância de quitação = a do motor (0,005)', () => {
+        const { TOLERANCIA_QUITACAO } = require('../../utils/invoiceMath');
+        expect(TOLERANCIA_QUITACAO).toBe(0.005);
+        // Total − 0,01 não é TOTAL
+        const a = planejarPagamento(1040.41, 1000, encargos());
+        expect(a.isTotal).toBe(false);
+        // Total − 0,004 arredonda para o Total: é TOTAL
+        expect(planejarPagamento(1040.416, 1000, encargos()).isTotal).toBe(true);
+        // principal com 0,01 restante não está quitado
+        const c = planejarPagamento(1036.61, 1000, encargos());
+        expect(c.alocacao.restante.principal).toBe(0.01);
+        expect(c.principalQuitado).toBe(false);
+        expect(c.isTotal).toBe(false);
+    });
+
     test('quita o principal sem cobrir o IOF fixo: principal quitado, fixo segue pending', () => {
         const p = planejarPagamento(1036.62, 1000, encargos());
         expect(p.isTotal).toBe(false);
