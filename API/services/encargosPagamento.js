@@ -368,6 +368,21 @@ function descontarEncargosJaPagos(novos, pagos = {}) {
 // ── SQL compartilhado (derivação da quitação) ─────────────────────────────────
 
 /**
+ * Subquery: encargos quitados por pagamento — `payment_id`, `total`. Para LEFT JOIN
+ * `... enc ON enc.payment_id = t.id` em quem precisa do principal pago
+ * (|amount| − COALESCE(enc.total, 0)) sobre um universo de transações diferente do de
+ * sqlPrincipalPorPagamento (ex.: com INVOICE_ANTICIPATION, sem invoice_id, cancelados fora).
+ * @param {object} dbService
+ * @param {string} [cpfSql] - CPF já escapado para filtrar
+ */
+function sqlEncargosQuitadosPorPagamento(dbService, cpfSql) {
+    return `SELECT payment_id, SUM(CAST(amount AS DECIMAL(15,2))) AS total
+            FROM ${dbService.fq('billing_charges')}
+            WHERE status = 'paid' AND payment_id IS NOT NULL ${cpfSql ? `AND cpf = ${cpfSql}` : ''}
+            GROUP BY payment_id`;
+}
+
+/**
  * Subquery: uma linha por INVOICE_PAYMENT vinculado com o PRINCIPAL que ela pagou
  * (|amount| − encargos quitados por ela). É o que deve alimentar a cascata
  * planDistribution — somar o |amount| cheio contaria o encargo pago como principal.
@@ -380,18 +395,12 @@ function descontarEncargosJaPagos(novos, pagos = {}) {
  */
 function sqlPrincipalPorPagamento(dbService, cpfSql) {
     const filtroTx = cpfSql ? `AND t.cpf = ${cpfSql}` : '';
-    const filtroBc = cpfSql ? `AND cpf = ${cpfSql}` : '';
     return `
         SELECT t.id, t.cpf, t.invoice_id, t.date,
                ABS(CAST(t.amount AS DECIMAL(15,2))) AS valor,
                ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(enc.total, 0) AS principal
         FROM ${dbService.fq('transactions')} t
-        LEFT JOIN (
-            SELECT payment_id, SUM(CAST(amount AS DECIMAL(15,2))) AS total
-            FROM ${dbService.fq('billing_charges')}
-            WHERE status = 'paid' AND payment_id IS NOT NULL ${filtroBc}
-            GROUP BY payment_id
-        ) enc ON enc.payment_id = t.id
+        LEFT JOIN (${sqlEncargosQuitadosPorPagamento(dbService, cpfSql)}) enc ON enc.payment_id = t.id
         WHERE t.type = 'INVOICE_PAYMENT' AND t.invoice_id IS NOT NULL ${filtroTx}
     `;
 }
@@ -414,6 +423,7 @@ module.exports = {
     buscarEncargosDoDebitoAtual,
     buscarEncargosPagosNoDebito,
     sqlPrincipalPorPagamento,
+    sqlEncargosQuitadosPorPagamento,
     sqlDatasQuitacaoTotal,
     sqlExisteEncargoPagoNoDebito,
 };

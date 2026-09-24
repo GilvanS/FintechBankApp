@@ -12,6 +12,7 @@
  */
 const crypto = require('crypto');
 const { esc: escPadrao } = require('../repositories/context');
+const { sqlEncargosQuitadosPorPagamento, garantirColunasQuitacao } = require('./encargosPagamento');
 
 const round2 = (n) => Math.round(n * 100) / 100;
 const num = (v) => parseFloat(v || 0);
@@ -33,37 +34,45 @@ const GROSS_SQL = `(COALESCE(i.valor_total,0) + COALESCE(i.saldo_anterior,0)
  * do services/dailyAudit.js).
  *
  * pago     = Σ |INVOICE_PAYMENT + INVOICE_ANTICIPATION| vinculados (invoice_id), não cancelados
- * devido   = valor_total + saldo_anterior + encargos (billing_charges da fatura)
+ * devido   = valor_total + saldo_anterior + encargos
+ * encargos = os que os pagamentos DESTA fatura quitaram (billing_charges.payment_id) +
+ *            os antigos, sem payment_id, ligados à fatura por invoice_amount
  * excedente = pago − devido − já devolvido (REFUND com a marca desta fatura)
  *
  * O saldo_anterior entra no devido: sem ele, quem quitou compras + saldo herdado
  * (ex.: massa 805, 364,97 + 3.870,86) aparecia com "excedente" do saldo herdado.
+ * Os encargos quitados por payment_id entram no devido porque o pagamento abate
+ * ENCARGOS PRIMEIRO: a charge guarda como invoice_amount a base do dia (o residual),
+ * não o valor_total, e sem o vínculo por payment_id todo TOTAL em atraso aparecia com
+ * "excedente" do tamanho dos encargos que ele pagou.
  */
 async function listarExcedentesFaturaFechada(db, { cpf = null, esc = escPadrao } = {}) {
     const fq = (t) => db.fq(t);
+    await garantirColunasQuitacao(db); // payment_id é lido abaixo
     const rows = await db.executeQuery(`
-        SELECT i.id, i.cpf, u.full_name, u.balance, i.valor_total, i.saldo_anterior, pg.pago,
+        SELECT i.id, i.cpf, u.full_name, u.balance, i.valor_total, i.saldo_anterior, pg.pago, pg.encargos_pagos,
             (SELECT COALESCE(SUM(b.amount), 0) FROM ${fq('billing_charges')} b
-              WHERE b.cpf = i.cpf AND b.invoice_amount = i.valor_total) AS encargos,
+              WHERE b.cpf = i.cpf AND b.invoice_amount = i.valor_total AND b.payment_id IS NULL) AS encargos,
             (SELECT COALESCE(SUM(ABS(r.amount)), 0) FROM ${fq('transactions')} r
               WHERE r.cpf = i.cpf AND r.type = 'REFUND'
                 AND r.description LIKE '%[excedente-fatura:' || i.id || ']%') AS devolvido
         FROM ${fq('invoices')} i
         JOIN ${fq('users')} u ON u.cpf = i.cpf
         JOIN (
-            SELECT invoice_id, SUM(ABS(amount)) AS pago
-            FROM ${fq('transactions')}
-            WHERE type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
-              AND invoice_id IS NOT NULL
-              AND (status IS NULL OR status <> 'cancelled')
-            GROUP BY invoice_id
+            SELECT t.invoice_id, SUM(ABS(t.amount)) AS pago, SUM(COALESCE(enc.total, 0)) AS encargos_pagos
+            FROM ${fq('transactions')} t
+            LEFT JOIN (${sqlEncargosQuitadosPorPagamento(db, cpf ? esc(cpf) : undefined)}) enc ON enc.payment_id = t.id
+            WHERE t.type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
+              AND t.invoice_id IS NOT NULL
+              AND (t.status IS NULL OR t.status <> 'cancelled')
+            GROUP BY t.invoice_id
         ) pg ON pg.invoice_id = i.id
         WHERE i.status = 'FECHADA' ${cpf ? `AND i.cpf = ${esc(cpf)}` : ''}
         ORDER BY i.cpf, i.due_date
     `);
     return rows.map((r) => {
         const principal = round2(num(r.valor_total) + num(r.saldo_anterior));
-        const encargos = round2(num(r.encargos));
+        const encargos = round2(num(r.encargos) + num(r.encargos_pagos));
         const devido = round2(principal + encargos);
         const pago = round2(num(r.pago));
         const devolvido = round2(num(r.devolvido));

@@ -7354,6 +7354,11 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
     // aceita condição OR no Postgres): órfãos (invoice_id NULL), vinculados
     // (invoice_id setado) e valor_pago das faturas FECHADA.
     let aggCovered = 0, aggExceeded = 0, aggDeficit = 0;
+    // Vinculados entram pelo PRINCIPAL (|amount| − encargos que quitaram, por
+    // billing_charges.payment_id): o valor_pago legado das fechadas é principal, e o
+    // pagamento abate encargos primeiro — com o |amount| cheio, a multa/juros pagos
+    // viravam cobertura e a massa aparecia como EXCEDENTE.
+    await encargosPagamento.garantirColunasQuitacao(dbService);
     try {
         const aggRows = await dbService.executeQuery(`
             SELECT cpf, SUM(coverage) AS coverage, SUM(valor_pago) AS valor_pago
@@ -7369,10 +7374,11 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
                   AND u.cpf IS NOT NULL
                   AND u.role IS DISTINCT FROM 'admin'
                 UNION ALL
-                -- Pagamentos VINCULADOS (invoice_id setado) — completam a cobertura
-                SELECT t.cpf, ABS(CAST(t.amount AS DECIMAL(15,2))) AS coverage, 0 AS valor_pago
+                -- Pagamentos VINCULADOS (invoice_id setado) — completam a cobertura (principal)
+                SELECT t.cpf, ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(enc.total, 0) AS coverage, 0 AS valor_pago
                 FROM ${dbService.fq('transactions')} t
                 LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
+                LEFT JOIN (${encargosPagamento.sqlEncargosQuitadosPorPagamento(dbService)}) enc ON enc.payment_id = t.id
                 WHERE t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
                   AND t.invoice_id IS NOT NULL
                   AND (t.status IS NULL OR t.status <> 'cancelled')
@@ -7440,13 +7446,15 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
         const valorPagoTotal = round2(invoices.reduce((s, i) => s + i.valorPago, 0));
 
         // 5. Pagamentos Jàvinculados (invoice_id setado) — completam a cobertura
+        // Principal (mesma regra do agregado acima): encargo pago não é cobertura.
         const linkedRes = await dbService.executeQuery(`
-            SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE cpf = ${esc(cpf)}
-              AND type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
-              AND invoice_id IS NOT NULL
-              AND (status IS NULL OR status <> 'cancelled')
+            SELECT COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(enc.total, 0)), 0) AS total
+            FROM ${dbService.fq('transactions')} t
+            LEFT JOIN (${encargosPagamento.sqlEncargosQuitadosPorPagamento(dbService, esc(cpf))}) enc ON enc.payment_id = t.id
+            WHERE t.cpf = ${esc(cpf)}
+              AND t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+              AND t.invoice_id IS NOT NULL
+              AND (t.status IS NULL OR t.status <> 'cancelled')
         `);
         const linkedTotal = round2(parseFloat(linkedRes[0]?.total || 0));
 

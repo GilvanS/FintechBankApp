@@ -10,15 +10,53 @@
  * Rodar (dentro da pasta API):
  *   node scripts/backfill_tbl_pf.cjs [prazo]
  */
-const dotenv = require('dotenv');
 const path = require('path');
-dotenv.config({ path: path.join(__dirname, '../.env') });
+// Só como CLI: o teste importa sqlFechadasEmAberto sem carregar .env nenhum.
+if (require.main === module) require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const DatabaseFactory = require('../services/database/DatabaseFactory');
 const { computeNextInvoiceDueDate } = require('../utils/billing');
 const { calcularParcelamentoFatura, TIPOS_ENTRADA } = require('../services/installmentCalcEngine');
+const { sqlEncargosQuitadosPorPagamento, garantirColunasQuitacao } = require('../services/encargosPagamento');
 
 const PRAZO = parseInt(process.argv[2], 10) || 6;
+
+// 1 fatura FECHADA por CPF (a mais recente), com residual = valor_total menos o
+// PRINCIPAL pago via transactions (INVOICE_PAYMENT) — NÃO usar `data_pagamento IS NULL`
+// pra filtrar "não paga": este projeto quita fatura fechada via cascata de
+// transactions (getClosedInvoiceDebt em invoiceController.js), sem
+// necessariamente gravar data_pagamento. Filtrar só por essa coluna incluía massa
+// já quitada e gerava saldo_aberto_anterior maior que o principal (IOF negativo).
+// Principal = |amount| − encargos que o pagamento quitou (billing_charges.payment_id):
+// o pagamento abate ENCARGOS PRIMEIRO, e com o |amount| cheio a multa/juros pagos
+// abatiam o valor parcelável (a massa parecia dever menos do que deve).
+// Simplificação informativa: pega só a fatura mais recente, não replica a cascata
+// completa multi-fatura de getClosedInvoiceDebt.
+function sqlFechadasEmAberto(fq = (t) => `fintech.${t}`) {
+    return `
+        WITH pagos_totais AS (
+            SELECT t.cpf, SUM(ABS(t.amount) - COALESCE(enc.total, 0)) AS total_pago
+            FROM ${fq('transactions')} t
+            LEFT JOIN (${sqlEncargosQuitadosPorPagamento({ fq })}) enc ON enc.payment_id = t.id
+            WHERE t.type = 'INVOICE_PAYMENT'
+            GROUP BY t.cpf
+        ),
+        fechada_recente AS (
+            SELECT DISTINCT ON (i.cpf)
+                i.id AS invoice_id, i.cpf, i.due_date, i.valor_total, i.saldo_anterior,
+                COALESCE(u.credit_card_due_day, 10) AS dia_vencimento
+            FROM ${fq('invoices')} i
+            INNER JOIN ${fq('users')} u ON u.cpf = i.cpf
+            WHERE i.status = 'FECHADA' AND i.valor_total > 0
+            ORDER BY i.cpf, i.due_date DESC
+        )
+        SELECT f.invoice_id, f.cpf, f.due_date, f.saldo_anterior, f.dia_vencimento,
+               GREATEST(0, f.valor_total - COALESCE(pt.total_pago, 0)) AS valor_total
+        FROM fechada_recente f
+        LEFT JOIN pagos_totais pt ON pt.cpf = f.cpf
+        WHERE GREATEST(0, f.valor_total - COALESCE(pt.total_pago, 0)) > 0.005
+    `;
+}
 
 async function main() {
     const db = DatabaseFactory.createDatabaseService();
@@ -45,36 +83,8 @@ async function main() {
         )
     `);
 
-    // 1 fatura FECHADA por CPF (a mais recente), com residual = valor_total menos o
-    // TOTAL pago via transactions (INVOICE_PAYMENT) — NÃO usar `data_pagamento IS NULL`
-    // pra filtrar "não paga": este projeto quita fatura fechada via cascata de
-    // transactions (getClosedInvoiceDebt em invoiceController.js), sem
-    // necessariamente gravar data_pagamento. Filtrar só por essa coluna incluía massa
-    // já quitada e gerava saldo_aberto_anterior maior que o principal (IOF negativo).
-    // Simplificação informativa: pega só a fatura mais recente, não replica a cascata
-    // completa multi-fatura de getClosedInvoiceDebt.
-    const rows = await db.executeQuery(`
-        WITH pagos_totais AS (
-            SELECT cpf, SUM(ABS(amount)) AS total_pago
-            FROM fintech.transactions
-            WHERE type = 'INVOICE_PAYMENT'
-            GROUP BY cpf
-        ),
-        fechada_recente AS (
-            SELECT DISTINCT ON (i.cpf)
-                i.id AS invoice_id, i.cpf, i.due_date, i.valor_total, i.saldo_anterior,
-                COALESCE(u.credit_card_due_day, 10) AS dia_vencimento
-            FROM fintech.invoices i
-            INNER JOIN fintech.users u ON u.cpf = i.cpf
-            WHERE i.status = 'FECHADA' AND i.valor_total > 0
-            ORDER BY i.cpf, i.due_date DESC
-        )
-        SELECT f.invoice_id, f.cpf, f.due_date, f.saldo_anterior, f.dia_vencimento,
-               GREATEST(0, f.valor_total - COALESCE(pt.total_pago, 0)) AS valor_total
-        FROM fechada_recente f
-        LEFT JOIN pagos_totais pt ON pt.cpf = f.cpf
-        WHERE GREATEST(0, f.valor_total - COALESCE(pt.total_pago, 0)) > 0.005
-    `);
+    await garantirColunasQuitacao(db); // payment_id é lido em sqlFechadasEmAberto
+    const rows = await db.executeQuery(sqlFechadasEmAberto());
 
     console.log(`🔎 ${rows.length} massa(s) com fatura fechada em aberto. Calculando PF ${PRAZO}x pra cada...`);
 
@@ -128,7 +138,11 @@ async function main() {
     process.exit(0);
 }
 
-main().catch((err) => {
-    console.error('❌ Erro no backfill:', err.message);
-    process.exit(1);
-});
+if (require.main === module) {
+    main().catch((err) => {
+        console.error('❌ Erro no backfill:', err.message);
+        process.exit(1);
+    });
+}
+
+module.exports = { sqlFechadasEmAberto };

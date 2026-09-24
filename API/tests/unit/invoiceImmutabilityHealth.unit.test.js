@@ -52,7 +52,8 @@ describe('Invoice Immutability Health Check & Messages', () => {
         if (sql.includes("name LIKE '%005%'")) {
           return Promise.resolve([{ created_at: '2026-08-01T00:00:00.000Z' }]);
         }
-        if (sql.includes("HAVING COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) > CAST(i.valor_total")) {
+        // B soma o PRINCIPAL pago (encargos primeiro), não o |amount| cheio.
+        if (sql.includes("HAVING COALESCE(SUM(pp.principal), 0) > CAST(i.valor_total")) {
           return Promise.resolve([{
             cpf: '44444444444',
             invoice_id: 'cb6f219d-d380-4a0b-bd11-90ee4b6f7e61',

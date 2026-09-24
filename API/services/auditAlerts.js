@@ -34,7 +34,12 @@ const CRITERIO_POR_TIPO = {
     ENCARGOS_ORFAOS_REGERADOS: 'faturas',
     FATURA_ABERTA_MES_DIVERGENTE_CORRIGIDO: 'faturas',
     BLACKLIST_DESSINCRONIZADA: 'faturas',
+    // Anomalia 8d. SALDO_* cairia em 'pagamentos' pelo fallback: explícito aqui. O nome
+    // antigo (só "herdou a mais") segue mapeado para relatórios/reenvios já gravados.
+    SALDO_ANTERIOR_DIVERGENTE: 'faturas',
     SALDO_ANTERIOR_JA_QUITADO: 'faturas',
+    ENCARGO_APOS_QUITACAO_TOTAL: 'faturas',
+    RESIDUAL_PARCIAL_SEM_ENCARGO: 'faturas',
 };
 
 const LIMITE_MSG = 3800;        // Telegram corta em 4096 — folga para o cabeçalho

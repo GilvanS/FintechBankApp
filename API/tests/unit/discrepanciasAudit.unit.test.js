@@ -12,6 +12,8 @@ function makeDb(dados = {}) {
     const selects = [];
     const executeQuery = jest.fn(async (sql) => {
         const s = sql.replace(/\s+/g, ' ').trim();
+        // DDL idempotente de garantirColunasQuitacao (payment_id): não é consulta nem escrita de dado.
+        if (s.startsWith('ALTER TABLE')) return [];
         if (s.startsWith('UPDATE') || s.startsWith('INSERT')) { writes.push(s); return []; }
         selects.push(s);
         if (s.includes('AS devolvido')) return dados.faturasFechadas || [];
