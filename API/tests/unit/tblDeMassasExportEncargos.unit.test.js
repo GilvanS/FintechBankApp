@@ -8,9 +8,11 @@
  *
  * Os cenários rodam a SQL REAL do export no Postgres, mas SÓ LEITURA: cada tabela
  * `fintech.X` é trocada por uma CTE com VALUES sintéticos — nada é lido nem gravado nas
- * tabelas reais. Sem Postgres acessível, só os testes de estrutura rodam.
+ * tabelas reais. Sem Postgres acessível, só os testes de estrutura rodam e os cenários
+ * aparecem como SKIPPED (decidido no load), não como passed sem ter rodado nada.
  */
 const { buildQuery } = require('../../utils/tblDeMassasExport.cjs');
+const { temPostgres, conectar } = require('./helpers/pgSintetico');
 
 const CPF = '99900000001';
 
@@ -76,18 +78,10 @@ function sqlComTabelasSinteticas({ pagamentos, charges }) {
     return trocado.replace(/^\s*WITH /, `WITH ${ctes.join(',\n')},\n`);
 }
 
+const descreverCenarios = temPostgres() ? describe : describe.skip;
+
 let db = null;
-beforeAll(async () => {
-    try {
-        const DatabaseFactory = require('../../services/database/DatabaseFactory');
-        const svc = DatabaseFactory.createDatabaseService();
-        await svc.connect();
-        await svc.executeQuery('SELECT 1');
-        db = svc;
-    } catch (err) {
-        console.warn('[tblDeMassasExportEncargos] Postgres indisponível — cenários pulados:', err.message);
-    }
-});
+beforeAll(async () => { if (temPostgres()) db = await conectar(); });
 afterAll(async () => { if (db && db.disconnect) await db.disconnect(); });
 
 async function exportar(cenario) {
@@ -98,9 +92,8 @@ async function exportar(cenario) {
 const pago = (payment_id, amount) => ({ amount, status: 'paid', payment_id });
 const pendente = amount => ({ amount, status: 'pending', payment_id: null });
 
-describe('tblDeMassasExport — cenários (SQL real, tabelas sintéticas)', () => {
+descreverCenarios('tblDeMassasExport — cenários (SQL real, tabelas sintéticas)', () => {
     test('parcial de 30 só de encargos: aberta = 100 + 1.000 + 10 (bate com o backend)', async () => {
-        if (!db) return;
         const r = await exportar({
             pagamentos: [{ id: 'pay-1', valor: 30 }],
             charges: [pago('pay-1', 20), pago('pay-1', 5), pago('pay-1', 5), pendente(5), pendente(5)],
@@ -112,7 +105,6 @@ describe('tblDeMassasExport — cenários (SQL real, tabelas sintéticas)', () =
     });
 
     test('TOTAL (1.040 = 1.000 + 40 de encargos): PAGO_TOTAL e herança zera', async () => {
-        if (!db) return;
         const r = await exportar({
             pagamentos: [{ id: 'pay-1', valor: 1040 }],
             charges: [pago('pay-1', 20), pago('pay-1', 5), pago('pay-1', 10), pago('pay-1', 5)],
@@ -123,7 +115,6 @@ describe('tblDeMassasExport — cenários (SQL real, tabelas sintéticas)', () =
     });
 
     test('MÍNIMO (140 = 40 de encargos + 10% do principal): PAGO_MIN', async () => {
-        if (!db) return;
         const r = await exportar({
             pagamentos: [{ id: 'pay-1', valor: 140 }],
             charges: [pago('pay-1', 20), pago('pay-1', 5), pago('pay-1', 10), pago('pay-1', 5)],
@@ -134,7 +125,6 @@ describe('tblDeMassasExport — cenários (SQL real, tabelas sintéticas)', () =
     });
 
     test('pagamento antigo sem payment_id: comportamento antigo (valor cheio)', async () => {
-        if (!db) return;
         const parcial = await exportar({
             pagamentos: [{ id: 'pay-old', valor: 500 }],
             charges: [pendente(20), pendente(5), pendente(10), pendente(5)],
