@@ -36,10 +36,14 @@ const agrupar = (rows) => {
     return m;
 };
 
-/** Fechadas, pagamentos (principal), quitações TOTAL e encargos, por CPF. */
-async function carregarDebitos(db, { cpf, esc }) {
+/**
+ * Fechadas, pagamentos (principal), quitações TOTAL e encargos, por CPF.
+ * `somenteLeitura`: não chama garantirColunasQuitacao (ALTER TABLE) — a simulação da
+ * cura não pode escrever nada; sem as colunas paid_at/payment_id a leitura falha.
+ */
+async function carregarDebitos(db, { cpf, esc, somenteLeitura = false }) {
     const filtro = (col) => (cpf ? `AND ${col} = ${esc(cpf)}` : '');
-    await garantirColunasQuitacao(db);
+    if (!somenteLeitura) await garantirColunasQuitacao(db);
     const fechadas = await db.executeQuery(`
         SELECT id, cpf, due_date, valor_total, COALESCE(valor_pago, 0) AS valor_pago
         FROM ${db.fq('invoices')}
@@ -89,6 +93,19 @@ function residualVencidoEm(fechadas, pagamentos, t) {
 const somaValores = (rows) => round2(rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0));
 
 /**
+ * Multa DUPLA: a mesma fatura já tinha multa (paga ou pending) criada antes desta. A
+ * multa é cobrança única por débito; a 2ª é indevida mesmo quando o débito é anterior
+ * ao TOTAL (a Anomalia 8b recriava a multa sobre a que o gerador/rota já tinham lançado).
+ */
+function ehMultaDupla(c, fatura, encargosDoCpf, fechadas) {
+    if (c.charge_type !== 'multa' || !fatura) return false;
+    return encargosDoCpf.some((o) => o.id !== c.id && o.charge_type === 'multa'
+        && parseFloat(o.amount || 0) > TOLERANCIA_QUITACAO
+        && ms(o.created_at) < ms(c.created_at)
+        && (faturaDoEncargo(o, fechadas) || {}).id === fatura.id);
+}
+
+/**
  * Fatura a que o encargo se refere: pelo invoice_id; no legado (sem invoice_id), a
  * fechada de valor_total = invoice_amount que venceu por último antes da criação dele.
  */
@@ -136,8 +153,8 @@ function classificarEncargoAposTotal(c, fechadas, totalEm) {
  * filtro de residual). Base da 8e e da cura (scripts/cura_encargos_apos_total.cjs).
  * @returns {Promise<Array<{cpf, fullName, encargos: Array}>>}
  */
-async function listarEncargosSemDebitoAposTotal(db, { cpf = null, esc = escPadrao } = {}) {
-    const d = await carregarDebitos(db, { cpf, esc });
+async function listarEncargosSemDebitoAposTotal(db, { cpf = null, esc = escPadrao, somenteLeitura = false } = {}) {
+    const d = await carregarDebitos(db, { cpf, esc, somenteLeitura });
     const porCpf = [];
     for (const [cpfAtual, encargos] of d.encargos) {
         const usuario = d.usuarios.get(cpfAtual);
@@ -156,6 +173,7 @@ async function listarEncargosSemDebitoAposTotal(db, { cpf = null, esc = escPadra
             lista.push({
                 ...c, quitacaoTotalEm: ultimoTotal.date, invoiceId: cls.fatura ? cls.fatura.id : null,
                 totalNoPrazo: cls.totalNoPrazo, acusa: cls.acusa,
+                multaDupla: ehMultaDupla(c, cls.fatura, encargos, fechadas),
             });
         }
         if (lista.length) porCpf.push({ cpf: cpfAtual, fullName: usuario.full_name || null, encargos: lista });

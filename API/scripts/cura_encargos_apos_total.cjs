@@ -1,23 +1,28 @@
 #!/usr/bin/env node
 /**
  * cura_encargos_apos_total.cjs — remove encargos PENDING cobrados SEM dívida depois de
- * um pagamento TOTAL (Task 4, fix 1). Duas origens, a mesma cobrança indevida:
- *   - "continuou contando" depois do TOTAL (Anomalia 8e, ENCARGO_APOS_QUITACAO_TOTAL);
- *   - débito ANTERIOR ao TOTAL recriado com created_at novo (a Anomalia 8b/botão
- *     fix-charges-proactive regerava multa/IOF em FECHADA já quitada — ex.: CPF
- *     42194343806, 21/09 23:54, multa 77,42 + IOF 14,71).
- * Critério (fonte única): auditoriaEncargos.listarEncargosSemDebitoAposTotal — criado
- * depois de um TOTAL ao vivo e sem principal vencido em aberto naquele instante.
+ * um pagamento TOTAL (Task 4, fix 1/2). Base: auditoriaEncargos.listarEncargosSemDebitoAposTotal
+ * (criado depois de um TOTAL ao vivo e sem principal vencido em aberto naquele instante).
  *
- * Padrão: SIMULA (só mostra CPFs, faturas, encargos e valor). --confirm apaga, por id,
- * só as charges que continuam 'pending'. Nunca toca a FECHADA (imutável) nem charge
- * 'paid' — encargo PAGO sem dívida vira devolução ao saldo, decisão manual (listado).
+ * Três grupos, e SÓ o primeiro é removível:
+ *   1. REMOVÍVEL: o que a 8e acusa (continuou contando depois do TOTAL) + multa DUPLA
+ *      (a mesma fatura já tinha multa antes — ex.: CPF 42194343806, 21/09 23:54).
+ *   2. LISTADO, decisão do usuário: "débito anterior recriado" — encargo de período até
+ *      o TOTAL, recriado com created_at novo. Quase todo vem de TOTAL pago DEPOIS do
+ *      vencimento pela rota antiga, que pagava só o principal e deixava os encargos do
+ *      atraso pending DE PROPÓSITO para herança (regra 2): é dívida real e a cura NÃO
+ *      pode perdoá-la. Nunca é apagado, em nenhum modo.
+ *   3. LISTADO, estorno manual: encargo PAGO sem dívida (vira devolução ao saldo).
+ *
+ * Padrão: SIMULA, sem escrever nada (nem o ALTER de garantirColunasQuitacao). --confirm
+ * garante as colunas e apaga, por id, só o grupo 1 que continua 'pending'. Nunca toca
+ * a FECHADA (imutável).
  *
  * Uso (dentro de API/):
  *   node scripts/cura_encargos_apos_total.cjs                 # simulação, base toda
  *   node scripts/cura_encargos_apos_total.cjs --cpf=12345678901
- *   node scripts/cura_encargos_apos_total.cjs --confirm       # aplica
- *   node scripts/cura_encargos_apos_total.cjs --json          # saída em JSON
+ *   node scripts/cura_encargos_apos_total.cjs --json          # simulação em JSON
+ *   node scripts/cura_encargos_apos_total.cjs --confirm       # aplica (só o grupo 1)
  */
 const path = require('path');
 // Só como CLI: o teste importa planejar/aplicar sem carregar .env.
@@ -26,35 +31,69 @@ if (require.main === module) require('dotenv').config({ path: path.join(__dirnam
 const { round2 } = require('../utils/invoiceMath');
 const { esc } = require('../repositories/context');
 const { listarEncargosSemDebitoAposTotal } = require('../services/auditoriaEncargos');
+const { garantirColunasQuitacao } = require('../services/encargosPagamento');
 
 const soma = (rows) => round2(rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0));
+const resumo = (rows) => ({
+    cpfs: new Set(rows.map((r) => r.cpf)).size,
+    faturas: new Set(rows.map((r) => `${r.cpf}|${r.invoiceId || '?'}`)).size,
+    encargos: rows.length,
+    valor: soma(rows),
+});
 
-/** Plano da cura (só leitura). */
+/** Lista por CPF + fatura (o que a simulação mostra para decisão do usuário). */
+function porFatura(rows) {
+    const m = new Map();
+    for (const r of rows) {
+        const k = `${r.cpf}|${r.invoiceId || '?'}`;
+        const f = m.get(k) || { cpf: r.cpf, fullName: r.fullName, invoiceId: r.invoiceId || null, charges: [], valor: 0 };
+        f.charges.push({ id: r.id, tipo: r.charge_type, valor: round2(parseFloat(r.amount || 0)), status: r.status });
+        f.valor = round2(f.valor + parseFloat(r.amount || 0));
+        m.set(k, f);
+    }
+    return [...m.values()];
+}
+
+/**
+ * Plano da cura. SÓ LEITURA: não chama garantirColunasQuitacao (ALTER) — sem as
+ * colunas paid_at/payment_id a leitura falha e é preciso rodar com --confirm.
+ */
 async function planejarCura(db, { cpf = null } = {}) {
-    const porCpf = await listarEncargosSemDebitoAposTotal(db, { cpf, esc });
+    const porCpf = await listarEncargosSemDebitoAposTotal(db, { cpf, esc, somenteLeitura: true });
     const remover = [];
+    const recriadoAnterior = [];
     const pagosSemDivida = [];
     for (const { cpf: c, fullName, encargos } of porCpf) {
-        for (const e of encargos) (e.status === 'pending' ? remover : pagosSemDivida).push({ ...e, cpf: c, fullName });
+        for (const e of encargos) {
+            const linha = { ...e, cpf: c, fullName };
+            if (e.status !== 'pending') pagosSemDivida.push(linha);
+            else if (e.acusa || e.multaDupla) remover.push(linha);
+            else recriadoAnterior.push(linha);
+        }
     }
-    const faturasDe = (rows) => new Set(rows.map((r) => `${r.cpf}|${r.invoiceId || '?'}`)).size;
-    const grupo = (rows) => ({ cpfs: new Set(rows.map((r) => r.cpf)).size, faturas: faturasDe(rows), encargos: rows.length, valor: soma(rows) });
     return {
         remover,
+        recriadoAnterior,
         pagosSemDivida,
         resumo: {
-            remover: grupo(remover),
-            continuouContando: grupo(remover.filter((r) => r.acusa)),
-            recriadoAnterior: grupo(remover.filter((r) => !r.acusa)),
-            pagosSemDivida: grupo(pagosSemDivida),
+            remover: resumo(remover),
+            continuouContando: resumo(remover.filter((r) => r.acusa)),
+            multaDupla: resumo(remover.filter((r) => r.multaDupla && !r.acusa)),
+            recriadoAnterior: { ...resumo(recriadoAnterior), acao: 'LISTADO — decisão do usuário (não é apagado)' },
+            pagosSemDivida: { ...resumo(pagosSemDivida), acao: 'LISTADO — estorno manual (não é apagado)' },
+        },
+        listados: {
+            recriadoAnterior: porFatura(recriadoAnterior),
+            pagosSemDivida: porFatura(pagosSemDivida),
         },
     };
 }
 
-/** Apaga, por id, as charges do plano que AINDA estão pending (nunca as pagas). */
+/** Apaga, por id, SÓ o grupo removível que AINDA está pending. */
 async function aplicarCura(db, plano) {
-    const ids = plano.remover.map((r) => r.id);
+    const ids = plano.remover.filter((r) => r.acusa || r.multaDupla).map((r) => r.id);
     if (!ids.length) return { apagadas: 0 };
+    await garantirColunasQuitacao(db);
     let apagadas = 0;
     for (let i = 0; i < ids.length; i += 200) {
         const lote = ids.slice(i, i + 200);
@@ -80,12 +119,19 @@ async function main() {
         const saida = { modo: confirm ? 'APLICADO' : 'SIMULACAO', ...plano.resumo };
         if (confirm) saida.aplicado = await aplicarCura(db, plano);
         if (json) {
-            console.log(JSON.stringify({ ...saida, remover: plano.remover.map(({ id, cpf, invoiceId, charge_type, amount, acusa }) => ({ id, cpf, invoiceId, charge_type, amount, acusa })) }, null, 2));
+            console.log(JSON.stringify({
+                ...saida,
+                remover: plano.remover.map(({ id, cpf, invoiceId, charge_type, amount, acusa, multaDupla }) => ({ id, cpf, invoiceId, charge_type, amount, acusa, multaDupla })),
+                listados: plano.listados,
+            }, null, 2));
         } else {
-            console.log(`${saida.modo} — encargos pending sem dívida depois do TOTAL:`, saida.remover);
-            console.log('  continuou contando (8e):', saida.continuouContando);
-            console.log('  débito anterior recriado:', saida.recriadoAnterior);
-            console.log('  PAGOS sem dívida (devolução manual, não tocados):', saida.pagosSemDivida);
+            console.log(`${saida.modo} — encargos pending sem dívida depois do TOTAL`);
+            console.log('  REMOVÍVEL (8e + multa dupla):', saida.remover);
+            console.log('    continuou contando (8e):', saida.continuouContando);
+            console.log('    multa dupla (fora da 8e):', saida.multaDupla);
+            console.log('  débito anterior recriado — decisão do usuário, NÃO apagado:', saida.recriadoAnterior);
+            for (const f of plano.listados.recriadoAnterior) console.log(`    ${f.cpf} fatura ${f.invoiceId || '?'}: ${f.charges.length} charge(s), R$ ${f.valor.toFixed(2)}`);
+            console.log('  PAGOS sem dívida — estorno manual, NÃO tocados:', saida.pagosSemDivida);
             if (saida.aplicado) console.log('  apagadas:', saida.aplicado.apagadas);
         }
     } finally {

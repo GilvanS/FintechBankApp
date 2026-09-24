@@ -119,11 +119,49 @@ descrever('scripts/cura_encargos_apos_total.cjs — caminho de cura (simula por 
         ],
     });
 
-    test('simulação lista os 2 pending recriados (R$ 92,13) e não toca a multa paga', async () => {
+    test('simulação: os 2 pending recriados (R$ 92,13) são removíveis e nada é escrito — nem ALTER', async () => {
         const db = bancoSintetico(pg, tabelas(), { capturarEscritas: true });
         const plano = await planejarCura(db, { cpf: CPF });
         expect(plano.resumo.remover).toEqual({ cpfs: 1, faturas: 1, encargos: 2, valor: 92.13 });
         expect(plano.remover.map((r) => r.id).sort()).toEqual(['iof-2109', 'm-2109']);
+        expect(db.escritas).toEqual([]);
+        // Fix 2: a simulação não chama garantirColunasQuitacao (ALTER TABLE).
+        expect(db.sqls.filter((q) => /^\s*ALTER/i.test(q))).toEqual([]);
+    });
+
+    test('débito anterior recriado (TOTAL pago DEPOIS do vencimento) só é LISTADO — nunca entra no DELETE', async () => {
+        // Rota antiga: TOTAL de 20/09 (venc. 10/09) pagou só o principal e deixou os encargos
+        // do atraso pending para herança (regra 2). A 8b recriou em 21/09 os juros do dia 5
+        // (dívida real) e uma 2ª multa sobre a de 11/09 (multa dupla = removível).
+        const db = bancoSintetico(pg, tabelasPadrao({
+            users: [usuario],
+            invoices: [fechada('inv-t', { valor_total: 1000, due_date: '2026-09-10 12:00:00', created_at: '2026-09-03 00:00:00' })],
+            transactions: [pagamento('tot', 1000, { description: 'Pagamento fatura', date: '2026-09-20 12:00:00', invoice_id: 'inv-t' })],
+            billing_charges: [
+                charge('multa-1', 'multa', 20, { invoice_amount: 1000, days_overdue: 1, created_at: '2026-09-11 03:00:00' }),
+                charge('multa-2', 'multa', 20, { invoice_amount: 1000, invoice_id: 'inv-t', days_overdue: 0, created_at: '2026-09-21 23:54:00' }),
+                charge('juros-d5', 'juros_mora', 1.67, { invoice_amount: 1000, invoice_id: 'inv-t', days_overdue: 5, created_at: '2026-09-21 23:54:00' }),
+            ],
+        }), { capturarEscritas: true });
+        const plano = await planejarCura(db, { cpf: CPF });
+        expect(plano.remover.map((r) => r.id)).toEqual(['multa-2']);
+        expect(plano.resumo.multaDupla).toEqual({ cpfs: 1, faturas: 1, encargos: 1, valor: 20 });
+        expect(plano.recriadoAnterior.map((r) => r.id)).toEqual(['juros-d5']);
+        expect(plano.listados.recriadoAnterior).toEqual([{
+            cpf: CPF, fullName: usuario.full_name, invoiceId: 'inv-t', valor: 1.67,
+            charges: [{ id: 'juros-d5', tipo: 'juros_mora', valor: 1.67, status: 'pending' }],
+        }]);
+        expect(plano.resumo.recriadoAnterior.acao).toMatch(/decisão do usuário/);
+
+        await aplicarCura(db, plano);
+        expect(db.escritas).toHaveLength(1);
+        expect(db.escritas[0]).toMatch(/id IN \('multa-2'\)/);
+        expect(db.escritas[0]).not.toMatch(/juros-d5|multa-1/);
+    });
+
+    test('aplicarCura ignora grupo recriado mesmo se ele vier dentro de plano.remover', async () => {
+        const db = bancoSintetico(pg, tabelas(), { capturarEscritas: true });
+        await aplicarCura(db, { remover: [{ id: 'recriado', acusa: false, multaDupla: false }] });
         expect(db.escritas).toEqual([]);
     });
 
