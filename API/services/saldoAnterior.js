@@ -9,9 +9,18 @@
  * servem: desde a trava de imutabilidade a FECHADA nunca os recebe — o filtro antigo
  * (data_pagamento IS NULL) tratava toda fechada como não paga e herdava o valor cheio
  * (CT03.1, 2026-09-23: R$ 3.870,86 já pagos às 18:25 herdados no fechamento das 21:35).
+ *
+ * O que entra na cascata é o PRINCIPAL pago (sqlPrincipalPorPagamento: |amount| − os
+ * encargos que a transação quitou). O pagamento abate ENCARGOS PRIMEIRO; somar o
+ * |amount| cheio contaria a multa/juros/IOF pagos como principal e a próxima fatura
+ * herdaria um saldo menor que o devido. Os encargos que sobram continuam 'pending' e
+ * são herdados por eles mesmos (congelados na próxima fechada e cobrados na aberta),
+ * por isso o saldo anterior segue sendo só o principal residual. Pagamento antigo, sem
+ * charge com payment_id, sai com o valor cheio (comportamento de antes).
  */
 const { esc: escPadrao } = require('../repositories/context');
 const { planDistribution, round2 } = require('../utils/invoiceMath');
+const { sqlPrincipalPorPagamento, garantirColunasQuitacao } = require('./encargosPagamento');
 
 /**
  * Total AINDA EM ABERTO de todas as `fechadas` (ordenadas por vencimento, mais antiga
@@ -54,10 +63,10 @@ async function calcularSaldoAnterior(db, cpf, esc = escPadrao) {
         ORDER BY due_date ASC
     `);
     if (!fechadas.length) return 0;
+    await garantirColunasQuitacao(db);
     const [pg] = await db.executeQuery(`
-        SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS pago
-        FROM ${db.fq('transactions')}
-        WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+        SELECT COALESCE(SUM(pp.principal), 0) AS pago
+        FROM (${sqlPrincipalPorPagamento(db, esc(cpf))}) pp
     `);
     return residualEmAberto(fechadas, parseFloat((pg && pg.pago) || 0));
 }
@@ -80,12 +89,14 @@ async function listarSaldoAnteriorIndevido(db, { cpf = null, esc = escPadrao } =
         ORDER BY i.cpf, i.due_date ASC
     `);
     if (!fechadas.length) return [];
+    // Principal de cada pagamento (encargos primeiro — ver o cabeçalho): com o |amount|
+    // cheio, um parcial que quitou encargos faria o "devido" sair menor que o real e o
+    // saldo herdado CORRETO seria acusado como indevido.
+    await garantirColunasQuitacao(db);
     const pagamentos = await db.executeQuery(`
-        SELECT cpf, date, ABS(CAST(amount AS DECIMAL(15,2))) AS valor
-        FROM ${db.fq('transactions')}
-        WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
-          AND cpf IN (SELECT DISTINCT cpf FROM ${db.fq('invoices')} WHERE status = 'FECHADA' AND COALESCE(saldo_anterior, 0) > 0.02)
-          ${cpf ? `AND cpf = ${esc(cpf)}` : ''}
+        SELECT pp.cpf, pp.date, pp.principal AS valor
+        FROM (${sqlPrincipalPorPagamento(db, cpf ? esc(cpf) : undefined)}) pp
+        WHERE pp.cpf IN (SELECT DISTINCT cpf FROM ${db.fq('invoices')} WHERE status = 'FECHADA' AND COALESCE(saldo_anterior, 0) > 0.02)
     `);
 
     const porCpf = new Map();

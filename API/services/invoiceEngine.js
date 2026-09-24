@@ -164,6 +164,10 @@ async function runEngine(targetCpf = null) {
         // enrich (pagamentos vinculados em cascata). O filtro antigo `data_pagamento IS
         // NULL` herdava o valor cheio de fatura já paga (a FECHADA nunca recebe
         // data_pagamento desde a trava de imutabilidade) — ver services/saldoAnterior.js.
+        // A cascata usa o PRINCIPAL pago (encargos primeiro): parcial que só cobriu
+        // encargos deixa o principal inteiro para trás, e é isso que esta fatura herda.
+        // Os encargos que sobraram seguem 'pending' e entram no congelamento abaixo; os
+        // já pagos ('paid') ficam fora dele e não são herdados de novo.
         const saldoAnterior = await require('./saldoAnterior').calcularSaldoAnterior(db, user.cpf, esc);
 
         // Buscar TODAS as charges pendentes geradas APÓS a última fechada para congelar

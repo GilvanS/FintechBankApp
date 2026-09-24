@@ -18,8 +18,9 @@
  *     CPF (continue antes do has()) — uma fantasma (total 0) nunca mascara a
  *     fatura seguinte legítima em aberto.
  *   - Pago HÍBRIDO: se a invoice tem vínculo (transactions.invoice_id,
- *     migration 005), o pago é a SOMA dos INVOICE_PAYMENT vinculados; sem
- *     vínculo, cai no valor_pago legado.
+ *     migration 005), o pago é a SOMA do PRINCIPAL dos INVOICE_PAYMENT
+ *     vinculados (|amount| − encargos que cada um quitou); sem vínculo, cai no
+ *     valor_pago legado.
  *   - Sem dívida (residual <= 0.005) ou pagamento mínimo (>= 10%, piso R$ 10)
  *     → dias 0 / adimplente. Caso contrário → real-time (CURRENT_DATE -
  *     due_date), inadimplente se >= 1 dia.
@@ -33,6 +34,13 @@
 // para a mais nova (planDistribution), não por invoice_id isolado.
 // O LEFT JOIN com users traz o estado atual do usuário para comparar e montar
 // o plano de correção. `extra` permite filtrar (ex.: --cpf no auditor).
+// O pago é o PRINCIPAL de cada pagamento (sqlPrincipalPorPagamento, o mesmo do
+// motor): o pagamento abate encargos primeiro, então somar o |amount| cheio
+// contaria a multa/juros pagos como principal — o residual cairia e o sync
+// zeraria dias de atraso que o motor mantém. Exige as colunas paid_at/payment_id
+// em billing_charges (garantirColunasQuitacao, chamada por quem executa a query).
+const { sqlPrincipalPorPagamento } = require('../services/encargosPagamento');
+
 const ANCHOR_SQL = (fq, extra) => `
     SELECT i.cpf, u.full_name, i.id AS invoice_id, i.due_date,
            COALESCE(i.dias_atraso, 0) AS invoice_dias_atraso,
@@ -47,15 +55,13 @@ const ANCHOR_SQL = (fq, extra) => `
            u.overdue_status
     FROM ${fq('invoices')} i
     LEFT JOIN (
-        SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
-        FROM ${fq('transactions')}
-        WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+        SELECT invoice_id, SUM(principal) AS total
+        FROM (${sqlPrincipalPorPagamento({ fq })}) pp
         GROUP BY invoice_id
     ) pagos ON pagos.invoice_id = i.id
     LEFT JOIN (
-        SELECT cpf, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
-        FROM ${fq('transactions')}
-        WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+        SELECT cpf, SUM(principal) AS total
+        FROM (${sqlPrincipalPorPagamento({ fq })}) pp
         GROUP BY cpf
     ) pagos_cpf ON pagos_cpf.cpf = i.cpf
     LEFT JOIN ${fq('users')} u ON u.cpf = i.cpf

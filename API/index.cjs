@@ -553,13 +553,19 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // mesmo quando a query falha (aí fica vazio e cai no híbrido legado).
         let _payRows = [];
         try {
+            // PRINCIPAL pago por fatura (|amount| − encargos que cada pagamento quitou):
+            // o pagamento abate ENCARGOS PRIMEIRO (invoiceController.pay). Com o |amount|
+            // cheio, o encargo pago contaria duas vezes — some do pending E abate o
+            // principal —, e um pagamento maior que o principal virava "saldo credor"
+            // mesmo com encargos devidos. Pagamento antigo (sem charge com payment_id)
+            // sai com o valor cheio, como antes.
+            await encargosPagamento.garantirColunasQuitacao(dbService);
             _payRows = await dbService.executeQuery(`
-                SELECT invoice_id,
-                       SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS pago,
-                       MAX(date) AS ultimo_pagamento
-                FROM ${dbService.fq('transactions')}
-                WHERE cpf = '${cpf}' AND type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
-                GROUP BY invoice_id
+                SELECT pp.invoice_id,
+                       SUM(pp.principal) AS pago,
+                       MAX(pp.date) AS ultimo_pagamento
+                FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService, esc(cpf))}) pp
+                GROUP BY pp.invoice_id
             `);
             for (const r of _payRows) {
                 _paidByInvoice.set(r.invoice_id, parseFloat(r.pago || 0));
@@ -1112,6 +1118,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     // —— Cálculo do Crédito Excedente (Saldo Credor) ——
     let creditoExcedente = 0;
     let paymentsTotal = 0;
+    let paymentsPrincipal = 0;
     let chargesTotal = 0;
     let principalTotal = 0;
     try {
@@ -1127,25 +1134,39 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         const chargesCycle = await dbService.executeQuery(`
             SELECT amount FROM ${dbService.fq('billing_charges')}
             WHERE cpf = '${cpf}'
-              AND (status = 'pending' OR (status = 'paid' AND created_at > '${new Date(_prevCloseMs).toISOString()}'))
+              AND (status = 'pending' OR (status = 'paid' AND payment_id IS NULL AND created_at > '${new Date(_prevCloseMs).toISOString()}'))
         `);
         chargesTotal = chargesCycle.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
 
-        // 3. Buscar pagamentos realizados no ciclo aberto atual
+        // 3. Buscar pagamentos realizados no ciclo aberto atual. `encargos` = o que cada
+        // um desses pagamentos quitou de billing_charges (payment_id): o pagamento abate
+        // encargos primeiro, então o PRINCIPAL pago no ciclo é total − encargos.
         const paymentsCycle = await dbService.executeQuery(`
-            SELECT COALESCE(SUM(ABS(amount)), 0) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE cpf = '${cpf}'
-              AND type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
-              AND date > '${new Date(_prevCloseMs).toISOString()}'
-              AND date <= '${new Date(maxDueTime).toISOString()}'
+            SELECT COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) AS total,
+                   COALESCE(SUM(enc.total), 0) AS encargos
+            FROM ${dbService.fq('transactions')} t
+            LEFT JOIN (
+                SELECT payment_id, SUM(CAST(amount AS DECIMAL(15,2))) AS total
+                FROM ${dbService.fq('billing_charges')}
+                WHERE cpf = ${esc(cpf)} AND status = 'paid' AND payment_id IS NOT NULL
+                GROUP BY payment_id
+            ) enc ON enc.payment_id = t.id
+            WHERE t.cpf = ${esc(cpf)}
+              AND t.type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
+              AND t.date > '${new Date(_prevCloseMs).toISOString()}'
+              AND t.date <= '${new Date(maxDueTime).toISOString()}'
         `);
+        // paymentsTotal (exposto) continua sendo o valor pago de fato no ciclo.
         paymentsTotal = parseFloat(paymentsCycle[0]?.total || 0);
+        paymentsPrincipal = round2(Math.max(0, paymentsTotal - parseFloat(paymentsCycle[0]?.encargos || 0)));
 
         // Crédito excedente = pagamento que passe de (principal + encargos) das faturas fechadas.
         // Subtrai chargesTotal: encargos pendentes/pagos no ciclo têm prioridade sobre crédito —
         // só o que sobrar DEPOIS de cobrir principal + encargos é saldo credor (creditoExcedente).
-        creditoExcedente = Math.max(0, paymentsTotal - principalTotal - chargesTotal);
+        // Parte do PRINCIPAL pago: os encargos quitados com payment_id já saíram dele e
+        // ficaram fora de chargesTotal (senão seriam descontados duas vezes); os pagos
+        // sem payment_id (pagamento antigo) continuam descontados como antes.
+        creditoExcedente = Math.max(0, paymentsPrincipal - principalTotal - chargesTotal);
     } catch (err) {
         console.warn('Erro ao calcular creditoExcedente:', err.message);
     }
@@ -1164,16 +1185,21 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     // max(db, janela): se a rota de pagamento já atualizou o valor_pago no DB, usa ele;
     // se por algum motivo o DB não foi atualizado (pagamento órfão), usa a janela como
     // rede de segurança para o residual não inflar.
-    const _residualPrincipal = _originalPrincipal - Math.max(_dbValorPago, paymentsTotal);
+    // Janela em PRINCIPAL (paymentsPrincipal): com o valor cheio, o encargo quitado
+    // pelo pagamento voltava a abater o principal e o residual ficava negativo (falso
+    // saldo credor) mesmo com a cascata correta.
+    const _residualPrincipal = _originalPrincipal - Math.max(_dbValorPago, paymentsPrincipal);
     // Saldo credor (pagou além do principal) = residual NEGATIVO (exibido como tal no admin)
     normalized.creditCard.closedInvoiceResidual = Math.round(_residualPrincipal * 100) / 100;
     // O valor pago exibido na fechada: total real pago (DB ou janela, o maior).
     // Nunca sobrescrever para MENOS: um pagamento parcial anterior (ex.: R$ 1.900 em
     // julho) não pode sumir quando a janela do ciclo atual não o enxerga.
-    if (paymentsTotal > 0) {
+    // É o PRINCIPAL pago (mesma base do residual: valorTotal − valorPago = residual);
+    // o que foi para encargos não quita a fechada.
+    if (paymentsPrincipal > 0) {
         normalized.creditCard._closedInvoiceValorPago = Math.max(
             parseFloat(normalized.creditCard._closedInvoiceValorPago || 0),
-            paymentsTotal
+            paymentsPrincipal
         );
     }
 
@@ -1194,6 +1220,10 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // calcAllCharges(residual, daysOverdue) porque após pagamento parcial o residual
         // é menor → calcAllCharges dá target < existing → encargos congelam.
         // billing_charges preserva o histórico real independente do residual.
+        // Só 'pending': o que um pagamento já quitou (encargos primeiro, inclusive a
+        // parte paga de uma charge dividida) fica 'paid' e não é herdado de novo. Sem
+        // pagamento TOTAL, o que sobra continua pending e a aberta herda — junto com
+        // o principal residual da cascata acima.
         let _dailyCharges = null;
         try {
             const _chargeRows = await dbService.executeQuery(`
