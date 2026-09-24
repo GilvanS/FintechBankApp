@@ -53,7 +53,8 @@ function montarBanco({ pagamentos, charges }) {
         if (/GROUP BY (pp\.)?invoice_id/.test(q)) {
             const descontaEncargos = /AS principal/.test(q);
             const pago = pagamentos.reduce((s, p) => s + cheio(p) - (descontaEncargos ? encargosPagosPor(p.id) : 0), 0);
-            return pagamentos.length ? [{ invoice_id: 'inv-a', pago: r2(pago), ultimo_pagamento: pagamentos[0].date }] : [];
+            const pago_bruto = r2(pagamentos.reduce((s, p) => s + cheio(p), 0));
+            return pagamentos.length ? [{ invoice_id: 'inv-a', pago: r2(pago), pago_bruto, ultimo_pagamento: pagamentos[0].date }] : [];
         }
         if (/installment_plans/.test(q)) return [];
         if (/type IN \('SHOP_CREDIT'/.test(q)) {
@@ -116,6 +117,11 @@ describe('enrichUserCreditCardData — quitação derivada com encargos primeiro
         expect(cc.currentInvoiceTotal).toBe(1110); // 100 compras + 1.000 principal + 10 encargos
         expect(cc.currentInvoiceMinimo).toBe(1020); // 10% compras + principal + 100% encargos
         expect(cc.creditoExcedente).toBe(0);
+        // Exibição (fix 1): o pagamento aparece cheio (30), todo em encargos; o principal
+        // abatido (base do residual/saldo financiado) é 0.
+        expect(cc._closedInvoiceValorPago).toBe(0);
+        expect(cc._closedInvoiceEncargosPagos).toBe(30);
+        expect(cc._closedInvoiceValorPagoBruto).toBe(30);
     });
 
     test('pagamento maior que o principal com encargos pendentes NÃO vira saldo credor', async () => {
@@ -133,6 +139,8 @@ describe('enrichUserCreditCardData — quitação derivada com encargos primeiro
         expect(cc.closedInvoiceResidual).toBe(20);
         expect(cc.closedInvoiceIsPaid).toBe(false);
         expect(cc._closedInvoiceValorPago).toBe(980);
+        expect(cc._closedInvoiceEncargosPagos).toBe(40);
+        expect(cc._closedInvoiceValorPagoBruto).toBe(1020);
         expect(cc.creditoExcedente).toBe(0);
         expect(cc.currentInvoiceTotal).toBe(120); // 100 compras + 20 de principal residual
     });
@@ -154,6 +162,10 @@ describe('enrichUserCreditCardData — quitação derivada com encargos primeiro
         expect(cc.closedInvoiceCharges.totalEncargos).toBe(0);
         expect(cc.currentInvoiceTotal).toBe(100);
         expect(cc.creditoExcedente).toBe(0);
+        // Cabeçalho "Pagamentos desta fatura" / admin / PDF: 1.040 = 40 encargos + 1.000 principal.
+        expect(cc._closedInvoiceValorPagoBruto).toBe(1040);
+        expect(cc._closedInvoiceEncargosPagos).toBe(40);
+        expect(cc._closedInvoiceValorPago).toBe(1000);
     });
 
     test('TOTAL com troco: só o que passa de principal + encargos é saldo credor', async () => {
@@ -183,6 +195,8 @@ describe('enrichUserCreditCardData — quitação derivada com encargos primeiro
         });
         expect(cc.closedInvoiceResidual).toBe(500);
         expect(cc.closedInvoiceCharges.totalEncargos).toBe(40);
+        expect(cc._closedInvoiceEncargosPagos).toBe(0);
+        expect(cc._closedInvoiceValorPagoBruto).toBe(500);
         expect(cc.currentInvoiceTotal).toBe(640); // 100 + 500 + 40, igual ao cálculo antigo
     });
 

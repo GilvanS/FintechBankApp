@@ -373,7 +373,8 @@ function descontarEncargosJaPagos(novos, pagos = {}) {
  * planDistribution — somar o |amount| cheio contaria o encargo pago como principal.
  * Pagamentos antigos (sem charge com payment_id) saem com o valor cheio, como antes.
  * `date` vem junto para quem precisa recortar por momento (saldo anterior "até o
- * fechamento", data do último pagamento exibida no enrich).
+ * fechamento", data do último pagamento exibida no enrich); `valor` (o |amount| pago de
+ * fato) para quem exibe o pagamento — valor − principal = encargos que ele quitou.
  * @param {object} dbService
  * @param {string} [cpfSql] - CPF já escapado (ex.: esc(cpf)) para filtrar
  */
@@ -382,6 +383,7 @@ function sqlPrincipalPorPagamento(dbService, cpfSql) {
     const filtroBc = cpfSql ? `AND cpf = ${cpfSql}` : '';
     return `
         SELECT t.id, t.cpf, t.invoice_id, t.date,
+               ABS(CAST(t.amount AS DECIMAL(15,2))) AS valor,
                ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(enc.total, 0) AS principal
         FROM ${dbService.fq('transactions')} t
         LEFT JOIN (

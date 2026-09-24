@@ -7,7 +7,10 @@
  * (runBillingValidation / syncInvoiceDiasAtraso em index.cjs).
  *
  * IMPORTANTE: este módulo NÃO tem side effects — não chama dotenv, não conecta
- * no banco, não lê process.argv. Ele pode ser require() de qualquer CWD sem
+ * no banco, não lê process.argv. Vale também para o que ele importa:
+ * services/encargosPagamento (sqlPrincipalPorPagamento) e utils/invoiceMath
+ * precisam continuar sem side effects no load — se um deles passar a conectar
+ * ou ler .env ao ser importado, este módulo quebra essa garantia. Ele pode ser require() de qualquer CWD sem
  * risco de carregar um .env diferente (o problema do require direto do sync,
  * que disparava dotenv.config() sem path). Toda dependência entra por
  * parâmetro (fq para a SQL) ou por argumento (rows para selectAnchors).

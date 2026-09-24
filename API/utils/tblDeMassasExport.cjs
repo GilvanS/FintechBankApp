@@ -21,8 +21,10 @@
 *                       pra escolher massa nova de teste sem examinar histórico antes)
 *                       — nome trocado do antigo 'ABERTA', que ficava ambíguo com o
 *                       'ABERTA' acima (aberta de quê?).
-*      'PAGO_MIN'    → pagou EXATAMENTE o valor mínimo (± 0.01), nem mais nem menos
-*      'PAGO_TOTAL'  → pagou EXATAMENTE o total (± 0.01), quitada (antigo 'PAGA')
+*      'PAGO_MIN'    → pagou EXATAMENTE o valor mínimo (± 0.01), nem mais nem menos:
+*                       100% dos encargos + max(10% das fechadas, R$ 10) de principal
+*      'PAGO_TOTAL'  → principal das fechadas quitado sem sobra (|resíduo| <=
+*                       TOLERANCIA_QUITACAO), quitada (antigo 'PAGA')
 *      'PAGO_PARCIAL'→ qualquer outro valor pago: menor que o mínimo, entre o
 *                       mínimo e o total ("maior que o mínimo"), ou acima do total
 *                       (excedente/saldo credor) — regra fechada em 2026-09-21:
@@ -32,7 +34,17 @@
  *  - fatura_aberta   = soma de compras do ciclo ATUAL (após corte da fechada) + encargos pending
  *  - status_fatura_fechada = 'ABERTA' | 'VIGENTE' | 'PAGO_PARCIAL' | 'PAGO_MIN' | 'PAGO_TOTAL'
  *  Estas colunas espelham o que o backend calcula em enrichUserCreditCardData (index.cjs).
+ *
+ * ENCARGOS PRIMEIRO (2026-09-24): o pagamento abate multa/juros/IOF diário antes do
+ * principal, e a rota marca as charges quitadas com payment_id. pagos_totais separa o
+ * valor pago de fato (total_pago_bruto) do PRINCIPAL pago (total_pago = |amount| −
+ * encargos quitados por ele, mesmo LEFT JOIN de encargosPagamento.sqlPrincipalPorPagamento).
+ * Só o principal abate as fechadas: com o valor cheio, um parcial de 30 só de encargos
+ * deixava fatura_aberta 30 menor que o backend (1.080 × 1.110). Pagamento antigo, sem
+ * charge com payment_id, continua com o valor cheio.
  */
+
+const { TOLERANCIA_QUITACAO } = require('./invoiceMath');
 
 const DELIM = ';';
 
@@ -43,10 +55,19 @@ const DELIM = ';';
 function buildQuery({ cpf, esc = (v) => `'${v}'` } = {}) {
     return `
 WITH pagos_totais AS (
-    SELECT cpf, SUM(ABS(amount)) AS total_pago, MAX(date) AS ultimo_pagamento
-    FROM fintech.transactions
-    WHERE type = 'INVOICE_PAYMENT'
-    GROUP BY cpf
+    SELECT t.cpf,
+           SUM(ABS(t.amount)) AS total_pago_bruto,
+           SUM(ABS(t.amount) - COALESCE(enc.total, 0)) AS total_pago,
+           MAX(t.date) AS ultimo_pagamento
+    FROM fintech.transactions t
+    LEFT JOIN (
+        SELECT payment_id, SUM(amount) AS total
+        FROM fintech.billing_charges
+        WHERE status = 'paid' AND payment_id IS NOT NULL
+        GROUP BY payment_id
+    ) enc ON enc.payment_id = t.id
+    WHERE t.type = 'INVOICE_PAYMENT'
+    GROUP BY t.cpf
 ),
 fechadas_invoices AS (
     SELECT
@@ -112,10 +133,16 @@ fechada_calculada AS (
         -- especial em vez de se disfarçar de PAGO_TOTAL). Mínimo usa o mesmo piso
         -- de R$10 do backend (invoiceController.js: Math.max(total*0.10, 10)),
         -- senão fatura pequena (<R$100) diverge do que o app realmente cobra.
+        -- Encargos primeiro: a comparação é pelo PRINCIPAL pago (total_pago). O mínimo
+        -- é 100% dos encargos + max(10%, R$10) do principal — os encargos saem antes,
+        -- então quem pagou o mínimo abateu exatamente max(10%, R$10) de principal (é o
+        -- critério da rota: principalAplicado >= minPayment). TOTAL = principal quitado
+        -- sem sobra (mesma tolerância do motor); pagar a mais segue PAGO_PARCIAL.
+        -- VIGENTE olha o valor pago de fato: parcial só de encargos tem principal 0.
         CASE
             WHEN f.total_fechadas IS NULL THEN 'ABERTA'
-            WHEN COALESCE(pt.total_pago, 0) <= 0 THEN 'VIGENTE'
-            WHEN ABS(COALESCE(pt.total_pago, 0) - f.total_fechadas) < 0.01 THEN 'PAGO_TOTAL'
+            WHEN COALESCE(pt.total_pago_bruto, 0) <= 0 THEN 'VIGENTE'
+            WHEN ABS(f.total_fechadas - COALESCE(pt.total_pago, 0)) <= ${TOLERANCIA_QUITACAO} THEN 'PAGO_TOTAL'
             WHEN ABS(COALESCE(pt.total_pago, 0) - GREATEST(f.total_fechadas * 0.10, 10)) < 0.01 THEN 'PAGO_MIN'
             ELSE 'PAGO_PARCIAL'
         END as status_fechada,
@@ -363,6 +390,8 @@ async function ensureFaixaAtrasoTables(dbService) {
 
 async function getExportMassasData(dbService, { cpf, esc } = {}) {
     await ensureFaixaAtrasoTables(dbService);
+    // pagos_totais lê billing_charges.payment_id (principal pago, encargos primeiro).
+    await require('../services/encargosPagamento').garantirColunasQuitacao(dbService);
     const sql = buildQuery({ cpf, esc });
     return dbService.executeQuery(sql);
 }

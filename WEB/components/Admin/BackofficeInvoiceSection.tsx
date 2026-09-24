@@ -69,7 +69,11 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
         ? searchedUser.creditCard.closedInvoice
         : 0;
     const isPaid = (searchedUser.creditCard as any)?.closedInvoiceIsPaid ?? false;
-    const valorPago = (searchedUser.creditCard as any)?._closedInvoiceValorPago ?? 0;
+    // Pagamento exibido = valor pago de fato; o pagamento quita ENCARGOS PRIMEIRO, então
+    // parte dele pode não ter abatido o principal (_closedInvoiceValorPago = só principal).
+    const valorPagoPrincipal = searchedUser.creditCard?._closedInvoiceValorPago ?? 0;
+    const encargosPagos = searchedUser.creditCard?._closedInvoiceEncargosPagos ?? 0;
+    const valorPago = searchedUser.creditCard?._closedInvoiceValorPagoBruto ?? valorPagoPrincipal;
     const closedInvoiceResidual = (searchedUser.creditCard as any)?.closedInvoiceResidual ?? 0;
     // Data de quitação da fatura fechada (ex.: "04/ago") para rótulos de PDF/tabela enviados ao Telegram.
     // Array fixo de meses pt-BR: determinístico e independente de ICU do ambiente (toLocaleDateString
@@ -556,6 +560,12 @@ const BackofficeInvoiceSection: React.FC<BackofficeInvoiceSectionProps> = ({
                         <div className="flex justify-between items-center p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 font-bold text-emerald-600 dark:text-emerald-400">
                             <span className="flex items-center gap-1">💰 Pagamento(s) Realizado(s) — abate diretamente do saldo devedor:</span>
                             <span className="font-mono">R$ {valorPago.toFixed(2)}</span>
+                        </div>
+                    )}
+                    {encargosPagos > 0.005 && (
+                        <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400">
+                            <span>🔹 Divisão do pagamento (encargos primeiro):</span>
+                            <span className="font-mono">R$ {encargosPagos.toFixed(2)} encargos + R$ {valorPagoPrincipal.toFixed(2)} principal</span>
                         </div>
                     )}
                     {valorPago > 0 && (

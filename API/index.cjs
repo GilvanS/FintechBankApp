@@ -549,6 +549,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // Sem isto, fatura paga continuava aparecendo como devida na tela.
         const _paidByInvoice = new Map();
         const _paidAtByInvoice = new Map();
+        const _encargosPagosByInvoice = new Map();
         // Hoisted fora do try: a CASCATA abaixo usa o total por CPF (_payTotalCpf)
         // mesmo quando a query falha (aí fica vazio e cai no híbrido legado).
         let _payRows = [];
@@ -563,6 +564,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             _payRows = await dbService.executeQuery(`
                 SELECT pp.invoice_id,
                        SUM(pp.principal) AS pago,
+                       SUM(pp.valor) AS pago_bruto,
                        MAX(pp.date) AS ultimo_pagamento
                 FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService, esc(cpf))}) pp
                 GROUP BY pp.invoice_id
@@ -570,8 +572,17 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             for (const r of _payRows) {
                 _paidByInvoice.set(r.invoice_id, parseFloat(r.pago || 0));
                 _paidAtByInvoice.set(r.invoice_id, r.ultimo_pagamento);
+                // Encargos quitados pelos pagamentos vinculados a esta fatura (pago de
+                // fato − principal). Só para EXIBIR o pagamento cheio; a quitação usa o principal.
+                _encargosPagosByInvoice.set(r.invoice_id, Math.max(0, parseFloat(r.pago_bruto || 0) - parseFloat(r.pago || 0)));
             }
-        } catch (_e) { /* sem vinculo: cai no valor_pago legado abaixo */ }
+        } catch (_e) {
+            // Sem a query o pago cai no valor_pago legado (fatura aparece devida). Ela agora
+            // também depende de billing_charges.payment_id — a falha tem de aparecer no log.
+            console.warn(`[enrich ${cpf}] Falha ao ler pagamentos vinculados (principal por pagamento):`, _e.message);
+        }
+        // Encargos quitados pelos pagamentos das fechadas em escopo (ver _closedInvoiceValorPagoBruto).
+        const _encargosPagosDe = (invs) => round2(invs.reduce((s, inv) => s + (_encargosPagosByInvoice.get(inv.id) || 0), 0));
 
         // Pago efetivo de uma fatura: vinculo tem precedencia, valor_pago legado e fallback
         // (faturas anteriores a 005 nao tem transacao vinculada).
@@ -700,6 +711,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 // maior do que foi realmente pago. O principal é o valor_total da invoice.
                 normalized.creditCard._closedInvoiceValorTotal = Math.round(unpaidClosed.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0) * 100) / 100;
                 normalized.creditCard._closedInvoiceValorPago = Math.round(unpaidClosed.reduce((sum, inv) => sum + _pagoEfetivo(inv), 0) * 100) / 100;
+                normalized.creditCard._closedInvoiceEncargosPagos = _encargosPagosDe(unpaidClosed);
                 normalized.creditCard._closedInvoiceCount = unpaidClosed.length;
                 // Escopo da fechada: o frontend filtra paymentHistory por estes ids em
                 // vez de ler PAYMENT de closedTransactions (que nao tem mais PAYMENT).
@@ -740,6 +752,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                     normalized.creditCard.closedInvoiceCutoffDate = computeCutoffDate(_maisRecente.due_date);
                     normalized.creditCard._closedInvoiceValorTotal = Math.round(_totalVal * 100) / 100;
                     normalized.creditCard._closedInvoiceValorPago = Math.round(_totalPago * 100) / 100;
+                    normalized.creditCard._closedInvoiceEncargosPagos = _encargosPagosDe(_quitadasPorVinculo);
                     normalized.creditCard._closedInvoiceDataPagamento = _ultimoPagamento;
                     normalized.creditCard._closedInvoiceCount = _quitadasPorVinculo.length;
                     normalized.creditCard._closedInvoiceIds = _quitadasPorVinculo.map(i => String(i.id));
@@ -1168,7 +1181,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // sem payment_id (pagamento antigo) continuam descontados como antes.
         creditoExcedente = Math.max(0, paymentsPrincipal - principalTotal - chargesTotal);
     } catch (err) {
-        console.warn('Erro ao calcular creditoExcedente:', err.message);
+        // Inclui as queries que dependem de billing_charges.payment_id: sem elas o
+        // residual volta a usar só a cascata e o crédito excedente fica 0.
+        console.warn(`[enrich ${cpf}] Erro ao calcular creditoExcedente/pagamentos do ciclo (principal por pagamento):`, err.message);
     }
 
     normalized.creditCard.creditoExcedente = creditoExcedente;
@@ -1200,6 +1215,21 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         normalized.creditCard._closedInvoiceValorPago = Math.max(
             parseFloat(normalized.creditCard._closedInvoiceValorPago || 0),
             paymentsPrincipal
+        );
+    }
+    // Pagamento EXIBIDO (cabeçalho "Pagamentos desta fatura", admin, PDF): o valor pago
+    // de fato = principal + encargos que ele quitou. _closedInvoiceValorPago continua
+    // sendo só o principal (é o que fecha valorTotal − valorPago = residual e o saldo
+    // financiado do PDF); sem os dois campos abaixo, um TOTAL de 1.040 (1.000 + 40 de
+    // encargos) aparecia como 1.000 e um parcial só de encargos como 0.
+    {
+        const _encargosPagos = round2(Math.max(
+            parseFloat(normalized.creditCard._closedInvoiceEncargosPagos || 0),
+            paymentsTotal - paymentsPrincipal
+        ));
+        normalized.creditCard._closedInvoiceEncargosPagos = _encargosPagos;
+        normalized.creditCard._closedInvoiceValorPagoBruto = round2(
+            parseFloat(normalized.creditCard._closedInvoiceValorPago || 0) + _encargosPagos
         );
     }
 
@@ -3088,7 +3118,11 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
     const originalClosedAmount = card._closedInvoiceValorTotal ?? card.closedInvoiceAmount ?? card.closedInvoice ?? 0;
     const closedAmount = card.closedInvoice ?? 0;
     const isPaid = card.closedInvoiceIsPaid ?? false;
+    // valorPago = PRINCIPAL abatido (base do saldo financiado); o PDF exibe o pagamento
+    // cheio (bruto) com a divisão encargos + principal (o pagamento quita encargos primeiro).
     const valorPago = card._closedInvoiceValorPago ?? 0;
+    const encargosPagos = card._closedInvoiceEncargosPagos ?? 0;
+    const valorPagoBruto = card._closedInvoiceValorPagoBruto ?? valorPago;
     const closedInvoiceResidual = card.closedInvoiceResidual ?? 0;
 
     const diffTime = Math.abs(new Date().getTime() - new Date(card.closedInvoiceDueDate || card.invoiceDueDate || '2026-07-15').getTime());
@@ -3315,7 +3349,9 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
         resumo: type === 'open'
             ? {
                 anterior: originalClosedAmount,
-                pagamento: valorPago,
+                pagamento: valorPagoBruto,
+                pagamentoEncargos: encargosPagos,
+                pagamentoPrincipal: valorPago,
                 pagamentoData: card.closedInvoicePaidAt || null,
                 saldoFinanciado: Math.max(0, closedInvoiceResidual),
                 lancamentos: openAmount,
@@ -3323,7 +3359,9 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
             }
             : {
                 anterior: 0,
-                pagamento: valorPago,
+                pagamento: valorPagoBruto,
+                pagamentoEncargos: encargosPagos,
+                pagamentoPrincipal: valorPago,
                 pagamentoData: card.closedInvoicePaidAt || null,
                 saldoFinanciado: Math.max(0, originalClosedAmount - valorPago),
                 lancamentos: originalClosedAmount,
@@ -6997,6 +7035,8 @@ apiRouter.get('/admin/audit-consistency', bearerAuth(), authenticateAdmin, async
 // utils/tblDeMassasExport.cjs, essa auditoria é a rede de segurança pra não voltar.
 async function runCsvConsistencyAuditQuery(cpfFilter, limit) {
     const { buildQuery } = require('./utils/tblDeMassasExport.cjs');
+    // A query do CSV lê billing_charges.payment_id (principal pago, encargos primeiro).
+    await encargosPagamento.garantirColunasQuitacao(dbService);
     const csvRows = await dbService.executeQuery(buildQuery({ cpf: cpfFilter || undefined }));
     const sample = cpfFilter ? csvRows : csvRows.slice(0, limit);
 
