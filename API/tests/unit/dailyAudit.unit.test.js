@@ -103,7 +103,9 @@ describe('dailyAudit service unit tests', () => {
                     days_overdue: 15
                 }];
             }
-            if (query.includes('FROM "billing_charges"')) {
+            // Só a soma de encargos da Anomalia 4: a Anomalia 8 também cita billing_charges
+            // (NOT EXISTS de encargo já quitado por pagamento) e não pode receber este mock.
+            if (query.includes('FROM "billing_charges"') && query.includes('SUM(amount)')) {
                 return [{ total: 0 }]; // Nenhuma cobrança ativa de multa/juros
             }
             return [];

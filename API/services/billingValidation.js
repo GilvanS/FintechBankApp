@@ -5,6 +5,7 @@ const DatabaseFactory = require('../services/database/DatabaseFactory');
 const dbService = DatabaseFactory.createDatabaseService();
 const notificationsRepo = require('../repositories/notificationsRepo');
 const { planDistribution } = require('../utils/invoiceMath');
+const encargosPagamento = require('./encargosPagamento');
 
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function calcMulta(amount) { return round2((Number(amount) || 0) * 0.02); }
@@ -84,6 +85,8 @@ async function runBillingValidationInner(opts) {
     if (!configRows.length) return { success: false, message: 'Configuração de faturamento não encontrada.' };
     const cfg = configRows[0];
     if (!cfg.is_active) return { success: true, message: 'Ciclo de faturamento inativo. Nenhuma validação executada.' };
+    // payment_id/paid_at de billing_charges são lidos abaixo (encargos quitados primeiro).
+    await encargosPagamento.garantirColunasQuitacao(dbService);
 
     const cycle = computeCurrentCycle(cfg);
     const today = new Date();
@@ -126,15 +129,13 @@ async function runBillingValidationInner(opts) {
                COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
         FROM ${dbService.fq('invoices')} i
         LEFT JOIN (
-            SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            SELECT invoice_id, SUM(principal) AS total
+            FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
             GROUP BY invoice_id
         ) pagos ON pagos.invoice_id = i.id
         LEFT JOIN (
-            SELECT cpf, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            SELECT cpf, SUM(principal) AS total
+            FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
             GROUP BY cpf
         ) pagos_cpf ON pagos_cpf.cpf = i.cpf
         WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
@@ -330,10 +331,14 @@ async function runBillingValidationInner(opts) {
                 // sem filtro de invoice_reference — qualquer multa/IOF pending do CPF já
                 // inibe nova inserção. Com o filtro por ref instável, cada troca de ref
                 // criava multa duplicada (77,42 em 2026-07 E em 2026-08 na massa 805).
+                // Conta também o que um pagamento parcial DESTE débito já quitou (encargos
+                // primeiro): sem isso, pagar a multa fazia o motor recriá-la amanhã.
+                const _vencYmd = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}-${String(dueDate.getDate()).padStart(2, '0')}`;
+                const _filtroDebito = encargosPagamento.sqlEncargoDoDebitoAtual(_vencYmd);
                 const existingCharges = await dbService.executeQuery(`
                     SELECT charge_type, COALESCE(SUM(amount), 0) AS total
                     FROM ${dbService.fq('billing_charges')}
-                    WHERE cpf = '${u.cpf}' AND status = 'pending'
+                    WHERE cpf = '${u.cpf}' AND ${_filtroDebito}
                     GROUP BY charge_type
                 `);
                 const getExisting = (type) => {
@@ -350,10 +355,12 @@ async function runBillingValidationInner(opts) {
                 // colidir caso a âncora mude (fatura mais antiga não paga) ou existam
                 // charges legadas de refs antigas no histórico. Multa/IOF adicional
                 // continuam no check global acima (uma única vez por débito).
+                // Inclui o dia já QUITADO por pagamento parcial deste débito: o incremento
+                // de hoje pago de manhã não pode ser reinserido pelo catch-up da tarde.
                 const existingDayRows = await dbService.executeQuery(`
                     SELECT invoice_reference, charge_type, days_overdue
                     FROM ${dbService.fq('billing_charges')}
-                    WHERE cpf = '${u.cpf}' AND status = 'pending'
+                    WHERE cpf = '${u.cpf}' AND ${_filtroDebito}
                 `);
                 // A chave usa o invoice_reference REAL de cada linha existente (não o
                 // stableRef corrente): linhas legadas de refs antigas (ex.: 2026-09 com

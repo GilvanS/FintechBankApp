@@ -79,6 +79,7 @@ const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate, computeCutoffDate, INVOICE_CUTOFF_DAYS } = require('./utils/billing');
 const cardEngine = require('./utils/cardEngine');
 const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates, classifyDoubleCount } = require('./utils/invoiceMath');
+const encargosPagamento = require('./services/encargosPagamento');
 
 // art. 52 CDC — payload único de encargos de juros exposto nas rotas de compra
 // (shop/checkout e acquirer-simulate) e nas transações enriquecidas do cartão.
@@ -4601,6 +4602,8 @@ async function runBillingValidationInner(opts) {
     if (!configRows.length) return { success: false, message: 'Configuração de faturamento não encontrada.' };
     const cfg = configRows[0];
     if (!cfg.is_active) return { success: true, message: 'Ciclo de faturamento inativo. Nenhuma validação executada.' };
+    // payment_id/paid_at de billing_charges são lidos abaixo (encargos quitados primeiro).
+    await encargosPagamento.garantirColunasQuitacao(dbService);
 
     const cycle = computeCurrentCycle(cfg);
     const today = new Date();
@@ -4641,15 +4644,13 @@ async function runBillingValidationInner(opts) {
                COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
         FROM ${dbService.fq('invoices')} i
         LEFT JOIN (
-            SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            SELECT invoice_id, SUM(principal) AS total
+            FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
             GROUP BY invoice_id
         ) pagos ON pagos.invoice_id = i.id
         LEFT JOIN (
-            SELECT cpf, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            SELECT cpf, SUM(principal) AS total
+            FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
             GROUP BY cpf
         ) pagos_cpf ON pagos_cpf.cpf = i.cpf
         WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
@@ -4658,7 +4659,10 @@ async function runBillingValidationInner(opts) {
     `);
     // CASCATA (mesma regra do enrich/auditor/sync): o pagamento é UMA transação com o
     // valor total (comprovante); a quitação de cada fatura é derivada distribuindo o
-    // TOTAL de INVOICE_PAYMENT do CPF da mais antiga para a mais nova (planDistribution).
+    // PRINCIPAL pago do CPF (INVOICE_PAYMENT menos os encargos que cada um quitou —
+    // encargos primeiro) da mais antiga para a mais nova (planDistribution). Sem o
+    // desconto, o encargo pago contaria como principal: o residual cairia, os encargos
+    // do dia sairiam menores e um parcial do tamanho do principal pararia a contagem.
     const _cascadeMotor = new Map();
     {
         const _byCpfMotor = new Map();
@@ -4797,10 +4801,14 @@ async function runBillingValidationInner(opts) {
                 // sem filtro de invoice_reference — qualquer multa/IOF pending do CPF já
                 // inibe nova inserção. Com o filtro por ref instável, cada troca de ref
                 // criava multa duplicada (77,42 em 2026-07 E em 2026-08 na massa 805).
+                // Conta também o que um pagamento parcial DESTE débito já quitou (encargos
+                // primeiro): sem isso, pagar a multa fazia o motor recriá-la amanhã.
+                const _vencYmd = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}-${String(dueDate.getDate()).padStart(2, '0')}`;
+                const _filtroDebito = encargosPagamento.sqlEncargoDoDebitoAtual(_vencYmd);
                 const existingCharges = await dbService.executeQuery(`
                     SELECT charge_type, COALESCE(SUM(amount), 0) AS total
                     FROM ${dbService.fq('billing_charges')}
-                    WHERE cpf = '${u.cpf}' AND status = 'pending'
+                    WHERE cpf = '${u.cpf}' AND ${_filtroDebito}
                     GROUP BY charge_type
                 `);
                 const getExisting = (type) => {
@@ -4817,10 +4825,12 @@ async function runBillingValidationInner(opts) {
                 // colidir caso a âncora mude (fatura mais antiga não paga) ou existam
                 // charges legadas de refs antigas no histórico. Multa/IOF adicional
                 // continuam no check global acima (uma única vez por débito).
+                // Inclui o dia já QUITADO por pagamento parcial deste débito: o incremento
+                // de hoje pago de manhã não pode ser reinserido pelo catch-up da tarde.
                 const existingDayRows = await dbService.executeQuery(`
                     SELECT invoice_reference, charge_type, days_overdue
                     FROM ${dbService.fq('billing_charges')}
-                    WHERE cpf = '${u.cpf}' AND status = 'pending'
+                    WHERE cpf = '${u.cpf}' AND ${_filtroDebito}
                 `);
                 // A chave usa o invoice_reference REAL de cada linha existente (não o
                 // stableRef corrente): linhas legadas de refs antigas (ex.: 2026-09 com
@@ -6093,6 +6103,8 @@ async function initializeDatabase() {
                     status VARCHAR(20) NOT NULL DEFAULT 'pending'
                 )
             `);
+            // paid_at/payment_id: quitação rastreável (pagamento abate encargos primeiro).
+            await encargosPagamento.garantirColunasQuitacao(dbService);
             console.log('✅ Tabela billing_charges verificada/criada com sucesso.');
 
             // telegram_user_topics — tópico do fórum Telegram por CPF

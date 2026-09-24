@@ -10,6 +10,8 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
     const errors = [];
 
     try {
+        // payment_id/paid_at de billing_charges são lidos na Anomalia 8 (encargos primeiro).
+        await require('./encargosPagamento').garantirColunasQuitacao(db);
         // Anomalia 1: Pagamento parcial após vencimento sem novos encargos
         // Se a fatura venceu, houve pagamento parcial (ou nenhum) e não foram gerados encargos (multa/juros)
         const closedUnpaid = await db.executeQuery(`
@@ -221,6 +223,13 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
             WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
               AND u.credit_card_due_day IS NOT NULL
               AND EXTRACT(DAY FROM i.due_date) != u.credit_card_due_day
+              -- Débito com encargo já QUITADO por pagamento (encargos primeiro): regerar
+              -- os encargos do zero cobraria de novo o que o cliente já pagou.
+              AND NOT EXISTS (
+                  SELECT 1 FROM ${db.fq('billing_charges')} bq
+                  WHERE bq.cpf = i.cpf AND bq.status = 'paid' AND bq.payment_id IS NOT NULL
+                    AND bq.paid_at >= i.due_date
+              )
             ORDER BY i.updated_at ASC
             LIMIT 150
         `);
