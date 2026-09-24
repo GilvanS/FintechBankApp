@@ -31,6 +31,20 @@ function residualEmAberto(fechadas, totalPago) {
     }, 0));
 }
 
+/**
+ * Quando a fatura FECHOU de fato. Fechamento do motor (no prazo ou recuperado depois,
+ * como o CT03.1 às 21:35) grava created_at até poucos dias após o vencimento — vale o
+ * created_at. Histórico gerado de uma vez pelo gerador de massa tem created_at = data
+ * da geração (meses depois): aí o fechamento é o corte, ~10 dias antes do vencimento.
+ */
+const DIA = 86400000;
+function fechadaPeloMotor(inv) {
+    return new Date(inv.created_at).getTime() <= new Date(inv.due_date).getTime() + 5 * DIA;
+}
+function momentoDoFechamento(inv) {
+    return fechadaPeloMotor(inv) ? new Date(inv.created_at).getTime() : new Date(inv.due_date).getTime() - 10 * DIA;
+}
+
 /** Saldo anterior para a fatura que está fechando AGORA (fechamento do invoiceEngine). */
 async function calcularSaldoAnterior(db, cpf, esc = escPadrao) {
     const fechadas = await db.executeQuery(`
@@ -85,7 +99,11 @@ async function listarSaldoAnteriorIndevido(db, { cpf = null, esc = escPadrao } =
             const inv = lista[i];
             const gravado = round2(parseFloat(inv.saldo_anterior || 0));
             if (gravado <= 0.02) continue;
-            const fechouEm = new Date(inv.created_at).getTime();
+            // Só fechamentos do MOTOR (regressão do invoiceEngine). Histórico gerado de uma
+            // vez pelo gerador antigo paga encargos junto com o principal, e a cascata de
+            // quitação (só principal) não sabe separar — comparar ali dá falso positivo.
+            if (!fechadaPeloMotor(inv)) continue;
+            const fechouEm = momentoDoFechamento(inv);
             const pagoAteFechar = (pagosPorCpf.get(cpfAtual) || [])
                 .filter((p) => new Date(p.date).getTime() < fechouEm)
                 .reduce((s, p) => s + parseFloat(p.valor || 0), 0);
@@ -103,4 +121,4 @@ async function listarSaldoAnteriorIndevido(db, { cpf = null, esc = escPadrao } =
     return indevidos;
 }
 
-module.exports = { calcularSaldoAnterior, listarSaldoAnteriorIndevido, residualEmAberto };
+module.exports = { calcularSaldoAnterior, listarSaldoAnteriorIndevido, residualEmAberto, momentoDoFechamento };
