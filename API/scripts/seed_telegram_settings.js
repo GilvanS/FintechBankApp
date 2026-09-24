@@ -17,7 +17,8 @@ const CATEGORIES = [
     'system_error',
     'deposit',
     'notification',
-    'daily_anomaly'
+    'daily_anomaly',
+    'uti_cura'
 ];
 
 async function seedTelegramSettings(knexInstance) {

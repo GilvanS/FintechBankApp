@@ -272,7 +272,13 @@ module.exports = function createAdminScriptsController(deps) {
                 reenviarComprovante,
                 aplicadoPor: req.user?.cpf || null,
             });
-            if (!dryRun) auditLog(req, 'admin_script_uti_recuperacao', 'info', { cpf: cpf || 'ALL', curadas: data.resumo.curadas, falhas: data.resumo.falhas });
+            if (!dryRun) {
+                auditLog(req, 'admin_script_uti_recuperacao', 'info', { cpf: cpf || 'ALL', curadas: data.resumo.curadas, falhas: data.resumo.falhas });
+                // Aviso no Telegram (categoria uti_cura) — fire-and-forget: a cura já está gravada.
+                require('../../services/utiAlerts').notificarCuras(require('../../services/telegramService'), data, {
+                    db: dbService, esc: repoContext.esc, aplicadoPor: req.user?.cpf || null,
+                });
+            }
             res.json({ success: true, data, executedAt: new Date().toISOString() });
         } catch (err) {
             res.status(500).json({ success: false, message: 'Erro ao rodar a UTI de Recuperação: ' + err.message });

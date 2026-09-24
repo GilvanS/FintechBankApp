@@ -31,7 +31,10 @@ const CATEGORY_DESTINATIONS = {
     system_error: ['general'],
     deposit: ['cpf', 'general'],
     notification: ['cpf', 'general'],
-    daily_anomaly: ['general']
+    daily_anomaly: ['general'],
+    // UTI de Recuperação curou a massa (services/utiAlerts.js): tópico do CPF + resumo
+    // no tópico persistente "🏥 UTI de Recuperação" (alertTopic).
+    uti_cura: ['cpf']
 };
 
 // Fila serial: evita rate limit do Telegram (~30 msg/s) e mantém ordem.
