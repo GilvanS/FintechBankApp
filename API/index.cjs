@@ -7934,8 +7934,8 @@ if (!IS_TEST) {
             require('./services/eventBus').publish('mass.created', {
                 cpf: created.cpf,
                 fullName: created.fullName,
-                // Estado atual = último ciclo (Gerador 4.0); cai no accountStatus do payload em clientes antigos.
-                accountStatus: created.cycles?.[created.cycles.length - 1] || payload.accountStatus,
+                // Estado atual = status do último ciclo (Gerador 4.0; ciclo pode ser objeto com pagamento); cai no accountStatus do payload em clientes antigos.
+                accountStatus: created.accountStatus || payload.accountStatus,
                 cycles: created.cycles,
                 cardBrand: payload.cardBrand,
             }).catch(() => {});
