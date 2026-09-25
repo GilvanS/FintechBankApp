@@ -2110,3 +2110,26 @@ Um `PAYMENT` `CREDIT_CARD` (descrição contendo `Faturado no Cartão`) **não**
   da API real (nossoNumero do CPF, DVs calculados) — Página 4 bate com o
   Python campo a campo.
 
+## 25. Pagamento com fatura ABERTA = antecipação
+
+Vale quando o cliente paga e **não há fatura FECHADA com dívida**.
+
+- **Encargos primeiro:** o pagamento quita os `billing_charges` pendentes, só se
+  cobrir **todos** (tolerância R$ 0,01). A parte vai para
+  `transactions.applied_to_charges`.
+- **O resto é antecipação:** fica em UM `INVOICE_PAYMENT` com `invoice_id NULL`
+  (1 pagamento = 1 lançamento no extrato). Nada é apagado: parcelas e compras do
+  ciclo continuam lá para a fatura fechar com elas.
+- **Fatura aberta:** `currentInvoiceTotal = compras + resíduo das fechadas +
+  encargos pendentes − antecipações`. O que passar vira `creditoExcedente`.
+- **Fechamento:** o `invoiceEngine` vincula a antecipação à fatura recém-fechada;
+  a cascata (`planDistribution`, mais antiga primeiro) faz a quitação.
+- **Pago de principal**, em qualquer soma, é `|amount| − applied_to_charges`
+  (`paidPrincipalSql`, `API/utils/invoiceMath.js`). Pagamento de FECHADA que
+  também quita encargos grava a parte dos encargos do mesmo jeito.
+- **Legado:** linhas anteriores (`applied_to_charges NULL`) contam como 0 de
+  encargos. Pagamento órfão legado não é vinculado nem vira crédito.
+- **CSV da planilha de controle:** `fatura_aberta` segue a mesma regra;
+  `tbl_pago_encargos` (soma de `applied_to_charges`) é a **última** coluna.
+- **Testes:** `API/tests/integration/pagamentoFaturaAberta.integration.test.js`
+  (cenários A, B, C, D, L e paridade do CSV).
