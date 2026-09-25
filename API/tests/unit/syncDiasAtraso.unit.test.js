@@ -162,7 +162,7 @@ describe('ANCHOR_SQL — query de âncoras do motor', () => {
         const sql = ANCHOR_SQL((t) => `"fintech"."${t}"`);
         // O JOIN que alimenta pagoEfetivo (pago_vinculado + tem_vinculo) precisa
         // existir na query — sem ele, o sync voltaria a divergir do motor.
-        expect(sql).toContain('SUM(ABS(CAST(amount AS DECIMAL(15,2))))');
+        expect(sql).toContain('SUM((ABS(CAST(amount AS DECIMAL(15,2))) - COALESCE(applied_to_charges, 0)))');
         expect(sql).toContain("type = 'INVOICE_PAYMENT'");
         expect(sql).toContain('GROUP BY invoice_id');
         expect(sql).toContain('COALESCE(pagos.total, 0) AS pago_vinculado');

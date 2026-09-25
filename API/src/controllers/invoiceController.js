@@ -42,7 +42,7 @@ module.exports = function createInvoiceController(deps) {
         if (Number.isNaN(d.getTime())) return String(v || '');
         return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     };
-    const { computeInvoiceGross, planDistribution } = require('../../utils/invoiceMath');
+    const { computeInvoiceGross, planDistribution, paidPrincipalSql } = require('../../utils/invoiceMath');
 
     // ── Comprovante de pagamento em PDF (evento de pagamento → tópico da massa) ──
     // Projeto de estudo para automação: todo pagamento de fatura (total, mínimo ou
@@ -169,7 +169,7 @@ module.exports = function createInvoiceController(deps) {
     async function fetchPaidByInvoice(cpf) {
         const { esc } = repoContext;
         const rows = await dbService.executeQuery(`
-            SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS total
+            SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS total
             FROM ${dbService.fq('transactions')}
             WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
         `);

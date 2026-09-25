@@ -3,6 +3,7 @@ const { nowDb } = require('../utils/timezone');
 const { toDateOnly } = require('../utils/dateUtils');
 const { computeLastPassedDueDate } = require('../repositories/usersRepo');
 const { computeNextInvoiceDueDate, INVOICE_CUTOFF_DAYS } = require('../utils/billing');
+const { paidPrincipalSql } = require('../utils/invoiceMath');
 
 async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = null) {
     console.log('[Audit] Iniciando auditoria diária de anomalias...');
@@ -306,7 +307,7 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
 
         for (const inv of faturasComPagamentoLigado) {
             const pagosRows = await db.executeQuery(`
-                SELECT COALESCE(SUM(ABS(amount)), 0) AS total
+                SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS total
                 FROM ${db.fq('transactions')}
                 WHERE invoice_id = '${inv.id}' AND type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
             `);

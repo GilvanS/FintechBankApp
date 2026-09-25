@@ -25,6 +25,8 @@
  *     due_date), inadimplente se >= 1 dia.
  */
 
+const { paidPrincipalSql } = require('../utils/invoiceMath');
+
 // Mesma query de âncoras usada pelo motor (closedInvoiceRows): fatura FECHADA
 // não paga, LEFT JOIN com a soma dos INVOICE_PAYMENT vinculados por invoice_id
 // E com o TOTAL de INVOICE_PAYMENT do CPF (pago_total_cpf) — base da CASCATA:
@@ -47,13 +49,13 @@ const ANCHOR_SQL = (fq, extra) => `
            u.overdue_status
     FROM ${fq('invoices')} i
     LEFT JOIN (
-        SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+        SELECT invoice_id, SUM(${paidPrincipalSql()}) AS total
         FROM ${fq('transactions')}
         WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
         GROUP BY invoice_id
     ) pagos ON pagos.invoice_id = i.id
     LEFT JOIN (
-        SELECT cpf, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+        SELECT cpf, SUM(${paidPrincipalSql()}) AS total
         FROM ${fq('transactions')}
         WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
         GROUP BY cpf

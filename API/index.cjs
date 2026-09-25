@@ -78,7 +78,7 @@ const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequeste
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate, computeCutoffDate, INVOICE_CUTOFF_DAYS } = require('./utils/billing');
 const cardEngine = require('./utils/cardEngine');
-const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates, classifyDoubleCount } = require('./utils/invoiceMath');
+const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates, classifyDoubleCount, paidPrincipalSql } = require('./utils/invoiceMath');
 
 // art. 52 CDC — payload único de encargos de juros exposto nas rotas de compra
 // (shop/checkout e acquirer-simulate) e nas transações enriquecidas do cartão.
@@ -554,7 +554,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         try {
             _payRows = await dbService.executeQuery(`
                 SELECT invoice_id,
-                       SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS pago,
+                       SUM(${paidPrincipalSql()}) AS pago,
                        MAX(date) AS ultimo_pagamento
                 FROM ${dbService.fq('transactions')}
                 WHERE cpf = '${cpf}' AND type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
@@ -4638,13 +4638,13 @@ async function runBillingValidationInner(opts) {
                COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
         FROM ${dbService.fq('invoices')} i
         LEFT JOIN (
-            SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+            SELECT invoice_id, SUM(${paidPrincipalSql()}) AS total
             FROM ${dbService.fq('transactions')}
             WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
             GROUP BY invoice_id
         ) pagos ON pagos.invoice_id = i.id
         LEFT JOIN (
-            SELECT cpf, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+            SELECT cpf, SUM(${paidPrincipalSql()}) AS total
             FROM ${dbService.fq('transactions')}
             WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
             GROUP BY cpf
@@ -5107,13 +5107,13 @@ const syncInvoiceDiasAtraso = async () => {
                    COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
             FROM ${dbService.fq('invoices')} i
             LEFT JOIN (
-                SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+                SELECT invoice_id, SUM(${paidPrincipalSql()}) AS total
                 FROM ${dbService.fq('transactions')}
                 WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
                 GROUP BY invoice_id
             ) pagos ON pagos.invoice_id = i.id
             LEFT JOIN (
-                SELECT cpf, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+                SELECT cpf, SUM(${paidPrincipalSql()}) AS total
                 FROM ${dbService.fq('transactions')}
                 WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
                 GROUP BY cpf
@@ -6711,7 +6711,7 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
                 ${filterCpf ? `AND t.cpf = ${esc(filterCpf)}` : ''}
             GROUP BY t.cpf
             HAVING ABS(
-                COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) -
+                COALESCE(SUM(${paidPrincipalSql('t')}), 0) -
                 COALESCE((
                     SELECT SUM(CAST(i.valor_pago AS DECIMAL(15,2)))
                     FROM ${dbService.fq('invoices')} i
@@ -7252,7 +7252,7 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
     // 2. CPFs com órfãos pré-005 (paginado)
     let listSql = `
         SELECT t.cpf, u.full_name, COUNT(*) AS orphan_count,
-               COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) AS orphan_sum
+               COALESCE(SUM(${paidPrincipalSql('t')}), 0) AS orphan_sum
         FROM ${dbService.fq('transactions')} t
         LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
         WHERE t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
@@ -7281,7 +7281,7 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
             SELECT cpf, SUM(coverage) AS coverage, SUM(valor_pago) AS valor_pago
             FROM (
                 -- Ã“rfãos PRÃ‰-005 (mesma semântica da página): invoice_id NULL + cutoff
-                SELECT t.cpf, ABS(CAST(t.amount AS DECIMAL(15,2))) AS coverage, 0 AS valor_pago
+                SELECT t.cpf, ${paidPrincipalSql('t')} AS coverage, 0 AS valor_pago
                 FROM ${dbService.fq('transactions')} t
                 LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
                 WHERE t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
@@ -7292,7 +7292,7 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
                   AND u.role IS DISTINCT FROM 'admin'
                 UNION ALL
                 -- Pagamentos VINCULADOS (invoice_id setado) — completam a cobertura
-                SELECT t.cpf, ABS(CAST(t.amount AS DECIMAL(15,2))) AS coverage, 0 AS valor_pago
+                SELECT t.cpf, ${paidPrincipalSql('t')} AS coverage, 0 AS valor_pago
                 FROM ${dbService.fq('transactions')} t
                 LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
                 WHERE t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
@@ -7363,7 +7363,7 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
 
         // 5. Pagamentos Jàvinculados (invoice_id setado) — completam a cobertura
         const linkedRes = await dbService.executeQuery(`
-            SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS total
+            SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS total
             FROM ${dbService.fq('transactions')}
             WHERE cpf = ${esc(cpf)}
               AND type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
