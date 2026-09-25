@@ -14,7 +14,7 @@ describe('Pagamento com fatura ABERTA = antecipação (§25)', () => {
     let db;
     let controller;
     let indexMod;
-    const CPF = { A: '99999999981', B: '99999999982', C: '99999999983', D: '99999999984', L: '99999999985' };
+    const CPF = { A: '99999999981', B: '99999999982', C: '99999999983', D: '99999999984' };
 
     async function limpar(cpf) {
         for (const t of ['transactions', 'billing_charges', 'invoices', 'installment_plans', 'users']) {
@@ -130,6 +130,27 @@ describe('Pagamento com fatura ABERTA = antecipação (§25)', () => {
         expect(tx.invoice_id).toBeNull();
         expect(parseFloat(tx.applied_to_charges)).toBe(0);
         expect(await encargosPendentes(CPF.B)).toBe(1);
+    }, 30000);
+
+    it('D: sem amount no body, fatura ABERTA usa o currentInvoiceTotal do enrich', async () => {
+        await criarUsuario(CPF.D, { dueInDays: 25 });
+        await compra(CPF.D, 800, 2);
+        await encargo(CPF.D, 100);
+
+        // O total esperado é o MESMO que a tela mostraria (enrich), não um valor
+        // recalculado à parte — é exatamente o que payOpenCycle usa como payAmount
+        // quando o body não manda `amount` (requisição real do cliente "pagar tudo").
+        const esperado = (await enrich(CPF.D)).currentInvoiceTotal;
+        expect(esperado).toBeCloseTo(900, 2);
+
+        const res = await pagar(CPF.D); // sem amount
+        expect(res.json.mock.calls[0][0].success).toBe(true);
+
+        const [tx] = await pagamentos(CPF.D);
+        expect(parseFloat(tx.amount)).toBeCloseTo(-esperado, 2);
+        expect(tx.invoice_id).toBeNull();
+        expect(parseFloat(tx.applied_to_charges)).toBeCloseTo(100, 2);
+        expect(await encargosPendentes(CPF.D)).toBe(0);
     }, 30000);
 
     it('C: pagamento total de FECHADA grava a parte dos encargos', async () => {
