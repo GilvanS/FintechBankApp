@@ -153,6 +153,31 @@ describe('Pagamento com fatura ABERTA = antecipação (§25)', () => {
         expect(await encargosPendentes(CPF.D)).toBe(0);
     }, 30000);
 
+    it('D: antecipação é vinculada no fechamento — a fatura NÃO é cobrada de novo', async () => {
+        // Reusa CPF.D (o teste "D: sem amount no body" acima já terminou e nada depois
+        // depende do estado dele) — limpar antes evita colisão de PK no criarUsuario.
+        await limpar(CPF.D);
+        // Vence em 2 dias → corte (vencimento − 5 dias) já passou: o engine fecha agora.
+        await criarUsuario(CPF.D, { dueInDays: 2 });
+        await compra(CPF.D, 500, 4);
+        expect((await enrich(CPF.D)).currentInvoiceTotal).toBeCloseTo(500, 2); // pré-condição
+
+        expect((await pagar(CPF.D, 500)).json.mock.calls[0][0].success).toBe(true);
+
+        await require('../../services/invoiceEngine').runEngine(CPF.D);
+
+        const inv = await db.executeQuery(`SELECT id, valor_total FROM fintech.invoices WHERE cpf = '${CPF.D}' AND status = 'FECHADA'`);
+        expect(inv).toHaveLength(1);
+        expect(parseFloat(inv[0].valor_total)).toBe(500);
+        const [tx] = await pagamentos(CPF.D);
+        expect(tx.invoice_id).toBe(inv[0].id);
+
+        // Antes da §25 isto cobrava os 500 de novo (pagamento em dobro).
+        const res2 = await pagar(CPF.D);
+        expect(res2.status).toHaveBeenCalledWith(400);
+        expect((await pagamentos(CPF.D))).toHaveLength(1);
+    }, 60000);
+
     it('C: pagamento total de FECHADA grava a parte dos encargos', async () => {
         await criarUsuario(CPF.C, { dueInDays: 20, status: 'inadimplente', diasAtraso: 10 });
         await fechada(CPF.C, 'inv-ant-C', 1000, 10);
