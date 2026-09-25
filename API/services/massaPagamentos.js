@@ -53,7 +53,7 @@ const DESCRICAO_PAGAMENTO_PARCIAL = 'Pagamento parcial de fatura';
 /** 'Mínimo', 'abaixo do minimo', 'ABAIXO_DO_MINIMO'... → tipo canônico (null se inválido). */
 function normalizarTipoPagamento(tipo) {
     if (tipo === null || tipo === undefined || tipo === '') return null;
-    const t = String(tipo).normalize('NFD').replace(/[̀-ͯ]/g, '')
+    const t = String(tipo).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .trim().toUpperCase().replace(/[\s-]+/g, '_').replace('ABAIXO_DO_MINIMO', 'ABAIXO_MINIMO');
     return TIPOS_PAGAMENTO_MASSA.includes(t) ? t : null;
 }
@@ -118,11 +118,13 @@ function simularCiclosComPagamento({ ciclos, agora, genId }) {
         return {
             idx, id: genId(), venc, corte: venc - DIAS_CORTE_ANTES_DO_VENCIMENTO * DIA,
             valorTotal: round2(c.principal), iofFixoExtra: round2(c.iofFixoExtra || 0), ref: referenciaDoMes(venc),
-            pago: 0, cursor: null, multaLancada: false, iofLancado: false, quitadaEm: null,
+            pago: 0, cursor: null, multaLancada: false, iofLancado: false,
             saldoAnterior: 0, congelado: { multa: 0, juros_mora: 0, juros_remuneratorios: 0, iof: 0 },
         };
     });
     const devido = (f) => round2(Math.max(0, f.valorTotal - f.pago));
+    // Mínimo do MOTOR sobre o principal pago da fechada (10%, piso R$ 10, folga 0,01).
+    const pagouMinimo = (f) => f.pago >= Math.max(f.valorTotal * 0.10, 10) - 0.01;
 
     const eventos = ciclos.map((c, idx) => {
         if (c.status === 'adimplente') return { idx, tipo: 'TOTAL', quando: fat[idx].venc };
@@ -200,10 +202,7 @@ function simularCiclosComPagamento({ ciclos, agora, genId }) {
             resto = round2(resto - abate);
         }
         for (const f of fechadas) {
-            if (f.quitadaEm === null && devido(f) <= TOLERANCIA_QUITACAO) {
-                f.quitadaEm = t;
-                f.cursor = null; // só o principal quitado para de render encargo
-            }
+            if (devido(f) <= TOLERANCIA_QUITACAO) f.cursor = null; // só o principal quitado para de render encargo
         }
         pagamentos.push({
             id: payId, date: t, amount: valor, invoice_id: ancora.id, tipo: e.tipo,
@@ -243,17 +242,18 @@ function simularCiclosComPagamento({ ciclos, agora, genId }) {
     // encargos seguem; abaixo disso, inadimplente com os dias desde o vencimento dela.
     const aberta = fat.find((f) => devido(f) > TOLERANCIA_QUITACAO);
     let usuario = { accountStatus: 'adimplente', daysOverdue: 0 };
-    if (aberta && !(aberta.pago >= Math.max(aberta.valorTotal * 0.10, 10) - 0.01)) {
+    if (aberta && !pagouMinimo(aberta)) {
         usuario = { accountStatus: 'inadimplente', daysOverdue: Math.max(1, dias(aberta.venc, agora)) };
     }
 
+    // invoices.dias_atraso pela regra do motor (billingValidation, sincronização das
+    // fechadas; audit_helpers.invoiceExpectedStateFor): 0 na quitada e na que teve o
+    // mínimo pago; nas demais, dias desde o vencimento até hoje.
     const faturas = fat.map((f) => ({
         id: f.id, dueDate: f.venc, createdAt: f.corte, valorTotal: f.valorTotal, saldoAnterior: f.saldoAnterior,
         valorMulta: f.congelado.multa, valorJurosMora: f.congelado.juros_mora,
         valorJurosRemuneratorios: f.congelado.juros_remuneratorios, valorIof: f.congelado.iof,
-        diasAtraso: f.quitadaEm !== null
-            ? Math.max(0, dias(f.venc, f.quitadaEm))
-            : (agora > f.venc ? Math.max(1, dias(f.venc, agora)) : 0),
+        diasAtraso: devido(f) <= TOLERANCIA_QUITACAO || pagouMinimo(f) ? 0 : Math.max(0, dias(f.venc, agora)),
     }));
     return { faturas, pagamentos, encargos, usuario };
 }

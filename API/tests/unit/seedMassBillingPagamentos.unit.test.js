@@ -172,10 +172,41 @@ descrever('massa gerada × auditoria (SQL real sobre tabelas sintéticas): nada 
     } = require('../../services/auditoriaEncargos');
     const esc = (v) => (v === null || v === undefined ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`);
 
-    const bancoDaMassa = (t) => bancoSintetico(pg, tabelasPadrao({
-        users: [{ cpf: CPF, full_name: 'Massa pagamento', balance: 0, role: 'user', credit_card_due_day: 10, is_blacklisted: false }],
-        invoices: t.invoices, transactions: t.transactions, billing_charges: t.billing_charges,
-    }));
+    const { ANCHOR_SQL, buildCascadePago, selectAnchors, invoiceExpectedStateFor, expectedUserStateFor } = require('../../scripts/audit_helpers.cjs');
+
+    // users com as colunas de estado que o ANCHOR_SQL (motor/sync/auditor) lê.
+    const COLUNAS_USERS = [['cpf', 'varchar'], ['full_name', 'text'], ['balance', 'numeric'], ['role', 'varchar'],
+        ['credit_card_due_day', 'int'], ['is_blacklisted', 'boolean'], ['updated_at', 'timestamp'],
+        ['account_status', 'varchar'], ['days_overdue', 'int'], ['overdue_status', 'varchar']];
+    const bancoDaMassa = (t) => {
+        const tabelas = tabelasPadrao({ invoices: t.invoices, transactions: t.transactions, billing_charges: t.billing_charges });
+        tabelas.users = {
+            colunas: COLUNAS_USERS,
+            linhas: [{
+                cpf: CPF, full_name: 'Massa pagamento', balance: 0, role: 'user', credit_card_due_day: 10, is_blacklisted: false,
+                updated_at: null, account_status: t.usuario.accountStatus, days_overdue: t.usuario.daysOverdue, overdue_status: null,
+            }],
+        };
+        return bancoSintetico(pg, tabelas);
+    };
+
+    // Dias de atraso da fechada e estado do usuário como o motor/sync_dias_atraso os
+    // deixariam (audit_helpers). O real-time do lado SQL usa CURRENT_DATE do Postgres:
+    // perto da meia-noite o fuso do servidor pode dar 1 dia de diferença.
+    async function conferirDiasComMotor(db, t) {
+        const rows = await db.executeQuery(ANCHOR_SQL(db.fq));
+        expect(rows).toHaveLength(t.faturas.length);
+        const cascata = buildCascadePago(rows);
+        for (const r of rows) {
+            const esperado = invoiceExpectedStateFor(r, cascata).days;
+            const gravado = Number(r.invoice_dias_atraso);
+            if (esperado === 0) expect(gravado).toBe(0);
+            else expect(Math.abs(gravado - esperado)).toBeLessThanOrEqual(1);
+        }
+        const u = expectedUserStateFor(selectAnchors(rows, cascata)[0], cascata);
+        expect(t.usuario.accountStatus).toBe(u.status);
+        expect(Math.abs(t.usuario.daysOverdue - u.days)).toBeLessThanOrEqual(1);
+    }
 
     test.each(CENARIOS)('%s', async (_nome, cycles) => {
         const t = await gerar(cycles);
@@ -191,6 +222,14 @@ descrever('massa gerada × auditoria (SQL real sobre tabelas sintéticas): nada 
         // Invariante do gerador pela derivação do motor (sqlResidualFechadas).
         const inv = await validarInvarianteMassa(db, CPF, require('../../repositories/usersRepo').normalizeMassCycles(cycles));
         expect(inv).toMatchObject({ ok: true, motivo: null });
+        // invoices.dias_atraso e users (status/dias) iguais aos do motor.
+        await conferirDiasComMotor(db, t);
+    });
+
+    test('dias_atraso com o valor antigo (dias corridos na fechada com mínimo pago) diverge do motor', async () => {
+        const t = await gerar([{ status: 'inadimplente', pagamento: 'MINIMO' }, 'inadimplente']);
+        t.faturas[0].dias_atraso = t.faturas[1].dias_atraso + 31;
+        await expect(conferirDiasComMotor(bancoDaMassa(t), t)).rejects.toThrow();
     });
 
     test('a 8d enxerga a massa (fechamento retroativo = fechamento do motor) e acusaria herança errada', async () => {

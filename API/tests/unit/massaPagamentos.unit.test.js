@@ -51,7 +51,9 @@ describe('simularCiclosComPagamento — um tipo de pagamento por vez', () => {
         // Encargo para no TOTAL: nenhuma charge da 1ª depois do pagamento.
         expect(f1Charges.some((r) => r.created_at > pag.date)).toBe(false);
         expect(f2.saldoAnterior).toBe(0);
-        expect(f1.diasAtraso).toBe(10);
+        // dias_atraso pela regra do motor: fechada quitada = 0; a em aberto conta desde o vencimento.
+        expect(f1.diasAtraso).toBe(0);
+        expect(f2.diasAtraso).toBe(45);
         // A 2ª fatura venceu sem pagamento: débito NOVO com multa própria, pending.
         expect(daFatura(sim, 1).map((r) => [r.charge_type, r.status])).toEqual([
             ['multa', 'pending'], ['juros_mora', 'pending'], ['juros_remuneratorios', 'pending'], ['iof', 'pending'],
@@ -80,7 +82,8 @@ describe('simularCiclosComPagamento — um tipo de pagamento por vez', () => {
         expect(depois.some((r) => r.charge_type === 'multa')).toBe(false); // multa é única por fatura
         // Encargos pending de antes do corte da 2ª congelados nela (só exibição).
         expect(f2).toMatchObject({ valorMulta: 0, valorJurosMora: 3.3, valorJurosRemuneratorios: 50.79, valorIof: 4.61 });
-        // Motor: principal pago >= 10% da fechada mais antiga → conta em dia.
+        // Motor: principal pago >= 10% da fechada mais antiga → conta em dia e a fechada fica com 0 dias.
+        expect(f1.diasAtraso).toBe(0);
         expect(sim.usuario).toEqual({ accountStatus: 'adimplente', daysOverdue: 0 });
     });
 
@@ -89,6 +92,7 @@ describe('simularCiclosComPagamento — um tipo de pagamento por vez', () => {
         const [pag] = sim.pagamentos;
         expect(pag).toMatchObject({ amount: 575.45, principal: 500, encargosQuitados: 75.45, description: DESCRICAO_PAGAMENTO_MINIMO });
         expect(sim.faturas[1].saldoAnterior).toBe(500);
+        expect(sim.faturas[0].diasAtraso).toBe(0); // mínimo pago (50% >= 10%)
         const depois = daFatura(sim, 0).filter((r) => r.created_at > pag.date);
         expect(depois.length).toBeGreaterThan(0);
         expect(depois.every((r) => r.invoice_amount === 500)).toBe(true);
@@ -100,6 +104,7 @@ describe('simularCiclosComPagamento — um tipo de pagamento por vez', () => {
         // 175,45 / 2 = 87,73: cobre os 75,45 de encargos e só 12,28 de principal.
         expect(pag).toMatchObject({ amount: 87.73, principal: 12.28, encargosQuitados: 75.45, description: DESCRICAO_PAGAMENTO_PARCIAL });
         expect(sim.faturas[1].saldoAnterior).toBe(987.72);
+        expect(sim.faturas[0].diasAtraso).toBe(76); // abaixo do mínimo: dias seguem contando
         expect(sim.usuario).toEqual({ accountStatus: 'inadimplente', daysOverdue: 76 });
     });
 

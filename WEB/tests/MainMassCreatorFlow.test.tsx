@@ -75,4 +75,39 @@ describe('⚡ MainMassCreatorFlow & 360 Global Mass Engine', () => {
         fireEvent.click(card);
         expect(card).toHaveStyle({ transform: 'rotateY(180deg)' });
     }, 25000);
+
+    // Task 5 — Fix round 1, I-1: tipo de pagamento em atraso no ciclo "em atraso".
+    it('ciclo em atraso oferece o select de pagamento; ciclo pago não oferece', () => {
+        renderWithContext(<MainMassCreatorFlow />);
+
+        const cicloAtual = screen.getByTestId('mass-cycle-0');
+        // O ciclo único nasce aleatório (pago ou em atraso) — força "em atraso" para o teste ser determinístico.
+        if (cicloAtual.getAttribute('aria-pressed') === 'false') fireEvent.click(cicloAtual);
+        expect(cicloAtual.getAttribute('aria-pressed')).toBe('true');
+
+        expect(screen.getByTestId('mass-cycle-0-pagamento')).toBeInTheDocument();
+        // Sem pagamento selecionado (padrão): sem o campo de dias.
+        expect(screen.queryByTestId('mass-cycle-0-dias')).not.toBeInTheDocument();
+
+        // Virar pago: some o select de pagamento.
+        fireEvent.click(cicloAtual);
+        expect(screen.queryByTestId('mass-cycle-0-pagamento')).not.toBeInTheDocument();
+    }, 25000);
+
+    it('escolher um tipo de pagamento revela o campo de dias (1-15); "Sem pagamento" volta a escondê-lo', () => {
+        renderWithContext(<MainMassCreatorFlow />);
+
+        const cicloAtual = screen.getByTestId('mass-cycle-0');
+        if (cicloAtual.getAttribute('aria-pressed') === 'false') fireEvent.click(cicloAtual);
+
+        const selectPagamento = screen.getByTestId('mass-cycle-0-pagamento') as HTMLSelectElement;
+        fireEvent.change(selectPagamento, { target: { value: 'MINIMO' } });
+        const diasInput = screen.getByTestId('mass-cycle-0-dias') as HTMLInputElement;
+        expect(diasInput).toBeInTheDocument();
+        expect(diasInput).toHaveAttribute('min', '1');
+        expect(diasInput).toHaveAttribute('max', '15');
+
+        fireEvent.change(selectPagamento, { target: { value: '' } });
+        expect(screen.queryByTestId('mass-cycle-0-dias')).not.toBeInTheDocument();
+    }, 25000);
 });
