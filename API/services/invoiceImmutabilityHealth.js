@@ -66,6 +66,10 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
         }
         console.log(`[InvoiceImmutability] Query A — cutoff: ${lowerBound}`);
 
+        // Antecipação da §25 fica sem invoice_id até o fechamento do ciclo (≤ ~35 dias).
+        // Só vira anomalia se passar disso — ou se for órfão legado (applied_to_charges NULL).
+        const antecipacaoVencida = new Date(Date.now() - 40 * 86400000).toISOString();
+
         const orphans = await db.executeQuery(`
             SELECT t.id, t.cpf, t.amount, t.date, t.description,
                    u.full_name
@@ -73,6 +77,7 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
             LEFT JOIN ${db.fq('users')} u ON u.cpf = t.cpf
             WHERE t.type = 'INVOICE_PAYMENT'
               AND t.invoice_id IS NULL
+              AND (t.applied_to_charges IS NULL OR t.date < '${antecipacaoVencida}'::timestamptz)
               AND t.date >= '${lowerBound}'::timestamptz
               AND u.cpf IS NOT NULL
               AND u.role IS DISTINCT FROM 'admin'
