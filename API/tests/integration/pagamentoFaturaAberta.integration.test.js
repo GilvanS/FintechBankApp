@@ -14,7 +14,7 @@ describe('Pagamento com fatura ABERTA = antecipação (§25)', () => {
     let db;
     let controller;
     let indexMod;
-    const CPF = { A: '99999999981', B: '99999999982', C: '99999999983', D: '99999999984' };
+    const CPF = { A: '99999999981', B: '99999999982', C: '99999999983', D: '99999999984', L: '99999999985' };
 
     async function limpar(cpf) {
         for (const t of ['transactions', 'billing_charges', 'invoices', 'installment_plans', 'users']) {
@@ -165,5 +165,40 @@ describe('Pagamento com fatura ABERTA = antecipação (§25)', () => {
         expect(parseFloat(tx.amount)).toBe(-1050);
         expect(tx.invoice_id).toBe('inv-ant-C');
         expect(parseFloat(tx.applied_to_charges)).toBe(50);
+    }, 30000);
+
+    it('A (enrich): antecipação abate a aberta — total 0, sem saldo credor', async () => {
+        const cc = await enrich(CPF.A);
+        expect(cc.antecipacoesFaturaAberta).toBeCloseTo(500, 2);
+        expect(cc.currentInvoiceTotal).toBeCloseTo(0, 2);
+        expect(cc.creditoExcedente).toBeCloseTo(0, 2);
+        expect(cc.closedInvoiceResidual).toBeCloseTo(0, 2);
+    }, 30000);
+
+    it('B (enrich): aberta = compras + encargos pendentes − antecipação', async () => {
+        const cc = await enrich(CPF.B);
+        expect(cc.currentInvoiceTotal).toBeCloseTo(520, 2); // 500 + 50 − 30
+    }, 30000);
+
+    it('C (enrich): encargos pagos junto NÃO viram saldo credor', async () => {
+        const cc = await enrich(CPF.C);
+        expect(cc.closedInvoiceResidual).toBeCloseTo(0, 2); // antes: −50
+        expect(cc.currentInvoiceTotal).toBeCloseTo(0, 2);
+    }, 30000);
+
+    it('L: pagamento órfão LEGADO (applied_to_charges NULL) não vira crédito', async () => {
+        await criarUsuario(CPF.L, { dueInDays: 25 });
+        await fechada(CPF.L, 'inv-ant-L', 1000, 40);
+        await db.executeQuery(`
+            INSERT INTO fintech.transactions (id, cpf, type, amount, description, date, invoice_id)
+            VALUES ('tx-L-pago', '${CPF.L}', 'INVOICE_PAYMENT', -1000.00, 'Pagamento fatura', '${iso(Date.now() - 35 * DIA)}', 'inv-ant-L'),
+                   ('tx-L-orfao', '${CPF.L}', 'INVOICE_PAYMENT', -300.00, 'Pagamento fatura', '${iso(Date.now() - 2 * DIA)}', NULL)
+        `);
+        await compra(CPF.L, 200, 1);
+
+        const cc = await enrich(CPF.L);
+        expect(cc.closedInvoiceResidual).toBeCloseTo(0, 2);
+        expect(cc.antecipacoesFaturaAberta).toBeCloseTo(0, 2);
+        expect(cc.currentInvoiceTotal).toBeCloseTo(200, 2); // antes: 0 (órfão virava crédito)
     }, 30000);
 });

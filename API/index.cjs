@@ -1108,29 +1108,10 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         : Math.max(0, rawInvoiceTotal);
     normalized.creditCard.closedInvoiceAmount = normalized.creditCard.closedInvoice;
 
-    // —— Cálculo do Crédito Excedente (Saldo Credor) ——
-    let creditoExcedente = 0;
+    // —— Pagamentos do ciclo (exibição) e antecipações da fatura aberta (§25) ——
     let paymentsTotal = 0;
-    let chargesTotal = 0;
-    let principalTotal = 0;
+    let antecipacoesAberta = 0;
     try {
-        // 1. Buscar faturas fechadas não pagas ou pagas no ciclo aberto atual
-        const closedInvoicesCycle = await dbService.executeQuery(`
-            SELECT valor_total FROM ${dbService.fq('invoices')}
-            WHERE cpf = '${cpf}' AND status = 'FECHADA'
-              AND (data_pagamento IS NULL OR data_pagamento > '${new Date(_prevCloseMs).toISOString()}')
-        `);
-        principalTotal = closedInvoicesCycle.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0);
-
-        // 2. Buscar encargos pendentes ou pagos no ciclo aberto atual
-        const chargesCycle = await dbService.executeQuery(`
-            SELECT amount FROM ${dbService.fq('billing_charges')}
-            WHERE cpf = '${cpf}'
-              AND (status = 'pending' OR (status = 'paid' AND created_at > '${new Date(_prevCloseMs).toISOString()}'))
-        `);
-        chargesTotal = chargesCycle.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
-
-        // 3. Buscar pagamentos realizados no ciclo aberto atual
         const paymentsCycle = await dbService.executeQuery(`
             SELECT COALESCE(SUM(ABS(amount)), 0) AS total
             FROM ${dbService.fq('transactions')}
@@ -1141,16 +1122,21 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         `);
         paymentsTotal = parseFloat(paymentsCycle[0]?.total || 0);
 
-        // Crédito excedente = pagamento que passe de (principal + encargos) das faturas fechadas.
-        // Subtrai chargesTotal: encargos pendentes/pagos no ciclo têm prioridade sobre crédito —
-        // só o que sobrar DEPOIS de cobrir principal + encargos é saldo credor (creditoExcedente).
-        creditoExcedente = Math.max(0, paymentsTotal - principalTotal - chargesTotal);
+        // Antecipação = pagamento da regra §25 (applied_to_charges NOT NULL) ainda sem
+        // vínculo: pertence ao ciclo que ainda não fechou (o invoiceEngine vincula no
+        // fechamento). Órfão legado (NULL) fica de fora — o fluxo antigo já o consumiu.
+        const antRows = await dbService.executeQuery(`
+            SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS total
+            FROM ${dbService.fq('transactions')}
+            WHERE cpf = '${cpf}' AND type = 'INVOICE_PAYMENT'
+              AND invoice_id IS NULL AND applied_to_charges IS NOT NULL
+        `);
+        antecipacoesAberta = parseFloat(antRows[0]?.total || 0);
     } catch (err) {
-        console.warn('Erro ao calcular creditoExcedente:', err.message);
+        console.warn('Erro ao calcular pagamentos/antecipações do ciclo:', err.message);
     }
-
-    normalized.creditCard.creditoExcedente = creditoExcedente;
     normalized.creditCard.paymentsTotal = paymentsTotal;
+    normalized.creditCard.antecipacoesFaturaAberta = round2(antecipacoesAberta);
     // —— closedInvoiceResidual: FONTE ÃšNICA = DB (valor_total - valor_pago) ——
     // NÃO usar paymentsTotal da janela do ciclo atual: pagamentos PARCIAIS feitos em
     // ciclos anteriores (registrados no valor_pago do DB pela rota de pagamento) ficariam
@@ -1158,23 +1144,16 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     // 12312312312: pagou R$ 1.900 em julho, mas o residual mostrava R$ 4.400,52 em vez de
     // R$ 2.500,52 (= 3.870,86 - 1.900 + 529,66). O DB é a fonte da verdade do valor pago.
     // _closedInvoiceValorTotal/_ValorPago somam TODAS as fechadas não pagas do DB.
+    // Só pagamento VINCULADO (invoice_id) quita fatura fechada — mesma regra do
+    // getClosedInvoiceDebt/fetchPaidByInvoice. A antiga "rede de segurança"
+    // max(valor_pago, paymentsTotal da janela) somava pagamento sem vínculo e
+    // INVOICE_ANTICIPATION como se tivessem pago a fechada: crédito fantasma
+    // (805/777, 2026-09). Antecipação da regra §25 abate a ABERTA, logo abaixo.
     const _originalPrincipal = parseFloat(normalized.creditCard._closedInvoiceValorTotal || 0);
     const _dbValorPago = parseFloat(normalized.creditCard._closedInvoiceValorPago || 0);
-    // max(db, janela): se a rota de pagamento já atualizou o valor_pago no DB, usa ele;
-    // se por algum motivo o DB não foi atualizado (pagamento órfão), usa a janela como
-    // rede de segurança para o residual não inflar.
-    const _residualPrincipal = _originalPrincipal - Math.max(_dbValorPago, paymentsTotal);
-    // Saldo credor (pagou além do principal) = residual NEGATIVO (exibido como tal no admin)
+    const _residualPrincipal = _originalPrincipal - _dbValorPago;
+    // Saldo credor (pagou além do principal, vinculado) = residual NEGATIVO
     normalized.creditCard.closedInvoiceResidual = Math.round(_residualPrincipal * 100) / 100;
-    // O valor pago exibido na fechada: total real pago (DB ou janela, o maior).
-    // Nunca sobrescrever para MENOS: um pagamento parcial anterior (ex.: R$ 1.900 em
-    // julho) não pode sumir quando a janela do ciclo atual não o enxerga.
-    if (paymentsTotal > 0) {
-        normalized.creditCard._closedInvoiceValorPago = Math.max(
-            parseFloat(normalized.creditCard._closedInvoiceValorPago || 0),
-            paymentsTotal
-        );
-    }
 
     // FONTE ÃšNICA DE VERDADE dos encargos/total da fatura fechada.
     // Calculado UMA vez aqui (backend) para que web e admin apenas LEIAM — antes cada
@@ -1286,10 +1265,13 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // Continuam devidos na ABERTA mesmo após a quitação do principal — pagar a fechada
         // estanca novos encargos, mas os já acumulados são herdados pela aberta.
         const _encargosHerdados = _summary.totalEncargos || 0;
-        // Total da aberta = compras do ciclo + principal residual da fechada + encargos herdados.
-        normalized.creditCard.currentInvoiceTotal = round2(Math.max(0, _openPurchases + _closedPrincipalResidual + _encargosHerdados));
-        // Mínimo consolidado: 10% das compras + 100% do residual + 100% dos encargos
-        normalized.creditCard.currentInvoiceMinimo = round2(Math.max(0, _openPurchases * 0.10 + _closedPrincipalResidual + _encargosHerdados));
+        // Antecipações (§25) abatem a aberta; o que passar do total vira saldo credor.
+        const _antecipacoes = normalized.creditCard.antecipacoesFaturaAberta || 0;
+        const _rawOpen = _openPurchases + _closedPrincipalResidual + _encargosHerdados - _antecipacoes;
+        normalized.creditCard.currentInvoiceTotal = round2(Math.max(0, _rawOpen));
+        // Mínimo consolidado: 10% das compras + 100% do residual + 100% dos encargos − antecipações
+        normalized.creditCard.currentInvoiceMinimo = round2(Math.max(0, _openPurchases * 0.10 + _closedPrincipalResidual + _encargosHerdados - _antecipacoes));
+        normalized.creditCard.creditoExcedente = round2(Math.max(0, -_rawOpen));
     }
 
     // Limpar campo interno de cálculo (não expor ao frontend)
