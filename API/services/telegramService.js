@@ -31,7 +31,10 @@ const CATEGORY_DESTINATIONS = {
     system_error: ['general'],
     deposit: ['cpf', 'general'],
     notification: ['cpf', 'general'],
-    daily_anomaly: ['general']
+    daily_anomaly: ['general'],
+    // UTI de Recuperação curou a massa (services/utiAlerts.js): tópico do CPF + resumo
+    // no tópico persistente "🏥 UTI de Recuperação" (alertTopic).
+    uti_cura: ['cpf']
 };
 
 // Fila serial: evita rate limit do Telegram (~30 msg/s) e mantém ordem.
@@ -123,6 +126,39 @@ async function alertGroup(text, category) {
         return;
     }
     enqueue(() => tg('sendMessage', { chat_id: CHAT_ID, text, parse_mode: 'HTML' }));
+}
+
+// Tópico persistente do fórum por NOME (ex.: "🔎 Auditoria · Limite"), guardado via
+// setPersistentTopic. `recriar` descarta o id salvo (tópico apagado no grupo).
+async function getOrCreatePersistentTopic(nome, { recriar = false } = {}) {
+    const repo = getSettingsRepo();
+    if (!recriar) {
+        const row = await repo.getPersistentTopic(nome);
+        if (row && row.topic_id) return row.topic_id;
+    }
+    const created = await tg('createForumTopic', { chat_id: CHAT_ID, name: nome.slice(0, 128) });
+    await repo.setPersistentTopic(nome, created.message_thread_id);
+    return created.message_thread_id;
+}
+
+// Alerta num tópico persistente por nome (critérios da auditoria — services/auditAlerts.js).
+// Fire-and-forget; respeita o toggle da `category`; tópico órfão é recriado 1x.
+async function alertTopic(nomeTopico, text, category) {
+    if (!ENABLED || !db) return;
+    if (category && !(await isCategoryActive(category))) {
+        console.debug(`[telegram:skip] category=${category} reason=disabled (alertTopic ${nomeTopico})`);
+        return;
+    }
+    enqueue(async () => {
+        const enviar = (topicId) => tg('sendMessage', { chat_id: CHAT_ID, message_thread_id: topicId, text, parse_mode: 'HTML' });
+        try {
+            await enviar(await getOrCreatePersistentTopic(nomeTopico));
+        } catch (err) {
+            if (!/message thread not found/i.test(err.message || '')) throw err;
+            console.warn(`[telegram] tópico "${nomeTopico}" órfão — recriando`);
+            await enviar(await getOrCreatePersistentTopic(nomeTopico, { recriar: true }));
+        }
+    });
 }
 
 // Cria o tópico no cadastro da massa (gerador admin ou signup web), com boas-vindas.
@@ -254,14 +290,27 @@ async function sendTable(cpf, title, headers, rows, category) {
     });
 }
 
+// Fire-and-forget: devolve na hora (res.sent vira true só quando a fila enviar).
 async function sendDocument(cpf, buffer, filename, category) {
-    if (!ENABLED || !db) return { sent: false, reason: 'service_disabled' };
+    return (await enviarDocumento(cpf, buffer, filename, category)).res;
+}
+
+// Mesmo envio, mas ESPERA a fila terminar — res.sent é a confirmação real do
+// Telegram. Usado onde a entrega precisa ser verificada (reenvio de comprovante pela UTI).
+async function sendDocumentAguardando(cpf, buffer, filename, category) {
+    const { res, pronto } = await enviarDocumento(cpf, buffer, filename, category);
+    await pronto;
+    return res;
+}
+
+async function enviarDocumento(cpf, buffer, filename, category) {
+    if (!ENABLED || !db) return { res: { sent: false, reason: 'service_disabled' }, pronto: Promise.resolve() };
     if (category && !(await isCategoryActive(category))) {
         console.debug(`[telegram:skip] category=${category} reason=disabled (sendDocument cpf=${cpf})`);
-        return { sent: false, reason: 'disabled' };
+        return { res: { sent: false, reason: 'disabled' }, pronto: Promise.resolve() };
     }
     const res = { sent: false };
-    enqueue(async () => {
+    const pronto = enqueue(async () => {
         let topicId;
         try {
             topicId = await getOrCreateTopic(cpf);
@@ -327,7 +376,7 @@ async function sendDocument(cpf, buffer, filename, category) {
             await logSend({ cpf, topicId, category, destination: 'cpf', messageType: 'document', messageId: null, ok: false, error: res.error || 'unknown' });
         }
     });
-    return res;
+    return { res, pronto };
 }
 
 // ===== WRAPPER send(category, payload) — toggle-gated multi-destination =====
@@ -551,7 +600,7 @@ async function isCategoryActive(category) {
 }
 
 module.exports = {
-    init, alertUser, alertGroup, ensureTopic, deleteTopic, listTopics, getStatus,
-    formatCpf, sendTable, sendDocument, send, isExpiringSoon, invalidateSettingCache,
+    init, alertUser, alertGroup, alertTopic, ensureTopic, deleteTopic, listTopics, getStatus,
+    formatCpf, sendTable, sendDocument, sendDocumentAguardando, send, isExpiringSoon, invalidateSettingCache,
     isCategoryActive, _enabled: ENABLED, _resetQueue: () => { queue = Promise.resolve(); }
 };

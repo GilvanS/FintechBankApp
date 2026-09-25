@@ -19,7 +19,8 @@ const CATEGORY_LABELS: Record<string, string> = {
     system_error: '❌ Erros do motor',
     deposit: '🏦 Depósito recebido',
     notification: '🔔 Notificações',
-    daily_anomaly: '⚠️ Anomalia diária'
+    daily_anomaly: '⚠️ Anomalia diária',
+    uti_cura: '🏥 UTI — massa curada'
 };
 
 const toLocalInput = (value: string | null): string => {

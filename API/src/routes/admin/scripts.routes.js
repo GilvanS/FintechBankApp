@@ -13,4 +13,5 @@ module.exports = function registerAdminScriptsRoutes({ apiRouter, bearerAuth, au
     apiRouter.get('/admin/scripts/export-massas-csv', bearerAuth(), authenticateAdmin, asyncHandler(controller.exportMassasCsv));
     apiRouter.post('/admin/scripts/recalcular-limite', bearerAuth(), authenticateAdmin, asyncHandler(controller.recalcularLimite));
     apiRouter.post('/admin/scripts/uti-recuperacao', bearerAuth(), authenticateAdmin, asyncHandler(controller.utiRecuperacao));
+    apiRouter.get('/admin/scripts/uti-historico', bearerAuth(), authenticateAdmin, asyncHandler(controller.utiHistorico));
 };

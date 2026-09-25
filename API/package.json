@@ -6,7 +6,9 @@
   "type": "",
   "scripts": {
     "start": "node index.cjs",
-    "dev": "node --watch-path=./index.cjs --watch-path=./src --watch-path=./services --watch-path=./repositories --watch-path=./utils --watch-path=./middlewares --watch-path=./workers --watch-path=./config index.cjs",
+    "dev": "node scripts/dev-watch.cjs",
+    "dev:pause": "node scripts/dev-pause.cjs",
+    "dev:node-watch": "node --watch-path=./index.cjs --watch-path=./src --watch-path=./services --watch-path=./repositories --watch-path=./utils --watch-path=./middlewares --watch-path=./workers --watch-path=./config index.cjs",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

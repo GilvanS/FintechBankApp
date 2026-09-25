@@ -49,25 +49,9 @@ module.exports = function createInvoiceController(deps) {
     // parcial) gera um comprovante PDF e envia ao tópico Telegram da massa.
     async function sendPaymentReceipt(cpf, user, data) {
         try {
-            const { generatePaymentReceiptPDF } = require('../../services/invoicePdfService');
-            const cardFinal = String((user && (user.card_number || user.cardNumber)) || '').replace(/\D/g, '').slice(-4);
-            const pdfData = {
-                nome: (user && user.full_name) || '',
-                cpf,
-                cpfFormatado: telegramService.formatCpf(cpf),
-                cartaoFinal: cardFinal || '—',
-                valorPago: data.valorPago,
-                tipo: data.tipo, // TOTAL | MINIMO | PARCIAL
-                saldoRestante: data.saldoRestante,
-                dataPagamento: data.dataPagamento || new Date().toISOString(),
-                formaPagamento: 'Saldo em conta',
-                vencimento: data.vencimento || null,
-                autenticacao: data.autenticacao || `FB-${Date.now().toString(36).toUpperCase()}`,
-                nota: data.nota || '',
-            };
-            // Toggle payment_receipt no painel admin decide se o comprovante vai ao Telegram (gate via categoria).
-            const buffer = await generatePaymentReceiptPDF(pdfData);
-            await telegramService.sendDocument(cpf, buffer, `comprovante_${cpf}.pdf`, 'payment_receipt');
+            // Montagem do PDF em services/paymentReceipt.js (fonte única com a 2ª via da UTI).
+            // Toggle payment_receipt no painel admin decide se o comprovante vai ao Telegram.
+            await require('../../services/paymentReceipt').enviarComprovante(cpf, user, data);
         } catch (err) {
             console.error('[invoiceController] Erro ao gerar/enviar comprovante PDF:', err.message);
         }

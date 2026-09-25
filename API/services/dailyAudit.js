@@ -3,7 +3,6 @@ const { nowDb } = require('../utils/timezone');
 const { toDateOnly } = require('../utils/dateUtils');
 const { computeLastPassedDueDate } = require('../repositories/usersRepo');
 const { computeNextInvoiceDueDate, INVOICE_CUTOFF_DAYS } = require('../utils/billing');
-const { paidPrincipalSql } = require('../utils/invoiceMath');
 
 async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = null) {
     console.log('[Audit] Iniciando auditoria diária de anomalias...');
@@ -178,6 +177,9 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
         // telegram_message_log. Cobre os dois furos possíveis: falha silenciosa na geração
         // do PDF (nem chega a logar) e falha de envio ao Telegram (loga ok=false). Janela de
         // 48h evita reprocessar pagamentos antigos a cada rodada.
+        // Desconta o comprovante que a UTI já reenviou (histórico uti_curas): o log do
+        // reenvio tem a data do reenvio, fora da janela do pagamento.
+        await require('./utiCuraLog').garantirTabela(db);
         const paymentsSemComprovante = await db.executeQuery(`
             SELECT t.cpf, t.id, t.amount, t.date, u.full_name
             FROM ${db.fq('transactions')} t
@@ -187,6 +189,10 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
                   SELECT 1 FROM ${db.fq('telegram_message_log')} l
                   WHERE l.cpf = t.cpf AND l.category = 'payment_receipt' AND l.ok = true
                     AND l.created_at BETWEEN t.date - INTERVAL '10' MINUTE AND t.date + INTERVAL '30' MINUTE
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM ${db.fq('uti_curas')} c
+                  WHERE c.tipo = 'PAGAMENTO_SEM_COMPROVANTE' AND c.ref_id = CAST(t.id AS VARCHAR)
               )
         `);
 
@@ -296,39 +302,31 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
         // Caso real 71040451128 (2026-09-20): Mínimo (R$387,09) + Total (R$3.870,86,
         // valor ORIGINAL de novo, não o residual) pagos na mesma fatura fechada =
         // R$187,63 de excedente por pegar massa que já tinha pagamento anterior.
-        const faturasComPagamentoLigado = await db.executeQuery(`
-            SELECT i.id, i.cpf, i.valor_total, u.full_name
-            FROM ${db.fq('invoices')} i
-            JOIN ${db.fq('users')} u ON u.cpf = i.cpf
-            JOIN ${db.fq('transactions')} t ON t.invoice_id = i.id AND t.type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
-            WHERE i.status = 'FECHADA'
-            GROUP BY i.id, i.cpf, i.valor_total, u.full_name
-        `);
+        // Regra em services/discrepanciasAudit.js (fonte única com o "Corrigir
+        // Discrepâncias", que devolve o excedente ao saldo): o devido inclui o
+        // saldo_anterior e desconta o que já foi devolvido.
+        // Anomalia 8d: fatura FECHADA que herdou saldo_anterior de uma fechada que JÁ
+        // estava paga quando ela fechou (bug do fechamento antigo, que olhava
+        // data_pagamento — nula em toda FECHADA). Não muda o que é cobrado (a quitação
+        // usa só valor_total), mas a tela mostra a fechada inflada (compras + saldo).
+        const { listarSaldoAnteriorIndevido } = require('./saldoAnterior');
+        for (const s of await listarSaldoAnteriorIndevido(db)) {
+            errors.push({
+                cpf: s.cpf,
+                name: s.fullName,
+                type: 'SALDO_ANTERIOR_JA_QUITADO',
+                details: `Fatura fechada ${toDateOnly(s.dueDate)} herdou saldo anterior de R$ ${s.saldoAnteriorGravado.toFixed(2)}, mas a fatura anterior já tinha só R$ ${s.saldoAnteriorCorreto.toFixed(2)} em aberto quando ela fechou (R$ ${s.diferenca.toFixed(2)} já pagos herdados como dívida). A tela mostra a fechada como R$ ${(s.valorTotal + s.saldoAnteriorGravado).toFixed(2)} em vez de R$ ${(s.valorTotal + s.saldoAnteriorCorreto).toFixed(2)}.`
+            });
+        }
 
-        for (const inv of faturasComPagamentoLigado) {
-            const pagosRows = await db.executeQuery(`
-                SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS total
-                FROM ${db.fq('transactions')}
-                WHERE invoice_id = '${inv.id}' AND type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
-            `);
-            const totalPago = round2(parseFloat(pagosRows[0]?.total || 0));
-
-            const principal = round2(parseFloat(inv.valor_total));
-            const chargesRows = await db.executeQuery(`
-                SELECT COALESCE(SUM(amount), 0) AS total
-                FROM ${db.fq('billing_charges')}
-                WHERE cpf = '${inv.cpf}' AND invoice_amount = ${principal}
-            `);
-            const encargos = round2(parseFloat(chargesRows[0]?.total || 0));
-            const devido = round2(principal + encargos);
-            const excedente = round2(totalPago - devido);
-
-            if (excedente > 0.02) {
+        const { listarExcedentesFaturaFechada } = require('./discrepanciasAudit');
+        for (const f of await listarExcedentesFaturaFechada(db)) {
+            if (f.excedente > 0.02) {
                 errors.push({
-                    cpf: inv.cpf,
-                    name: inv.full_name,
+                    cpf: f.cpf,
+                    name: f.fullName,
                     type: 'PAGAMENTO_EXCEDENTE_FATURA_FECHADA',
-                    details: `Fatura fechada de R$ ${principal.toFixed(2)} (+ R$ ${encargos.toFixed(2)} de encargos = R$ ${devido.toFixed(2)} devido) recebeu R$ ${totalPago.toFixed(2)} em pagamentos vinculados — excedente de R$ ${excedente.toFixed(2)}. Provável massa que recebeu pagamento parcial (Mínimo/Parcial) e depois 'Total' (que cobra o valor original de novo, não o residual restante).`
+                    details: `Fatura fechada de R$ ${f.principal.toFixed(2)} (+ R$ ${f.encargos.toFixed(2)} de encargos = R$ ${f.devido.toFixed(2)} devido) recebeu R$ ${f.pago.toFixed(2)} em pagamentos vinculados — excedente de R$ ${f.excedente.toFixed(2)}. Devolver ao saldo pelo "Corrigir Discrepâncias" do Admin (Simular com o CPF antes).`
                 });
             }
         }
@@ -494,10 +492,11 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
             for (const err of errors) {
                 const reqDummy = { user: { cpf: '00000000000', role: 'system' } };
                 await auditLog(reqDummy, 'daily_audit_anomaly', 'error', err);
-
-                // Alerta no grupo geral
-                telegramService.alertGroup(`⚠️ <b>Auditoria de Anomalia [${err.type}]</b>\n\n<b>Cliente:</b> ${err.name} (${telegramService.formatCpf(err.cpf)})\n<b>Detalhes:</b> ${err.details}`, 'daily_anomaly');
             }
+            // 1 mensagem por critério (Pagamentos, PIX, Compras, Faturas/Encargos,
+            // Limite) no tópico dele + 1 resumo no General — antes era 1 mensagem
+            // no General por anomalia, a cada rodada.
+            require('./auditAlerts').enviarAlertasAuditoria(telegramService, errors);
         } else {
             console.log('[Audit] Nenhuma anomalia de faturamento encontrada.');
         }

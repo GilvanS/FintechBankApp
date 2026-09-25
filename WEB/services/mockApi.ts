@@ -2066,12 +2066,14 @@ export const adminUpdateSystemConfig = async (defaultTheme: 'yellow' | 'midnight
 export const adminAdjustCreditLimit = async (_cpf: string, _totalLimit: number): Promise<{ success: boolean; message: string }> => demoFail();
 
 // --- Scripts admin (massas) — indisponíveis sem backend ---
-export const adminAuditFix = async (_cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
+export const adminAuditFix = async (_cpf?: string, _dryRun?: boolean): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminSyncOverdueDays = async (_cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminInvoicePdfPreview = async (_cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminMassaReport = async (_cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminActivatePendingCards = async (_cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminRecalcularLimiteDisponivel = async (_cpf?: string, _dryRun?: boolean): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
+export const adminUtiRecuperacao = async (_cpf?: string, _dryRun?: boolean): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
+export const adminUtiHistorico = async (_cpf?: string): Promise<{ success: boolean; data?: any[]; message?: string }> => demoFail();
 export const adminExportMassasCsv = async (_cpf?: string): Promise<{ success: boolean; data?: { csv: string; count: number }; message?: string }> => demoFail();
 
 // --- Planejamento de testes (TestPlanningSection) ---

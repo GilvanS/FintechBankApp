@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { Wrench, RefreshCw, FileText, BarChart3, CreditCard, AlertTriangle, Download, Scale, HeartPulse } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import {
-    adminAuditFix, adminSyncOverdueDays, adminInvoicePdfPreview, adminMassaReport,
-    adminActivatePendingCards, adminExportMassasCsv, adminUtiRecuperacao,
+    adminSyncOverdueDays, adminInvoicePdfPreview, adminMassaReport,
+    adminActivatePendingCards, adminExportMassasCsv,
 } from '../../services/api';
 import ScriptActionModal, { ScriptActionResult } from './ScriptActionModal';
 import LimiteDisponivelModal from './LimiteDisponivelModal';
+import DiscrepanciasModal from './DiscrepanciasModal';
+import UtiModal from './UtiModal';
 
 type ScriptKey = 'audit-fix' | 'sync-overdue' | 'pdf-preview' | 'report' | 'activate-cards' | 'export-csv' | 'recalcular-limite' | 'uti-recuperacao' | null;
 
@@ -26,7 +28,7 @@ const ScriptsMassasSection: React.FC = () => {
             icon: Wrench,
             iconBg: 'bg-amber-500',
             title: 'Corrigir Discrepâncias',
-            description: 'Roda audit --fix nas 3 auditorias (dupla cobrança, saldo negativo, pagamentos órfãos). CPF opcional: vazio roda em todas as massas.',
+            description: 'Simula primeiro e mostra o antes × depois de cada correção (pago a mais em fatura fechada → volta ao saldo, saldo negativo, limite negativo); só grava quando você aplicar. CPF opcional: vazio verifica todas as massas.',
             cpfMode: 'optional' as const,
             onClick: () => setActiveScript('audit-fix'),
         },
@@ -89,7 +91,7 @@ const ScriptsMassasSection: React.FC = () => {
             icon: HeartPulse,
             iconBg: 'bg-red-500',
             title: 'UTI de Recuperação',
-            description: 'Força a correção de massas presas no cemitério de teste (billing_charges dessincronizado, fatura duplicada, etc.) usando a mesma fórmula de uma massa saudável como molde. CPF opcional: vazio roda em todas as massas do cemitério.',
+            description: 'Simula primeiro e lista as massas do cemitério com o que será feito em cada anomalia; cure uma massa ou todas. Tudo que é aplicado fica no histórico. CPF opcional: vazio mostra todas as massas na UTI.',
             cpfMode: 'optional' as const,
             onClick: () => setActiveScript('uti-recuperacao'),
         },
@@ -136,15 +138,10 @@ const ScriptsMassasSection: React.FC = () => {
                 </div>
             </div>
 
-            <ScriptActionModal
+            <DiscrepanciasModal
                 isOpen={activeScript === 'audit-fix'}
-                title="Corrigir Discrepâncias"
-                icon={Wrench}
-                description="Roda as 3 auditorias com --fix: dupla cobrança, saldo negativo e pagamentos órfãos. Sem CPF, afeta todas as massas com discrepância encontrada."
-                cpfMode="optional"
                 isMidnight={isMidnight}
                 onClose={() => setActiveScript(null)}
-                onExecute={async (cpf): Promise<ScriptActionResult> => adminAuditFix(cpf)}
             />
 
             <ScriptActionModal
@@ -210,16 +207,10 @@ const ScriptsMassasSection: React.FC = () => {
                 onClose={() => setActiveScript(null)}
             />
 
-            <ScriptActionModal
+            <UtiModal
                 isOpen={activeScript === 'uti-recuperacao'}
-                title="UTI de Recuperação"
-                icon={HeartPulse}
-                confirmLabel="Rodar UTI"
-                description="Escolhe dinamicamente uma massa saudável (adimplente e inadimplente) como molde e força a correção de quem está no cemitério de teste: regera billing_charges órfãos, consolida faturas duplicadas e relinka os encargos. Sem CPF, roda em todas as massas com status 'precisa_massa_nova'."
-                cpfMode="optional"
                 isMidnight={isMidnight}
                 onClose={() => setActiveScript(null)}
-                onExecute={async (cpf): Promise<ScriptActionResult> => adminUtiRecuperacao(cpf)}
             />
         </div>
     );
