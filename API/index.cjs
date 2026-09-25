@@ -7789,7 +7789,7 @@ if (!IS_TEST) {
         const { initReconciliationScheduler, runDailyReconciliation } = require('./services/cronReconciliation');
         initReconciliationScheduler();
 
-        app.post('/api/admin/run-reconciliation-job', async (req, res) => {
+        app.post('/api/admin/run-reconciliation-job', bearerAuth(), authenticateAdmin, async (req, res) => {
             const auditResult = await runDailyReconciliation();
             return res.json(auditResult);
         });
