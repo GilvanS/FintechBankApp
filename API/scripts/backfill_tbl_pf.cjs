@@ -17,6 +17,7 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 const DatabaseFactory = require('../services/database/DatabaseFactory');
 const { computeNextInvoiceDueDate } = require('../utils/billing');
 const { calcularParcelamentoFatura, TIPOS_ENTRADA } = require('../services/installmentCalcEngine');
+const { paidPrincipalSql } = require('../utils/invoiceMath');
 
 const PRAZO = parseInt(process.argv[2], 10) || 6;
 
@@ -55,7 +56,7 @@ async function main() {
     // completa multi-fatura de getClosedInvoiceDebt.
     const rows = await db.executeQuery(`
         WITH pagos_totais AS (
-            SELECT cpf, SUM(ABS(amount)) AS total_pago
+            SELECT cpf, SUM(${paidPrincipalSql()}) AS total_pago
             FROM fintech.transactions
             WHERE type = 'INVOICE_PAYMENT'
             GROUP BY cpf

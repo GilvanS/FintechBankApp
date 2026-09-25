@@ -425,6 +425,23 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
                         (id, cpf, status, due_date, valor_total, created_at, updated_at, data_pagamento, dias_atraso, saldo_anterior)
                         VALUES ('${invoiceId}', '${u.cpf}', 'FECHADA', '${cicloPerdidoDue.toISOString()}', ${round2(total)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, ${daysOverdueCiclo}, 0)
                     `);
+
+                    // Este caminho reconstrói um ciclo que o invoiceEngine nunca fechou (due_date
+                    // nasceu errado), então a antecipação (§25: INVOICE_PAYMENT com invoice_id
+                    // NULL e applied_to_charges preenchido) feita contra esse ciclo também nunca
+                    // passou pelo vínculo que o invoiceEngine faz logo após seu próprio INSERT
+                    // (ver invoiceEngine.js, os dois pontos que fazem este mesmo UPDATE). Sem
+                    // repetir o vínculo aqui, a antecipação fica órfã pra sempre — já que este
+                    // é o único outro lugar que cria fatura FECHADA — recriando o double-charge/
+                    // saldo fantasma que todo este plano existe pra eliminar (enrichUserCreditCardData
+                    // assume que toda antecipação eventualmente é vinculada por algo). Só a regra
+                    // nova (applied_to_charges NOT NULL): o órfão legado não entra aqui de propósito.
+                    await db.executeQuery(`
+                        UPDATE ${db.fq('transactions')}
+                        SET invoice_id = '${invoiceId}'
+                        WHERE cpf = '${u.cpf}' AND type = 'INVOICE_PAYMENT'
+                          AND invoice_id IS NULL AND applied_to_charges IS NOT NULL
+                    `);
                     ciclosFechados++;
                     errors.push({
                         cpf: u.cpf,

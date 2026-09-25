@@ -135,4 +135,57 @@ describe('dailyAudit service unit tests', () => {
         expect(result.count).toBe(1);
         expect(result.errors[0].type).toBe('TRANSACAO_ORFA');
     });
+
+    test('deve identificar anomalia 10: ciclo de fatura perdido reconstruído vincula antecipação pendente', async () => {
+        // Reproduz o mesmo cálculo de datas do próprio bloco Anomalia 10 (setMonth),
+        // pra não depender de suposições sobre duração de mês/dia em que o teste roda.
+        const now = new Date();
+        const dueDateAberta = new Date(now); // due_date rastreado (drift) do ciclo aberto atual
+        const cicloPerdidoDue = new Date(dueDateAberta);
+        cicloPerdidoDue.setMonth(cicloPerdidoDue.getMonth() - 1); // 1º ciclo perdido, calculado igual ao código
+        const createdAt = new Date(cicloPerdidoDue);
+        createdAt.setDate(createdAt.getDate() - 10); // created_at logo antes do ciclo perdido: só 1 ciclo a reconstruir
+
+        mockDb.executeQuery.mockImplementation(async (query) => {
+            if (query.includes('LIMIT 80')) {
+                // usersParaCiclosPerdidos (Anomalia 10)
+                return [{
+                    cpf: '12345678901',
+                    full_name: 'Usuario Teste',
+                    credit_card_due_day: 10,
+                    credit_card_invoice_due_date: dueDateAberta.toISOString(),
+                    created_at: createdAt.toISOString()
+                }];
+            }
+            if (query.includes('EXTRACT(YEAR FROM due_date)')) {
+                return []; // nenhuma fatura FECHADA já cobre esse ciclo — precisa reconstruir
+            }
+            if (query.includes("type IN ('SHOP_CREDIT'")) {
+                return [{ amount: '150.00' }]; // compras existentes no ciclo perdido
+            }
+            return [];
+        });
+
+        const result = await runDailyAudit(mockDb, mockAuditLog);
+
+        expect(result.success).toBe(true);
+        expect(result.errors.some(e => e.type === 'CICLO_PERDIDO_FECHADO')).toBe(true);
+
+        // A antecipação (§25: INVOICE_PAYMENT com invoice_id NULL e applied_to_charges
+        // preenchido) precisa ser vinculada ao ciclo reconstruído, senão fica órfã pra
+        // sempre e recria o double-charge que todo o plano existe pra eliminar.
+        const linkCall = mockDb.executeQuery.mock.calls.find(([q]) =>
+            q.includes('UPDATE') &&
+            q.includes('transactions') &&
+            q.includes("type = 'INVOICE_PAYMENT'") &&
+            q.includes('invoice_id IS NULL') &&
+            q.includes('applied_to_charges IS NOT NULL') &&
+            q.includes('test-uuid') &&
+            q.includes('12345678901')
+        );
+        expect(linkCall).toBeDefined();
+
+        // Nunca deve tocar órfãos legados (applied_to_charges IS NULL) — regra global do plano.
+        expect(linkCall[0]).not.toMatch(/applied_to_charges IS NULL/);
+    });
 });

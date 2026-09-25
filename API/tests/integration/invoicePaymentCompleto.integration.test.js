@@ -124,15 +124,19 @@ describe('Teste de Integração E2E — Fluxo de Pagamento de Faturas e Encargos
         expect(parseFloat(sumLinked[0].s)).toBe(5623.68);
 
         // 6. Validar que ao rodar o enrichUserCreditCardData, a sobra vira saldo credor negativo.
-        // Pagamento: 5623.68. Principal: 3870.86. Excedente: R$ 1752.82 (encargo de atraso que
-        // pertence a fatura ABERTA, conforme §19.3). Valor e sempre negativo: o sinal indica
-        // saldo credor.
+        // Pagamento: 5623.68. Principal: 3870.86. Encargos: 478.48. Excedente real: R$ 1274.34
+        // (= 5623.68 - 3870.86 - 478.48). Valor e sempre negativo: o sinal indica saldo credor.
+        // Regra §25 (2026-09-25, applied_to_charges): a parte do pagamento que quitou os
+        // encargos (478.48) agora é excluída do "pago de principal" (paidPrincipalSql), então
+        // deixa de ser contada de novo como excedente/crédito. Antes desta correção o valor
+        // aqui era -1752.82 (1274.34 + 478.48) — o próprio crédito fantasma que motivou o §25
+        // (casos reais 805.357.576-54 e 777.666.555-44).
         const { enrichUserCreditCardData, normalizeUser, usersRepo, fetchUnpaidClosedInvoices } = require('../../index.cjs');
         const userRowFull = await usersRepo.findByCpf(testCpf);
         const tempUser = normalizeUser(userRowFull);
         await enrichUserCreditCardData(tempUser, testCpf);
 
-        expect(tempUser.creditCard.closedInvoiceResidual).toBe(-1752.82);
+        expect(tempUser.creditCard.closedInvoiceResidual).toBe(-1274.34);
 
         // 6. PAGAMENTO TOTAL PARA os encargos (regra de negócio): as billing_charges
         // pending desta massa são marcadas 'paid' — não podem continuar somando em

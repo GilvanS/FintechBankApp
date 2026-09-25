@@ -11,7 +11,7 @@
  * (CT03.1, 2026-09-23: R$ 3.870,86 já pagos às 18:25 herdados no fechamento das 21:35).
  */
 const { esc: escPadrao } = require('../repositories/context');
-const { planDistribution, round2 } = require('../utils/invoiceMath');
+const { planDistribution, round2, paidPrincipalSql } = require('../utils/invoiceMath');
 
 /**
  * Total AINDA EM ABERTO de todas as `fechadas` (ordenadas por vencimento, mais antiga
@@ -55,7 +55,7 @@ async function calcularSaldoAnterior(db, cpf, esc = escPadrao) {
     `);
     if (!fechadas.length) return 0;
     const [pg] = await db.executeQuery(`
-        SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS pago
+        SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS pago
         FROM ${db.fq('transactions')}
         WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
     `);
@@ -81,7 +81,7 @@ async function listarSaldoAnteriorIndevido(db, { cpf = null, esc = escPadrao } =
     `);
     if (!fechadas.length) return [];
     const pagamentos = await db.executeQuery(`
-        SELECT cpf, date, ABS(CAST(amount AS DECIMAL(15,2))) AS valor
+        SELECT cpf, date, ${paidPrincipalSql()} AS valor
         FROM ${db.fq('transactions')}
         WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
           AND cpf IN (SELECT DISTINCT cpf FROM ${db.fq('invoices')} WHERE status = 'FECHADA' AND COALESCE(saldo_anterior, 0) > 0.02)

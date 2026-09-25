@@ -43,6 +43,7 @@
  */
 require('dotenv').config();
 const { Pool } = require('pg');
+const { paidPrincipalSql } = require('../utils/invoiceMath');
 
 const schema = process.env.DB_SCHEMA || 'fintech';
 const TRIGGER_NAME = 'trg_invoices_immutable_when_closed';
@@ -103,7 +104,7 @@ async function queryCategoryC(client) {
           AND u.role IS DISTINCT FROM 'admin'
         GROUP BY i.id, i.cpf, i.valor_total, i.valor_pago, i.data_pagamento, i.due_date, u.full_name
         HAVING ABS(
-            COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0)
+            COALESCE(SUM(${paidPrincipalSql('t')}), 0)
             - CAST(COALESCE(i.valor_pago, '0') AS DECIMAL(15,2))
         ) > 0.02
         ORDER BY i.cpf, i.due_date
@@ -262,7 +263,7 @@ async function runAll(client) {
     for (const { cpf: cpfKey, plan } of allPlans) {
         for (const d of plan.deficits) {
             const sumRes = await client.query(
-                `SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS s
+                `SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS s
                  FROM ${schema}.transactions
                  WHERE invoice_id = $1 AND type = 'INVOICE_PAYMENT'`,
                 [d.inv.id]
@@ -404,7 +405,7 @@ async function runAll(client) {
             for (const a of alignDeficits) {
                 // Soma derivável REAL (já inclui os vínculos do rateio acima)
                 const sum = await client.query(
-                    `SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS s
+                    `SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS s
                      FROM ${schema}.transactions
                      WHERE invoice_id = $1 AND type = 'INVOICE_PAYMENT'`,
                     [a.inv.id]

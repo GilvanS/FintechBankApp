@@ -925,3 +925,15 @@ describe('classifyDoubleCount', () => {
         expect(result.status).toBe('discrepancy');
     });
 });
+
+describe('paidPrincipalSql — pago de PRINCIPAL de um INVOICE_PAYMENT', () => {
+    const { paidPrincipalSql } = require('../../utils/invoiceMath');
+
+    test('sem alias: |amount| menos a parte que foi para encargos (NULL = 0)', () => {
+        expect(paidPrincipalSql()).toBe('(ABS(CAST(amount AS DECIMAL(15,2))) - COALESCE(applied_to_charges, 0))');
+    });
+
+    test('com alias: prefixa as duas colunas', () => {
+        expect(paidPrincipalSql('t')).toBe('(ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(t.applied_to_charges, 0))');
+    });
+});

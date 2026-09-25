@@ -4,7 +4,7 @@
 const DatabaseFactory = require('../services/database/DatabaseFactory');
 const dbService = DatabaseFactory.createDatabaseService();
 const notificationsRepo = require('../repositories/notificationsRepo');
-const { planDistribution } = require('../utils/invoiceMath');
+const { planDistribution, paidPrincipalSql } = require('../utils/invoiceMath');
 
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function calcMulta(amount) { return round2((Number(amount) || 0) * 0.02); }
@@ -126,13 +126,13 @@ async function runBillingValidationInner(opts) {
                COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
         FROM ${dbService.fq('invoices')} i
         LEFT JOIN (
-            SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+            SELECT invoice_id, SUM(${paidPrincipalSql()}) AS total
             FROM ${dbService.fq('transactions')}
             WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
             GROUP BY invoice_id
         ) pagos ON pagos.invoice_id = i.id
         LEFT JOIN (
-            SELECT cpf, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+            SELECT cpf, SUM(${paidPrincipalSql()}) AS total
             FROM ${dbService.fq('transactions')}
             WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
             GROUP BY cpf
@@ -750,13 +750,13 @@ const syncInvoiceDiasAtraso = async () => {
                    COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
             FROM ${dbService.fq('invoices')} i
             LEFT JOIN (
-                SELECT invoice_id, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+                SELECT invoice_id, SUM(${paidPrincipalSql()}) AS total
                 FROM ${dbService.fq('transactions')}
                 WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
                 GROUP BY invoice_id
             ) pagos ON pagos.invoice_id = i.id
             LEFT JOIN (
-                SELECT cpf, SUM(ABS(CAST(amount AS DECIMAL(15,2)))) AS total
+                SELECT cpf, SUM(${paidPrincipalSql()}) AS total
                 FROM ${dbService.fq('transactions')}
                 WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
                 GROUP BY cpf

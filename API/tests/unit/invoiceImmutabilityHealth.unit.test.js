@@ -52,7 +52,7 @@ describe('Invoice Immutability Health Check & Messages', () => {
         if (sql.includes("name LIKE '%005%'")) {
           return Promise.resolve([{ created_at: '2026-08-01T00:00:00.000Z' }]);
         }
-        if (sql.includes("HAVING COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) > CAST(i.valor_total")) {
+        if (sql.includes("HAVING COALESCE(SUM((ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(t.applied_to_charges, 0))), 0) > CAST(i.valor_total")) {
           return Promise.resolve([{
             cpf: '44444444444',
             invoice_id: 'cb6f219d-d380-4a0b-bd11-90ee4b6f7e61',
@@ -75,5 +75,22 @@ describe('Invoice Immutability Health Check & Messages', () => {
       expect.stringContaining('Fatura cb6f219d-d380-4a0b-bd11-90ee4b6f7e61 (vencida 2026-08-10T15:00:00Z): pago R$ 5016.93, devido R$ 1146.07, excedente R$ 3870.86.'),
       'daily_anomaly'
     );
+  });
+
+  test('PAYMENT_SEM_INVOICE_ID ignora antecipação da §25 ainda dentro do prazo de vínculo', async () => {
+    const queries = [];
+    mockDbService = {
+      executeQuery: jest.fn().mockImplementation((sql) => {
+        queries.push(sql);
+        if (sql.includes("name LIKE '%005%'")) return Promise.resolve([{ created_at: '2026-08-01T00:00:00.000Z' }]);
+        return Promise.resolve([]);
+      }),
+      fq: jest.fn(t => `fintech.${t}`)
+    };
+
+    await runInvoiceImmutabilityHealth(mockDbService, mockAuditLog);
+
+    const orfaos = queries.find(q => q.includes('t.invoice_id IS NULL'));
+    expect(orfaos).toContain('t.applied_to_charges IS NULL OR t.date <');
   });
 });

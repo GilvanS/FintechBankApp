@@ -218,6 +218,20 @@ async function runEngine(targetCpf = null) {
         if (existingInvoice.length > 0) {
           console.log(`[InvoiceEngine] Fatura para CPF ${user.cpf} com vencimento ${dueDate.toISOString().slice(0,10)} já existe (id: ${existingInvoice[0].id}). Pulando INSERT.
 `);
+
+          // Reexecução (crash/retry) do mesmo fechamento: a fatura já existe, mas a
+          // antecipação pode não ter sido vinculada ainda (ex.: processo interrompido
+          // entre o INSERT e o UPDATE abaixo, em uma execução anterior). Repetir o
+          // vínculo aqui é idempotente — o WHERE só pega o que ainda está com
+          // invoice_id NULL — e fecha a mesma brecha do bloco de INSERT normal, sem
+          // depender de qual das duas execuções concorrentes "ganhou" o INSERT.
+          await db.executeQuery(`
+            UPDATE ${db.fq('transactions')}
+            SET invoice_id = ${esc(existingInvoice[0].id)}
+            WHERE cpf = ${esc(user.cpf)} AND type = 'INVOICE_PAYMENT'
+              AND invoice_id IS NULL AND applied_to_charges IS NOT NULL
+          `);
+
           // Rolar o due_date para o próximo mês mesmo assim
           const dueDay = user.credit_card_due_day || 15;
           let nextDueDate = new Date(dueDate);
@@ -234,6 +248,19 @@ async function runEngine(targetCpf = null) {
         await db.executeQuery(`
           INSERT INTO ${db.fq('invoices')} (id, cpf, status, due_date, valor_total, created_at, updated_at, saldo_anterior, valor_iof, valor_juros_remuneratorios, valor_juros_mora, valor_multa, itemized_transactions)
           VALUES (${esc(invoiceId)}, ${esc(user.cpf)}, 'FECHADA', ${esc(dueDate.toISOString())}, ${invoiceAmount.toFixed(2)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${saldoAnterior}, ${iof}, ${jurosRem}, ${jurosMora}, ${multa}, ${esc(itemizedTransactionsJson)})
+        `);
+
+        // Antecipações (pagamento feito com a fatura ABERTA, §25) passam a quitar a
+        // fatura que acabou de fechar. Sem o vínculo, getClosedInvoiceDebt cobrava a
+        // fatura cheia e o cliente pagava 2× (caso 20250513611, 2026-09). Só linhas da
+        // regra nova (applied_to_charges NOT NULL): o órfão legado já foi consumido pelo
+        // fluxo antigo e vinculá-lo criaria crédito fantasma. INVOICE_ANTICIPATION fica
+        // de fora — ela já apagou as parcelas que antecipou (cardRepo.anticipateInstallments).
+        await db.executeQuery(`
+          UPDATE ${db.fq('transactions')}
+          SET invoice_id = ${esc(invoiceId)}
+          WHERE cpf = ${esc(user.cpf)} AND type = 'INVOICE_PAYMENT'
+            AND invoice_id IS NULL AND applied_to_charges IS NOT NULL
         `);
 
         // NOTA: as charges congeladas acima NÃO são marcadas 'paid' de propósito. A
