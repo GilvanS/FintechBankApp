@@ -533,12 +533,21 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     const { esc } = repoContext;
     let latestInvoice = null;
     try {
+        // SEM LIMIT: uma massa com 6+ fechadas históricas perdia a mais antiga daqui (o
+        // LIMIT 5 antigo), mas a soma de pago (transactions.invoice_id) continua somando
+        // TODAS as transações do CPF sem limite — a cascata (planDistribution) então
+        // "gastava" nas 5 fechadas visíveis um pagamento que já tinha ido pra mais antiga
+        // (invisível), deixando a fatura que o cliente realmente pagou com valor_pago=0
+        // (bug real 2026-09-25, CPF 044.823.780-62: mínimo não abatia entre tentativas).
+        // getClosedInvoiceDebt (invoiceController.js), que decide QUANTO cobrar, nunca teve
+        // esse limite — só a leitura do dashboard tinha. Por CPF o volume é baixo (poucas
+        // dezenas de faturas mesmo em contas antigas), sem custo de performance real.
         const invRows = await dbService.executeQuery(`
             SELECT id, status, due_date, valor_total, saldo_anterior, valor_iof, valor_multa,
                    valor_juros_remuneratorios, valor_juros_mora,
                    COALESCE(valor_pago, 0) AS valor_pago, itemized_transactions, data_pagamento
             FROM ${dbService.fq('invoices')}
-            WHERE cpf = '${cpf}' ORDER BY due_date DESC LIMIT 5
+            WHERE cpf = '${cpf}' ORDER BY due_date DESC
         `);
 
         // Quitacao pos-migration-005: a fatura FECHADA e imutavel, entao valor_pago e
