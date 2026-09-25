@@ -43,9 +43,30 @@ const DELIM = ';';
 function buildQuery({ cpf, esc = (v) => `'${v}'` } = {}) {
     return `
 WITH pagos_totais AS (
-    SELECT cpf, SUM(ABS(amount)) AS total_pago, MAX(date) AS ultimo_pagamento
+    -- Só o que abateu PRINCIPAL de fatura FECHADA: pagamento vinculado (invoice_id) e
+    -- sem a parte que foi para encargos (applied_to_charges). Mesma regra do enrich
+    -- (docs/REGRAS-NEGOCIO-FATURA.md §25) — somar pagamento sem vínculo e encargos
+    -- gerava saldo credor fantasma (805/777, 2026-09).
+    SELECT cpf,
+           SUM(ABS(amount) - COALESCE(applied_to_charges, 0)) AS total_pago,
+           MAX(date) AS ultimo_pagamento
     FROM fintech.transactions
-    WHERE type = 'INVOICE_PAYMENT'
+    WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+    GROUP BY cpf
+),
+antecipacoes AS (
+    -- Pagamento feito com a fatura ABERTA (§25) ainda não vinculado pelo invoiceEngine:
+    -- abate a fatura aberta. Órfão legado (applied_to_charges NULL) fica de fora.
+    SELECT cpf, SUM(ABS(amount) - COALESCE(applied_to_charges, 0)) AS total
+    FROM fintech.transactions
+    WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NULL AND applied_to_charges IS NOT NULL
+    GROUP BY cpf
+),
+pago_encargos AS (
+    -- tbl_pago_encargos: quanto dos pagamentos da massa foi para encargos (billing_charges).
+    SELECT cpf, SUM(applied_to_charges) AS total
+    FROM fintech.transactions
+    WHERE type = 'INVOICE_PAYMENT' AND applied_to_charges IS NOT NULL
     GROUP BY cpf
 ),
 fechadas_invoices AS (
@@ -204,7 +225,7 @@ todas_massas AS (
         (u.credit_card_total_limit - u.credit_card_available_limit) AS limite_utilizado,
         u.credit_card_available_limit                               AS limite_disponivel,
         COALESCE(fc.valor_fechada_exibicao, 0)                      AS fatura_fechada,
-        (COALESCE(cc.total, 0) + COALESCE(fc.residual_total_fechadas, 0) + COALESCE(eh.total, 0)) AS fatura_aberta,
+        GREATEST(0, COALESCE(cc.total, 0) + COALESCE(fc.residual_total_fechadas, 0) + COALESCE(eh.total, 0) - COALESCE(an.total, 0)) AS fatura_aberta,
         COALESCE(fc.status_fechada, 'ABERTA')                      AS status_fatura_fechada,
         CASE
             WHEN fc.status_fechada = 'PAGO_TOTAL' THEN 0
@@ -254,6 +275,9 @@ todas_massas AS (
         -- tbl_cemiterio_teste: presença aqui = "não tenta salvar essa massa, gera nova".
         ct.status                                                    AS tbl_cemiterio_teste,
         ARRAY_TO_STRING(ct.tipos_anomalia, ', ')                     AS tbl_cemiterio_teste_motivo,
+        -- tbl_pago_encargos: SEMPRE a última coluna do CSV (a planilha de controle
+        -- carrega por posição — coluna nova vai no fim, nunca no meio).
+        COALESCE(pe.total, 0)                                        AS tbl_pago_encargos,
         u.cpf                                                       AS _cpf_filtro
     FROM fintech.users u
     LEFT JOIN fechada_calculada fc ON fc.cpf = u.cpf
@@ -265,6 +289,8 @@ todas_massas AS (
     LEFT JOIN pa_recente        pa ON pa.cpf = u.cpf
     LEFT JOIN pf_elegivel_recente pfe ON pfe.cpf = u.cpf
     LEFT JOIN cemiterio_teste   ct ON ct.cpf = u.cpf
+    LEFT JOIN antecipacoes      an ON an.cpf = u.cpf
+    LEFT JOIN pago_encargos     pe ON pe.cpf = u.cpf
     WHERE u.role IN ('customer', 'user')
 )
 SELECT id_massa, cpf, dia_vencimento, nome_completo, saldo_conta, limite_utilizado,
@@ -272,7 +298,8 @@ SELECT id_massa, cpf, dia_vencimento, nome_completo, saldo_conta, limite_utiliza
        cartao_fisico_cvv, cartao_virtual_numero, cartao_virtual_cvv, "data_criação", tbl_ven, tbl_corte, tbl_schema,
        tbl_pf_valor_parcela, tbl_pf_saldo_financiado, tbl_pf_iof_total, tbl_pf_iof_adicional, tbl_pf_cet_anual, tbl_pf_prazo, tbl_pf_data_contratacao,
        tbl_pa_valor_pagamento, tbl_pa_minimo, tbl_pa_piso, tbl_pa_valor_parcela, tbl_pa_saldo_financiado, tbl_pa_iof_total, tbl_pa_cet_anual, tbl_pa_data_contratacao,
-       tbl_reneg, tbl_pf_elegivel, tbl_pf_valor_ativacao_automatica, tbl_cemiterio_teste, tbl_cemiterio_teste_motivo
+       tbl_reneg, tbl_pf_elegivel, tbl_pf_valor_ativacao_automatica, tbl_cemiterio_teste, tbl_cemiterio_teste_motivo,
+       tbl_pago_encargos
 FROM todas_massas
 ${cpf ? `WHERE _cpf_filtro = ${esc(cpf)}` : ''}
 ORDER BY "data_criação" ASC;

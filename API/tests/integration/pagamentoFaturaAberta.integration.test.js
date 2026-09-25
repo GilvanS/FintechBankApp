@@ -226,4 +226,16 @@ describe('Pagamento com fatura ABERTA = antecipação (§25)', () => {
         expect(cc.antecipacoesFaturaAberta).toBeCloseTo(0, 2);
         expect(cc.currentInvoiceTotal).toBeCloseTo(200, 2); // antes: 0 (órfão virava crédito)
     }, 30000);
+
+    it('CSV: fatura_aberta bate com o enrich e tbl_pago_encargos é a última coluna', async () => {
+        const { buildQuery } = require('../../utils/tblDeMassasExport.cjs');
+        for (const cpf of [CPF.A, CPF.B, CPF.L]) {
+            const [row] = await db.executeQuery(buildQuery({ cpf }));
+            const cc = await enrich(cpf);
+            expect(parseFloat(row.fatura_aberta)).toBeCloseTo(cc.currentInvoiceTotal, 2);
+            expect(Object.keys(row).pop()).toBe('tbl_pago_encargos');
+        }
+        const [rowA] = await db.executeQuery(buildQuery({ cpf: CPF.A }));
+        expect(parseFloat(rowA.tbl_pago_encargos)).toBe(50);
+    }, 30000);
 });
