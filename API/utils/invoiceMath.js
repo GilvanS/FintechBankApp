@@ -274,9 +274,22 @@ function classifyDoubleCount({ paymentTotal, invoiceTotalPago, invoiceRows, hasP
     return { status, diff };
 }
 
+/**
+ * Fragmento SQL do valor de um INVOICE_PAYMENT que abateu PRINCIPAL de fatura.
+ * Pagamento que também quitou encargos (billing_charges) grava essa parte em
+ * transactions.applied_to_charges — somar o amount cheio contaria o mesmo dinheiro
+ * de novo como principal e geraria saldo credor fantasma (805/777, 2026-09).
+ * Linhas anteriores à migration 009 têm NULL = 0 (comportamento antigo preservado).
+ */
+function paidPrincipalSql(alias = '') {
+    const p = alias ? `${alias}.` : '';
+    return `(ABS(CAST(${p}amount AS DECIMAL(15,2))) - COALESCE(${p}applied_to_charges, 0))`;
+}
+
 module.exports = {
     round2,
     classifyDoubleCount,
+    paidPrincipalSql,
     INVOICE_GROSS_FIELDS,
     computeInvoiceGross,
     computeInvoiceOwed,
