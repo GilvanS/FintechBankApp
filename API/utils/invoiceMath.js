@@ -342,6 +342,25 @@ function classifyDoubleCount({ paymentTotal, invoiceTotalPago, invoiceRows, hasP
     return { status, diff };
 }
 
+/**
+ * Fragmento SQL do valor de um INVOICE_PAYMENT que abateu PRINCIPAL de fatura —
+ * |amount| menos a soma das billing_charges que ESTE pagamento quitou (payment_id
+ * = id da transação, status='paid'). Somar o amount cheio conta o encargo pago
+ * como principal e gera saldo credor fantasma (§25, docs/REGRAS-NEGOCIO-FATURA.md).
+ *
+ * `payment_id`/`paid_at` (garantirColunasQuitacao, services/encargosPagamento.js)
+ * é a ÚNICA fonte de "quanto foi pra encargos" — não existe cálculo paralelo em
+ * `transactions.applied_to_charges` (essa coluna, quando presente, é só um
+ * marcador de "pagamento pós-regra-nova" para o vínculo de antecipação em
+ * invoiceEngine/dailyAudit — nunca uma fonte de valor).
+ * @param {object} dbService - precisa de dbService.fq('billing_charges')
+ * @param {string} [alias] - alias de `transactions` na query (ex.: 't'); vazio = sem alias
+ */
+function paidPrincipalSql(dbService, alias = '') {
+    const p = alias ? `${alias}.` : '';
+    return `(ABS(CAST(${p}amount AS DECIMAL(15,2))) - COALESCE((SELECT SUM(CAST(bc.amount AS DECIMAL(15,2))) FROM ${dbService.fq('billing_charges')} bc WHERE bc.payment_id = ${p}id AND bc.status = 'paid'), 0))`;
+}
+
 module.exports = {
     round2,
     TOLERANCIA_QUITACAO,
@@ -370,4 +389,5 @@ module.exports = {
     alocarPagamento,
     buildClosedInvoiceSummary,
     calcEffectiveRates,
+    paidPrincipalSql,
 };
