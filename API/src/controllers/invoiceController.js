@@ -932,15 +932,25 @@ module.exports = function createInvoiceController(deps) {
             return Number.isFinite(quando) && (Date.now() - quando) < IDEMPOTENCY_WINDOW_MS;
         });
         if (pagamentoRecenteIgual.length > 0) {
-            console.warn(`[pay][idempotencia] CPF ${cpf}: pagamento de R$ ${payAmount.toFixed(2)} já registrado há instantes (tx ${pagamentoRecenteIgual[0].id}) — reenvio ignorado, NÃO cobrando de novo.`);
+            const txOriginalIdem = pagamentoRecenteIgual[0];
+            console.warn(`[pay][idempotencia] CPF ${cpf}: pagamento de R$ ${payAmount.toFixed(2)} já registrado há instantes (tx ${txOriginalIdem.id}) — reenvio ignorado, NÃO cobrando de novo.`);
             const freshRowIdem = await usersRepo.findByCpf(cpf);
             const freshUserIdem = normalizeUser(freshRowIdem);
             await enrichUserCreditCardData(freshUserIdem, cpf);
+            // Resposta INEQUÍVOCA: nenhum débito novo aconteceu. Antes este payload
+            // repetia amountPaid = payAmount com success: true — indistinguível de um
+            // débito novo (bug CT03.2 2026-09: 2 de 8 pagamentos descartados assim e
+            // ninguém percebeu). Agora: idempotent + debitado:false + amountPaid:0 +
+            // dados da transação ORIGINAL (paymentId/date) para o front exibir o
+            // comprovante real em vez de fingir um novo pagamento.
             return res.json({
                 success: true,
                 idempotent: true,
-                message: 'Pagamento já processado.',
-                amountPaid: payAmount,
+                debitado: false,
+                message: 'Pagamento já processado — nenhum novo débito foi realizado.',
+                amountPaid: 0,
+                paymentId: txOriginalIdem.id,
+                originalPaymentDate: txOriginalIdem.date,
                 user: freshUserIdem,
             });
         }
