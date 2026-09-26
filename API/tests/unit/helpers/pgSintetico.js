@@ -101,7 +101,11 @@ const COLUNAS = {
         ['created_at', 'timestamp'], ['updated_at', 'timestamp'], ['valor_total', 'numeric'], ['saldo_anterior', 'numeric'],
         ['valor_pago', 'numeric'], ['data_pagamento', 'timestamp'], ['dias_atraso', 'int']],
     transactions: [['id', 'varchar'], ['cpf', 'varchar'], ['type', 'varchar'], ['amount', 'numeric'],
-        ['description', 'text'], ['date', 'timestamp'], ['invoice_id', 'varchar'], ['status', 'varchar']],
+        ['description', 'text'], ['date', 'timestamp'], ['invoice_id', 'varchar'], ['status', 'varchar'],
+        // applied_to_charges (migration 009, §25): marcador de "pagamento pós-regra-nova"
+        // usado por invoiceEngine/dailyAudit/invoiceImmutabilityHealth para reconhecer
+        // antecipação vinculável — NUNCA fonte de valor (isso é billing_charges.payment_id).
+        ['applied_to_charges', 'numeric']],
     billing_charges: [['id', 'varchar'], ['cpf', 'varchar'], ['charge_type', 'varchar'], ['amount', 'numeric'],
         ['status', 'varchar'], ['invoice_amount', 'numeric'], ['payment_id', 'varchar'], ['created_at', 'timestamp'],
         ['paid_at', 'timestamp'], ['days_overdue', 'int'], ['invoice_id', 'varchar'], ['invoice_reference', 'varchar']],

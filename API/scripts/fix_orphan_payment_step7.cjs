@@ -45,6 +45,15 @@ require('dotenv').config();
 const { Pool } = require('pg');
 
 const schema = process.env.DB_SCHEMA || 'fintech';
+
+// Fragmento SQL do PRINCIPAL de um INVOICE_PAYMENT (|amount| − encargos que ele
+// quitou via billing_charges.payment_id — mesma fonte de utils/invoiceMath.js e
+// services/encargosPagamento.js, aqui reescrita porque este script fala direto
+// com `pg.Pool` (sem dbService.fq) e usa o schema fixo já hardcoded no arquivo.
+function paidPrincipalSql(alias = '') {
+    const p = alias ? `${alias}.` : '';
+    return `(ABS(CAST(${p}amount AS DECIMAL(15,2))) - COALESCE((SELECT SUM(CAST(bc.amount AS DECIMAL(15,2))) FROM ${schema}.billing_charges bc WHERE bc.payment_id = ${p}id AND bc.status = 'paid'), 0))`;
+}
 const TRIGGER_NAME = 'trg_invoices_immutable_when_closed';
 const DEFAULT_CPF = '09086747329';
 const r2 = (n) => Math.round(n * 100) / 100;
@@ -103,7 +112,7 @@ async function queryCategoryC(client) {
           AND u.role IS DISTINCT FROM 'admin'
         GROUP BY i.id, i.cpf, i.valor_total, i.valor_pago, i.data_pagamento, i.due_date, u.full_name
         HAVING ABS(
-            COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0)
+            COALESCE(SUM(${paidPrincipalSql('t')}), 0)
             - CAST(COALESCE(i.valor_pago, '0') AS DECIMAL(15,2))
         ) > 0.02
         ORDER BY i.cpf, i.due_date
@@ -262,7 +271,7 @@ async function runAll(client) {
     for (const { cpf: cpfKey, plan } of allPlans) {
         for (const d of plan.deficits) {
             const sumRes = await client.query(
-                `SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS s
+                `SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS s
                  FROM ${schema}.transactions
                  WHERE invoice_id = $1 AND type = 'INVOICE_PAYMENT'`,
                 [d.inv.id]
@@ -404,7 +413,7 @@ async function runAll(client) {
             for (const a of alignDeficits) {
                 // Soma derivável REAL (já inclui os vínculos do rateio acima)
                 const sum = await client.query(
-                    `SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))), 0) AS s
+                    `SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS s
                      FROM ${schema}.transactions
                      WHERE invoice_id = $1 AND type = 'INVOICE_PAYMENT'`,
                     [a.inv.id]

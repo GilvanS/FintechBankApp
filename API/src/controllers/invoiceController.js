@@ -46,6 +46,7 @@ module.exports = function createInvoiceController(deps) {
     // Pagamento abate ENCARGOS PRIMEIRO e registra quais billing_charges quitou
     // (services/encargosPagamento.js — regra de 2026-09-23).
     const encargosPagamento = require('../../services/encargosPagamento');
+    const { planOpenCyclePayment } = require('../../services/openCyclePayment');
 
     // ── Comprovante de pagamento em PDF (evento de pagamento → tópico da massa) ──
     // Projeto de estudo para automação: todo pagamento de fatura (total, mínimo ou
@@ -102,7 +103,7 @@ module.exports = function createInvoiceController(deps) {
     // uma única quitação (feedback 805/381).
     //
     // `invoices` = closedDebt.invoices (order by due_date ASC, só faturas com dívida).
-    async function persistPaymentDistribution({ cpf, invoices, payAmount, dateIso, description }) {
+    async function persistPaymentDistribution({ cpf, invoices, payAmount, dateIso, description, appliedToCharges = 0 }) {
         const { esc } = repoContext;
         const round2 = n => Math.round(n * 100) / 100;
         const payId = dbService.generateUUID();
@@ -111,11 +112,13 @@ module.exports = function createInvoiceController(deps) {
         // Vínculo na fatura MAIS RECENTE em aberto (a que ancora o comprovante).
         // A quitação das demais é derivada por cascata na leitura — o invoice_id
         // aqui é apenas a âncora do lançamento no extrato.
+        // applied_to_charges: parte deste pagamento que quitou billing_charges. Sempre
+        // gravado (0 quando nada) — NULL fica reservado às linhas anteriores à §25.
         const anchor = invoices[invoices.length - 1] || null;
         await dbService.executeQuery(`
             INSERT INTO ${dbService.fq('transactions')}
-            (id, cpf, type, amount, description, from_user, to_user, to_key, date, invoice_id)
-            VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-amount).toFixed(2))}, ${esc(description)}, NULL, NULL, NULL, ${esc(dateIso)}, ${anchor ? esc(anchor.id) : 'NULL'})
+            (id, cpf, type, amount, description, from_user, to_user, to_key, date, invoice_id, applied_to_charges)
+            VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-amount).toFixed(2))}, ${esc(description)}, NULL, NULL, NULL, ${esc(dateIso)}, ${anchor ? esc(anchor.id) : 'NULL'}, ${round2(appliedToCharges).toFixed(2)})
         `);
         // payId amarra as billing_charges quitadas por ESTE pagamento (payment_id).
         return { payId, links: [{ invoiceId: anchor ? anchor.id : null, amount }] };
@@ -765,6 +768,89 @@ module.exports = function createInvoiceController(deps) {
         });
     };
 
+    // Pós-resposta do pagamento TOTAL (fechada ou aberta): notificação, comprovante e
+    // SSE. Fire-and-forget com .catch() — a resposta já foi enviada.
+    function notifyTotalPayment({ cpf, user, payAmount, cutoffIso }) {
+        notificationsRepo.addNotification({
+            cpf,
+            title: 'Pagamento de fatura',
+            message: [
+                '💵 <b>COMPROVANTE DE PAGAMENTO INTEGRAL</b>',
+                '',
+                `<b>Cliente</b>    ${user.full_name}`,
+                `<b>CPF</b>        <code>${telegramService.formatCpf(cpf)}</code>`,
+                '',
+                `<b>Valor pago</b> <code>R$ ${brl(payAmount)}</code>`,
+                `<b>Vencimento</b> ${diaBR(cutoffIso)}`,
+                `<b>Pago em</b>    ${dataBR(nowDb())}`,
+                '',
+                '<b>Status</b>     QUITADO ✅',
+                '',
+                '<blockquote>Limite de crédito reestabelecido e conta regularizada com sucesso.</blockquote>'
+            ].join('\n'),
+            actionUrl: '/dashboard'
+        }).catch((erro) => console.error('[pay] notificação total falhou (ignorado):', erro && erro.message));
+        Promise.resolve(sendPaymentReceipt(cpf, user, {
+            valorPago: payAmount,
+            tipo: 'TOTAL',
+            saldoRestante: 0,
+            dataPagamento: nowDb(),
+            vencimento: cutoffIso,
+            nota: 'Limite de crédito reestabelecido e conta regularizada com sucesso.'
+        })).catch((erro) => console.error('[pay] comprovante total falhou (ignorado):', erro && erro.message));
+        try {
+            const sse = require('../../services/sseService');
+            sse.sendToClient(cpf, 'payment.completed', {
+                cpf,
+                amount: payAmount,
+                type: 'full',
+                timestamp: new Date().toISOString(),
+            });
+        } catch (_sseErr) { /* SSE é fire-and-forget */ }
+    }
+
+    // Pagamento da fatura ABERTA (§25): quita os encargos pendentes se cobrir todos; o
+    // resto é ANTECIPAÇÃO — fica sem invoice_id até o invoiceEngine vinculá-lo à fatura
+    // que fecha. NÃO apaga INVOICE_INSTALLMENT nem avança plano: a fatura fecha com as
+    // compras/parcelas do ciclo e a antecipação vinculada as quita pela cascata.
+    async function payOpenCycle({ cpf, user, payAmount, pendingChargesTotal, cutoffIso, res }) {
+        const { esc } = repoContext;
+        const plan = planOpenCyclePayment({ payAmount, pendingChargesTotal });
+        const dateIso = nowDb();
+        const { payId } = await persistPaymentDistribution({
+            cpf,
+            invoices: [],
+            payAmount,
+            dateIso,
+            description: 'Pagamento fatura',
+            // applied_to_charges aqui é só o MARCADOR "pagamento pós-regra-nova" que o
+            // invoiceEngine/dailyAudit usam pra saber que este órfão pode ser vinculado
+            // à fatura que fechar (nunca fonte de valor — essa é payment_id abaixo).
+            appliedToCharges: plan.appliedToCharges
+        });
+        await usersRepo.updateBalance(cpf, (parseFloat(user.balance || 0) - payAmount).toFixed(2));
+        if (plan.markChargesPaid && payId) {
+            // payment_id/paid_at (mesma marca da Task 2, encargosPagamento.js): sem isso
+            // a proteção contra recobrar encargo pago (chargesProactiveFix/Anomalia 8/UTI)
+            // não reconhece esta quitação e regenerava multa/IOF já pagos por antecipação.
+            await dbService.executeQuery(`
+                UPDATE ${dbService.fq('billing_charges')}
+                SET status = 'paid', payment_id = ${esc(payId)}, paid_at = ${esc(dateIso)}
+                WHERE cpf = ${esc(cpf)} AND status = 'pending'
+            `);
+        }
+        const totalLimit = parseFloat(user.credit_card_total_limit || 0);
+        const availableLimit = parseFloat(user.credit_card_available_limit || 0);
+        const restoredLimit = Math.min(totalLimit, availableLimit + plan.anticipation);
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('users')}
+            SET credit_card_available_limit = ${restoredLimit.toFixed(2)}
+            WHERE cpf = ${esc(cpf)}
+        `);
+        res.json({ success: true, message: 'Fatura paga com sucesso.', anticipation: plan.anticipation, appliedToCharges: plan.appliedToCharges });
+        notifyTotalPayment({ cpf, user, payAmount, cutoffIso });
+    }
+
     const pay = async (req, res) => {
         const { cpf, pin, amount } = req.body || {};
         if (!cpf || cpf.length !== 11 || !pin || pin.length !== 4) {
@@ -793,20 +879,24 @@ module.exports = function createInvoiceController(deps) {
         const cutoffIso = cutoff.toISOString();
     
         let totalDue;
+        let openCycleDue = null;
         if (closedDebt) {
             totalDue = closedDebt.owed;
         } else {
-            // Legado (sem registro em invoices): soma das parcelas vencidas
-            const dueRows = await dbService.executeQuery(`
-                SELECT amount FROM ${dbService.fq('transactions')}
-                WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
-            `);
-            totalDue = dueRows.reduce((acc, r) => acc + Math.abs(parseFloat(r.amount || 0)), 0);
+            // Sem fatura FECHADA com dívida: o cliente está pagando a fatura ABERTA (§25).
+            // O devido é o MESMO total da tela (enrich: compras do ciclo + parcelas
+            // projetadas + encargos herdados − antecipações já feitas). A soma antiga de
+            // INVOICE_INSTALLMENT lançadas ignorava compras à vista e parcelas projetadas,
+            // e o que o cliente pagava a mais sumia (805/777/2025, 2026-09).
+            const _openUser = normalizeUser(user);
+            await enrichUserCreditCardData(_openUser, cpf);
+            openCycleDue = Math.round(parseFloat(_openUser.creditCard?.currentInvoiceTotal || 0) * 100) / 100;
+            totalDue = openCycleDue;
         }
         if (totalDue <= 0) {
             return res.status(400).json({ success: false, message: 'Nenhuma fatura em aberto para pagamento.' });
         }
-    
+
         const balance = parseFloat(user.balance || 0);
         const minPayment = Math.max(totalDue * 0.10, 10);
 
@@ -819,7 +909,11 @@ module.exports = function createInvoiceController(deps) {
             console.warn(`[pay] ${cpf}: charge_type fora do mapa de encargos (${encargos.tiposDesconhecidos.join(', ')}) — fica pending até o pagamento TOTAL.`);
         }
         const pendingChargesTotal = encargos.total;
-        const totalDueComplete = Math.round((totalDue + pendingChargesTotal) * 100) / 100;
+        // Fatura aberta (§25): currentInvoiceTotal (openCycleDue) já inclui os encargos
+        // herdados — somar pendingChargesTotal de novo cobraria os mesmos encargos 2×.
+        const totalDueComplete = closedDebt
+            ? Math.round((totalDue + pendingChargesTotal) * 100) / 100
+            : openCycleDue;
 
         // NÃO capar ao total devido: pagamento acima do devido é aceito e o excedente
         // vira saldo credor (closedInvoiceResidual negativo) — bug reportado: pagar
@@ -854,15 +948,25 @@ module.exports = function createInvoiceController(deps) {
             return Number.isFinite(quando) && (Date.now() - quando) < IDEMPOTENCY_WINDOW_MS;
         });
         if (pagamentoRecenteIgual.length > 0) {
-            console.warn(`[pay][idempotencia] CPF ${cpf}: pagamento de R$ ${payAmount.toFixed(2)} já registrado há instantes (tx ${pagamentoRecenteIgual[0].id}) — reenvio ignorado, NÃO cobrando de novo.`);
+            const txOriginalIdem = pagamentoRecenteIgual[0];
+            console.warn(`[pay][idempotencia] CPF ${cpf}: pagamento de R$ ${payAmount.toFixed(2)} já registrado há instantes (tx ${txOriginalIdem.id}) — reenvio ignorado, NÃO cobrando de novo.`);
             const freshRowIdem = await usersRepo.findByCpf(cpf);
             const freshUserIdem = normalizeUser(freshRowIdem);
             await enrichUserCreditCardData(freshUserIdem, cpf);
+            // Resposta INEQUÍVOCA: nenhum débito novo aconteceu. Antes este payload
+            // repetia amountPaid = payAmount com success: true — indistinguível de um
+            // débito novo (bug CT03.2 2026-09: 2 de 8 pagamentos descartados assim e
+            // ninguém percebeu). Agora: idempotent + debitado:false + amountPaid:0 +
+            // dados da transação ORIGINAL (paymentId/date) para o front exibir o
+            // comprovante real em vez de fingir um novo pagamento.
             return res.json({
                 success: true,
                 idempotent: true,
-                message: 'Pagamento já processado.',
-                amountPaid: payAmount,
+                debitado: false,
+                message: 'Pagamento já processado — nenhum novo débito foi realizado.',
+                amountPaid: 0,
+                paymentId: txOriginalIdem.id,
+                originalPaymentDate: txOriginalIdem.date,
                 user: freshUserIdem,
             });
         }
@@ -870,6 +974,10 @@ module.exports = function createInvoiceController(deps) {
         // Valor mínimo é apenas sugestão de UI — o usuário pode pagar menos, mais, ou o total.
         // Pagar abaixo do mínimo mantém saldo devedor e encargos via fluxo de pagamento parcial abaixo.
         if (balance < payAmount) return res.status(400).json({ success: false, message: 'Saldo insuficiente.' });
+
+        if (!closedDebt) {
+            return payOpenCycle({ cpf, user, payAmount, pendingChargesTotal, cutoffIso, res });
+        }
 
         const availableLimit = parseFloat(user.credit_card_available_limit || 0);
         const totalLimit = parseFloat(user.credit_card_total_limit || 0);
@@ -917,7 +1025,11 @@ module.exports = function createInvoiceController(deps) {
                 invoices: closedDebt?.invoices || [],
                 payAmount,
                 dateIso: nowIso,
-                description: payDescription
+                description: payDescription,
+                // Informativo (applied_to_charges nunca é fonte de valor — isso é
+                // billing_charges.payment_id/quitarEncargos abaixo): registra quanto deste
+                // pagamento foi para encargos, útil pra auditoria/debug e pro §25.
+                appliedToCharges: plano.encargosQuitados
             });
             await quitarEncargos(payId, nowIso);
             await usersRepo.updateBalance(cpf, (balance - payAmount).toFixed(2));
@@ -1046,7 +1158,11 @@ module.exports = function createInvoiceController(deps) {
             payAmount,
             dateIso: paidAtTotal,
             // Marca o fim do débito contínuo (encargosPagamento.pertenceAoDebitoAtual).
-            description: encargosPagamento.DESCRICAO_PAGAMENTO_TOTAL
+            description: encargosPagamento.DESCRICAO_PAGAMENTO_TOTAL,
+            // Informativo (applied_to_charges nunca é fonte de valor — isso é
+            // billing_charges.payment_id/quitarEncargos abaixo): registra quanto deste
+            // pagamento foi para encargos, útil pra auditoria/debug e pro §25.
+            appliedToCharges: plano.encargosQuitados
         });
         // — PAGAMENTO TOTAL (principal + TODAS as pending): PARA os encargos e os dias
         // de atraso — todas as charges lidas acima viram 'paid' com payment_id.
@@ -1092,47 +1208,7 @@ module.exports = function createInvoiceController(deps) {
         // getUserByCpf() após sucesso, nenhum call-site depende de `user` aqui.
         res.json({ success: true, message: 'Fatura paga com sucesso.', allocation: plano.alocacao.aplicado });
 
-        // Pós-resposta: fire-and-forget, .catch() obrigatório (mesmo motivo do branch parcial).
-        notificationsRepo.addNotification({
-            cpf,
-            title: 'Pagamento de fatura',
-            message: [
-                '💵 <b>COMPROVANTE DE PAGAMENTO INTEGRAL</b>',
-                '',
-                `<b>Cliente</b>    ${user.full_name}`,
-                `<b>CPF</b>        <code>${telegramService.formatCpf(cpf)}</code>`,
-                '',
-                `<b>Valor pago</b> <code>R$ ${brl(payAmount)}</code>`,
-                `<b>Vencimento</b> ${diaBR(cutoffIso)}`,
-                `<b>Pago em</b>    ${dataBR(nowDb())}`,
-                '',
-                '<b>Status</b>     QUITADO ✅',
-                '',
-                '<blockquote>Limite de crédito reestabelecido e conta regularizada com sucesso.</blockquote>'
-            ].join('\n'),
-            actionUrl: '/dashboard'
-        }).catch((erro) => console.error('[pay] notificação total falhou (ignorado):', erro && erro.message));
-        // Comprovante PDF no tópico da massa (pagamento total) — processo interno
-        // (Telegram/PDF); sendPaymentReceipt já engole os próprios erros (try/catch
-        // interno), nunca rejeita.
-        Promise.resolve(sendPaymentReceipt(cpf, user, {
-            valorPago: payAmount,
-            tipo: 'TOTAL',
-            saldoRestante: 0,
-            dataPagamento: nowDb(),
-            vencimento: cutoffIso,
-            nota: 'Limite de crédito reestabelecido e conta regularizada com sucesso.'
-        })).catch((erro) => console.error('[pay] comprovante total falhou (ignorado):', erro && erro.message));
-        // SSE: notificar frontend em tempo real (best-effort)
-        try {
-            const sse = require('../../services/sseService');
-            sse.sendToClient(cpf, 'payment.completed', {
-                cpf,
-                amount: payAmount,
-                type: 'full',
-                timestamp: new Date().toISOString(),
-            });
-        } catch (_sseErr) { /* SSE é fire-and-forget */ }
+        notifyTotalPayment({ cpf, user, payAmount, cutoffIso });
     };
     
     const summary = async (req, res) => {

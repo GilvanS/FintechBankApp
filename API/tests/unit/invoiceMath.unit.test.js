@@ -925,3 +925,26 @@ describe('classifyDoubleCount', () => {
         expect(result.status).toBe('discrepancy');
     });
 });
+
+describe('paidPrincipalSql — pago de PRINCIPAL de um INVOICE_PAYMENT', () => {
+    const { paidPrincipalSql } = require('../../utils/invoiceMath');
+    // §25 (2026-09-25) pediu uma coluna nova (applied_to_charges) para "quanto foi pra
+    // encargos"; a reconciliação com a regra encargos-primeiro (2026-09-23) manteve
+    // billing_charges.payment_id como ÚNICA fonte de valor (já testada nas Tasks 1-6) —
+    // a coluna, quando presente, vira só o marcador "pagamento pós-regra-nova" que o
+    // invoiceEngine/dailyAudit usam para vincular antecipação, nunca fonte de dinheiro.
+    const fq = (t) => `fintech.${t}`;
+    const dbService = { fq };
+
+    test('sem alias: |amount| menos a soma das billing_charges pagas por este payment_id (NULL = 0)', () => {
+        expect(paidPrincipalSql(dbService)).toBe(
+            "(ABS(CAST(amount AS DECIMAL(15,2))) - COALESCE((SELECT SUM(CAST(bc.amount AS DECIMAL(15,2))) FROM fintech.billing_charges bc WHERE bc.payment_id = id AND bc.status = 'paid'), 0))"
+        );
+    });
+
+    test('com alias: prefixa amount/id da transação; a subquery de billing_charges não leva o alias', () => {
+        expect(paidPrincipalSql(dbService, 't')).toBe(
+            "(ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE((SELECT SUM(CAST(bc.amount AS DECIMAL(15,2))) FROM fintech.billing_charges bc WHERE bc.payment_id = t.id AND bc.status = 'paid'), 0))"
+        );
+    });
+});

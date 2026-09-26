@@ -67,6 +67,10 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
         }
         console.log(`[InvoiceImmutability] Query A — cutoff: ${lowerBound}`);
 
+        // Antecipação da §25 fica sem invoice_id até o fechamento do ciclo (≤ ~35 dias).
+        // Só vira anomalia se passar disso — ou se for órfão legado (applied_to_charges NULL).
+        const antecipacaoVencida = new Date(Date.now() - 40 * 86400000).toISOString();
+
         const orphans = await db.executeQuery(`
             SELECT t.id, t.cpf, t.amount, t.date, t.description,
                    u.full_name
@@ -74,6 +78,7 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
             LEFT JOIN ${db.fq('users')} u ON u.cpf = t.cpf
             WHERE t.type = 'INVOICE_PAYMENT'
               AND t.invoice_id IS NULL
+              AND (t.applied_to_charges IS NULL OR t.date < '${antecipacaoVencida}'::timestamptz)
               AND t.date >= '${lowerBound}'::timestamptz
               AND u.cpf IS NOT NULL
               AND u.role IS DISTINCT FROM 'admin'
@@ -130,11 +135,10 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
 
         const legacyMutated = await db.executeQuery(`
             SELECT i.id, i.cpf, i.valor_pago, i.updated_at, i.created_at,
-                   COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) AS pago
+                   COALESCE(SUM(pp.principal), 0) AS pago
             FROM ${db.fq('invoices')} i
             LEFT JOIN ${db.fq('users')} u ON u.cpf = i.cpf
-            LEFT JOIN ${db.fq('transactions')} t
-                   ON t.invoice_id = i.id AND t.type = 'INVOICE_PAYMENT'
+            LEFT JOIN (${sqlPrincipalPorPagamento(db)}) pp ON pp.invoice_id = i.id
             WHERE i.status = 'FECHADA'
               AND i.valor_pago IS NOT NULL
               AND i.valor_pago > 0
@@ -143,7 +147,7 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
               AND u.role IS DISTINCT FROM 'admin'
             GROUP BY i.id, i.cpf, i.valor_pago, i.updated_at, i.created_at
             HAVING ABS(
-                COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0)
+                COALESCE(SUM(pp.principal), 0)
                 - CAST(COALESCE(i.valor_pago, '0') AS DECIMAL(15,2))
             ) > 0.02
         `);

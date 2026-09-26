@@ -365,6 +365,7 @@ module.exports = {
     round2,
     TOLERANCIA_QUITACAO,
     classifyDoubleCount,
+    paidPrincipalSql,
     INVOICE_GROSS_FIELDS,
     computeInvoiceGross,
     computeInvoiceOwed,

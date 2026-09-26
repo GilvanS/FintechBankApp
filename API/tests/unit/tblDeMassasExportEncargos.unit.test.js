@@ -45,9 +45,14 @@ const tabela = (nome, colunas, linhas) => {
 };
 
 function sqlComTabelasSinteticas({ pagamentos, charges }) {
+    // invoice_id vincula o pagamento à fechada (pagos_totais exige invoice_id IS NOT
+    // NULL desde a reconciliação com o §25 — antecipação, invoice_id NULL, entra em
+    // outra CTE). applied_to_charges fica NULL em todos: nenhum cenário aqui testa
+    // antecipação, mas a coluna precisa existir pra query rodar.
+    const INV_ID = 'inv-a';
     const tx = [
-        { id: 'tx-compra', cpf: CPF, type: 'CREDIT', amount: -100, date: '2026-09-15 12:00:00' },
-        ...pagamentos.map(p => ({ id: p.id, cpf: CPF, type: 'INVOICE_PAYMENT', amount: -p.valor, date: '2026-09-20 12:00:00' })),
+        { id: 'tx-compra', cpf: CPF, type: 'CREDIT', amount: -100, date: '2026-09-15 12:00:00', invoice_id: null, applied_to_charges: null },
+        ...pagamentos.map(p => ({ id: p.id, cpf: CPF, type: 'INVOICE_PAYMENT', amount: -p.valor, date: '2026-09-20 12:00:00', invoice_id: INV_ID, applied_to_charges: null })),
     ];
     const ctes = [
         tabela('users', [['cpf', 'varchar'], ['credit_card_due_day', 'int'], ['full_name', 'text'], ['balance', 'numeric'],
@@ -56,9 +61,9 @@ function sqlComTabelasSinteticas({ pagamentos, charges }) {
         [{ cpf: CPF, credit_card_due_day: 10, full_name: 'Massa Sintetica', balance: 0, credit_card_total_limit: 5000,
             credit_card_available_limit: 3900, days_overdue: 14, account_status: 'inadimplente', created_at: '2026-01-01 00:00:00',
             credit_card_invoice_due_date: '2026-10-10 00:00:00', role: 'customer' }]),
-        tabela('transactions', [['id', 'varchar'], ['cpf', 'varchar'], ['type', 'varchar'], ['amount', 'numeric'], ['date', 'timestamp']], tx),
-        tabela('invoices', [['cpf', 'varchar'], ['due_date', 'timestamp'], ['valor_total', 'numeric'], ['data_pagamento', 'timestamp'], ['status', 'varchar']],
-            [{ cpf: CPF, due_date: '2026-09-10 00:00:00', valor_total: 1000, data_pagamento: null, status: 'FECHADA' }]),
+        tabela('transactions', [['id', 'varchar'], ['cpf', 'varchar'], ['type', 'varchar'], ['amount', 'numeric'], ['date', 'timestamp'], ['invoice_id', 'varchar'], ['applied_to_charges', 'numeric']], tx),
+        tabela('invoices', [['id', 'varchar'], ['cpf', 'varchar'], ['due_date', 'timestamp'], ['valor_total', 'numeric'], ['data_pagamento', 'timestamp'], ['status', 'varchar']],
+            [{ id: INV_ID, cpf: CPF, due_date: '2026-09-10 00:00:00', valor_total: 1000, data_pagamento: null, status: 'FECHADA' }]),
         tabela('billing_charges', [['cpf', 'varchar'], ['amount', 'numeric'], ['status', 'varchar'], ['payment_id', 'varchar']],
             charges.map(c => ({ cpf: CPF, ...c }))),
         tabela('cards', [['user_cpf', 'varchar'], ['card_number', 'varchar'], ['cvv', 'varchar'], ['card_type', 'varchar'], ['created_at', 'timestamp']], []),

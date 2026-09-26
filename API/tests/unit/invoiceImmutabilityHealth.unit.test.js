@@ -77,4 +77,21 @@ describe('Invoice Immutability Health Check & Messages', () => {
       'daily_anomaly'
     );
   });
+
+  test('PAYMENT_SEM_INVOICE_ID ignora antecipação da §25 ainda dentro do prazo de vínculo', async () => {
+    const queries = [];
+    mockDbService = {
+      executeQuery: jest.fn().mockImplementation((sql) => {
+        queries.push(sql);
+        if (sql.includes("name LIKE '%005%'")) return Promise.resolve([{ created_at: '2026-08-01T00:00:00.000Z' }]);
+        return Promise.resolve([]);
+      }),
+      fq: jest.fn(t => `fintech.${t}`)
+    };
+
+    await runInvoiceImmutabilityHealth(mockDbService, mockAuditLog);
+
+    const orfaos = queries.find(q => q.includes('t.invoice_id IS NULL'));
+    expect(orfaos).toContain('t.applied_to_charges IS NULL OR t.date <');
+  });
 });

@@ -55,6 +55,10 @@ const DELIM = ';';
 function buildQuery({ cpf, esc = (v) => `'${v}'` } = {}) {
     return `
 WITH pagos_totais AS (
+    -- Só o que abateu PRINCIPAL de fatura FECHADA (pagamento vinculado, invoice_id
+    -- IS NOT NULL): pagamento ainda não vinculado (antecipação da fatura ABERTA, §25)
+    -- entra em antecipacoes (CTE abaixo), nunca aqui — contar nos dois CTEs dobraria o
+    -- abatimento (fatura_aberta usa os dois, subtraindo antecipacoes por fora).
     SELECT t.cpf,
            SUM(ABS(t.amount)) AS total_pago_bruto,
            SUM(ABS(t.amount) - COALESCE(enc.total, 0)) AS total_pago,
@@ -66,8 +70,33 @@ WITH pagos_totais AS (
         WHERE status = 'paid' AND payment_id IS NOT NULL
         GROUP BY payment_id
     ) enc ON enc.payment_id = t.id
-    WHERE t.type = 'INVOICE_PAYMENT'
+    WHERE t.type = 'INVOICE_PAYMENT' AND t.invoice_id IS NOT NULL
     GROUP BY t.cpf
+),
+antecipacoes AS (
+    -- Pagamento feito com a fatura ABERTA (§25) ainda não vinculado pelo invoiceEngine:
+    -- abate a fatura aberta. Órfão legado (applied_to_charges NULL — esse marcador,
+    -- quando presente, só sinaliza "pagamento pós-regra-nova", nunca é fonte de
+    -- valor) fica de fora. Valor = PRINCIPAL do pagamento, mesma fonte de
+    -- pagos_totais (|amount| − encargos quitados via billing_charges.payment_id).
+    SELECT t.cpf, SUM(ABS(t.amount) - COALESCE(enc.total, 0)) AS total
+    FROM fintech.transactions t
+    LEFT JOIN (
+        SELECT payment_id, SUM(amount) AS total
+        FROM fintech.billing_charges
+        WHERE status = 'paid' AND payment_id IS NOT NULL
+        GROUP BY payment_id
+    ) enc ON enc.payment_id = t.id
+    WHERE t.type = 'INVOICE_PAYMENT' AND t.invoice_id IS NULL AND t.applied_to_charges IS NOT NULL
+    GROUP BY t.cpf
+),
+pago_encargos AS (
+    -- tbl_pago_encargos: quanto dos pagamentos da massa foi para encargos, pela
+    -- fonte única (billing_charges.payment_id) — nunca a coluna applied_to_charges.
+    SELECT cpf, SUM(amount) AS total
+    FROM fintech.billing_charges
+    WHERE status = 'paid' AND payment_id IS NOT NULL
+    GROUP BY cpf
 ),
 fechadas_invoices AS (
     SELECT
@@ -231,7 +260,7 @@ todas_massas AS (
         (u.credit_card_total_limit - u.credit_card_available_limit) AS limite_utilizado,
         u.credit_card_available_limit                               AS limite_disponivel,
         COALESCE(fc.valor_fechada_exibicao, 0)                      AS fatura_fechada,
-        (COALESCE(cc.total, 0) + COALESCE(fc.residual_total_fechadas, 0) + COALESCE(eh.total, 0)) AS fatura_aberta,
+        GREATEST(0, COALESCE(cc.total, 0) + COALESCE(fc.residual_total_fechadas, 0) + COALESCE(eh.total, 0) - COALESCE(an.total, 0)) AS fatura_aberta,
         COALESCE(fc.status_fechada, 'ABERTA')                      AS status_fatura_fechada,
         CASE
             WHEN fc.status_fechada = 'PAGO_TOTAL' THEN 0
@@ -281,6 +310,9 @@ todas_massas AS (
         -- tbl_cemiterio_teste: presença aqui = "não tenta salvar essa massa, gera nova".
         ct.status                                                    AS tbl_cemiterio_teste,
         ARRAY_TO_STRING(ct.tipos_anomalia, ', ')                     AS tbl_cemiterio_teste_motivo,
+        -- tbl_pago_encargos: SEMPRE a última coluna do CSV (a planilha de controle
+        -- carrega por posição — coluna nova vai no fim, nunca no meio).
+        COALESCE(pe.total, 0)                                        AS tbl_pago_encargos,
         u.cpf                                                       AS _cpf_filtro
     FROM fintech.users u
     LEFT JOIN fechada_calculada fc ON fc.cpf = u.cpf
@@ -292,6 +324,8 @@ todas_massas AS (
     LEFT JOIN pa_recente        pa ON pa.cpf = u.cpf
     LEFT JOIN pf_elegivel_recente pfe ON pfe.cpf = u.cpf
     LEFT JOIN cemiterio_teste   ct ON ct.cpf = u.cpf
+    LEFT JOIN antecipacoes      an ON an.cpf = u.cpf
+    LEFT JOIN pago_encargos     pe ON pe.cpf = u.cpf
     WHERE u.role IN ('customer', 'user')
 )
 SELECT id_massa, cpf, dia_vencimento, nome_completo, saldo_conta, limite_utilizado,
@@ -299,7 +333,8 @@ SELECT id_massa, cpf, dia_vencimento, nome_completo, saldo_conta, limite_utiliza
        cartao_fisico_cvv, cartao_virtual_numero, cartao_virtual_cvv, "data_criação", tbl_ven, tbl_corte, tbl_schema,
        tbl_pf_valor_parcela, tbl_pf_saldo_financiado, tbl_pf_iof_total, tbl_pf_iof_adicional, tbl_pf_cet_anual, tbl_pf_prazo, tbl_pf_data_contratacao,
        tbl_pa_valor_pagamento, tbl_pa_minimo, tbl_pa_piso, tbl_pa_valor_parcela, tbl_pa_saldo_financiado, tbl_pa_iof_total, tbl_pa_cet_anual, tbl_pa_data_contratacao,
-       tbl_reneg, tbl_pf_elegivel, tbl_pf_valor_ativacao_automatica, tbl_cemiterio_teste, tbl_cemiterio_teste_motivo
+       tbl_reneg, tbl_pf_elegivel, tbl_pf_valor_ativacao_automatica, tbl_cemiterio_teste, tbl_cemiterio_teste_motivo,
+       tbl_pago_encargos
 FROM todas_massas
 ${cpf ? `WHERE _cpf_filtro = ${esc(cpf)}` : ''}
 ORDER BY "data_criação" ASC;

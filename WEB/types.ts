@@ -26,11 +26,10 @@ export interface CardTransaction {
     currentInstallment?: number;
     totalAmount?: number;
     category?: string;
-    paymentType?: "TOTAL" | "MINIMO" | "PARCIAL";
+    paymentType?: 'TOTAL' | 'MINIMO' | 'PARCIAL';
     cardNumber?: string;
     cardLast4?: string;
     authorizationCode?: string;
-    paymentType?: 'TOTAL' | 'MINIMO' | 'PARCIAL';
 }
 
 export interface PaymentEntry {

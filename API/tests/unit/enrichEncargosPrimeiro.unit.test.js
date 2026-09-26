@@ -48,7 +48,9 @@ function montarBanco({ pagamentos, charges }) {
     return async (sql) => {
         const q = String(sql);
         if (/^\s*ALTER TABLE/i.test(q)) return [];
-        if (/FROM "[^"]+"\."invoices"/.test(q) && /ORDER BY due_date DESC LIMIT 5/.test(q)) return [FECHADA_A];
+        // Sem LIMIT: removido pelo PR de "não pode perder faturas fechadas antigas"
+        // (2026-09-25) — a query lê TODAS as fechadas do CPF, sem limite fixo.
+        if (/FROM "[^"]+"\."invoices"/.test(q) && /WHERE cpf = '12345678901' ORDER BY due_date DESC/.test(q)) return [FECHADA_A];
         // Pago por fatura (cascata). SQL nova: principal por pagamento; antiga: |amount| cheio.
         if (/GROUP BY (pp\.)?invoice_id/.test(q)) {
             const descontaEncargos = /AS principal/.test(q);

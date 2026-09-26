@@ -125,12 +125,13 @@ describe('Teste de Integração E2E — Fluxo de Pagamento de Faturas e Encargos
 
         // 6. Validar que ao rodar o enrichUserCreditCardData, a sobra vira saldo credor negativo.
         // Pagamento: 5623.68. Total devido: 3870.86 (principal) + 478.48 (encargos) = 4349.34
-        // (regra ENCARGOS PRIMEIRO, 2026-09-23: o TOTAL quita principal + 100% dos encargos, o
-        // adicional de IOF incluso). Excedente: 5623.68 - 4349.34 = R$ 1274.34. Valor e sempre
-        // negativo: o sinal indica saldo credor.
-        // Antes da regra nova (principal primeiro) o excedente era medido só contra o principal
-        // (5623.68 - 3870.86 = 1752.82): esperava-se então -1752.82. Como o TOTAL agora quita os
-        // encargos junto com o principal, a sobra real e menor.
+        // (regra ENCARGOS PRIMEIRO, 2026-09-23: o TOTAL quita principal + 100% dos encargos).
+        // Excedente: 5623.68 - 4349.34 = R$ 1274.34. Valor e sempre negativo: o sinal indica
+        // saldo credor. A parte que quitou os encargos (478.48) e excluida do "pago de
+        // principal" (sqlPrincipalPorPagamento, billing_charges.payment_id — §25,
+        // 2026-09-25), entao nao e contada de novo como excedente/credito. Sem essa exclusao
+        // (nem a regra de encargos primeiro), o valor aqui seria -1752.82 (so contra o
+        // principal) — o proprio credito fantasma que os dois planos corrigem juntos.
         const { enrichUserCreditCardData, normalizeUser, usersRepo, fetchUnpaidClosedInvoices } = require('../../index.cjs');
         const userRowFull = await usersRepo.findByCpf(testCpf);
         const tempUser = normalizeUser(userRowFull);
