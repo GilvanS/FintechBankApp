@@ -8,8 +8,9 @@
 //      Pagamento órfão: quitação não pode ser derivada. Histórico pré-005 é
 //      aceito (cobre com valor_pago legado); pós-005 precisa ser reprocessado.
 //
-//   B. Soma de pagamentos vinculados > valor_total (pagou mais do que a fatura
-//      vale). Excedente deveria ter virado creditoExcedente na fatura ABERTA;
+//   B. Soma do PRINCIPAL dos pagamentos vinculados > valor_total (pagou mais do
+//      que a fatura vale; encargos quitados pelo pagamento não contam — são pagos
+//      primeiro). Excedente deveria ter virado creditoExcedente na fatura ABERTA;
 //      se bateu aqui, pode indicar pagamento com valor errado na origem ou
 //      pagamento único quitando múltiplas faturas acumuladas.
 //
@@ -20,7 +21,7 @@
 
 const DatabaseFactory = require('./database/DatabaseFactory');
 const telegramService = require('../services/telegramService');
-const { paidPrincipalSql } = require('../utils/invoiceMath');
+const { sqlPrincipalPorPagamento, garantirColunasQuitacao } = require('./encargosPagamento');
 const DEFAULT_MIGRATION_005_CUTOFF = '2026-08-01T00:00:00.000Z';
 
 async function resolveOrphanCutoff(db, options = {}) {
@@ -97,18 +98,22 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
             });
         }
 
+        // B compara o PRINCIPAL pago (|amount| − encargos que o pagamento quitou, por
+        // billing_charges.payment_id) com o valor_total. O pagamento abate ENCARGOS
+        // PRIMEIRO: com o |amount| cheio, todo TOTAL em atraso aparecia como "excedente"
+        // do tamanho da multa/juros/IOF que ele pagou.
+        await garantirColunasQuitacao(db);
         const overpaid = await db.executeQuery(`
             SELECT i.cpf, i.id AS invoice_id, i.valor_total, i.due_date, u.full_name,
-                   COALESCE(SUM(${paidPrincipalSql('t')}), 0) AS pago
+                   COALESCE(SUM(pp.principal), 0) AS pago
             FROM ${db.fq('invoices')} i
             JOIN ${db.fq('users')} u ON u.cpf = i.cpf
-            LEFT JOIN ${db.fq('transactions')} t
-                   ON t.invoice_id = i.id AND t.type = 'INVOICE_PAYMENT'
+            LEFT JOIN (${sqlPrincipalPorPagamento(db)}) pp ON pp.invoice_id = i.id
             WHERE i.status = 'FECHADA'
               AND u.cpf IS NOT NULL
               AND u.role IS DISTINCT FROM 'admin'
             GROUP BY i.cpf, i.id, i.valor_total, i.due_date, u.full_name
-            HAVING COALESCE(SUM(${paidPrincipalSql('t')}), 0) > CAST(i.valor_total AS DECIMAL(15,2)) + 0.02
+            HAVING COALESCE(SUM(pp.principal), 0) > CAST(i.valor_total AS DECIMAL(15,2)) + 0.02
         `);
 
         for (const inv of overpaid) {
@@ -130,11 +135,10 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
 
         const legacyMutated = await db.executeQuery(`
             SELECT i.id, i.cpf, i.valor_pago, i.updated_at, i.created_at,
-                   COALESCE(SUM(${paidPrincipalSql('t')}), 0) AS pago
+                   COALESCE(SUM(pp.principal), 0) AS pago
             FROM ${db.fq('invoices')} i
             LEFT JOIN ${db.fq('users')} u ON u.cpf = i.cpf
-            LEFT JOIN ${db.fq('transactions')} t
-                   ON t.invoice_id = i.id AND t.type = 'INVOICE_PAYMENT'
+            LEFT JOIN (${sqlPrincipalPorPagamento(db)}) pp ON pp.invoice_id = i.id
             WHERE i.status = 'FECHADA'
               AND i.valor_pago IS NOT NULL
               AND i.valor_pago > 0
@@ -143,7 +147,7 @@ async function runInvoiceImmutabilityHealth(dbService, auditLog, options = {}) {
               AND u.role IS DISTINCT FROM 'admin'
             GROUP BY i.id, i.cpf, i.valor_pago, i.updated_at, i.created_at
             HAVING ABS(
-                COALESCE(SUM(${paidPrincipalSql('t')}), 0)
+                COALESCE(SUM(pp.principal), 0)
                 - CAST(COALESCE(i.valor_pago, '0') AS DECIMAL(15,2))
             ) > 0.02
         `);

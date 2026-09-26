@@ -1,7 +1,7 @@
 /**
  * saldoAnterior.js — quanto da fatura FECHADA anterior ainda está em aberto no momento
  * em que a próxima fecha (coluna invoices.saldo_anterior). FONTE ÚNICA: usada no
- * fechamento (invoiceEngine) e na auditoria (dailyAudit, SALDO_ANTERIOR_JA_QUITADO).
+ * fechamento (invoiceEngine) e na auditoria (dailyAudit, SALDO_ANTERIOR_DIVERGENTE).
  *
  * Regra de quitação = a do enrichUserCreditCardData: os INVOICE_PAYMENT vinculados
  * (transactions.invoice_id) somados por CPF e distribuídos em cascata, da fechada mais
@@ -9,9 +9,18 @@
  * servem: desde a trava de imutabilidade a FECHADA nunca os recebe — o filtro antigo
  * (data_pagamento IS NULL) tratava toda fechada como não paga e herdava o valor cheio
  * (CT03.1, 2026-09-23: R$ 3.870,86 já pagos às 18:25 herdados no fechamento das 21:35).
+ *
+ * O que entra na cascata é o PRINCIPAL pago (sqlPrincipalPorPagamento: |amount| − os
+ * encargos que a transação quitou). O pagamento abate ENCARGOS PRIMEIRO; somar o
+ * |amount| cheio contaria a multa/juros/IOF pagos como principal e a próxima fatura
+ * herdaria um saldo menor que o devido. Os encargos que sobram continuam 'pending' e
+ * são herdados por eles mesmos (congelados na próxima fechada e cobrados na aberta),
+ * por isso o saldo anterior segue sendo só o principal residual. Pagamento antigo, sem
+ * charge com payment_id, sai com o valor cheio (comportamento de antes).
  */
 const { esc: escPadrao } = require('../repositories/context');
-const { planDistribution, round2, paidPrincipalSql } = require('../utils/invoiceMath');
+const { planDistribution, round2 } = require('../utils/invoiceMath');
+const { sqlPrincipalPorPagamento, garantirColunasQuitacao } = require('./encargosPagamento');
 
 /**
  * Total AINDA EM ABERTO de todas as `fechadas` (ordenadas por vencimento, mais antiga
@@ -45,6 +54,39 @@ function momentoDoFechamento(inv) {
     return fechadaPeloMotor(inv) ? new Date(inv.created_at).getTime() : new Date(inv.due_date).getTime() - 10 * DIA;
 }
 
+/**
+ * Subquery `id, cpf, residual`: o que cada FECHADA não paga (data_pagamento IS NULL)
+ * ainda deve pela MESMA regra do motor (billingValidation → closedDueByCpf): o
+ * principal pago do CPF (sqlPrincipalPorPagamento) distribuído da fechada mais antiga
+ * para a mais nova, cada uma com teto em valor_total − valor_pago (planDistribution):
+ *   residual_i = min(devido_i, max(0, Σ_{j<=i} devido_j − pago_cpf))
+ * Rotinas que (re)geram encargo numa fechada filtram `residual > TOLERANCIA_QUITACAO`:
+ * sem isso, a fatura quitada pelo TOTAL ganhava multa/IOF de novo (CPF 42194343806,
+ * 21/09 — Anomalia 8b regerou 77,42 + 14,71 numa fechada paga em 18/08).
+ * @param {object} db
+ * @param {string} [cpfSql] - CPF já escapado para filtrar
+ */
+function sqlResidualFechadas(db, cpfSql) {
+    const filtro = cpfSql ? `AND cpf = ${cpfSql}` : '';
+    return `
+        SELECT f.id, f.cpf,
+               LEAST(f.devido, GREATEST(0,
+                   SUM(f.devido) OVER (PARTITION BY f.cpf ORDER BY f.due_date, f.id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                   - COALESCE(pg.pago, 0))) AS residual
+        FROM (
+            SELECT id, cpf, due_date,
+                   GREATEST(0, CAST(valor_total AS DECIMAL(15,2)) - CAST(COALESCE(valor_pago, 0) AS DECIMAL(15,2))) AS devido
+            FROM ${db.fq('invoices')}
+            WHERE status = 'FECHADA' AND data_pagamento IS NULL ${filtro}
+        ) f
+        LEFT JOIN (
+            SELECT pp.cpf, SUM(pp.principal) AS pago
+            FROM (${sqlPrincipalPorPagamento(db, cpfSql)}) pp
+            GROUP BY pp.cpf
+        ) pg ON pg.cpf = f.cpf
+    `;
+}
+
 /** Saldo anterior para a fatura que está fechando AGORA (fechamento do invoiceEngine). */
 async function calcularSaldoAnterior(db, cpf, esc = escPadrao) {
     const fechadas = await db.executeQuery(`
@@ -54,38 +96,51 @@ async function calcularSaldoAnterior(db, cpf, esc = escPadrao) {
         ORDER BY due_date ASC
     `);
     if (!fechadas.length) return 0;
+    await garantirColunasQuitacao(db);
     const [pg] = await db.executeQuery(`
-        SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS pago
-        FROM ${db.fq('transactions')}
-        WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+        SELECT COALESCE(SUM(pp.principal), 0) AS pago
+        FROM (${sqlPrincipalPorPagamento(db, esc(cpf))}) pp
     `);
     return residualEmAberto(fechadas, parseFloat((pg && pg.pago) || 0));
 }
 
+// Diferença mínima para acusar divergência (arredondamento de centavos no fechamento).
+const TOLERANCIA_DIVERGENCIA = 0.02;
+
 /**
- * Auditoria: faturas FECHADAS cujo saldo_anterior gravado é MAIOR do que o residual
- * que a fechada anterior tinha no instante em que esta fechou (pagamentos com data
- * anterior ao created_at desta). Pagamento feito DEPOIS do fechamento não conta —
- * aí o saldo herdado estava certo naquele momento.
+ * Auditoria (Anomalia 8d, SALDO_ANTERIOR_DIVERGENTE): faturas FECHADAS cujo
+ * saldo_anterior gravado NÃO bate com o residual que as fechadas anteriores tinham no
+ * instante em que esta fechou (pagamentos com data anterior ao fechamento). Pagamento
+ * feito DEPOIS do fechamento não conta — o saldo herdado estava certo naquele momento.
+ *   - direcao 'A_MAIS':  herdou valor que já estava pago (fechamento antigo, que olhava
+ *     data_pagamento; ou encargo pago contado como principal).
+ *   - direcao 'A_MENOS': deixou de herdar principal que continuava devendo (ex.: parcial
+ *     que só cobriu encargos lido como abatimento de principal).
+ * O esperado é SÓ o principal residual: os encargos são herdados pelo caminho próprio
+ * (pending → congelados na nova fechada), e somá-los aqui os contaria duas vezes.
  */
-async function listarSaldoAnteriorIndevido(db, { cpf = null, esc = escPadrao } = {}) {
+async function listarSaldoAnteriorDivergente(db, { cpf = null, esc = escPadrao } = {}) {
+    // Só CPFs com 2+ fechadas: a 1ª não tem de quem herdar. Sem o filtro antigo
+    // (saldo_anterior > 0) — a herança A MENOS aparece justamente com saldo_anterior 0.
+    const cpfsComHeranca = `SELECT cpf FROM ${db.fq('invoices')} WHERE status = 'FECHADA'
+        ${cpf ? `AND cpf = ${esc(cpf)}` : ''} GROUP BY cpf HAVING COUNT(*) >= 2`;
     const fechadas = await db.executeQuery(`
         SELECT i.id, i.cpf, u.full_name, i.due_date, i.created_at, i.valor_total,
                COALESCE(i.valor_pago, 0) AS valor_pago, COALESCE(i.saldo_anterior, 0) AS saldo_anterior
         FROM ${db.fq('invoices')} i
         JOIN ${db.fq('users')} u ON u.cpf = i.cpf
-        WHERE i.status = 'FECHADA'
-          AND i.cpf IN (SELECT cpf FROM ${db.fq('invoices')} WHERE status = 'FECHADA' AND COALESCE(saldo_anterior, 0) > 0.02)
-          ${cpf ? `AND i.cpf = ${esc(cpf)}` : ''}
+        WHERE i.status = 'FECHADA' AND i.cpf IN (${cpfsComHeranca})
         ORDER BY i.cpf, i.due_date ASC
     `);
     if (!fechadas.length) return [];
+    // Principal de cada pagamento (encargos primeiro — ver o cabeçalho): com o |amount|
+    // cheio, um parcial que quitou encargos faria o "devido" sair menor que o real e o
+    // saldo herdado CORRETO seria acusado.
+    await garantirColunasQuitacao(db);
     const pagamentos = await db.executeQuery(`
-        SELECT cpf, date, ${paidPrincipalSql()} AS valor
-        FROM ${db.fq('transactions')}
-        WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
-          AND cpf IN (SELECT DISTINCT cpf FROM ${db.fq('invoices')} WHERE status = 'FECHADA' AND COALESCE(saldo_anterior, 0) > 0.02)
-          ${cpf ? `AND cpf = ${esc(cpf)}` : ''}
+        SELECT pp.cpf, pp.date, pp.principal AS valor
+        FROM (${sqlPrincipalPorPagamento(db, cpf ? esc(cpf) : undefined)}) pp
+        WHERE pp.cpf IN (${cpfsComHeranca})
     `);
 
     const porCpf = new Map();
@@ -93,32 +148,45 @@ async function listarSaldoAnteriorIndevido(db, { cpf = null, esc = escPadrao } =
     const pagosPorCpf = new Map();
     for (const p of pagamentos) (pagosPorCpf.get(p.cpf) || pagosPorCpf.set(p.cpf, []).get(p.cpf)).push(p);
 
-    const indevidos = [];
+    const divergentes = [];
     for (const [cpfAtual, lista] of porCpf) {
-        for (let i = 1; i < lista.length; i++) {
-            const inv = lista[i];
-            const gravado = round2(parseFloat(inv.saldo_anterior || 0));
-            if (gravado <= 0.02) continue;
+        for (const inv of lista) {
             // Só fechamentos do MOTOR (regressão do invoiceEngine). Histórico gerado de uma
             // vez pelo gerador antigo paga encargos junto com o principal, e a cascata de
             // quitação (só principal) não sabe separar — comparar ali dá falso positivo.
             if (!fechadaPeloMotor(inv)) continue;
             const fechouEm = momentoDoFechamento(inv);
+            // "Anteriores" = as que JÁ tinham fechado quando esta fechou (momento do
+            // fechamento), não as de vencimento menor: a Anomalia 8 reescreve due_date
+            // (ex.: fechada de julho que passou a vencer em setembro) e a ordem por
+            // vencimento punha a mais antiga depois da sucessora — "a menos" falso. A
+            // cascata entre elas segue por vencimento (lista já vem ordenada assim).
+            const anteriores = lista.filter((f) => f !== inv && momentoDoFechamento(f) < fechouEm);
+            if (!anteriores.length) continue;
+            const gravado = round2(parseFloat(inv.saldo_anterior || 0));
             const pagoAteFechar = (pagosPorCpf.get(cpfAtual) || [])
                 .filter((p) => new Date(p.date).getTime() < fechouEm)
                 .reduce((s, p) => s + parseFloat(p.valor || 0), 0);
-            const devido = residualEmAberto(lista.slice(0, i), pagoAteFechar);
-            if (gravado > devido + 0.02) {
-                indevidos.push({
-                    invoiceId: inv.id, cpf: cpfAtual, fullName: inv.full_name || null,
-                    dueDate: inv.due_date, fechadaEm: inv.created_at,
-                    saldoAnteriorGravado: gravado, saldoAnteriorCorreto: devido,
-                    diferenca: round2(gravado - devido), valorTotal: round2(parseFloat(inv.valor_total || 0)),
-                });
-            }
+            const devido = residualEmAberto(anteriores, pagoAteFechar);
+            if (Math.abs(gravado - devido) <= TOLERANCIA_DIVERGENCIA) continue;
+            divergentes.push({
+                invoiceId: inv.id, cpf: cpfAtual, fullName: inv.full_name || null,
+                dueDate: inv.due_date, fechadaEm: inv.created_at,
+                direcao: gravado > devido ? 'A_MAIS' : 'A_MENOS',
+                saldoAnteriorGravado: gravado, saldoAnteriorCorreto: devido,
+                diferenca: round2(Math.abs(gravado - devido)), valorTotal: round2(parseFloat(inv.valor_total || 0)),
+            });
         }
     }
-    return indevidos;
+    return divergentes;
 }
 
-module.exports = { calcularSaldoAnterior, listarSaldoAnteriorIndevido, residualEmAberto, momentoDoFechamento };
+/** Só a direção A_MAIS (nome e contrato de antes da 8d virar bidirecional). */
+async function listarSaldoAnteriorIndevido(db, opts = {}) {
+    return (await listarSaldoAnteriorDivergente(db, opts)).filter((d) => d.direcao === 'A_MAIS');
+}
+
+module.exports = {
+    calcularSaldoAnterior, listarSaldoAnteriorDivergente, listarSaldoAnteriorIndevido,
+    residualEmAberto, fechadaPeloMotor, momentoDoFechamento, sqlResidualFechadas,
+};

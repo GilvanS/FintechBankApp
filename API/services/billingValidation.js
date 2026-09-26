@@ -4,7 +4,8 @@
 const DatabaseFactory = require('../services/database/DatabaseFactory');
 const dbService = DatabaseFactory.createDatabaseService();
 const notificationsRepo = require('../repositories/notificationsRepo');
-const { planDistribution, paidPrincipalSql } = require('../utils/invoiceMath');
+const { planDistribution, TOLERANCIA_QUITACAO } = require('../utils/invoiceMath');
+const encargosPagamento = require('./encargosPagamento');
 
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function calcMulta(amount) { return round2((Number(amount) || 0) * 0.02); }
@@ -84,6 +85,8 @@ async function runBillingValidationInner(opts) {
     if (!configRows.length) return { success: false, message: 'Configuração de faturamento não encontrada.' };
     const cfg = configRows[0];
     if (!cfg.is_active) return { success: true, message: 'Ciclo de faturamento inativo. Nenhuma validação executada.' };
+    // payment_id/paid_at de billing_charges são lidos abaixo (encargos quitados primeiro).
+    await encargosPagamento.garantirColunasQuitacao(dbService);
 
     const cycle = computeCurrentCycle(cfg);
     const today = new Date();
@@ -126,15 +129,13 @@ async function runBillingValidationInner(opts) {
                COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
         FROM ${dbService.fq('invoices')} i
         LEFT JOIN (
-            SELECT invoice_id, SUM(${paidPrincipalSql()}) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            SELECT invoice_id, SUM(principal) AS total
+            FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
             GROUP BY invoice_id
         ) pagos ON pagos.invoice_id = i.id
         LEFT JOIN (
-            SELECT cpf, SUM(${paidPrincipalSql()}) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            SELECT cpf, SUM(principal) AS total
+            FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
             GROUP BY cpf
         ) pagos_cpf ON pagos_cpf.cpf = i.cpf
         WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
@@ -173,7 +174,7 @@ async function runBillingValidationInner(opts) {
         // O `continue` precisa vir ANTES do has(): sem ele, a fatura quitada (mais antiga,
         // por causa do ORDER BY ASC) ocuparia o slot do CPF e mascararia uma fatura
         // seguinte legitimamente em aberto.
-        if (residual <= 0.005) continue;
+        if (residual <= TOLERANCIA_QUITACAO) continue;
         if (!closedDueByCpf.has(row.cpf)) {
             closedDueByCpf.set(row.cpf, {
                 dueDate: row.due_date,
@@ -330,12 +331,11 @@ async function runBillingValidationInner(opts) {
                 // sem filtro de invoice_reference — qualquer multa/IOF pending do CPF já
                 // inibe nova inserção. Com o filtro por ref instável, cada troca de ref
                 // criava multa duplicada (77,42 em 2026-07 E em 2026-08 na massa 805).
-                const existingCharges = await dbService.executeQuery(`
-                    SELECT charge_type, COALESCE(SUM(amount), 0) AS total
-                    FROM ${dbService.fq('billing_charges')}
-                    WHERE cpf = '${u.cpf}' AND status = 'pending'
-                    GROUP BY charge_type
-                `);
+                // Conta também o que pagamento parcial DESTE débito contínuo já quitou
+                // (encargos primeiro) — desde o último pagamento total, sem depender da
+                // cascata: sem isso, pagar a multa fazia o motor recriá-la amanhã.
+                const _encargosDebito = await encargosPagamento.buscarEncargosDoDebitoAtual(dbService, `'${u.cpf}'`);
+                const existingCharges = _encargosDebito.existingCharges;
                 const getExisting = (type) => {
                     const row = existingCharges.find(e => e.charge_type === type);
                     return row ? parseFloat(row.total) : 0;
@@ -350,11 +350,9 @@ async function runBillingValidationInner(opts) {
                 // colidir caso a âncora mude (fatura mais antiga não paga) ou existam
                 // charges legadas de refs antigas no histórico. Multa/IOF adicional
                 // continuam no check global acima (uma única vez por débito).
-                const existingDayRows = await dbService.executeQuery(`
-                    SELECT invoice_reference, charge_type, days_overdue
-                    FROM ${dbService.fq('billing_charges')}
-                    WHERE cpf = '${u.cpf}' AND status = 'pending'
-                `);
+                // Inclui o dia já QUITADO por pagamento parcial deste débito: o incremento
+                // de hoje pago de manhã não pode ser reinserido pelo catch-up da tarde.
+                const existingDayRows = _encargosDebito.linhas;
                 // A chave usa o invoice_reference REAL de cada linha existente (não o
                 // stableRef corrente): linhas legadas de refs antigas (ex.: 2026-09 com
                 // dias 1-27 do período de base errada) NÃO bloqueiam o incremento correto
@@ -682,7 +680,7 @@ async function runBillingValidationInner(opts) {
                     : parseFloat(row.valor_pago || 0));
             const residual = Math.max(0, valorTotal - pago);
             const pagMin = pago >= Math.max(valorTotal * 0.10, 10) - 0.01;
-            if (residual <= 0.005 || pagMin) _zeroIds.add(row.id);
+            if (residual <= TOLERANCIA_QUITACAO || pagMin) _zeroIds.add(row.id);
         }
         if (_zeroIds.size) {
             await dbService.executeQuery(`
@@ -742,6 +740,10 @@ const syncInvoiceDiasAtraso = async () => {
         // do DB (0 na pós-005) nem do vínculo por invoice_id isolado. Busca as fechadas
         // não pagas com o total por CPF, distribui da mais antiga para a mais nova e
         // zera dias das quitadas/mínimo; as demais seguem real-time.
+        // PRINCIPAL pago (INVOICE_PAYMENT − encargos que cada um quitou), igual ao
+        // motor: com o |amount| cheio, sync e motor discordavam sobre mínimo/quitada
+        // e invoices.dias_atraso ficava alternando entre 0 e o real.
+        await encargosPagamento.garantirColunasQuitacao(dbService);
         const invRowsSync = await dbService.executeQuery(`
             SELECT i.id, i.cpf, i.due_date, i.valor_total,
                    COALESCE(i.valor_pago, 0) AS valor_pago,
@@ -750,15 +752,13 @@ const syncInvoiceDiasAtraso = async () => {
                    COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
             FROM ${dbService.fq('invoices')} i
             LEFT JOIN (
-                SELECT invoice_id, SUM(${paidPrincipalSql()}) AS total
-                FROM ${dbService.fq('transactions')}
-                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+                SELECT invoice_id, SUM(principal) AS total
+                FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
                 GROUP BY invoice_id
             ) pagos ON pagos.invoice_id = i.id
             LEFT JOIN (
-                SELECT cpf, SUM(${paidPrincipalSql()}) AS total
-                FROM ${dbService.fq('transactions')}
-                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+                SELECT cpf, SUM(principal) AS total
+                FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
                 GROUP BY cpf
             ) pagos_cpf ON pagos_cpf.cpf = i.cpf
             WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
@@ -789,7 +789,7 @@ const syncInvoiceDiasAtraso = async () => {
                     : parseFloat(row.valor_pago || 0));
             const residual = Math.max(0, valorTotal - pago);
             const pagMin = pago >= Math.max(valorTotal * 0.10, 10) - 0.01;
-            if (residual <= 0.005 || pagMin) _zeroIdsSync.add(row.id);
+            if (residual <= TOLERANCIA_QUITACAO || pagMin) _zeroIdsSync.add(row.id);
         }
         if (_zeroIdsSync.size) {
             await dbService.executeQuery(`

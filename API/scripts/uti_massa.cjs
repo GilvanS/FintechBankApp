@@ -28,11 +28,13 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const DatabaseFactory = require('../services/database/DatabaseFactory');
 const {
-    calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIof, round2,
+    calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIof, round2, TOLERANCIA_QUITACAO,
 } = require('../utils/invoiceMath');
 const { esc } = require('../repositories/context');
 const { runOrphanInstallmentFix } = require('../services/orphanInstallmentFix');
 const { registrarCura, garantirTabela } = require('../services/utiCuraLog');
+const encargosPagamento = require('../services/encargosPagamento');
+const { sqlResidualFechadas } = require('../services/saldoAnterior');
 
 // Limite: MESMA fórmula canônica do botão "Recalcular Limite Disponível".
 // Dentro da API (painel) vem injetada — recalcularLimiteDisponivel do index.cjs.
@@ -203,8 +205,25 @@ async function acharMassaModelo(db, perfil, ctx = {}) {
 
 // ─── Correções (força o invariante da massa-molde) ──────────────────────────
 
+// Só (re)gera encargo sobre FECHADA que ainda deve pela cascata do motor
+// (saldoAnterior.sqlResidualFechadas). data_pagamento é nula em toda FECHADA desde a
+// trava de imutabilidade: sem isto, a fatura quitada pelo TOTAL ganhava multa/IOF de
+// novo (mesmo bug da Anomalia 8b no CPF 42194343806, 21/09). Mantém a ordem recebida.
+async function fechadasEmAberto(db, cpf, fechadas) {
+    const rows = await db.executeQuery(`SELECT r.id, r.residual FROM (${sqlResidualFechadas(db, esc(cpf))}) r`);
+    const residual = new Map((rows || []).map((r) => [r.id, parseFloat(r.residual || 0)]));
+    return (fechadas || []).filter((f) => (residual.get(f.id) || 0) > TOLERANCIA_QUITACAO);
+}
+
+const semDividaEmAberto = (qtd) => ({
+    manual: true,
+    acao: `Nada regerado: as ${qtd} fatura(s) FECHADA(s) já estão quitadas pela cascata dos pagamentos — encargo novo aqui seria cobrança indevida. Revisar à mão (os pending que sobraram são candidatos a remoção).`,
+});
+
 async function corrigirBillingChargesDessincronizado(db, cpf, anomalia, confirm) {
-    const invoiceAlvo = anomalia.invoicesFechadas[0];
+    const abertas = await fechadasEmAberto(db, cpf, anomalia.invoicesFechadas);
+    if (!abertas.length) return semDividaEmAberto(anomalia.invoicesFechadas.length);
+    const invoiceAlvo = abertas[0];
     const principal = round2(parseFloat(invoiceAlvo.valor_total));
 
     // users.days_overdue é a fonte canônica (é o que a regra de blacklist >=90d
@@ -216,15 +235,19 @@ async function corrigirBillingChargesDessincronizado(db, cpf, anomalia, confirm)
     const dias = Number(u?.days_overdue || 0) || Number(invoiceAlvo.dias_atraso) || 0;
     const invoiceDiasDivergente = Number(invoiceAlvo.dias_atraso) !== dias;
 
-    const novos = [
+    // Regera do zero SEM cobrar de novo o que pagamentos do débito atual já quitaram
+    // (encargos primeiro): desconta por tipo; o que zera (ex.: multa paga) não volta.
+    const pagos = await encargosPagamento.buscarEncargosPagosNoDebito(db, `'${cpf}'`);
+    const novos = encargosPagamento.descontarEncargosJaPagos([
         ['multa', calcMulta(principal)],
         ['juros_mora', calcJurosMora(principal, dias)],
         ['juros_remuneratorios', calcJurosRemuneratorios(principal, dias)],
         ['iof', calcIof(principal, dias)],
-    ];
+    ], pagos);
 
     const plano = {
-        acao: `Apagar ${anomalia.pendingCharges.length} billing_charges pending órfãos e regerar 4 do zero ancorados na fatura vigente (valor_total=${principal}, dias_atraso=${dias} via users.days_overdue)`
+        acao: `Apagar ${anomalia.pendingCharges.length} billing_charges pending órfãos e regerar ${novos.length} do zero ancorados na fatura vigente (valor_total=${principal}, dias_atraso=${dias} via users.days_overdue)`
+            + (Object.keys(pagos).length ? ` — descontado o já quitado por pagamento (${Object.entries(pagos).map(([t, v]) => `${t} R$${v}`).join(', ')})` : '')
             + (invoiceDiasDivergente ? ` — também realinha invoices.dias_atraso (estava ${invoiceAlvo.dias_atraso}, também obsoleto pós-consolidação)` : ''),
         apaga: anomalia.pendingCharges.map((c) => `${c.charge_type} R$${c.amount} (invoice_amount=${c.invoice_amount})`),
         insere: novos.map(([tipo, valor]) => `${tipo} R$${valor} (invoice_amount=${principal}, days_overdue=${dias})`),
@@ -257,16 +280,25 @@ async function corrigirSaldoCredorEstacionado(db, cpf, anomalia, confirm) {
 }
 
 async function corrigirInadimplenteSemEncargos(db, cpf, anomalia, confirm) {
-    const invoiceAlvo = anomalia.invoicesFechadas[0];
+    const abertas = await fechadasEmAberto(db, cpf, anomalia.invoicesFechadas);
+    if (!abertas.length) return semDividaEmAberto(anomalia.invoicesFechadas.length);
+    const invoiceAlvo = abertas[0];
     const principal = round2(parseFloat(invoiceAlvo.valor_total));
     const dias = Number(anomalia.userRow.days_overdue) || Number(invoiceAlvo.dias_atraso) || 0;
-    const novos = [
+    // "Sem encargo pending" pode ser porque um pagamento parcial quitou todos
+    // (encargos primeiro): desconta o que o débito atual já pagou por tipo.
+    const pagos = await encargosPagamento.buscarEncargosPagosNoDebito(db, `'${cpf}'`);
+    const novos = encargosPagamento.descontarEncargosJaPagos([
         ['multa', calcMulta(principal)],
         ['juros_mora', calcJurosMora(principal, dias)],
         ['juros_remuneratorios', calcJurosRemuneratorios(principal, dias)],
         ['iof', calcIof(principal, dias)],
-    ];
-    const plano = { acao: `Seed de 4 billing_charges (principal=${principal}, dias=${dias}) — inadimplente sem nenhum encargo`, insere: novos.map(([t, v]) => `${t} R$${v}`) };
+    ], pagos);
+    const plano = {
+        acao: `Seed de ${novos.length} billing_charges (principal=${principal}, dias=${dias}) — inadimplente sem nenhum encargo pending`
+            + (Object.keys(pagos).length ? ` — descontado o já quitado por pagamento (${Object.entries(pagos).map(([t, v]) => `${t} R$${v}`).join(', ')})` : ''),
+        insere: novos.map(([t, v]) => `${t} R$${v}`),
+    };
     if (confirm) {
         const ref = invoiceAlvo.due_date ? new Date(invoiceAlvo.due_date).toISOString().slice(0, 7) : new Date().toISOString().slice(0, 7);
         for (const [tipo, valor] of novos) {
@@ -522,7 +554,12 @@ async function runUti({
     };
 }
 
-module.exports = { runUti };
+module.exports = {
+    runUti,
+    // Expostas para teste unitário (proteção de encargo já pago por pagamento).
+    corrigirBillingChargesDessincronizado,
+    corrigirInadimplenteSemEncargos,
+};
 
 // ─── CLI ─────────────────────────────────────────────────────────────────
 

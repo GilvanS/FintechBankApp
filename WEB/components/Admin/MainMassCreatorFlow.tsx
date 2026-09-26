@@ -12,6 +12,13 @@ import {
     sortearValorTier,
     OverdueState,
     CycleStatus,
+    SimpleCycleStatus,
+    PaymentType,
+    PAYMENT_TYPES,
+    PAYMENT_TYPE_LABELS,
+    MIN_DIAS_ATRASO_PAGAMENTO,
+    MAX_DIAS_ATRASO_PAGAMENTO,
+    statusDoCiclo,
     buildMassPayload,
     getCycleLabels,
     computeCycleDueDates,
@@ -55,10 +62,11 @@ const prefersReducedMotion = () =>
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // Ciclo único coerente com o estado atual da conta (1 ciclo = comportamento do Gerador 3.0).
-const cycleFromState = (state: OverdueState): CycleStatus => (state === 'EM_DIA' ? 'adimplente' : 'inadimplente');
-// Inverso: estado da conta coerente com o ciclo ATUAL, preservando o tier de atraso já escolhido.
-const stateForCycle = (cycle: CycleStatus, prev: OverdueState): OverdueState =>
-    cycle === 'adimplente' ? 'EM_DIA' : (prev === 'EM_DIA' ? 'EM_ATRASO_15D' : prev);
+const cycleFromState = (state: OverdueState): SimpleCycleStatus => (state === 'EM_DIA' ? 'adimplente' : 'inadimplente');
+// Inverso: estado da conta coerente com o STATUS do ciclo ATUAL (statusDoCiclo — o
+// ciclo pode ser um objeto com pagamento), preservando o tier de atraso já escolhido.
+const stateForCycle = (status: SimpleCycleStatus, prev: OverdueState): OverdueState =>
+    status === 'adimplente' ? 'EM_DIA' : (prev === 'EM_DIA' ? 'EM_ATRASO_15D' : prev);
 
 const CARD_GRADIENT: Record<GeneratedMassData['creditCard']['brand'], string> = {
     VISA: 'from-blue-700 via-indigo-800 to-black',
@@ -84,7 +92,7 @@ const IS_DEMO = (import.meta as { env?: Record<string, string | undefined> }).en
 // services/massPreflight.js). Detalhes locais aparecem quando a etapa começa; o backend
 // sobrescreve com o detalhe real.
 const buildTodoItems = (dados: GeneratedMassData, ciclos: CycleStatus[]): MassTodoItem[] => {
-    const inadimplentes = ciclos.filter((c) => c === 'inadimplente').length;
+    const inadimplentes = ciclos.filter((c) => statusDoCiclo(c) === 'inadimplente').length;
     return [
         { id: 'cadastro', title: 'Criar cadastro base e cartão', status: 'pending', detail: `${dados.fullName} • ${dados.creditCard.brand}` },
         { id: 'ciclos', title: `Injetar ${ciclos.length} ciclo(s) de fatura`, status: 'pending', detail: `${inadimplentes} inadimplente(s)` },
@@ -205,7 +213,7 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
             setFormData({ ...random, overdueState: historico.overdueState });
             showToast(`🎲 Dados gerados com sucesso (${random.countryOrigin}) — ${historico.cycles.length} ciclo(s) de fatura!`, 'success');
         } else {
-            setFormData({ ...random, overdueState: stateForCycle(cycles[cycles.length - 1], random.overdueState) });
+            setFormData({ ...random, overdueState: stateForCycle(statusDoCiclo(cycles[cycles.length - 1]), random.overdueState) });
             showToast(`🎲 Dados gerados com sucesso (${random.countryOrigin})!`, 'success');
         }
         pulseGrid();
@@ -232,18 +240,50 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
         });
     };
 
+    // Alterna adimplente <-> inadimplente. Sempre volta pro par de strings simples —
+    // um ciclo com pagamento configurado perde o pagamento ao virar adimplente, e um
+    // ciclo que vira inadimplente nasce "Sem pagamento" (ajustado pelo select abaixo).
     const toggleCycle = (index: number) => {
         const next = [...cycles];
-        next[index] = next[index] === 'adimplente' ? 'inadimplente' : 'adimplente';
+        next[index] = statusDoCiclo(next[index]) === 'adimplente' ? 'inadimplente' : 'adimplente';
         setCycles(next);
         // Alternar o ciclo ATUAL também muda o estado da conta (mantém o tier já escolhido quando em atraso).
         if (index === next.length - 1) {
-            setFormData((f) => ({ ...f, overdueState: stateForCycle(next[index], f.overdueState) }));
+            setFormData((f) => ({ ...f, overdueState: stateForCycle(statusDoCiclo(next[index]), f.overdueState) }));
         }
     };
 
-    const inadimplentesCount = cycles.filter((c) => c === 'inadimplente').length;
-    const atualInadimplente = cycles[cycles.length - 1] === 'inadimplente';
+    // Tipo de pagamento em atraso de um ciclo inadimplente (Task 5 — encargos primeiro).
+    // `pagamento: ''` ("Sem pagamento") volta o ciclo à string simples, preservando o
+    // payload antigo — massas sem pagamento configurado continuam idênticas a antes.
+    const setCicloPagamento = (index: number, pagamento: PaymentType | '') => {
+        setCycles((prev) => {
+            if (statusDoCiclo(prev[index]) !== 'inadimplente') return prev;
+            const next = [...prev];
+            if (!pagamento) {
+                next[index] = 'inadimplente';
+            } else {
+                const atual = prev[index];
+                const diasAtrasoPagamento = typeof atual === 'object' ? atual.diasAtrasoPagamento : undefined;
+                next[index] = { status: 'inadimplente', pagamento, diasAtrasoPagamento };
+            }
+            return next;
+        });
+    };
+
+    // Dias entre o vencimento e o pagamento (1-15, opcional — o backend usa 10 por padrão).
+    const setCicloDiasAtrasoPagamento = (index: number, dias: number | undefined) => {
+        setCycles((prev) => {
+            const atual = prev[index];
+            if (typeof atual !== 'object') return prev;
+            const next = [...prev];
+            next[index] = { ...atual, diasAtrasoPagamento: dias };
+            return next;
+        });
+    };
+
+    const inadimplentesCount = cycles.filter((c) => statusDoCiclo(c) === 'inadimplente').length;
+    const atualInadimplente = statusDoCiclo(cycles[cycles.length - 1]) === 'inadimplente';
     const tierAtual = formData.overdueState === 'EM_DIA' ? null : OVERDUE_TIERS[formData.overdueState];
     // Atraso mínimo do ciclo atual = dias do tier, com o mesmo piso do backend. Com dueDay recente
     // demais, o vencimento recua 1 mês — fatura que venceu hoje/ontem nunca nasce "inadimplente".
@@ -299,8 +339,8 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
         // Tier de atraso: o selecionado quando inadimplente; fallback 15d quando o estado atual
         // é EM_DIA mas há ciclos inadimplentes no histórico (precisa de valor base pra parcelada).
         const tier = dados.overdueState === 'EM_DIA' ? OVERDUE_TIERS.EM_ATRASO_15D : OVERDUE_TIERS[dados.overdueState];
-        const cicloAtualInadimplente = ciclos[ciclos.length - 1] === 'inadimplente';
-        const temInadimplencia = ciclos.includes('inadimplente');
+        const cicloAtualInadimplente = statusDoCiclo(ciclos[ciclos.length - 1]) === 'inadimplente';
+        const temInadimplencia = ciclos.some((c) => statusDoCiclo(c) === 'inadimplente');
         return buildMassPayload({
             fullName: dados.fullName,
             cpf: dados.cpf.replace(/\D/g, ''),
@@ -374,14 +414,14 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
                 // O histórico de ciclos é mantido; só o estado atual acompanha o último ciclo.
                 if (i < iteracoes - 1) {
                     const proximo = generateRandomMassData(currentData.countryOrigin);
-                    currentData = { ...proximo, overdueState: stateForCycle(cycles[cycles.length - 1], currentData.overdueState) };
+                    currentData = { ...proximo, overdueState: stateForCycle(statusDoCiclo(cycles[cycles.length - 1]), currentData.overdueState) };
                 }
             }
 
             if (sucessos > 0) {
                 showToast(iteracoes > 1 ? `🚀 ${sucessos} massas criadas com sucesso no PGDB!` : `🚀 Massa ${currentData.fullName} criada com sucesso no PGDB!`, 'success');
                 const novo = generateRandomMassData(currentData.countryOrigin);
-                setFormData({ ...novo, overdueState: stateForCycle(cycles[cycles.length - 1], currentData.overdueState) });
+                setFormData({ ...novo, overdueState: stateForCycle(statusDoCiclo(cycles[cycles.length - 1]), currentData.overdueState) });
                 pulseGrid();
             }
         } catch (err: any) {
@@ -703,25 +743,61 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
                             <div className="flex items-stretch gap-1.5">
                                 {cycles.map((cycle, idx) => {
                                     const isCurrent = idx === cycles.length - 1;
-                                    const isPaid = cycle === 'adimplente';
+                                    const status = statusDoCiclo(cycle);
+                                    const isPaid = status === 'adimplente';
+                                    const pagamento = typeof cycle === 'object' ? cycle.pagamento : '';
+                                    const diasAtrasoPagamento = typeof cycle === 'object' ? cycle.diasAtrasoPagamento : undefined;
                                     return (
-                                        <button
-                                            key={idx}
-                                            type="button"
-                                            data-testid={`mass-cycle-${idx}`}
-                                            aria-pressed={!isPaid}
-                                            aria-label={`Ciclo ${cycleLabels[idx]}: ${isPaid ? 'pago' : 'em atraso'}`}
-                                            title={isPaid ? 'Fatura FECHADA e paga no vencimento' : 'Fatura FECHADA vencida não paga (encargos + saldo encadeado)'}
-                                            onClick={() => toggleCycle(idx)}
-                                            className={`flex-1 min-w-0 py-1.5 px-1 rounded-xl border text-[10px] font-black flex flex-col items-center gap-0.5 cursor-pointer transition-all hover:scale-[1.03] active:scale-95 ${
-                                                isPaid
-                                                    ? 'bg-emerald-500/15 border-emerald-500/60 text-emerald-600 dark:text-emerald-300'
-                                                    : 'bg-rose-500/15 border-rose-500/60 text-rose-600 dark:text-rose-300'
-                                            } ${isCurrent ? 'ring-2 ring-offset-1 ring-offset-transparent ' + (isPaid ? 'ring-emerald-500/50' : 'ring-rose-500/50') : ''}`}
-                                        >
-                                            <span className="leading-none">{isPaid ? '🟢' : '🔴'}</span>
-                                            <span className="leading-none truncate w-full text-center">{cycleLabels[idx]}</span>
-                                        </button>
+                                        <div key={idx} className="flex-1 min-w-0 flex flex-col gap-1">
+                                            <button
+                                                type="button"
+                                                data-testid={`mass-cycle-${idx}`}
+                                                aria-pressed={!isPaid}
+                                                aria-label={`Ciclo ${cycleLabels[idx]}: ${isPaid ? 'pago' : 'em atraso'}`}
+                                                title={isPaid ? 'Fatura FECHADA e paga no vencimento' : 'Fatura FECHADA vencida não paga (encargos + saldo encadeado)'}
+                                                onClick={() => toggleCycle(idx)}
+                                                className={`w-full py-1.5 px-1 rounded-xl border text-[10px] font-black flex flex-col items-center gap-0.5 cursor-pointer transition-all hover:scale-[1.03] active:scale-95 ${
+                                                    isPaid
+                                                        ? 'bg-emerald-500/15 border-emerald-500/60 text-emerald-600 dark:text-emerald-300'
+                                                        : 'bg-rose-500/15 border-rose-500/60 text-rose-600 dark:text-rose-300'
+                                                } ${isCurrent ? 'ring-2 ring-offset-1 ring-offset-transparent ' + (isPaid ? 'ring-emerald-500/50' : 'ring-rose-500/50') : ''}`}
+                                            >
+                                                <span className="leading-none">{isPaid ? '🟢' : '🔴'}</span>
+                                                <span className="leading-none truncate w-full text-center">{cycleLabels[idx]}</span>
+                                            </button>
+                                            {/* Ciclo em atraso: tipo de pagamento (Task 5 — encargos primeiro). "Sem
+                                                pagamento" (padrão) mantém o payload antigo — a fatura fica em aberto,
+                                                sem nenhum pagamento vinculado, como sempre foi. */}
+                                            {!isPaid && (
+                                                <>
+                                                    <select
+                                                        data-testid={`mass-cycle-${idx}-pagamento`}
+                                                        aria-label={`Pagamento do ciclo ${cycleLabels[idx]}`}
+                                                        value={pagamento}
+                                                        onChange={(e) => setCicloPagamento(idx, e.target.value as PaymentType | '')}
+                                                        className={`w-full p-1 rounded-lg text-[9px] font-bold cursor-pointer truncate ${inputClass}`}
+                                                    >
+                                                        <option value="">Sem pagamento</option>
+                                                        {PAYMENT_TYPES.map((tipo) => (
+                                                            <option key={tipo} value={tipo}>{PAYMENT_TYPE_LABELS[tipo]}</option>
+                                                        ))}
+                                                    </select>
+                                                    {pagamento && (
+                                                        <input
+                                                            type="number"
+                                                            data-testid={`mass-cycle-${idx}-dias`}
+                                                            aria-label={`Dias até o pagamento do ciclo ${cycleLabels[idx]}`}
+                                                            min={MIN_DIAS_ATRASO_PAGAMENTO}
+                                                            max={MAX_DIAS_ATRASO_PAGAMENTO}
+                                                            placeholder="dias (10)"
+                                                            value={diasAtrasoPagamento ?? ''}
+                                                            onChange={(e) => setCicloDiasAtrasoPagamento(idx, e.target.value ? Number(e.target.value) : undefined)}
+                                                            className={`w-full p-1 rounded-lg text-[9px] font-mono ${inputClass}`}
+                                                        />
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
                                     );
                                 })}
                             </div>
@@ -1005,7 +1081,7 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
                     <div><span className="opacity-60">Estado:</span> {formData.overdueState === 'EM_DIA' ? '🟢 Adimplente' : `🔴 Inadimplente · ${tierAtual?.short} · ${diasAtrasoAtual}d (venc. ${fmtDia(vencimentoAtual)})`}</div>
                     <div className="col-span-2 sm:col-span-4">
                         <span className="opacity-60">Ciclos:</span>{' '}
-                        <span data-testid="mass-cycles-summary" className="tracking-widest">{cycles.map((c) => (c === 'adimplente' ? '🟢' : '🔴')).join('')}</span>
+                        <span data-testid="mass-cycles-summary" className="tracking-widest">{cycles.map((c) => (statusDoCiclo(c) === 'adimplente' ? '🟢' : '🔴')).join('')}</span>
                         {' '}<span className="opacity-60">({cycles.length}/{MAX_MASS_CYCLES}, {inadimplentesCount} em atraso)</span>
                     </div>
                 </div>

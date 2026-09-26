@@ -18,6 +18,15 @@ function calcEffectiveRates(rate, installments) {
 
 const round2 = n => Math.round(n * 100) / 100;
 
+/**
+ * Resíduo máximo (R$) para uma dívida contar como QUITADA. Fonte única entre a rota
+ * de pagamento (TOTAL / principal quitado) e o motor diário (fatura sai do débito):
+ * com tolerâncias diferentes, pagar Total − R$ 0,01 era TOTAL na rota (charges pagas,
+ * débito encerrado) e dívida de 0,01 no motor — que criava 2ª multa e 2º IOF adicional.
+ * 1 centavo a menos é pagamento parcial/mínimo e continua devendo 0,01.
+ */
+const TOLERANCIA_QUITACAO = 0.005;
+
 // Compras do ciclo + saldo anterior + encargos consolidados no fechamento.
 const INVOICE_GROSS_FIELDS = [
     'valor_total',
@@ -245,6 +254,65 @@ function calcAllCharges(principal, days) {
 }
 
 /**
+ * Ordem canônica de aplicação de um pagamento de fatura: ENCARGOS PRIMEIRO
+ * (multa, juros de mora, juros remuneratórios, IOF diário) e só depois o
+ * principal. O IOF adicional (0,38%) fica de fora de propósito: é calculado
+ * sobre as compras e não é abatido/recalculado pelo pagamento.
+ */
+const ORDEM_ALOCACAO_PAGAMENTO = Object.freeze([
+    'multa', 'jurosMora', 'jurosRemuneratorios', 'iofDiario', 'principal',
+]);
+
+/** Valor monetário saneado: string numérica aceita (NUMERIC do pg), inválido/negativo = 0. */
+function valorNaoNegativo(v) {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? round2(n) : 0;
+}
+
+/**
+ * Fonte única da regra "encargos primeiro": distribui um pagamento entre os
+ * encargos em aberto e o principal, na ordem de ORDEM_ALOCACAO_PAGAMENTO.
+ * Função pura — não sabe de fatura, status nem banco; quem chama decide o que
+ * fazer com o restante (herança para a aberta) e com o excedente.
+ *
+ * Pagamento que não quita tudo (mínimo, abaixo do mínimo, parcial) NÃO para
+ * os encargos: o restante segue devendo e continua gerando encargos até a
+ * quitação total (regra de negócio de 2026-09-23).
+ *
+ * @param {number|string} valorPago - valor do pagamento em reais
+ * @param {{ principal?: number|string, multa?: number|string, jurosMora?: number|string,
+ *           jurosRemuneratorios?: number|string, iofDiario?: number|string }} [divida]
+ *        saldos em aberto; ausente/negativo/inválido conta como 0
+ * @returns {{
+ *   aplicado: { multa: number, jurosMora: number, jurosRemuneratorios: number, iofDiario: number, principal: number },
+ *   restante: { multa: number, jurosMora: number, jurosRemuneratorios: number, iofDiario: number, principal: number },
+ *   excedente: number, quitouEncargos: boolean, quitouTudo: boolean
+ * }}
+ */
+function alocarPagamento(valorPago, divida = {}) {
+    let disponivel = valorNaoNegativo(valorPago);
+    const aplicado = {};
+    const restante = {};
+    for (const chave of ORDEM_ALOCACAO_PAGAMENTO) {
+        const devido = valorNaoNegativo(divida && divida[chave]);
+        const abate = round2(Math.min(disponivel, devido));
+        aplicado[chave] = abate;
+        restante[chave] = round2(devido - abate);
+        disponivel = round2(disponivel - abate);
+    }
+    const quitouEncargos = ORDEM_ALOCACAO_PAGAMENTO
+        .filter(chave => chave !== 'principal')
+        .every(chave => restante[chave] === 0);
+    return {
+        aplicado,
+        restante,
+        excedente: disponivel,
+        quitouEncargos,
+        quitouTudo: quitouEncargos && restante.principal === 0,
+    };
+}
+
+/**
  * Classifica o status de double-counting para um CPF: compara a soma dos
  * pagamentos (transactions.type = INVOICE_PAYMENT) com a soma de
  * invoices.valor_pago. Usada por GET /admin/audit-double-count e por
@@ -275,19 +343,27 @@ function classifyDoubleCount({ paymentTotal, invoiceTotalPago, invoiceRows, hasP
 }
 
 /**
- * Fragmento SQL do valor de um INVOICE_PAYMENT que abateu PRINCIPAL de fatura.
- * Pagamento que também quitou encargos (billing_charges) grava essa parte em
- * transactions.applied_to_charges — somar o amount cheio contaria o mesmo dinheiro
- * de novo como principal e geraria saldo credor fantasma (805/777, 2026-09).
- * Linhas anteriores à migration 009 têm NULL = 0 (comportamento antigo preservado).
+ * Fragmento SQL do valor de um INVOICE_PAYMENT que abateu PRINCIPAL de fatura —
+ * |amount| menos a soma das billing_charges que ESTE pagamento quitou (payment_id
+ * = id da transação, status='paid'). Somar o amount cheio conta o encargo pago
+ * como principal e gera saldo credor fantasma (§25, docs/REGRAS-NEGOCIO-FATURA.md).
+ *
+ * `payment_id`/`paid_at` (garantirColunasQuitacao, services/encargosPagamento.js)
+ * é a ÚNICA fonte de "quanto foi pra encargos" — não existe cálculo paralelo em
+ * `transactions.applied_to_charges` (essa coluna, quando presente, é só um
+ * marcador de "pagamento pós-regra-nova" para o vínculo de antecipação em
+ * invoiceEngine/dailyAudit — nunca uma fonte de valor).
+ * @param {object} dbService - precisa de dbService.fq('billing_charges')
+ * @param {string} [alias] - alias de `transactions` na query (ex.: 't'); vazio = sem alias
  */
-function paidPrincipalSql(alias = '') {
+function paidPrincipalSql(dbService, alias = '') {
     const p = alias ? `${alias}.` : '';
-    return `(ABS(CAST(${p}amount AS DECIMAL(15,2))) - COALESCE(${p}applied_to_charges, 0))`;
+    return `(ABS(CAST(${p}amount AS DECIMAL(15,2))) - COALESCE((SELECT SUM(CAST(bc.amount AS DECIMAL(15,2))) FROM ${dbService.fq('billing_charges')} bc WHERE bc.payment_id = ${p}id AND bc.status = 'paid'), 0))`;
 }
 
 module.exports = {
     round2,
+    TOLERANCIA_QUITACAO,
     classifyDoubleCount,
     paidPrincipalSql,
     INVOICE_GROSS_FIELDS,
@@ -309,6 +385,10 @@ module.exports = {
     calcIofDiario,
     calcIof,
     calcAllCharges,
+    // Alocação de pagamento: encargos primeiro, depois principal
+    ORDEM_ALOCACAO_PAGAMENTO,
+    alocarPagamento,
     buildClosedInvoiceSummary,
     calcEffectiveRates,
+    paidPrincipalSql,
 };

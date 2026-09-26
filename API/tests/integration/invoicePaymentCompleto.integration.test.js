@@ -124,13 +124,14 @@ describe('Teste de Integração E2E — Fluxo de Pagamento de Faturas e Encargos
         expect(parseFloat(sumLinked[0].s)).toBe(5623.68);
 
         // 6. Validar que ao rodar o enrichUserCreditCardData, a sobra vira saldo credor negativo.
-        // Pagamento: 5623.68. Principal: 3870.86. Encargos: 478.48. Excedente real: R$ 1274.34
-        // (= 5623.68 - 3870.86 - 478.48). Valor e sempre negativo: o sinal indica saldo credor.
-        // Regra §25 (2026-09-25, applied_to_charges): a parte do pagamento que quitou os
-        // encargos (478.48) agora é excluída do "pago de principal" (paidPrincipalSql), então
-        // deixa de ser contada de novo como excedente/crédito. Antes desta correção o valor
-        // aqui era -1752.82 (1274.34 + 478.48) — o próprio crédito fantasma que motivou o §25
-        // (casos reais 805.357.576-54 e 777.666.555-44).
+        // Pagamento: 5623.68. Total devido: 3870.86 (principal) + 478.48 (encargos) = 4349.34
+        // (regra ENCARGOS PRIMEIRO, 2026-09-23: o TOTAL quita principal + 100% dos encargos).
+        // Excedente: 5623.68 - 4349.34 = R$ 1274.34. Valor e sempre negativo: o sinal indica
+        // saldo credor. A parte que quitou os encargos (478.48) e excluida do "pago de
+        // principal" (sqlPrincipalPorPagamento, billing_charges.payment_id — §25,
+        // 2026-09-25), entao nao e contada de novo como excedente/credito. Sem essa exclusao
+        // (nem a regra de encargos primeiro), o valor aqui seria -1752.82 (so contra o
+        // principal) — o proprio credito fantasma que os dois planos corrigem juntos.
         const { enrichUserCreditCardData, normalizeUser, usersRepo, fetchUnpaidClosedInvoices } = require('../../index.cjs');
         const userRowFull = await usersRepo.findByCpf(testCpf);
         const tempUser = normalizeUser(userRowFull);
@@ -150,7 +151,7 @@ describe('Teste de Integração E2E — Fluxo de Pagamento de Faturas e Encargos
         }
     });
 
-    it('MINIMO (>= 10%): zera dias de atraso, segue adimplente e encargos continuam pending', async () => {
+    it('MINIMO (>= 10%): zera dias de atraso, segue adimplente e quita os encargos abatíveis (regra ENCARGOS PRIMEIRO)', async () => {
         // Re-seed do cenário de dívida para este teste
         const minCpf = testCpf;
         await db.executeQuery(`DELETE FROM fintech.transactions WHERE cpf = '${minCpf}'`);
@@ -168,8 +169,21 @@ describe('Teste de Integração E2E — Fluxo de Pagamento de Faturas e Encargos
             ('${minCpf}_jmora_${nowMs}', '${minCpf}', '2026-08', 'juros_mora', 23.20, 18, 3870.86, 'pending')
         `);
 
-        // Pagamento >= 10% (minPayment = 387.09) e < total -> MÍNIMO
-        const req = { user: { cpf: minCpf }, body: { cpf: minCpf, pin: '1234', amount: 400.00 } };
+        // Regra ENCARGOS PRIMEIRO (2026-09-23): a rota abate multa -> juros de mora -> juros
+        // remuneratorios -> IOF diario ANTES do principal (alocarPagamento). O IOF gravado nesta
+        // linha (20.42) e uma linha COMBINADA (separarIof): so R$ 5,71 e o diario abativel pela
+        // ordem (calcIofDiario(3870.86, 18) dias), os R$ 14,71 restantes sao o IOF adicional
+        // fixo — fora da ordem, so sai de pending no pagamento TOTAL. Dividendo abativel =
+        // 77.42 (multa) + 23.20 (juros mora) + 357.44 (juros rem) + 5.71 (IOF diario) = 463.77.
+        // Antigamente (principal primeiro) R$ 400,00 já bastava para MÍNIMO (>= 10% do
+        // principal, minPayment ~387,09) e os 4 encargos ficavam intactos em pending. Agora
+        // esse mesmo valor e TODO consumido pelos encargos antes de chegar no principal — não
+        // sobra nada pra ele (principalAplicado = 0), então R$ 400,00 vira PARCIAL abaixo do
+        // mínimo (ver o teste seguinte). Para exercitar um MÍNIMO de verdade sob a regra nova, o
+        // pagamento precisa cobrir os R$ 463,77 abatíveis de encargos MAIS >= 10% do principal
+        // (387.09): usamos R$ 863,77 (463.77 + 400.00 de principal, folga confortável acima do
+        // piso de 387,09 pra não cair em zona de arredondamento).
+        const req = { user: { cpf: minCpf }, body: { cpf: minCpf, pin: '1234', amount: 863.77 } };
         const res = { status: function() { return this; }, json: jest.fn() };
         await controller.pay(req, res);
         expect(res.json).toHaveBeenCalled();
@@ -179,19 +193,34 @@ describe('Teste de Integração E2E — Fluxo de Pagamento de Faturas e Encargos
         const txPayment = (await db.executeQuery(`SELECT invoice_id FROM fintech.transactions WHERE cpf = '${minCpf}' AND type = 'INVOICE_PAYMENT'`))[0];
         expect(txPayment.invoice_id).toBe('test-inv-id-min');
 
-        // MÍNIMO: dias de atraso ZERADOS e status adimplente
+        // MÍNIMO: dias de atraso ZERADOS e status adimplente (principalAplicado = 400.00 >=
+        // minPayment ~387,09, mesmo critério do motor diário — pagamentoMinimo pelo PRINCIPAL
+        // abatido, não pelo valor bruto pago).
         const userRow = (await db.executeQuery(`SELECT account_status, days_overdue FROM fintech.users WHERE cpf = '${minCpf}'`))[0];
         expect(userRow.account_status).toBe('adimplente');
         expect(parseInt(userRow.days_overdue)).toBe(0);
 
-        // Encargos CONTINUAM pending (não foi pagamento total)
-        const chargesAfter = await db.executeQuery(`SELECT status FROM fintech.billing_charges WHERE cpf = '${minCpf}'`);
-        expect(chargesAfter.length).toBe(4);
-        for (const row of chargesAfter) expect(row.status).toBe('pending');
+        // Encargos: multa, juros de mora e juros remuneratórios são cobertos INTEIROS (a soma
+        // dos 3 é exatamente o que o pagamento aplicou na ordem). O IOF é uma linha combinada:
+        // só os R$ 5,71 diários são quitados (viram uma linha filha 'paid'), e os R$ 14,71 do
+        // adicional fixo continuam pending — o fixo só some no pagamento TOTAL (Global
+        // Constraint 1). Por isso "encargos continuam pending" não é mais verdade para um
+        // MÍNIMO sob a regra nova: só o resíduo fixo do IOF fica pending.
+        const chargesAfter = await db.executeQuery(`SELECT charge_type, status, CAST(amount AS DECIMAL(15,2)) AS amount FROM fintech.billing_charges WHERE cpf = '${minCpf}' ORDER BY charge_type, status`);
+        expect(chargesAfter.length).toBe(5); // iof vira 2 linhas (mãe pending reduzida + filha paga)
+        const porTipo = (tipo) => chargesAfter.filter(r => r.charge_type === tipo);
+        expect(porTipo('multa')).toEqual([{ charge_type: 'multa', status: 'paid', amount: '77.42' }]);
+        expect(porTipo('juros_mora')).toEqual([{ charge_type: 'juros_mora', status: 'paid', amount: '23.20' }]);
+        expect(porTipo('juros_remuneratorios')).toEqual([{ charge_type: 'juros_remuneratorios', status: 'paid', amount: '357.44' }]);
+        const iofRows = porTipo('iof').sort((a, b) => a.status.localeCompare(b.status));
+        expect(iofRows).toEqual([
+            { charge_type: 'iof', status: 'paid', amount: '5.71' },     // filha: diário quitado
+            { charge_type: 'iof', status: 'pending', amount: '14.71' }, // mãe: só o IOF adicional fixo
+        ]);
 
-        // Saldo residual reduzido (400 pagos)
+        // Saldo residual reduzido (863.77 pagos: 463.77 de encargos abatíveis + 400.00 de principal)
         const sumLinked = await db.executeQuery(`SELECT COALESCE(SUM(ABS(CAST(amount AS DECIMAL(15,2)))),0) AS s FROM fintech.transactions WHERE invoice_id = 'test-inv-id-min' AND type = 'INVOICE_PAYMENT'`);
-        expect(parseFloat(sumLinked[0].s)).toBe(400.00);
+        expect(parseFloat(sumLinked[0].s)).toBe(863.77);
 
         await db.executeQuery(`DELETE FROM fintech.transactions WHERE cpf = '${minCpf}'`);
         await db.executeQuery(`DELETE FROM fintech.billing_charges WHERE cpf = '${minCpf}'`);
@@ -227,10 +256,23 @@ describe('Teste de Integração E2E — Fluxo de Pagamento de Faturas e Encargos
         expect(userRow.account_status).toBe('inadimplente');
         expect(parseInt(userRow.days_overdue)).toBe(18);
 
-        // Encargos continuam pending
-        const chargesAfter = await db.executeQuery(`SELECT status FROM fintech.billing_charges WHERE cpf = '${parCpf}'`);
-        expect(chargesAfter.length).toBe(4);
-        for (const row of chargesAfter) expect(row.status).toBe('pending');
+        // Regra ENCARGOS PRIMEIRO (2026-09-23): mesmo um PARCIAL pequeno (R$ 100,00, bem abaixo
+        // do mínimo de ~387,09) já abate encargos na ordem multa -> juros de mora -> ... — não
+        // "continua tudo pending" como na regra antiga (principal primeiro). R$ 100,00 cobre a
+        // multa inteira (77,42) e parte dos juros de mora (22,58 de 23,20, sobrando 0,62
+        // pending numa linha filha 'paid'). Juros remuneratórios e IOF nem chegam a ser
+        // tocados — o pagamento acaba antes.
+        const chargesAfter = await db.executeQuery(`SELECT charge_type, status, CAST(amount AS DECIMAL(15,2)) AS amount FROM fintech.billing_charges WHERE cpf = '${parCpf}' ORDER BY charge_type, status`);
+        expect(chargesAfter.length).toBe(5); // juros_mora vira 2 linhas (mãe pending reduzida + filha paga)
+        const porTipo = (tipo) => chargesAfter.filter(r => r.charge_type === tipo);
+        expect(porTipo('multa')).toEqual([{ charge_type: 'multa', status: 'paid', amount: '77.42' }]);
+        const jurosMoraRows = porTipo('juros_mora').sort((a, b) => a.status.localeCompare(b.status));
+        expect(jurosMoraRows).toEqual([
+            { charge_type: 'juros_mora', status: 'paid', amount: '22.58' },
+            { charge_type: 'juros_mora', status: 'pending', amount: '0.62' },
+        ]);
+        expect(porTipo('juros_remuneratorios')).toEqual([{ charge_type: 'juros_remuneratorios', status: 'pending', amount: '357.44' }]);
+        expect(porTipo('iof')).toEqual([{ charge_type: 'iof', status: 'pending', amount: '20.42' }]);
 
         await db.executeQuery(`DELETE FROM fintech.transactions WHERE cpf = '${parCpf}'`);
         await db.executeQuery(`DELETE FROM fintech.billing_charges WHERE cpf = '${parCpf}'`);

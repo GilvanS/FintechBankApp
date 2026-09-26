@@ -216,7 +216,12 @@ CREATE TABLE IF NOT EXISTS billing_charges (
     -- uuid = character varying").
     invoice_id VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' -- pending | applied | cancelled
+    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending | paid | applied | cancelled
+    -- Quitação rastreável (pagamento abate encargos primeiro): quando e por qual
+    -- transação INVOICE_PAYMENT a charge foi paga. Quitação parcial = linha filha
+    -- 'paid' com id '<id da mãe>:q:<payment_id>' (services/encargosPagamento.js).
+    paid_at TIMESTAMP,
+    payment_id VARCHAR(255)
 );
 
 -- Inserir usuário administrador padrão

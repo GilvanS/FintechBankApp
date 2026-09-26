@@ -9,8 +9,9 @@
  *     antes de ocupar o slot do CPF (continue antes do has()), então uma fatura
  *     fantasma (total 0) nunca mascara a fatura seguinte legítima em aberto.
  *   - Fonte de verdade da quitação = HÍBRIDA, igual ao motor: se a invoice tem
- *     vínculo (transactions.invoice_id, migration 005), o pago é a SOMA dos
- *     INVOICE_PAYMENT vinculados; sem vínculo, cai no valor_pago legado.
+ *     vínculo (transactions.invoice_id, migration 005), o pago é a SOMA do
+ *     PRINCIPAL dos INVOICE_PAYMENT vinculados (|amount| − encargos que cada um
+ *     quitou — encargos primeiro); sem vínculo, cai no valor_pago legado.
  *   - Sem dívida (residual = total - pagoEfetivo <= 0.005)  → dias 0, adimplente.
  *   - Pagamento mínimo (>= 10%, piso R$ 10)               → dias 0, adimplente
  *     (encargos continuam acumulando, mas o contador exibido fica 0).
@@ -56,7 +57,9 @@ async function main() {
 
     console.log(CONFIRM ? '⚙️  Modo APLICAR (--confirm)' : '👁️  Modo DRY-RUN (use --confirm para aplicar)');
 
-    // Âncora por massa: fatura FECHADA não paga mais antiga COM DÍVIDA
+    // Âncora por massa: fatura FECHADA não paga mais antiga COM DÍVIDA. O pago é o
+    // PRINCIPAL de cada pagamento (encargos primeiro), que lê billing_charges.payment_id.
+    await require('../services/encargosPagamento').garantirColunasQuitacao(db);
     const rows = await db.executeQuery(ANCHOR_SQL(fq));
     // CASCATA (mesma regra do motor): 1 transação única cobre as faturas da massa
     // da mais antiga para a mais nova — o pago por fatura é derivado do total do CPF.

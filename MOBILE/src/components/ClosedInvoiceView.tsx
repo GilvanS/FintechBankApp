@@ -104,14 +104,16 @@ function ClosedInvoice({ user, onBack, onPayInvoice, onParcel, openPixModal, the
   // Pagamentos já aplicados nesta fatura (mais recente primeiro). O PAYMENT não vive
   // mais em closedTransactions — a fatura fechada é imutável (§6.4.1/§8.1). A lista sai
   // de creditCard.paymentHistory, filtrada pelos ids das fechadas em escopo; o acumulado
-  // continua vindo de _closedInvoiceValorPago.
+  // vem de _closedInvoiceValorPagoBruto: o valor pago de fato (principal + encargos que
+  // o pagamento quitou — ele abate encargos primeiro). _closedInvoiceValorPago é só o
+  // principal e deixaria o cabeçalho menor que a soma das linhas abaixo dele.
   const closedInvoiceIds = creditCard._closedInvoiceIds ?? [];
   const paymentTxs = (!isOpenInvoice && !isNextMonth && closedInvoiceIds.length > 0)
     ? (creditCard.paymentHistory ?? [])
         .filter(p => !!p.invoiceId && closedInvoiceIds.includes(p.invoiceId))
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     : [];
-  const valorPagoBackend = (creditCard as any)?._closedInvoiceValorPago;
+  const valorPagoBackend = creditCard._closedInvoiceValorPagoBruto ?? creditCard._closedInvoiceValorPago;
   const totalPaid = typeof valorPagoBackend === 'number' && valorPagoBackend > 0
     ? valorPagoBackend
     : paymentTxs.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);

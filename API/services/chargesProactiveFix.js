@@ -23,6 +23,9 @@
  * por grupo (cpf, valor) no primeiro fix daquele grupo, nunca duplicados.
  */
 const nowDb = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+const encargosPagamento = require('./encargosPagamento');
+const { sqlResidualFechadas } = require('./saldoAnterior');
+const { TOLERANCIA_QUITACAO } = require('../utils/invoiceMath');
 const round2 = n => Math.round(n * 100) / 100;
 
 /**
@@ -40,6 +43,8 @@ async function runChargesProactiveFix(dbService, { cpfFilter = null, limit = 150
     const allowed = cpfFilter && typeof cpfFilter === 'string' && cpfFilter.replace(/\D/g, '').length === 11;
     const filterCpf = allowed ? cpfFilter.replace(/\D/g, '') : null;
     const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 150;
+    // payment_id/paid_at são lidos no filtro abaixo (script standalone também chama aqui).
+    await encargosPagamento.garantirColunasQuitacao(dbService);
 
     // bc_own: charges JÁ vinculados a ESTA invoice por id (correlação forte).
     // bc_legacy: existe ALGO relacionado por valor, mesmo sem invoice_id ainda
@@ -56,7 +61,13 @@ async function runChargesProactiveFix(dbService, { cpfFilter = null, limit = 150
             FROM ${dbService.fq('billing_charges')} bc
             WHERE bc.invoice_id = i.id AND bc.status = 'pending'
         ) bc_own ON true
+        LEFT JOIN (${sqlResidualFechadas(dbService, filterCpf ? `'${filterCpf}'` : undefined)}) res ON res.id = i.id
         WHERE i.status IN ('FECHADA', 'ABERTA') AND i.data_pagamento IS NULL
+          -- FECHADA já quitada pela cascata (mesma regra do motor): data_pagamento é
+          -- nula em toda FECHADA desde a trava de imutabilidade, então sem este filtro
+          -- a fatura paga pelo TOTAL ganhava multa/IOF de novo (CPF 42194343806, 21/09).
+          -- No SQL, e não depois do LIMIT: fatura pulada não pode ocupar o lote para sempre.
+          AND (i.status <> 'FECHADA' OR res.residual > ${TOLERANCIA_QUITACAO})
           AND (
               bc_own.qtd IS NULL OR bc_own.qtd = 0
               OR bc_own.qtd != 4
@@ -67,6 +78,11 @@ async function runChargesProactiveFix(dbService, { cpfFilter = null, limit = 150
               WHERE bc2.status = 'pending'
                 AND (bc2.invoice_id = i.id OR (bc2.invoice_id IS NULL AND bc2.cpf = i.cpf AND bc2.invoice_amount = i.valor_total))
           )
+          -- Débito com encargo já QUITADO (encargos primeiro, ou legado pago sem
+          -- payment_id): regerar "do zero" cobraria de novo a multa/juros já pagos.
+          -- Âncora no último pagamento total (não em i.due_date: ABERTA vence no futuro
+          -- e a Anomalia 8 corrige due_date errado — nos dois casos a proteção sumiria).
+          AND NOT ${encargosPagamento.sqlExisteEncargoPagoNoDebito(dbService, 'i.cpf')}
     `;
     if (filterCpf) sql += ` AND i.cpf = '${filterCpf}'`;
     sql += ` ORDER BY i.updated_at ASC LIMIT ${safeLimit}`;

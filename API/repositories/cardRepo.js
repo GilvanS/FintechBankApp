@@ -2,6 +2,7 @@ const { getDb, esc } = require('./context');
 const { computeInstallmentPlan } = require('../utils/billing');
 const { calcularParcelamentoFatura, TIPOS_ENTRADA } = require('../services/installmentCalcEngine');
 const { nowDb } = require('../utils/timezone');
+const { DESCRICAO_PAGAMENTO_TOTAL } = require('../services/encargosPagamento');
 
 /**
  * @param {object} params
@@ -84,7 +85,7 @@ async function payDueInstallments({ cpf, cutoffIso, amount, paymentDateIso, invo
     await db.executeQuery(`
         INSERT INTO ${db.fq('transactions')}
         (id, cpf, type, amount, description, from_user, to_user, to_key, date, invoice_id)
-        VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-totalDue).toFixed(2))}, ${esc('Pagamento fatura')}, NULL, NULL, NULL, ${esc(payDate)}, ${esc(invoiceId || null)})
+        VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-totalDue).toFixed(2))}, ${esc(DESCRICAO_PAGAMENTO_TOTAL)}, NULL, NULL, NULL, ${esc(payDate)}, ${esc(invoiceId || null)})
     `);
 
     await db.executeQuery(`

@@ -34,7 +34,12 @@ const CRITERIO_POR_TIPO = {
     ENCARGOS_ORFAOS_REGERADOS: 'faturas',
     FATURA_ABERTA_MES_DIVERGENTE_CORRIGIDO: 'faturas',
     BLACKLIST_DESSINCRONIZADA: 'faturas',
+    // Anomalia 8d. SALDO_* cairia em 'pagamentos' pelo fallback: explícito aqui. O nome
+    // antigo (só "herdou a mais") segue mapeado para relatórios/reenvios já gravados.
+    SALDO_ANTERIOR_DIVERGENTE: 'faturas',
     SALDO_ANTERIOR_JA_QUITADO: 'faturas',
+    ENCARGO_APOS_QUITACAO_TOTAL: 'faturas',
+    RESIDUAL_PARCIAL_SEM_ENCARGO: 'faturas',
 };
 
 const LIMITE_MSG = 3800;        // Telegram corta em 4096 — folga para o cabeçalho
@@ -59,9 +64,22 @@ function agrupar(anomalias) {
     return grupos;
 }
 
+/**
+ * Tipos de MENOR volume primeiro (ordem estável dentro de cada tipo). O corte em
+ * MAX_MSGS_POR_CRITERIO cai sobre o fim da lista: sem isto, um tipo de alto volume
+ * (ex.: SALDO_ANTERIOR_DIVERGENTE) ocupava as 3 mensagens de 'faturas' e escondia os
+ * raros (RESIDUAL_PARCIAL_SEM_ENCARGO, BLACKLIST_DESSINCRONIZADA…).
+ */
+function priorizarPorVolume(anomalias) {
+    const porTipo = new Map();
+    for (const a of anomalias) (porTipo.get(a.type) || porTipo.set(a.type, []).get(a.type)).push(a);
+    return [...porTipo.values()].sort((x, y) => x.length - y.length).flat();
+}
+
 /** Mensagens (HTML) de UM critério: uma linha por anomalia, em blocos ≤ LIMITE_MSG. */
-function mensagensDoCriterio(criterio, anomalias) {
+function mensagensDoCriterio(criterio, anomaliasRecebidas) {
     const { rotulo } = CRITERIOS[criterio];
+    const anomalias = priorizarPorVolume(anomaliasRecebidas);
     const linhas = anomalias.map((a) => {
         const det = String(a.details || '');
         const detCurto = det.length > MAX_DETALHE ? `${det.slice(0, MAX_DETALHE)}…` : det;
@@ -87,10 +105,14 @@ function mensagensDoCriterio(criterio, anomalias) {
     else usadas -= atual.length;
 
     const total = anomalias.length;
+    // O que ficou de fora, por tipo (sempre os de maior volume — ver priorizarPorVolume).
+    const cortadas = {};
+    for (const a of anomalias.slice(usadas)) cortadas[a.type] = (cortadas[a.type] || 0) + 1;
+    const porTipoCortado = Object.entries(cortadas).map(([t, n]) => `${escHtml(t)}: ${n}`).join(', ');
     return msgs.map((bloco, i) => {
         const parte = msgs.length > 1 ? ` (${i + 1}/${msgs.length})` : '';
         const resto = i === msgs.length - 1 && usadas < total
-            ? `\n\n… e mais ${total - usadas} — lista completa no painel Admin › Auditoria.`
+            ? `\n\n… e mais ${total - usadas} (${porTipoCortado}) — lista completa no painel Admin › Auditoria.`
             : '';
         return `🔎 <b>Auditoria — ${rotulo}: ${total} anomalia(s)</b>${parte}\n\n${bloco.join('\n\n')}${resto}`;
     });

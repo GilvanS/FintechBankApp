@@ -581,6 +581,31 @@ describe('planDistribution(invoiceRows, payAmount) — 12 cenários', () => {
         expect(result.applied).toBe(3870.86); // só aplicou até o target
         expect(result.remaining).toBe(414.08);
     });
+
+    // ─── C14b: a ENTRADA da cascata é o PRINCIPAL pago (encargos primeiro, 2026-09-24) ──
+    // C14 continua valendo para a função pura, mas o valor que a leitura passa para ela
+    // mudou: o pagamento abate encargos primeiro e a rota marca as charges quitadas com
+    // payment_id; enrich/saldoAnterior/motor passam |amount| − encargos quitados
+    // (sqlPrincipalPorPagamento). Pagar o gross 4.284,94 com 414,08 de encargos pendentes
+    // entra como 3.870,86 de principal: quita a fatura SEM sobrar 414,08 de "saldo
+    // credor" — antes esse remaining aparecia como crédito, com os encargos já pagos.
+    it('C14b: pagamento do gross com encargos pendentes → principal 3870.86, sem saldo credor', () => {
+        const inv = inv10();
+        const encargosQuitadosPeloPagamento = 414.08;
+        const principalPago = r2(4284.94 - encargosQuitadosPeloPagamento);
+        const result = planDistribution([inv], principalPago);
+
+        expect(result.invoices[0].isFullyPaid).toBe(true);
+        expect(result.remaining).toBe(0);
+    });
+
+    it('C14c: pagamento do valor do principal com encargos pendentes → fatura NÃO quitada', () => {
+        // 3.870,86 pagos, 414,08 foram para encargos: só 3.456,78 abatem o principal e a
+        // aberta herda 414,08 de principal residual (antes a fatura aparecia quitada).
+        const result = planDistribution([inv10()], r2(3870.86 - 414.08));
+        expect(result.invoices[0].isFullyPaid).toBe(false);
+        expect(r2(3870.86 - result.invoices[0].newValorPago)).toBe(414.08);
+    });
 });
 
 // ─── Suite 10: computeInvoicePaidInfo — 6 cenários faltantes ──────────────

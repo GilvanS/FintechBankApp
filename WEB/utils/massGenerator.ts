@@ -44,10 +44,41 @@ export interface GeneratedMassData {
 
 export type OverdueState = 'EM_DIA' | 'EM_ATRASO_7D' | 'EM_ATRASO_15D' | 'EM_ATRASO_30D';
 
-/** Estado de um ciclo de fatura do Gerador de Massa 4.0 (histórico de 1 a 6 ciclos encadeados). */
-export type CycleStatus = 'adimplente' | 'inadimplente';
+/** Estado simples de um ciclo (sem pagamento em atraso configurado). */
+export type SimpleCycleStatus = 'adimplente' | 'inadimplente';
+
+/** Tipos de pagamento em atraso que o gerador (Task 5, API) aceita para um ciclo inadimplente. */
+export type PaymentType = 'TOTAL' | 'MINIMO' | 'ABAIXO_MINIMO' | 'PARCIAL';
+export const PAYMENT_TYPES: PaymentType[] = ['TOTAL', 'MINIMO', 'ABAIXO_MINIMO', 'PARCIAL'];
+export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
+    TOTAL: 'Total',
+    MINIMO: 'Mínimo',
+    ABAIXO_MINIMO: 'Abaixo do mínimo',
+    PARCIAL: 'Parcial',
+};
+export const MIN_DIAS_ATRASO_PAGAMENTO = 1;
+export const MAX_DIAS_ATRASO_PAGAMENTO = 15;
+
+/** Ciclo inadimplente pago em atraso — espelha o objeto que `usersRepo.normalizeMassCycles` (API) aceita. */
+export interface CycleWithPayment {
+    status: 'inadimplente';
+    pagamento: PaymentType;
+    diasAtrasoPagamento?: number;
+}
+
+/**
+ * Estado de um ciclo de fatura do Gerador de Massa 4.0 (histórico de 1 a 6 ciclos
+ * encadeados): string simples (comportamento de sempre) ou, num ciclo inadimplente,
+ * um objeto com o tipo de pagamento em atraso (Task 5 — encargos primeiro).
+ */
+export type CycleStatus = SimpleCycleStatus | CycleWithPayment;
 export const MAX_MASS_CYCLES = 6;
 export const MIN_MASS_CYCLES = 1;
+
+/** Status do ciclo, seja ele string simples ou objeto com pagamento. */
+export function statusDoCiclo(cycle: CycleStatus): SimpleCycleStatus {
+    return typeof cycle === 'string' ? cycle : cycle.status;
+}
 
 const MESES_CURTOS_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
@@ -128,7 +159,7 @@ export function getCycleLabels(count: number, dueDay: number, now: Date = new Da
 export function generateRandomCycleHistory(): { cycles: CycleStatus[]; overdueState: OverdueState } {
     const count = MIN_MASS_CYCLES + Math.floor(Math.random() * (MAX_MASS_CYCLES - MIN_MASS_CYCLES + 1));
     const cycles: CycleStatus[] = Array.from({ length: count }, () => (Math.random() < 0.5 ? 'adimplente' : 'inadimplente'));
-    const atualInadimplente = cycles[cycles.length - 1] === 'inadimplente';
+    const atualInadimplente = statusDoCiclo(cycles[cycles.length - 1]) === 'inadimplente';
     const overdueState: OverdueState = atualInadimplente
         ? OVERDUE_TIER_KEYS[Math.floor(Math.random() * OVERDUE_TIER_KEYS.length)]
         : 'EM_DIA';
@@ -139,24 +170,41 @@ export function generateRandomCycleHistory(): { cycles: CycleStatus[]; overdueSt
  * Monta o payload de criação de massa garantindo o campo `cycles` (1-6 posições).
  *  - Sem `cycles`: deriva 1 ciclo do `accountStatus` informado (ou 'inadimplente'),
  *    preservando o comportamento atual do gerador.
- *  - `accountStatus` é sempre alinhado ao ÚLTIMO ciclo (estado atual da conta),
- *    para manter compatível o restante do backend que ainda lê esse campo.
+ *  - `accountStatus` é sempre alinhado ao status do ÚLTIMO ciclo (estado atual da
+ *    conta — se o ciclo for um objeto com pagamento, usa `statusDoCiclo`), para manter
+ *    compatível o restante do backend que ainda lê esse campo.
+ *  - Ciclo objeto `{ status: 'inadimplente', pagamento, diasAtrasoPagamento }` é
+ *    validado aqui (mesmas regras de `usersRepo.normalizeMassCycles` na API), não
+ *    mais recusado: pagamento só em ciclo inadimplente, tipo de pagamento válido e
+ *    dias entre 1 e 15 quando informado.
  */
 export function buildMassPayload<T extends { cycles?: CycleStatus[]; accountStatus?: string }>(
     input: T
-): Omit<T, 'cycles' | 'accountStatus'> & { cycles: CycleStatus[]; accountStatus: CycleStatus } {
-    const fallback: CycleStatus = input.accountStatus === 'adimplente' ? 'adimplente' : 'inadimplente';
+): Omit<T, 'cycles' | 'accountStatus'> & { cycles: CycleStatus[]; accountStatus: SimpleCycleStatus } {
+    const fallback: SimpleCycleStatus = input.accountStatus === 'adimplente' ? 'adimplente' : 'inadimplente';
     const cycles: CycleStatus[] = input.cycles && input.cycles.length > 0 ? [...input.cycles] : [fallback];
 
     if (cycles.length > MAX_MASS_CYCLES) {
         throw new Error(`Máximo de ${MAX_MASS_CYCLES} ciclos de fatura por massa.`);
     }
-    const invalido = cycles.find((c) => c !== 'adimplente' && c !== 'inadimplente');
-    if (invalido !== undefined) {
-        throw new Error(`Ciclo inválido: ${String(invalido)}. Use 'adimplente' ou 'inadimplente'.`);
+    for (const c of cycles) {
+        if (c === 'adimplente' || c === 'inadimplente') continue;
+        if (c === null || c === undefined || typeof c !== 'object') {
+            throw new Error(`Ciclo inválido: ${String(c)}. Use 'adimplente' ou 'inadimplente'.`);
+        }
+        if (c.status !== 'inadimplente') {
+            throw new Error(`Ciclo com pagamento tem status inválido: ${String(c.status)}. Pagamento só vale em ciclo inadimplente.`);
+        }
+        if (!PAYMENT_TYPES.includes(c.pagamento)) {
+            throw new Error(`Pagamento inválido: ${String(c.pagamento)}. Use ${PAYMENT_TYPES.join(', ')}.`);
+        }
+        if (c.diasAtrasoPagamento !== undefined
+            && (c.diasAtrasoPagamento < MIN_DIAS_ATRASO_PAGAMENTO || c.diasAtrasoPagamento > MAX_DIAS_ATRASO_PAGAMENTO)) {
+            throw new Error(`diasAtrasoPagamento deve estar entre ${MIN_DIAS_ATRASO_PAGAMENTO} e ${MAX_DIAS_ATRASO_PAGAMENTO} (recebido ${c.diasAtrasoPagamento}).`);
+        }
     }
 
-    return { ...input, cycles, accountStatus: cycles[cycles.length - 1] };
+    return { ...input, cycles, accountStatus: statusDoCiclo(cycles[cycles.length - 1]) };
 }
 
 /**

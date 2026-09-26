@@ -102,6 +102,12 @@ export interface CreditCard {
     paymentHistory?: PaymentEntry[];
     /** Ids das faturas fechadas em escopo - usado para filtrar paymentHistory na aba Fechada. */
     _closedInvoiceIds?: string[];
+    /** PRINCIPAL já abatido das fechadas em escopo (base do residual e do saldo financiado). */
+    _closedInvoiceValorPago?: number;
+    /** Valor pago de fato (principal + encargos quitados) — é o que a tela exibe como pagamento. */
+    _closedInvoiceValorPagoBruto?: number;
+    /** Parte do pagamento que quitou encargos (bruto − principal): o pagamento abate encargos primeiro. */
+    _closedInvoiceEncargosPagos?: number;
     futureInstallments?: Record<string, number>;
     futureInstallmentsDetail?: Record<string, { description: string; amount: number; num: number; total: number }[]>;
 }

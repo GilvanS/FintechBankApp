@@ -48,6 +48,17 @@ describe('mensagensDoCriterio', () => {
     });
 });
 
+describe('mensagensDoCriterio — tipos de baixo volume não somem (Task 4 fix 1)', () => {
+    test('300 da 8d não escondem a 8f nem a BLACKLIST; o rodapé diz o que foi cortado', () => {
+        const muitas = Array.from({ length: 300 }, (_, i) => anomalia('SALDO_ANTERIOR_DIVERGENTE', String(i).padStart(11, '0'), 'x'.repeat(150)));
+        const msgs = mensagensDoCriterio('faturas', [...muitas, anomalia('RESIDUAL_PARCIAL_SEM_ENCARGO'), anomalia('BLACKLIST_DESSINCRONIZADA')]);
+        expect(msgs).toHaveLength(3);
+        expect(msgs[0]).toContain('<b>RESIDUAL_PARCIAL_SEM_ENCARGO</b>');
+        expect(msgs[0]).toContain('<b>BLACKLIST_DESSINCRONIZADA</b>');
+        expect(msgs[2]).toMatch(/… e mais \d+ \(SALDO_ANTERIOR_DIVERGENTE: \d+\)/);
+    });
+});
+
 describe('resumoGeral', () => {
     test('conta por critério e por tipo', () => {
         const txt = resumoGeral([anomalia('LIMITE_EXCEDIDO'), anomalia('LIMITE_EXCEDIDO'), anomalia('TRANSACAO_ORFA')]);

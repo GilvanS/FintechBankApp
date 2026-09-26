@@ -5,7 +5,9 @@ import {
     computeCycleDueDates,
     computeCurrentCycleOverdueDays,
     generateRandomCycleHistory,
+    statusDoCiclo,
     OVERDUE_TIER_KEYS,
+    PAYMENT_TYPES,
     MAX_MASS_CYCLES,
     MIN_MASS_CYCLES,
     CycleStatus
@@ -131,5 +133,51 @@ describe('buildMassPayload — ciclos (Gerador de Massa 4.0)', () => {
         const payload = buildMassPayload({ fullName: 'Massa X', cpf: '12345678900', cycles: ['inadimplente'] });
         expect(payload.fullName).toBe('Massa X');
         expect(payload.cpf).toBe('12345678900');
+    });
+});
+
+describe('statusDoCiclo — string simples e ciclo com pagamento', () => {
+    it('string simples devolve ela mesma', () => {
+        expect(statusDoCiclo('adimplente')).toBe('adimplente');
+        expect(statusDoCiclo('inadimplente')).toBe('inadimplente');
+    });
+
+    it('ciclo objeto devolve o status', () => {
+        expect(statusDoCiclo({ status: 'inadimplente', pagamento: 'TOTAL' })).toBe('inadimplente');
+    });
+});
+
+describe('buildMassPayload — ciclo com pagamento em atraso (Task 5, tela do Gerador 4.0)', () => {
+    it('aceita ciclo objeto e o mantém no payload, com accountStatus derivado do status dele', () => {
+        const cycles: CycleStatus[] = ['adimplente', { status: 'inadimplente', pagamento: 'MINIMO', diasAtrasoPagamento: 12 }];
+        const payload = buildMassPayload({ cycles });
+        expect(payload.cycles).toEqual(cycles);
+        expect(payload.accountStatus).toBe('inadimplente');
+    });
+
+    it('aceita os 4 tipos de pagamento, com e sem diasAtrasoPagamento', () => {
+        for (const pagamento of PAYMENT_TYPES) {
+            const payload = buildMassPayload({ cycles: [{ status: 'inadimplente', pagamento }] });
+            expect(payload.cycles).toEqual([{ status: 'inadimplente', pagamento }]);
+        }
+        const comDias = buildMassPayload({ cycles: [{ status: 'inadimplente', pagamento: 'PARCIAL', diasAtrasoPagamento: 1 }] });
+        expect((comDias.cycles[0] as any).diasAtrasoPagamento).toBe(1);
+    });
+
+    it('rejeita pagamento em ciclo adimplente (o adimplente já é pago no vencimento)', () => {
+        expect(() => buildMassPayload({ cycles: [{ status: 'adimplente' as any, pagamento: 'TOTAL' }] }))
+            .toThrow(/Pagamento só vale em ciclo inadimplente/);
+    });
+
+    it('rejeita tipo de pagamento inválido', () => {
+        expect(() => buildMassPayload({ cycles: [{ status: 'inadimplente', pagamento: 'QUASE' as any }] }))
+            .toThrow(/Pagamento inválido/);
+    });
+
+    it('rejeita diasAtrasoPagamento fora de 1-15', () => {
+        expect(() => buildMassPayload({ cycles: [{ status: 'inadimplente', pagamento: 'TOTAL', diasAtrasoPagamento: 0 }] }))
+            .toThrow(/entre 1 e 15/);
+        expect(() => buildMassPayload({ cycles: [{ status: 'inadimplente', pagamento: 'TOTAL', diasAtrasoPagamento: 16 }] }))
+            .toThrow(/entre 1 e 15/);
     });
 });

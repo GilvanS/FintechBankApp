@@ -18,8 +18,8 @@
  */
 const fs = require('fs');
 const path = require('path');
-const dotenv = require('dotenv');
-dotenv.config({ path: path.join(__dirname, '..', '.env') });
+// Só como CLI: o teste importa buildPdfData sem carregar .env nem gravar nada.
+if (require.main === module) require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const { Pool } = require('pg');
 const { generateUniversalInvoicePDF } = require('../services/invoicePdfService');
@@ -30,7 +30,6 @@ const {
 } = require('../utils/invoiceMath');
 
 const OUT_DIR = path.join(__dirname, '..', '..', '.freebuff', 'pdf-preview');
-fs.mkdirSync(OUT_DIR, { recursive: true });
 
 const API_BASE = process.env.API_BASE || 'http://localhost:3001';
 const POOL = new Pool({
@@ -144,7 +143,12 @@ function buildPdfData({ cpf, cc, user, type, plans, cartaoFinal }) {
     const originalClosedAmount = cc._closedInvoiceValorTotal ?? cc.closedInvoiceAmount ?? cc.closedInvoice ?? 0;
     const closedAmount = cc.closedInvoice ?? 0;
     const isPaid = cc.closedInvoiceIsPaid ?? false;
+    // Igual à rota send-pdf: valorPago = PRINCIPAL abatido (base do saldo financiado); o
+    // PDF exibe o pagamento cheio (bruto) com a divisão encargos + principal (o pagamento
+    // quita encargos primeiro).
     const valorPago = cc._closedInvoiceValorPago ?? 0;
+    const encargosPagos = cc._closedInvoiceEncargosPagos ?? 0;
+    const valorPagoBruto = cc._closedInvoiceValorPagoBruto ?? valorPago;
     const closedInvoiceResidual = cc.closedInvoiceResidual ?? 0;
 
     const diffTime = Math.abs(new Date().getTime() - new Date(cc.closedInvoiceDueDate || cc.invoiceDueDate || '2026-07-15').getTime());
@@ -305,7 +309,9 @@ function buildPdfData({ cpf, cc, user, type, plans, cartaoFinal }) {
         resumo: type === 'open'
             ? {
                 anterior: originalClosedAmount,
-                pagamento: valorPago,
+                pagamento: valorPagoBruto,
+                pagamentoEncargos: encargosPagos,
+                pagamentoPrincipal: valorPago,
                 pagamentoData: cc.closedInvoicePaidAt || null,
                 saldoFinanciado: Math.max(0, closedInvoiceResidual),
                 lancamentos: openAmount,
@@ -313,7 +319,9 @@ function buildPdfData({ cpf, cc, user, type, plans, cartaoFinal }) {
             }
             : {
                 anterior: 0,
-                pagamento: valorPago,
+                pagamento: valorPagoBruto,
+                pagamentoEncargos: encargosPagos,
+                pagamentoPrincipal: valorPago,
                 pagamentoData: cc.closedInvoicePaidAt || null,
                 saldoFinanciado: Math.max(0, originalClosedAmount - valorPago),
                 lancamentos: originalClosedAmount,
@@ -440,6 +448,7 @@ async function main() {
         console.error('Uso: node scripts/render_massa_pdf_preview.cjs <cpf> [--open] [--closed]');
         process.exit(1);
     }
+    fs.mkdirSync(OUT_DIR, { recursive: true });
     const wantOpen = process.argv.includes('--open');
     const wantClosed = process.argv.includes('--closed');
     const types = (wantOpen || wantClosed) ? [] : ['closed', 'open'];
@@ -473,4 +482,8 @@ async function main() {
     await POOL.end();
 }
 
-main().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
+if (require.main === module) {
+    main().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
+}
+
+module.exports = { buildPdfData };

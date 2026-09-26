@@ -42,7 +42,10 @@ module.exports = function createInvoiceController(deps) {
         if (Number.isNaN(d.getTime())) return String(v || '');
         return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     };
-    const { computeInvoiceGross, planDistribution, paidPrincipalSql } = require('../../utils/invoiceMath');
+    const { computeInvoiceGross, planDistribution } = require('../../utils/invoiceMath');
+    // Pagamento abate ENCARGOS PRIMEIRO e registra quais billing_charges quitou
+    // (services/encargosPagamento.js — regra de 2026-09-23).
+    const encargosPagamento = require('../../services/encargosPagamento');
     const { planOpenCyclePayment } = require('../../services/openCyclePayment');
 
     // ── Comprovante de pagamento em PDF (evento de pagamento → tópico da massa) ──
@@ -105,7 +108,7 @@ module.exports = function createInvoiceController(deps) {
         const round2 = n => Math.round(n * 100) / 100;
         const payId = dbService.generateUUID();
         const amount = round2(payAmount);
-        if (amount <= 0.005) return [];
+        if (amount <= 0.005) return { payId: null, links: [] };
         // Vínculo na fatura MAIS RECENTE em aberto (a que ancora o comprovante).
         // A quitação das demais é derivada por cascata na leitura — o invoice_id
         // aqui é apenas a âncora do lançamento no extrato.
@@ -117,7 +120,8 @@ module.exports = function createInvoiceController(deps) {
             (id, cpf, type, amount, description, from_user, to_user, to_key, date, invoice_id, applied_to_charges)
             VALUES (${esc(payId)}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${esc((-amount).toFixed(2))}, ${esc(description)}, NULL, NULL, NULL, ${esc(dateIso)}, ${anchor ? esc(anchor.id) : 'NULL'}, ${round2(appliedToCharges).toFixed(2)})
         `);
-        return [{ invoiceId: anchor ? anchor.id : null, amount }];
+        // payId amarra as billing_charges quitadas por ESTE pagamento (payment_id).
+        return { payId, links: [{ invoiceId: anchor ? anchor.id : null, amount }] };
     }
 
     async function refreshAccountStatus(cpf) {
@@ -149,16 +153,18 @@ module.exports = function createInvoiceController(deps) {
     //
     // `invoice` = a mais RECENTE em aberto e ancora o cutoff das parcelas (o corte precisa
     // cobrir todos os ciclos que estão sendo pagos). `oldest` ancora atraso/encargos.
-    // TOTAL pago de uma massa (soma de TODOS os INVOICE_PAYMENT). A distribuição
-    // entre as faturas é feita por CASCATA na leitura (planDistribution: mais antiga
-    // primeiro, excedente = saldo credor) — o pagamento é UMA transação (igual ao
-    // comprovante), então o pago não pode ser derivado por invoice_id isolado.
+    // PRINCIPAL pago de uma massa: soma de TODOS os INVOICE_PAYMENT descontado o que
+    // cada um quitou de encargos (o pagamento abate encargos primeiro — ver
+    // services/encargosPagamento.js). A distribuição entre as faturas é feita por
+    // CASCATA na leitura (planDistribution: mais antiga primeiro, excedente = saldo
+    // credor) — o pagamento é UMA transação (igual ao comprovante), então o pago não
+    // pode ser derivado por invoice_id isolado.
     async function fetchPaidByInvoice(cpf) {
         const { esc } = repoContext;
+        await encargosPagamento.garantirColunasQuitacao(dbService);
         const rows = await dbService.executeQuery(`
-            SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE cpf = ${esc(cpf)} AND type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            SELECT COALESCE(SUM(p.principal), 0) AS total
+            FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService, esc(cpf))}) p
         `);
         return parseFloat(rows[0]?.total || 0);
     }
@@ -810,19 +816,26 @@ module.exports = function createInvoiceController(deps) {
     async function payOpenCycle({ cpf, user, payAmount, pendingChargesTotal, cutoffIso, res }) {
         const { esc } = repoContext;
         const plan = planOpenCyclePayment({ payAmount, pendingChargesTotal });
-        await persistPaymentDistribution({
+        const dateIso = nowDb();
+        const { payId } = await persistPaymentDistribution({
             cpf,
             invoices: [],
             payAmount,
-            dateIso: nowDb(),
+            dateIso,
             description: 'Pagamento fatura',
+            // applied_to_charges aqui é só o MARCADOR "pagamento pós-regra-nova" que o
+            // invoiceEngine/dailyAudit usam pra saber que este órfão pode ser vinculado
+            // à fatura que fechar (nunca fonte de valor — essa é payment_id abaixo).
             appliedToCharges: plan.appliedToCharges
         });
         await usersRepo.updateBalance(cpf, (parseFloat(user.balance || 0) - payAmount).toFixed(2));
-        if (plan.markChargesPaid) {
+        if (plan.markChargesPaid && payId) {
+            // payment_id/paid_at (mesma marca da Task 2, encargosPagamento.js): sem isso
+            // a proteção contra recobrar encargo pago (chargesProactiveFix/Anomalia 8/UTI)
+            // não reconhece esta quitação e regenerava multa/IOF já pagos por antecipação.
             await dbService.executeQuery(`
                 UPDATE ${dbService.fq('billing_charges')}
-                SET status = 'paid'
+                SET status = 'paid', payment_id = ${esc(payId)}, paid_at = ${esc(dateIso)}
                 WHERE cpf = ${esc(cpf)} AND status = 'pending'
             `);
         }
@@ -887,14 +900,17 @@ module.exports = function createInvoiceController(deps) {
         const balance = parseFloat(user.balance || 0);
         const minPayment = Math.max(totalDue * 0.10, 10);
 
-        // Obter o total de encargos pendentes no banco
-        const chargesRows = await dbService.executeQuery(`
-            SELECT COALESCE(SUM(CAST(amount AS DECIMAL(15,2))), 0) AS total
-            FROM ${dbService.fq('billing_charges')}
-            WHERE cpf = '${cpf}' AND status = 'pending'
-        `);
-        const pendingChargesTotal = parseFloat(chargesRows[0]?.total || 0);
-        // Fatura aberta: currentInvoiceTotal já inclui os encargos herdados.
+        // Encargos pendentes do CPF, linha a linha e discriminados por tipo: o Total segue
+        // principal + SUM(pending) (inalterado), mas o pagamento abaixo do total abate
+        // multa → juros de mora → juros remuneratórios → IOF diário ANTES do principal.
+        const { pendentes, filhasQuitadas } = await encargosPagamento.buscarEncargosDoCpf(dbService, esc, cpf);
+        const encargos = encargosPagamento.montarDividaEncargos(pendentes, filhasQuitadas);
+        if (encargos.tiposDesconhecidos.length) {
+            console.warn(`[pay] ${cpf}: charge_type fora do mapa de encargos (${encargos.tiposDesconhecidos.join(', ')}) — fica pending até o pagamento TOTAL.`);
+        }
+        const pendingChargesTotal = encargos.total;
+        // Fatura aberta (§25): currentInvoiceTotal (openCycleDue) já inclui os encargos
+        // herdados — somar pendingChargesTotal de novo cobraria os mesmos encargos 2×.
         const totalDueComplete = closedDebt
             ? Math.round((totalDue + pendingChargesTotal) * 100) / 100
             : openCycleDue;
@@ -965,18 +981,37 @@ module.exports = function createInvoiceController(deps) {
 
         const availableLimit = parseFloat(user.credit_card_available_limit || 0);
         const totalLimit = parseFloat(user.credit_card_total_limit || 0);
-        const principalToPay = Math.min(payAmount, totalDue);
-        const chargesToPay = Math.max(0, payAmount - principalToPay);
+        // ENCARGOS PRIMEIRO: multa → juros de mora → juros remuneratórios → IOF diário,
+        // depois o principal (alocarPagamento). O IOF fixo (adicional 0,38%/câmbio) fica
+        // fora da ordem e só sai de pending no TOTAL. Só o principal abatido devolve
+        // limite (encargo não consome limite) e conta para o mínimo.
+        const plano = encargosPagamento.planejarPagamento(payAmount, totalDue, encargos);
+        const principalAplicado = plano.principalAplicado;
+        const principalToPay = Math.min(principalAplicado, totalDue);
+        // Grava a quitação das billing_charges amarrada à transação do pagamento
+        // (payment_id). Falha aqui não desfaz o pagamento: sem payment_id a derivação
+        // conta o valor cheio como principal (lado do cliente), e o erro fica no log.
+        const quitarEncargos = async (payId, paidAt) => {
+            if (!payId) return;
+            try {
+                await encargosPagamento.gravarQuitacao(dbService, esc, { quitacao: plano.quitacao, paymentId: payId, paidAt });
+            } catch (erro) {
+                console.error(`[pay] ${cpf}: falha ao registrar a quitação dos encargos do pagamento ${payId}:`, erro && erro.message);
+            }
+        };
 
-        if (payAmount < totalDue - 0.01) {
-            // Classificação do pagamento (regra de negócio do ciclo de vida da fatura):
-            //  - MÍNIMO  = >= 10% do devido (do mínimo até < total): o contador de dias de
+        if (!plano.principalQuitado) {
+            // Classificação do pagamento (regra de negócio do ciclo de vida da fatura).
+            // Com encargos primeiro, o que conta é o PRINCIPAL abatido — o mínimo exibido
+            // (10% + 100% dos encargos) deixa exatamente 10% para o principal, o mesmo
+            // critério do motor diário (pagamentoMinimo = principal pago >= 10%):
+            //  - MÍNIMO  = principal abatido >= 10% do devido: o contador de dias de
             //    atraso ZERA e a conta volta a "em dia" (adimplente, dias 0 e assim fica),
             //    MAS os encargos CONTINUAM acumulando sobre o saldo residual até o total.
             //  - PARCIAL = abaixo do mínimo (< 10%): segue inadimplente, os dias de atraso
             //    continuam contando e os encargos continuam acumulando.
-            //  - TOTAL   = >= devido (vai para o branch abaixo): PARA os encargos e os dias.
-            const isMinimo = payAmount >= minPayment - 0.05;
+            //  - principal quitado (vai para o branch abaixo): PARA os encargos e os dias.
+            const isMinimo = principalAplicado >= minPayment - 0.05;
             const payDescription = isMinimo
                 ? 'Pagamento minimo de fatura'
                 : 'Pagamento parcial de fatura';
@@ -985,15 +1020,20 @@ module.exports = function createInvoiceController(deps) {
             // DERIVADA por cascata na leitura (getClosedInvoiceDebt → planDistribution),
             // nunca escrita na FECHADA (imutável).
             const nowIso = nowDb();
-            await persistPaymentDistribution({
+            const { payId } = await persistPaymentDistribution({
                 cpf,
                 invoices: closedDebt?.invoices || [],
                 payAmount,
                 dateIso: nowIso,
-                description: payDescription
+                description: payDescription,
+                // Informativo (applied_to_charges nunca é fonte de valor — isso é
+                // billing_charges.payment_id/quitarEncargos abaixo): registra quanto deste
+                // pagamento foi para encargos, útil pra auditoria/debug e pro §25.
+                appliedToCharges: plano.encargosQuitados
             });
+            await quitarEncargos(payId, nowIso);
             await usersRepo.updateBalance(cpf, (balance - payAmount).toFixed(2));
-            const restoredLimit = Math.min(totalLimit, availableLimit + payAmount);
+            const restoredLimit = Math.min(totalLimit, availableLimit + principalToPay);
             await dbService.executeQuery(`
                 UPDATE ${dbService.fq('users')}
                 SET credit_card_available_limit = ${restoredLimit.toFixed(2)}
@@ -1002,7 +1042,10 @@ module.exports = function createInvoiceController(deps) {
             // A quitação é derivada de transactions.invoice_id (getClosedInvoiceDebt):
             // a fatura FECHADA não recebe escrita. Só o status do usuário é reavaliado.
             await refreshAccountStatus(cpf);
-            const remaining = totalDue - payAmount;
+            // Saldo devedor de fato após o pagamento: principal + encargos que sobraram
+            // (antes era só totalDue - pago, que ignorava os encargos pending).
+            const remaining = Math.max(0, Math.round((totalDueComplete - payAmount) * 100) / 100);
+            console.log(`[pay] ${cpf} pagou R$ ${payAmount.toFixed(2)} (${isMinimo ? 'mínimo' : 'parcial'}): encargos R$ ${plano.encargosQuitados.toFixed(2)} (multa ${plano.alocacao.aplicado.multa.toFixed(2)}, juros mora ${plano.alocacao.aplicado.jurosMora.toFixed(2)}, juros rem ${plano.alocacao.aplicado.jurosRemuneratorios.toFixed(2)}, IOF diário ${plano.alocacao.aplicado.iofDiario.toFixed(2)}) + principal R$ ${principalAplicado.toFixed(2)}; restam R$ ${remaining.toFixed(2)} herdados pela fatura aberta.`);
             // — MÍNIMO (>= 10%): regulariza a conta (dias = 0, adimplente) mantendo os
             // encargos acumulando. O motor diário (runBillingValidation) reconhece a
             // fatura com pagamento >= 10% do total e continua os incrementos de
@@ -1018,9 +1061,9 @@ module.exports = function createInvoiceController(deps) {
                 `);
             }
             // ── Notificação específica para ABAIXO do mínimo crítico ──
-            // Se pagou MENOS de 10% do total, é ABAIXO (crítico — alerta no admin).
-            // Se pagou entre 10% e < 100%, é mínimo (multa/juros mora estacionados).
-            const isPaymentAbaixo = payAmount < minPayment;
+            // Se abateu MENOS de 10% do principal, é ABAIXO (crítico — alerta no admin).
+            // Se abateu entre 10% e < 100%, é mínimo (multa/juros mora estacionados).
+            const isPaymentAbaixo = principalAplicado < minPayment;
             const notifTitle = isPaymentAbaixo
                 ? '⚠️ Pagamento abaixo do mínimo crítico'
                 : 'Pagamento mínimo de fatura ✅';
@@ -1056,7 +1099,7 @@ module.exports = function createInvoiceController(deps) {
             // ECONNRESET pós-PIN com pagamento já efetivado — o proxy do Vite corta a
             // conexão em 30s e o enrich, sob carga de dados de teste acumulados, passava
             // disso (2026-09-22).
-            res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining });
+            res.json({ success: true, message: 'Pagamento parcial realizado.', amountPaid: payAmount, totalDue, remainingBalance: remaining, allocation: plano.alocacao.aplicado });
 
             // .catch() obrigatório em cada uma: uma rejeição aqui viraria unhandledRejection
             // e (sem handler) derrubaria o processo — mas agora a resposta já foi enviada,
@@ -1108,17 +1151,33 @@ module.exports = function createInvoiceController(deps) {
         // Antes o valor inteiro ia num único vínculo para `oldest`, deixando a 2ª fatura
         // sem pagamento quando havia mais de uma em aberto (bug 805.357.576-54 e
         // 381.600.813-59). O excedente sobre a soma vira saldo credor na última fatura (§19.3).
-        const pagouEncargos = payAmount >= totalDueComplete - 0.01;
-        await persistPaymentDistribution({
+        const paidAtTotal = nowDb();
+        const { payId: payIdTotal } = await persistPaymentDistribution({
             cpf,
             invoices: closedDebt?.invoices || [],
             payAmount,
-            dateIso: nowDb(),
-            description: 'Pagamento fatura',
-            // Encargos pagos junto do principal: sem isto a cascata contava esses
-            // reais como principal e sobrava saldo credor fantasma (§25).
-            appliedToCharges: pagouEncargos ? pendingChargesTotal : 0
+            dateIso: paidAtTotal,
+            // Marca o fim do débito contínuo (encargosPagamento.pertenceAoDebitoAtual).
+            description: encargosPagamento.DESCRICAO_PAGAMENTO_TOTAL,
+            // Informativo (applied_to_charges nunca é fonte de valor — isso é
+            // billing_charges.payment_id/quitarEncargos abaixo): registra quanto deste
+            // pagamento foi para encargos, útil pra auditoria/debug e pro §25.
+            appliedToCharges: plano.encargosQuitados
         });
+        // — PAGAMENTO TOTAL (principal + TODAS as pending): PARA os encargos e os dias
+        // de atraso — todas as charges lidas acima viram 'paid' com payment_id.
+        // — Principal quitado SEM cobrir o IOF fixo (adicional/câmbio, fora da ordem):
+        // multa/juros/IOF diário foram abatidos antes do principal (payment_id); o fixo
+        // permanece 'pending' e é HERDADO pela fatura aberta (enrichUserCreditCardData
+        // -> closedInvoiceCharges -> currentInvoiceTotal). Marcar pago o que não foi
+        // recebido "perdoava" dívida real (caso 118.796.467-06).
+        // Gravado ANTES do refreshAccountStatus: a derivação do principal pago desconta
+        // os encargos quitados por este pagamento. As colunas congeladas das faturas
+        // fechadas (análise mensal) permanecem intactas (trigger da migration 005).
+        await quitarEncargos(payIdTotal, paidAtTotal);
+        if (!plano.isTotal) {
+            console.log(`[pay] ${cpf} pagou R$ ${payAmount.toFixed(2)}: encargos R$ ${plano.encargosQuitados.toFixed(2)} + principal R$ ${principalAplicado.toFixed(2)} quitados; R$ ${Math.max(0, totalDueComplete - payAmount).toFixed(2)} de IOF fixo (adicional/câmbio) seguem pending para a fatura aberta.`);
+        }
         // Limpa as parcelas legadas do ciclo (mesma ação do antigo payDueInstallments)
         await dbService.executeQuery(`
             DELETE FROM ${dbService.fq('transactions')}
@@ -1144,31 +1203,10 @@ module.exports = function createInvoiceController(deps) {
         if (closedDebt) {
             await refreshAccountStatus(cpf);
         }
-        // — PAGAMENTO TOTAL: PARA os encargos e os dias de atraso.
-        // Só marca as billing_charges pending como 'paid' se o valor pago COBRIU os
-        // encargos (payAmount >= totalDueComplete = principal + encargos). Caso
-        // contrário (pagou o principal, mas não os encargos — ex.: 118.796.467-06
-        // pagou R$ 1.651,69 e ficaram R$ 66,79 de 3 dias de atraso), as charges
-        // permanecem 'pending' e são HERDADAS pela fatura aberta (regra do ciclo de
-        // vida): marcá-las como pagas sem tê-las recebido "perdoava" dívida real e
-        // zerava a herança que a fatura aberta deve exibir.
-        // As colunas congeladas das faturas fechadas (análise mensal) permanecem
-        // intactas (imutáveis pela trigger da migration 005).
-        if (pagouEncargos) {
-            await dbService.executeQuery(`
-                UPDATE ${dbService.fq('billing_charges')}
-                SET status = 'paid'
-                WHERE cpf = '${cpf}' AND status = 'pending'
-            `);
-        } else {
-            // Encargos herdados: permanecem pending e migram para a fatura ABERTA
-            // (enrichUserCreditCardData -> closedInvoiceCharges -> currentInvoiceTotal).
-            console.log(`[pay] ${cpf} pagou R$ ${payAmount.toFixed(2)} (principal), deixando R$ ${(totalDueComplete - payAmount).toFixed(2)} de encargos pending para a fatura aberta.`);
-        }
         // Responde JÁ — mesmo raciocínio do branch parcial acima (ver comentário lá):
         // enrichUserCreditCardData sai do caminho síncrono, front sempre refaz
         // getUserByCpf() após sucesso, nenhum call-site depende de `user` aqui.
-        res.json({ success: true, message: 'Fatura paga com sucesso.' });
+        res.json({ success: true, message: 'Fatura paga com sucesso.', allocation: plano.alocacao.aplicado });
 
         notifyTotalPayment({ cpf, user, payAmount, cutoffIso });
     };

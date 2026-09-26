@@ -43,9 +43,17 @@
  */
 require('dotenv').config();
 const { Pool } = require('pg');
-const { paidPrincipalSql } = require('../utils/invoiceMath');
 
 const schema = process.env.DB_SCHEMA || 'fintech';
+
+// Fragmento SQL do PRINCIPAL de um INVOICE_PAYMENT (|amount| − encargos que ele
+// quitou via billing_charges.payment_id — mesma fonte de utils/invoiceMath.js e
+// services/encargosPagamento.js, aqui reescrita porque este script fala direto
+// com `pg.Pool` (sem dbService.fq) e usa o schema fixo já hardcoded no arquivo.
+function paidPrincipalSql(alias = '') {
+    const p = alias ? `${alias}.` : '';
+    return `(ABS(CAST(${p}amount AS DECIMAL(15,2))) - COALESCE((SELECT SUM(CAST(bc.amount AS DECIMAL(15,2))) FROM ${schema}.billing_charges bc WHERE bc.payment_id = ${p}id AND bc.status = 'paid'), 0))`;
+}
 const TRIGGER_NAME = 'trg_invoices_immutable_when_closed';
 const DEFAULT_CPF = '09086747329';
 const r2 = (n) => Math.round(n * 100) / 100;

@@ -164,9 +164,16 @@ function drawResumoFatura(doc, data, y) {
     y += 8;
 
     const resumo = data.resumo || {};
+    // O pagamento quita ENCARGOS PRIMEIRO: o valor pago é exibido cheio e, quando parte
+    // dele foi para encargos, a divisão vai no rótulo — senão "anterior − pagamento" não
+    // bateria com o saldo financiado (que desconta só o principal).
+    const _encPagos = Number(resumo.pagamentoEncargos) || 0;
+    const _divisao = _encPagos > 0.005
+        ? ` (${brl(_encPagos)} encargos + ${brl(Number(resumo.pagamentoPrincipal) || 0)} principal)`
+        : '';
     const rows = [
         { label: 'Total da fatura anterior', value: resumo.anterior ?? 0, circle: null },
-        { label: resumo.pagamentoData ? `Pagamento efetuado em ${ddmmYYYY(resumo.pagamentoData)}` : 'Pagamento efetuado', value: -(resumo.pagamento ?? 0), circle: null },
+        { label: (resumo.pagamentoData ? `Pagamento efetuado em ${ddmmYYYY(resumo.pagamentoData)}` : 'Pagamento efetuado') + _divisao, value: -(resumo.pagamento ?? 0), circle: null },
         { label: 'Saldo financiado', value: resumo.saldoFinanciado ?? 0, circle: 'S' },
         { label: 'Lançamentos atuais', value: resumo.lancamentos ?? 0, circle: 'L' },
         { label: 'Total desta fatura', value: resumo.total ?? 0, circle: '=', bold: true },

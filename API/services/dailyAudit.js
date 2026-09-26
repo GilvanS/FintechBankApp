@@ -3,6 +3,9 @@ const { nowDb } = require('../utils/timezone');
 const { toDateOnly } = require('../utils/dateUtils');
 const { computeLastPassedDueDate } = require('../repositories/usersRepo');
 const { computeNextInvoiceDueDate, INVOICE_CUTOFF_DAYS } = require('../utils/billing');
+const encargosPagamento = require('./encargosPagamento');
+const { sqlResidualFechadas } = require('./saldoAnterior');
+const { TOLERANCIA_QUITACAO } = require('../utils/invoiceMath');
 
 async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = null) {
     console.log('[Audit] Iniciando auditoria diária de anomalias...');
@@ -10,6 +13,8 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
     const errors = [];
 
     try {
+        // payment_id/paid_at de billing_charges são lidos na Anomalia 8 (encargos primeiro).
+        await encargosPagamento.garantirColunasQuitacao(db);
         // Anomalia 1: Pagamento parcial após vencimento sem novos encargos
         // Se a fatura venceu, houve pagamento parcial (ou nenhum) e não foram gerados encargos (multa/juros)
         const closedUnpaid = await db.executeQuery(`
@@ -218,9 +223,17 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
             SELECT i.id, i.cpf, i.due_date, i.status, i.valor_total, u.full_name, u.credit_card_due_day
             FROM ${db.fq('invoices')} i
             JOIN ${db.fq('users')} u ON u.cpf = i.cpf
+            -- FECHADA já quitada pela cascata (mesma regra do motor) não ganha encargo
+            -- novo: data_pagamento é nula em toda FECHADA desde a trava de imutabilidade.
+            JOIN (${sqlResidualFechadas(db)}) res ON res.id = i.id AND res.residual > ${TOLERANCIA_QUITACAO}
             WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
               AND u.credit_card_due_day IS NOT NULL
               AND EXTRACT(DAY FROM i.due_date) != u.credit_card_due_day
+              -- Débito com encargo já PAGO (encargos primeiro, ou legado sem payment_id): regerar
+              -- os encargos do zero cobraria de novo o que o cliente já pagou. Âncora no
+              -- último pagamento total, NÃO em i.due_date — essa data é justamente a
+              -- errada aqui e, se for posterior ao pagamento, não protegeria nada.
+              AND NOT ${encargosPagamento.sqlExisteEncargoPagoNoDebito(db, 'i.cpf')}
             ORDER BY i.updated_at ASC
             LIMIT 150
         `);
@@ -305,17 +318,46 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
         // Regra em services/discrepanciasAudit.js (fonte única com o "Corrigir
         // Discrepâncias", que devolve o excedente ao saldo): o devido inclui o
         // saldo_anterior e desconta o que já foi devolvido.
-        // Anomalia 8d: fatura FECHADA que herdou saldo_anterior de uma fechada que JÁ
-        // estava paga quando ela fechou (bug do fechamento antigo, que olhava
-        // data_pagamento — nula em toda FECHADA). Não muda o que é cobrado (a quitação
-        // usa só valor_total), mas a tela mostra a fechada inflada (compras + saldo).
-        const { listarSaldoAnteriorIndevido } = require('./saldoAnterior');
-        for (const s of await listarSaldoAnteriorIndevido(db)) {
+        // Anomalia 8d: fatura FECHADA (fechamento do motor) cujo saldo_anterior não bate
+        // com o principal que as fechadas anteriores ainda deviam quando ela fechou —
+        // nas duas direções. A MAIS: herdou o que já estava pago (fechamento antigo, que
+        // olhava data_pagamento — nula em toda FECHADA). A MENOS: deixou de herdar
+        // principal que seguia devendo (ex.: parcial que só cobriu encargos lido como
+        // principal). Não muda o que é cobrado (a quitação usa só valor_total), mas a tela
+        // mostra a fechada errada (compras + saldo). Antes era SALDO_ANTERIOR_JA_QUITADO
+        // (só A MAIS); o auditAlerts mantém o nome antigo mapeado para os relatórios velhos.
+        const { listarSaldoAnteriorDivergente } = require('./saldoAnterior');
+        for (const s of await listarSaldoAnteriorDivergente(db)) {
+            const motivo = s.direcao === 'A_MAIS'
+                ? `R$ ${s.diferenca.toFixed(2)} já pagos herdados como dívida`
+                : `R$ ${s.diferenca.toFixed(2)} de principal ainda devido que não foi herdado`;
             errors.push({
                 cpf: s.cpf,
                 name: s.fullName,
-                type: 'SALDO_ANTERIOR_JA_QUITADO',
-                details: `Fatura fechada ${toDateOnly(s.dueDate)} herdou saldo anterior de R$ ${s.saldoAnteriorGravado.toFixed(2)}, mas a fatura anterior já tinha só R$ ${s.saldoAnteriorCorreto.toFixed(2)} em aberto quando ela fechou (R$ ${s.diferenca.toFixed(2)} já pagos herdados como dívida). A tela mostra a fechada como R$ ${(s.valorTotal + s.saldoAnteriorGravado).toFixed(2)} em vez de R$ ${(s.valorTotal + s.saldoAnteriorCorreto).toFixed(2)}.`
+                type: 'SALDO_ANTERIOR_DIVERGENTE',
+                details: `Fatura fechada ${toDateOnly(s.dueDate)} herdou saldo anterior de R$ ${s.saldoAnteriorGravado.toFixed(2)}, mas as fechadas anteriores tinham R$ ${s.saldoAnteriorCorreto.toFixed(2)} de principal em aberto quando ela fechou (herdou ${s.direcao === 'A_MAIS' ? 'a mais' : 'a menos'}: ${motivo}). A tela mostra a fechada como R$ ${(s.valorTotal + s.saldoAnteriorGravado).toFixed(2)} em vez de R$ ${(s.valorTotal + s.saldoAnteriorCorreto).toFixed(2)}.`
+            });
+        }
+
+        // Anomalias 8e/8f (regra de 2026-09-23 — só o TOTAL para os encargos; parcial,
+        // mínimo e abaixo do mínimo não). Só detecção: a cura é de quem trata o alerta.
+        // 8e: encargo criado depois de pagamento TOTAL sem fatura vencida em aberto.
+        // 8f: residual de pagamento parcial vencido que parou de gerar encargo.
+        const auditoriaEncargos = require('./auditoriaEncargos');
+        for (const e of await auditoriaEncargos.listarEncargosAposQuitacaoTotal(db)) {
+            errors.push({
+                cpf: e.cpf,
+                name: e.fullName,
+                type: 'ENCARGO_APOS_QUITACAO_TOTAL',
+                details: `${e.quantidade} encargo(s) em ${e.faturas.length} fatura(s) (R$ ${e.valor.toFixed(2)}, ${e.pendentes} ainda pending = R$ ${e.valorPendente.toFixed(2)}) criado(s) entre ${toDateOnly(e.primeiroEncargoEm)} e ${toDateOnly(e.ultimoEncargoEm)}, depois do pagamento TOTAL de ${toDateOnly(e.quitacaoTotalEm)}, sem fatura vencida em aberto. O TOTAL encerra o débito — encargo não pode continuar contando.`
+            });
+        }
+        for (const r of await auditoriaEncargos.listarResidualParcialSemEncargo(db)) {
+            errors.push({
+                cpf: r.cpf,
+                name: r.fullName,
+                type: 'RESIDUAL_PARCIAL_SEM_ENCARGO',
+                details: `Residual vencido de R$ ${r.residual.toFixed(2)} depois do pagamento parcial de ${toDateOnly(r.ultimoPagamentoParcialEm)}, mas o último encargo é de ${r.ultimoEncargoEm ? toDateOnly(r.ultimoEncargoEm) : 'nunca'} (motor rodou em ${toDateOnly(r.motorRodouEm)}). Parcial/mínimo não para os encargos — só o pagamento TOTAL.`
             });
         }
 

@@ -105,6 +105,8 @@ async function main() {
     // invoice_dias_atraso, pago/vínculo e real-time — o auditor e o sync
     // selecionam as MESMAS âncoras por construção, sem replace de string.
     const sql = ANCHOR_SQL(fq, FILTER_CPF ? `AND i.cpf = ${esc(FILTER_CPF)}` : '');
+    // ANCHOR_SQL lê billing_charges.payment_id (principal pago, encargos primeiro).
+    await require('../services/encargosPagamento').garantirColunasQuitacao(db);
     const rows = await db.executeQuery(sql);
 
     // ── 3. Processar resultados ────────────────────────────────────────────────

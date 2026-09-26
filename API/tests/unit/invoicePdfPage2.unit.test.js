@@ -51,6 +51,26 @@ describe('Página 2 — Pagamentos na fatura ABERTA (plano 1.2)', () => {
         expect(buf.slice(-32).toString('latin1')).toContain('%%EOF');
     });
 
+    test('resumo mostra o pagamento cheio com a divisão encargos + principal (encargos primeiro)', async () => {
+        // O pagamento quita encargos antes do principal: 1.040 = 40 de encargos + 1.000 de
+        // principal. O valor exibido é o cheio; a divisão no rótulo explica por que o saldo
+        // financiado desconta só os 1.000.
+        const PDFDocument = require('pdfkit');
+        const spy = jest.spyOn(PDFDocument.prototype, 'text');
+        try {
+            await generateUniversalInvoicePDF({
+                ...baseData,
+                resumo: { anterior: 1000, pagamento: 1040, pagamentoEncargos: 40, pagamentoPrincipal: 1000, saldoFinanciado: 0, lancamentos: 100, total: 100 },
+                movimentacoes: [],
+            });
+            const textos = spy.mock.calls.map(c => String(c[0]));
+            expect(textos.some(t => /Pagamento efetuado \(R\$ 40,00 encargos \+ R\$ 1\.000,00 principal\)/.test(t))).toBe(true);
+            expect(textos).toContain('R$ -1.040,00');
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
     test('aceita fatura fechada SEM pagamentos (imutável)', async () => {
         const buf = await generateUniversalInvoicePDF({
             ...baseData,

@@ -78,7 +78,8 @@ const { findByCpf, deposit, setBlocked, updatePixLimit, setPasswordResetRequeste
 const limitRequestsRepo = require('./repositories/limitRequestsRepo');
 const { computeCurrentCycle, calcCharges, computeInstallmentPlan, buildInstallmentOptions, computeNextInvoiceDueDate, computeCutoffDate, INVOICE_CUTOFF_DAYS } = require('./utils/billing');
 const cardEngine = require('./utils/cardEngine');
-const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates, classifyDoubleCount, paidPrincipalSql } = require('./utils/invoiceMath');
+const { round2, computeInvoiceGross, computeInvoicePaidInfo, buildClosedInvoiceSummary, planDistribution, calcMulta, calcJurosMora, calcJurosRemuneratorios, calcIofAdicional, calcIofDiario, calcIof, calcAllCharges, calcEffectiveRates, classifyDoubleCount, TOLERANCIA_QUITACAO } = require('./utils/invoiceMath');
+const encargosPagamento = require('./services/encargosPagamento');
 
 // art. 52 CDC — payload único de encargos de juros exposto nas rotas de compra
 // (shop/checkout e acquirer-simulate) e nas transações enriquecidas do cartão.
@@ -557,23 +558,40 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // Sem isto, fatura paga continuava aparecendo como devida na tela.
         const _paidByInvoice = new Map();
         const _paidAtByInvoice = new Map();
+        const _encargosPagosByInvoice = new Map();
         // Hoisted fora do try: a CASCATA abaixo usa o total por CPF (_payTotalCpf)
         // mesmo quando a query falha (aí fica vazio e cai no híbrido legado).
         let _payRows = [];
         try {
+            // PRINCIPAL pago por fatura (|amount| − encargos que cada pagamento quitou):
+            // o pagamento abate ENCARGOS PRIMEIRO (invoiceController.pay). Com o |amount|
+            // cheio, o encargo pago contaria duas vezes — some do pending E abate o
+            // principal —, e um pagamento maior que o principal virava "saldo credor"
+            // mesmo com encargos devidos. Pagamento antigo (sem charge com payment_id)
+            // sai com o valor cheio, como antes.
+            await encargosPagamento.garantirColunasQuitacao(dbService);
             _payRows = await dbService.executeQuery(`
-                SELECT invoice_id,
-                       SUM(${paidPrincipalSql()}) AS pago,
-                       MAX(date) AS ultimo_pagamento
-                FROM ${dbService.fq('transactions')}
-                WHERE cpf = '${cpf}' AND type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
-                GROUP BY invoice_id
+                SELECT pp.invoice_id,
+                       SUM(pp.principal) AS pago,
+                       SUM(pp.valor) AS pago_bruto,
+                       MAX(pp.date) AS ultimo_pagamento
+                FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService, esc(cpf))}) pp
+                GROUP BY pp.invoice_id
             `);
             for (const r of _payRows) {
                 _paidByInvoice.set(r.invoice_id, parseFloat(r.pago || 0));
                 _paidAtByInvoice.set(r.invoice_id, r.ultimo_pagamento);
+                // Encargos quitados pelos pagamentos vinculados a esta fatura (pago de
+                // fato − principal). Só para EXIBIR o pagamento cheio; a quitação usa o principal.
+                _encargosPagosByInvoice.set(r.invoice_id, Math.max(0, parseFloat(r.pago_bruto || 0) - parseFloat(r.pago || 0)));
             }
-        } catch (_e) { /* sem vinculo: cai no valor_pago legado abaixo */ }
+        } catch (_e) {
+            // Sem a query o pago cai no valor_pago legado (fatura aparece devida). Ela agora
+            // também depende de billing_charges.payment_id — a falha tem de aparecer no log.
+            console.warn(`[enrich ${cpf}] Falha ao ler pagamentos vinculados (principal por pagamento):`, _e.message);
+        }
+        // Encargos quitados pelos pagamentos das fechadas em escopo (ver _closedInvoiceValorPagoBruto).
+        const _encargosPagosDe = (invs) => round2(invs.reduce((s, inv) => s + (_encargosPagosByInvoice.get(inv.id) || 0), 0));
 
         // Pago efetivo de uma fatura: vinculo tem precedencia, valor_pago legado e fallback
         // (faturas anteriores a 005 nao tem transacao vinculada).
@@ -702,6 +720,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                 // maior do que foi realmente pago. O principal é o valor_total da invoice.
                 normalized.creditCard._closedInvoiceValorTotal = Math.round(unpaidClosed.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0) * 100) / 100;
                 normalized.creditCard._closedInvoiceValorPago = Math.round(unpaidClosed.reduce((sum, inv) => sum + _pagoEfetivo(inv), 0) * 100) / 100;
+                normalized.creditCard._closedInvoiceEncargosPagos = _encargosPagosDe(unpaidClosed);
                 normalized.creditCard._closedInvoiceCount = unpaidClosed.length;
                 // Escopo da fechada: o frontend filtra paymentHistory por estes ids em
                 // vez de ler PAYMENT de closedTransactions (que nao tem mais PAYMENT).
@@ -742,6 +761,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
                     normalized.creditCard.closedInvoiceCutoffDate = computeCutoffDate(_maisRecente.due_date);
                     normalized.creditCard._closedInvoiceValorTotal = Math.round(_totalVal * 100) / 100;
                     normalized.creditCard._closedInvoiceValorPago = Math.round(_totalPago * 100) / 100;
+                    normalized.creditCard._closedInvoiceEncargosPagos = _encargosPagosDe(_quitadasPorVinculo);
                     normalized.creditCard._closedInvoiceDataPagamento = _ultimoPagamento;
                     normalized.creditCard._closedInvoiceCount = _quitadasPorVinculo.length;
                     normalized.creditCard._closedInvoiceIds = _quitadasPorVinculo.map(i => String(i.id));
@@ -1117,35 +1137,92 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         : Math.max(0, rawInvoiceTotal);
     normalized.creditCard.closedInvoiceAmount = normalized.creditCard.closedInvoice;
 
+    let creditoExcedente = 0;
     // —— Pagamentos do ciclo (exibição) e antecipações da fatura aberta (§25) ——
     let paymentsTotal = 0;
+    let paymentsPrincipal = 0;
+    let chargesTotal = 0;
+    let principalTotal = 0;
     let antecipacoesAberta = 0;
     try {
-        const paymentsCycle = await dbService.executeQuery(`
-            SELECT COALESCE(SUM(ABS(amount)), 0) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE cpf = '${cpf}'
-              AND type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
-              AND date > '${new Date(_prevCloseMs).toISOString()}'
-              AND date <= '${new Date(maxDueTime).toISOString()}'
+        // 1. Buscar faturas fechadas não pagas ou pagas no ciclo aberto atual
+        const closedInvoicesCycle = await dbService.executeQuery(`
+            SELECT valor_total FROM ${dbService.fq('invoices')}
+            WHERE cpf = '${cpf}' AND status = 'FECHADA'
+              AND (data_pagamento IS NULL OR data_pagamento > '${new Date(_prevCloseMs).toISOString()}')
         `);
-        paymentsTotal = parseFloat(paymentsCycle[0]?.total || 0);
+        principalTotal = closedInvoicesCycle.reduce((sum, inv) => sum + parseFloat(inv.valor_total || 0), 0);
 
-        // Antecipação = pagamento da regra §25 (applied_to_charges NOT NULL) ainda sem
-        // vínculo: pertence ao ciclo que ainda não fechou (o invoiceEngine vincula no
-        // fechamento). Órfão legado (NULL) fica de fora — o fluxo antigo já o consumiu.
+        // 2. Buscar encargos pendentes ou pagos no ciclo aberto atual
+        const chargesCycle = await dbService.executeQuery(`
+            SELECT amount FROM ${dbService.fq('billing_charges')}
+            WHERE cpf = '${cpf}'
+              AND (status = 'pending' OR (status = 'paid' AND payment_id IS NULL AND created_at > '${new Date(_prevCloseMs).toISOString()}'))
+        `);
+        chargesTotal = chargesCycle.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
+
+        // 3. Buscar pagamentos realizados no ciclo aberto atual. `encargos` = o que cada
+        // um desses pagamentos quitou de billing_charges (payment_id): o pagamento abate
+        // encargos primeiro, então o PRINCIPAL pago no ciclo é total − encargos.
+        const paymentsCycle = await dbService.executeQuery(`
+            SELECT COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2)))), 0) AS total,
+                   COALESCE(SUM(enc.total), 0) AS encargos
+            FROM ${dbService.fq('transactions')} t
+            LEFT JOIN (
+                SELECT payment_id, SUM(CAST(amount AS DECIMAL(15,2))) AS total
+                FROM ${dbService.fq('billing_charges')}
+                WHERE cpf = ${esc(cpf)} AND status = 'paid' AND payment_id IS NOT NULL
+                GROUP BY payment_id
+            ) enc ON enc.payment_id = t.id
+            WHERE t.cpf = ${esc(cpf)}
+              AND t.type IN ('INVOICE_PAYMENT', 'INVOICE_ANTICIPATION')
+              AND t.date > '${new Date(_prevCloseMs).toISOString()}'
+              AND t.date <= '${new Date(maxDueTime).toISOString()}'
+        `);
+        // paymentsTotal (exposto) continua sendo o valor pago de fato no ciclo.
+        paymentsTotal = parseFloat(paymentsCycle[0]?.total || 0);
+        paymentsPrincipal = round2(Math.max(0, paymentsTotal - parseFloat(paymentsCycle[0]?.encargos || 0)));
+
+        // Antecipação = pagamento da regra §25 (§25, invoice_id NULL) ainda sem vínculo:
+        // pertence ao ciclo que ainda não fechou (o invoiceEngine vincula no fechamento).
+        // Órfão legado (applied_to_charges NULL — o marcador de "pagamento pós-regra-
+        // nova", nunca fonte de valor) fica de fora. Principal pelo mesmo mecanismo de
+        // sqlPrincipalPorPagamento (billing_charges.payment_id), só com invoice_id NULL
+        // no lugar de NOT NULL (sqlPrincipalPorPagamento é exclusivo do vinculado).
         const antRows = await dbService.executeQuery(`
-            SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE cpf = '${cpf}' AND type = 'INVOICE_PAYMENT'
-              AND invoice_id IS NULL AND applied_to_charges IS NOT NULL
+            SELECT COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(enc.total, 0)), 0) AS total
+            FROM ${dbService.fq('transactions')} t
+            LEFT JOIN (
+                SELECT payment_id, SUM(CAST(amount AS DECIMAL(15,2))) AS total
+                FROM ${dbService.fq('billing_charges')}
+                WHERE status = 'paid' AND payment_id IS NOT NULL
+                GROUP BY payment_id
+            ) enc ON enc.payment_id = t.id
+            WHERE t.cpf = ${esc(cpf)} AND t.type = 'INVOICE_PAYMENT'
+              AND t.invoice_id IS NULL AND t.applied_to_charges IS NOT NULL
         `);
         antecipacoesAberta = parseFloat(antRows[0]?.total || 0);
+
+        // Crédito excedente = pagamento VINCULADO que passe de (principal + encargos)
+        // das faturas fechadas. Exclui antecipacoesAberta de paymentsPrincipal: um
+        // pagamento sem vínculo já abate a fatura ABERTA por lá — contar os dois dobraria
+        // o benefício (saldo credor E fatura aberta menor pelo mesmo pagamento).
+        // Subtrai chargesTotal: encargos pendentes/pagos no ciclo têm prioridade sobre
+        // crédito — só o que sobrar DEPOIS de cobrir principal + encargos é excedente.
+        const paymentsPrincipalVinculado = round2(Math.max(0, paymentsPrincipal - antecipacoesAberta));
+        creditoExcedente = Math.max(0, paymentsPrincipalVinculado - principalTotal - chargesTotal);
     } catch (err) {
-        console.warn('Erro ao calcular pagamentos/antecipações do ciclo:', err.message);
+        // Inclui as queries que dependem de billing_charges.payment_id: sem elas o
+        // residual volta a usar só a cascata e o crédito excedente fica 0.
+        console.warn(`[enrich ${cpf}] Erro ao calcular creditoExcedente/antecipações/pagamentos do ciclo:`, err.message);
     }
     normalized.creditCard.paymentsTotal = paymentsTotal;
     normalized.creditCard.antecipacoesFaturaAberta = round2(antecipacoesAberta);
+    // Excedente de pagamento VINCULADO a fatura FECHADA (encargos primeiro). Pode ser
+    // somado com o excedente de antecipação (open-cycle, calculado mais abaixo a partir
+    // de _rawOpen) — são fontes DIFERENTES de sobra: uma paga a fechada a mais, a outra
+    // antecipa a aberta a mais. Nunca uma sobrescreve a outra.
+    normalized.creditCard.creditoExcedente = creditoExcedente;
     // —— closedInvoiceResidual: FONTE ÃšNICA = DB (valor_total - valor_pago) ——
     // NÃO usar paymentsTotal da janela do ciclo atual: pagamentos PARCIAIS feitos em
     // ciclos anteriores (registrados no valor_pago do DB pela rota de pagamento) ficariam
@@ -1160,9 +1237,24 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     // (805/777, 2026-09). Antecipação da regra §25 abate a ABERTA, logo abaixo.
     const _originalPrincipal = parseFloat(normalized.creditCard._closedInvoiceValorTotal || 0);
     const _dbValorPago = parseFloat(normalized.creditCard._closedInvoiceValorPago || 0);
+    // SEM max(db, janela): a "rede de segurança" antiga (usar o maior entre o valor_pago
+    // do DB e o pago na janela do ciclo) inflava o residual pago com 2+ fechadas em
+    // aberto — um pagamento vinculado a uma fatura que a cascata já tinha quitado
+    // entrava de novo aqui e criava saldo credor fantasma nas ANTERIORES (§25). O DB
+    // (_closedInvoiceValorPago, já calculado acima pela cascata por invoice_id) é fonte
+    // única — não a janela do ciclo atual.
     const _residualPrincipal = _originalPrincipal - _dbValorPago;
     // Saldo credor (pagou além do principal, vinculado) = residual NEGATIVO
     normalized.creditCard.closedInvoiceResidual = Math.round(_residualPrincipal * 100) / 100;
+    // Pagamento EXIBIDO (cabeçalho "Pagamentos desta fatura", admin, PDF): o valor pago
+    // de fato = principal (_closedInvoiceValorPago, cascata acima) + encargos que ele
+    // quitou (_closedInvoiceEncargosPagos, idem) — os dois já vieram corretos por
+    // invoice_id; nada de re-derivar pela janela do ciclo aqui (mesma classe de bug do
+    // residual acima). Sem isto, um TOTAL de 1.040 (1.000 + 40 de encargos) aparecia
+    // como 1.000 e um parcial só de encargos como 0.
+    normalized.creditCard._closedInvoiceValorPagoBruto = round2(
+        _dbValorPago + parseFloat(normalized.creditCard._closedInvoiceEncargosPagos || 0)
+    );
 
     // FONTE ÃšNICA DE VERDADE dos encargos/total da fatura fechada.
     // Calculado UMA vez aqui (backend) para que web e admin apenas LEIAM — antes cada
@@ -1181,6 +1273,10 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // calcAllCharges(residual, daysOverdue) porque após pagamento parcial o residual
         // é menor → calcAllCharges dá target < existing → encargos congelam.
         // billing_charges preserva o histórico real independente do residual.
+        // Só 'pending': o que um pagamento já quitou (encargos primeiro, inclusive a
+        // parte paga de uma charge dividida) fica 'paid' e não é herdado de novo. Sem
+        // pagamento TOTAL, o que sobra continua pending e a aberta herda — junto com
+        // o principal residual da cascata acima.
         let _dailyCharges = null;
         try {
             const _chargeRows = await dbService.executeQuery(`
@@ -1280,7 +1376,9 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         normalized.creditCard.currentInvoiceTotal = round2(Math.max(0, _rawOpen));
         // Mínimo consolidado: 10% das compras + 100% do residual + 100% dos encargos − antecipações
         normalized.creditCard.currentInvoiceMinimo = round2(Math.max(0, _openPurchases * 0.10 + _closedPrincipalResidual + _encargosHerdados - _antecipacoes));
-        normalized.creditCard.creditoExcedente = round2(Math.max(0, -_rawOpen));
+        // Soma com o excedente da fatura FECHADA (creditoExcedente, calculado acima) —
+        // são duas fontes independentes de sobra (pagamento vinculado vs. antecipação).
+        normalized.creditCard.creditoExcedente = round2(creditoExcedente + Math.max(0, -_rawOpen));
     }
 
     // Limpar campo interno de cálculo (não expor ao frontend)
@@ -3048,7 +3146,11 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
     const originalClosedAmount = card._closedInvoiceValorTotal ?? card.closedInvoiceAmount ?? card.closedInvoice ?? 0;
     const closedAmount = card.closedInvoice ?? 0;
     const isPaid = card.closedInvoiceIsPaid ?? false;
+    // valorPago = PRINCIPAL abatido (base do saldo financiado); o PDF exibe o pagamento
+    // cheio (bruto) com a divisão encargos + principal (o pagamento quita encargos primeiro).
     const valorPago = card._closedInvoiceValorPago ?? 0;
+    const encargosPagos = card._closedInvoiceEncargosPagos ?? 0;
+    const valorPagoBruto = card._closedInvoiceValorPagoBruto ?? valorPago;
     const closedInvoiceResidual = card.closedInvoiceResidual ?? 0;
 
     const diffTime = Math.abs(new Date().getTime() - new Date(card.closedInvoiceDueDate || card.invoiceDueDate || '2026-07-15').getTime());
@@ -3275,7 +3377,9 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
         resumo: type === 'open'
             ? {
                 anterior: originalClosedAmount,
-                pagamento: valorPago,
+                pagamento: valorPagoBruto,
+                pagamentoEncargos: encargosPagos,
+                pagamentoPrincipal: valorPago,
                 pagamentoData: card.closedInvoicePaidAt || null,
                 saldoFinanciado: Math.max(0, closedInvoiceResidual),
                 lancamentos: openAmount,
@@ -3283,7 +3387,9 @@ apiRouter.post('/admin/telegram/topics/:cpf/send-pdf', bearerAuth(), authenticat
             }
             : {
                 anterior: 0,
-                pagamento: valorPago,
+                pagamento: valorPagoBruto,
+                pagamentoEncargos: encargosPagos,
+                pagamentoPrincipal: valorPago,
                 pagamentoData: card.closedInvoicePaidAt || null,
                 saldoFinanciado: Math.max(0, originalClosedAmount - valorPago),
                 lancamentos: originalClosedAmount,
@@ -4592,6 +4698,8 @@ async function runBillingValidationInner(opts) {
     if (!configRows.length) return { success: false, message: 'Configuração de faturamento não encontrada.' };
     const cfg = configRows[0];
     if (!cfg.is_active) return { success: true, message: 'Ciclo de faturamento inativo. Nenhuma validação executada.' };
+    // payment_id/paid_at de billing_charges são lidos abaixo (encargos quitados primeiro).
+    await encargosPagamento.garantirColunasQuitacao(dbService);
 
     const cycle = computeCurrentCycle(cfg);
     const today = new Date();
@@ -4632,15 +4740,13 @@ async function runBillingValidationInner(opts) {
                COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
         FROM ${dbService.fq('invoices')} i
         LEFT JOIN (
-            SELECT invoice_id, SUM(${paidPrincipalSql()}) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            SELECT invoice_id, SUM(principal) AS total
+            FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
             GROUP BY invoice_id
         ) pagos ON pagos.invoice_id = i.id
         LEFT JOIN (
-            SELECT cpf, SUM(${paidPrincipalSql()}) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+            SELECT cpf, SUM(principal) AS total
+            FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
             GROUP BY cpf
         ) pagos_cpf ON pagos_cpf.cpf = i.cpf
         WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
@@ -4649,7 +4755,10 @@ async function runBillingValidationInner(opts) {
     `);
     // CASCATA (mesma regra do enrich/auditor/sync): o pagamento é UMA transação com o
     // valor total (comprovante); a quitação de cada fatura é derivada distribuindo o
-    // TOTAL de INVOICE_PAYMENT do CPF da mais antiga para a mais nova (planDistribution).
+    // PRINCIPAL pago do CPF (INVOICE_PAYMENT menos os encargos que cada um quitou —
+    // encargos primeiro) da mais antiga para a mais nova (planDistribution). Sem o
+    // desconto, o encargo pago contaria como principal: o residual cairia, os encargos
+    // do dia sairiam menores e um parcial do tamanho do principal pararia a contagem.
     const _cascadeMotor = new Map();
     {
         const _byCpfMotor = new Map();
@@ -4679,7 +4788,7 @@ async function runBillingValidationInner(opts) {
         // O `continue` precisa vir ANTES do has(): sem ele, a fatura quitada (mais antiga,
         // por causa do ORDER BY ASC) ocuparia o slot do CPF e mascararia uma fatura
         // seguinte legitimamente em aberto.
-        if (residual <= 0.005) continue;
+        if (residual <= TOLERANCIA_QUITACAO) continue;
         if (!closedDueByCpf.has(row.cpf)) {
             closedDueByCpf.set(row.cpf, {
                 id: row.id,
@@ -4788,12 +4897,11 @@ async function runBillingValidationInner(opts) {
                 // sem filtro de invoice_reference — qualquer multa/IOF pending do CPF já
                 // inibe nova inserção. Com o filtro por ref instável, cada troca de ref
                 // criava multa duplicada (77,42 em 2026-07 E em 2026-08 na massa 805).
-                const existingCharges = await dbService.executeQuery(`
-                    SELECT charge_type, COALESCE(SUM(amount), 0) AS total
-                    FROM ${dbService.fq('billing_charges')}
-                    WHERE cpf = '${u.cpf}' AND status = 'pending'
-                    GROUP BY charge_type
-                `);
+                // Conta também o que pagamento parcial DESTE débito contínuo já quitou
+                // (encargos primeiro) — desde o último pagamento total, sem depender da
+                // cascata: sem isso, pagar a multa fazia o motor recriá-la amanhã.
+                const _encargosDebito = await encargosPagamento.buscarEncargosDoDebitoAtual(dbService, `'${u.cpf}'`);
+                const existingCharges = _encargosDebito.existingCharges;
                 const getExisting = (type) => {
                     const row = existingCharges.find(e => e.charge_type === type);
                     return row ? parseFloat(row.total) : 0;
@@ -4808,11 +4916,9 @@ async function runBillingValidationInner(opts) {
                 // colidir caso a âncora mude (fatura mais antiga não paga) ou existam
                 // charges legadas de refs antigas no histórico. Multa/IOF adicional
                 // continuam no check global acima (uma única vez por débito).
-                const existingDayRows = await dbService.executeQuery(`
-                    SELECT invoice_reference, charge_type, days_overdue
-                    FROM ${dbService.fq('billing_charges')}
-                    WHERE cpf = '${u.cpf}' AND status = 'pending'
-                `);
+                // Inclui o dia já QUITADO por pagamento parcial deste débito: o incremento
+                // de hoje pago de manhã não pode ser reinserido pelo catch-up da tarde.
+                const existingDayRows = _encargosDebito.linhas;
                 // A chave usa o invoice_reference REAL de cada linha existente (não o
                 // stableRef corrente): linhas legadas de refs antigas (ex.: 2026-09 com
                 // dias 1-27 do período de base errada) NÃO bloqueiam o incremento correto
@@ -5033,7 +5139,7 @@ async function runBillingValidationInner(opts) {
                     : parseFloat(row.valor_pago || 0));
             const residual = Math.max(0, valorTotal - pago);
             const pagMin = pago >= Math.max(valorTotal * 0.10, 10) - 0.01;
-            if (residual <= 0.005 || pagMin) _zeroIds.add(row.id);
+            if (residual <= TOLERANCIA_QUITACAO || pagMin) _zeroIds.add(row.id);
         }
         if (_zeroIds.size) {
             await dbService.executeQuery(`
@@ -5093,6 +5199,10 @@ const syncInvoiceDiasAtraso = async () => {
         // do DB (0 na pós-005) nem do vínculo por invoice_id isolado. Busca as fechadas
         // não pagas com o total por CPF, distribui da mais antiga para a mais nova e
         // zera dias das quitadas/mínimo; as demais seguem real-time.
+        // PRINCIPAL pago (INVOICE_PAYMENT − encargos que cada um quitou), igual ao
+        // motor: com o |amount| cheio, sync e motor discordavam sobre mínimo/quitada
+        // e invoices.dias_atraso ficava alternando entre 0 e o real.
+        await encargosPagamento.garantirColunasQuitacao(dbService);
         const invRowsSync = await dbService.executeQuery(`
             SELECT i.id, i.cpf, i.due_date, i.valor_total,
                    COALESCE(i.valor_pago, 0) AS valor_pago,
@@ -5101,15 +5211,13 @@ const syncInvoiceDiasAtraso = async () => {
                    COALESCE(pagos_cpf.total, 0) AS pago_total_cpf
             FROM ${dbService.fq('invoices')} i
             LEFT JOIN (
-                SELECT invoice_id, SUM(${paidPrincipalSql()}) AS total
-                FROM ${dbService.fq('transactions')}
-                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+                SELECT invoice_id, SUM(principal) AS total
+                FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
                 GROUP BY invoice_id
             ) pagos ON pagos.invoice_id = i.id
             LEFT JOIN (
-                SELECT cpf, SUM(${paidPrincipalSql()}) AS total
-                FROM ${dbService.fq('transactions')}
-                WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL
+                SELECT cpf, SUM(principal) AS total
+                FROM (${encargosPagamento.sqlPrincipalPorPagamento(dbService)}) pp
                 GROUP BY cpf
             ) pagos_cpf ON pagos_cpf.cpf = i.cpf
             WHERE i.status = 'FECHADA' AND i.data_pagamento IS NULL
@@ -5140,7 +5248,7 @@ const syncInvoiceDiasAtraso = async () => {
                     : parseFloat(row.valor_pago || 0));
             const residual = Math.max(0, valorTotal - pago);
             const pagMin = pago >= Math.max(valorTotal * 0.10, 10) - 0.01;
-            if (residual <= 0.005 || pagMin) _zeroIdsSync.add(row.id);
+            if (residual <= TOLERANCIA_QUITACAO || pagMin) _zeroIdsSync.add(row.id);
         }
         if (_zeroIdsSync.size) {
             await dbService.executeQuery(`
@@ -6084,6 +6192,8 @@ async function initializeDatabase() {
                     status VARCHAR(20) NOT NULL DEFAULT 'pending'
                 )
             `);
+            // paid_at/payment_id: quitação rastreável (pagamento abate encargos primeiro).
+            await encargosPagamento.garantirColunasQuitacao(dbService);
             console.log('✅ Tabela billing_charges verificada/criada com sucesso.');
 
             // telegram_user_topics — tópico do fórum Telegram por CPF
@@ -6700,12 +6810,13 @@ apiRouter.get('/admin/audit-orphan-payments', bearerAuth(), authenticateAdmin, a
         const aggSql = `
             SELECT t.cpf
             FROM ${dbService.fq('transactions')} t
+            LEFT JOIN (${encargosPagamento.sqlEncargosQuitadosPorPagamento(dbService)}) enc ON enc.payment_id = t.id
             WHERE t.type = 'INVOICE_PAYMENT'
                 AND (t.status IS NULL OR t.status <> 'cancelled')
                 ${filterCpf ? `AND t.cpf = ${esc(filterCpf)}` : ''}
             GROUP BY t.cpf
             HAVING ABS(
-                COALESCE(SUM(${paidPrincipalSql('t')}), 0) -
+                COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(enc.total, 0)), 0) -
                 COALESCE((
                     SELECT SUM(CAST(i.valor_pago AS DECIMAL(15,2)))
                     FROM ${dbService.fq('invoices')} i
@@ -6953,6 +7064,8 @@ apiRouter.get('/admin/audit-consistency', bearerAuth(), authenticateAdmin, async
 // utils/tblDeMassasExport.cjs, essa auditoria é a rede de segurança pra não voltar.
 async function runCsvConsistencyAuditQuery(cpfFilter, limit) {
     const { buildQuery } = require('./utils/tblDeMassasExport.cjs');
+    // A query do CSV lê billing_charges.payment_id (principal pago, encargos primeiro).
+    await encargosPagamento.garantirColunasQuitacao(dbService);
     const csvRows = await dbService.executeQuery(buildQuery({ cpf: cpfFilter || undefined }));
     const sample = cpfFilter ? csvRows : csvRows.slice(0, limit);
 
@@ -7246,8 +7359,9 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
     // 2. CPFs com órfãos pré-005 (paginado)
     let listSql = `
         SELECT t.cpf, u.full_name, COUNT(*) AS orphan_count,
-               COALESCE(SUM(${paidPrincipalSql('t')}), 0) AS orphan_sum
+               COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(enc.total, 0)), 0) AS orphan_sum
         FROM ${dbService.fq('transactions')} t
+        LEFT JOIN (${encargosPagamento.sqlEncargosQuitadosPorPagamento(dbService)}) enc ON enc.payment_id = t.id
         LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
         WHERE t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
           AND t.invoice_id IS NULL
@@ -7270,13 +7384,22 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
     // aceita condição OR no Postgres): órfãos (invoice_id NULL), vinculados
     // (invoice_id setado) e valor_pago das faturas FECHADA.
     let aggCovered = 0, aggExceeded = 0, aggDeficit = 0;
+    // Vinculados entram pelo PRINCIPAL (|amount| − encargos que quitaram, por
+    // billing_charges.payment_id): o valor_pago legado das fechadas é principal, e o
+    // pagamento abate encargos primeiro — com o |amount| cheio, a multa/juros pagos
+    // viravam cobertura e a massa aparecia como EXCEDENTE.
+    await encargosPagamento.garantirColunasQuitacao(dbService);
     try {
         const aggRows = await dbService.executeQuery(`
             SELECT cpf, SUM(coverage) AS coverage, SUM(valor_pago) AS valor_pago
             FROM (
-                -- Ã“rfãos PRÃ‰-005 (mesma semântica da página): invoice_id NULL + cutoff
-                SELECT t.cpf, ${paidPrincipalSql('t')} AS coverage, 0 AS valor_pago
+                -- Órfãos PRÉ-005 (mesma semântica da página) e antecipações §25 (invoice_id
+                -- NULL) + cutoff. Principal via billing_charges.payment_id (mesmo enc join
+                -- do vinculado abaixo) — cobre também o caso raro de uma antecipação que já
+                -- quitou encargos (payOpenCycle) mas segue sem invoice_id.
+                SELECT t.cpf, ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(enc0.total, 0) AS coverage, 0 AS valor_pago
                 FROM ${dbService.fq('transactions')} t
+                LEFT JOIN (${encargosPagamento.sqlEncargosQuitadosPorPagamento(dbService)}) enc0 ON enc0.payment_id = t.id
                 LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
                 WHERE t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
                   AND t.invoice_id IS NULL
@@ -7285,10 +7408,11 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
                   AND u.cpf IS NOT NULL
                   AND u.role IS DISTINCT FROM 'admin'
                 UNION ALL
-                -- Pagamentos VINCULADOS (invoice_id setado) — completam a cobertura
-                SELECT t.cpf, ${paidPrincipalSql('t')} AS coverage, 0 AS valor_pago
+                -- Pagamentos VINCULADOS (invoice_id setado) — completam a cobertura (principal)
+                SELECT t.cpf, ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(enc.total, 0) AS coverage, 0 AS valor_pago
                 FROM ${dbService.fq('transactions')} t
                 LEFT JOIN ${dbService.fq('users')} u ON u.cpf = t.cpf
+                LEFT JOIN (${encargosPagamento.sqlEncargosQuitadosPorPagamento(dbService)}) enc ON enc.payment_id = t.id
                 WHERE t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
                   AND t.invoice_id IS NOT NULL
                   AND (t.status IS NULL OR t.status <> 'cancelled')
@@ -7356,13 +7480,15 @@ apiRouter.get('/admin/audit/orphans-pre005', bearerAuth(), authenticateAdmin, as
         const valorPagoTotal = round2(invoices.reduce((s, i) => s + i.valorPago, 0));
 
         // 5. Pagamentos Jàvinculados (invoice_id setado) — completam a cobertura
+        // Principal (mesma regra do agregado acima): encargo pago não é cobertura.
         const linkedRes = await dbService.executeQuery(`
-            SELECT COALESCE(SUM(${paidPrincipalSql()}), 0) AS total
-            FROM ${dbService.fq('transactions')}
-            WHERE cpf = ${esc(cpf)}
-              AND type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
-              AND invoice_id IS NOT NULL
-              AND (status IS NULL OR status <> 'cancelled')
+            SELECT COALESCE(SUM(ABS(CAST(t.amount AS DECIMAL(15,2))) - COALESCE(enc.total, 0)), 0) AS total
+            FROM ${dbService.fq('transactions')} t
+            LEFT JOIN (${encargosPagamento.sqlEncargosQuitadosPorPagamento(dbService, esc(cpf))}) enc ON enc.payment_id = t.id
+            WHERE t.cpf = ${esc(cpf)}
+              AND t.type IN ('INVOICE_PAYMENT','INVOICE_ANTICIPATION')
+              AND t.invoice_id IS NOT NULL
+              AND (t.status IS NULL OR t.status <> 'cancelled')
         `);
         const linkedTotal = round2(parseFloat(linkedRes[0]?.total || 0));
 
@@ -7842,8 +7968,8 @@ if (!IS_TEST) {
             require('./services/eventBus').publish('mass.created', {
                 cpf: created.cpf,
                 fullName: created.fullName,
-                // Estado atual = último ciclo (Gerador 4.0); cai no accountStatus do payload em clientes antigos.
-                accountStatus: created.cycles?.[created.cycles.length - 1] || payload.accountStatus,
+                // Estado atual = status do último ciclo (Gerador 4.0; ciclo pode ser objeto com pagamento); cai no accountStatus do payload em clientes antigos.
+                accountStatus: created.accountStatus || payload.accountStatus,
                 cycles: created.cycles,
                 cardBrand: payload.cardBrand,
             }).catch(() => {});

@@ -28,10 +28,15 @@ describe('tblDeMassasExport.buildQuery — contrato de colunas do CSV', () => {
         expect(cols[cols.length - 1]).toBe('tbl_pago_encargos');
     });
 
+    // Reconciliação com a regra encargos-primeiro (2026-09-23): a fonte de "quanto foi
+    // pra encargos" é billing_charges.payment_id (já testada nas Tasks 1-6), não a
+    // coluna applied_to_charges — essa, quando presente, é só o marcador "pagamento
+    // pós-regra-nova" que decide se um órfão pode virar antecipação.
     test('pagos_totais só conta pagamento vinculado e desconta a parte dos encargos (§25)', () => {
         const sql = buildQuery();
-        expect(sql).toMatch(/WHERE type = 'INVOICE_PAYMENT' AND invoice_id IS NOT NULL/);
-        expect(sql).toContain('COALESCE(applied_to_charges, 0)');
-        expect(sql).toMatch(/invoice_id IS NULL AND applied_to_charges IS NOT NULL/);
+        expect(sql).toMatch(/WHERE t\.type = 'INVOICE_PAYMENT' AND t\.invoice_id IS NOT NULL/);
+        expect(sql).toContain('COALESCE(enc.total, 0)');
+        expect(sql).toContain('enc.payment_id = t.id');
+        expect(sql).toMatch(/t\.invoice_id IS NULL AND t\.applied_to_charges IS NOT NULL/);
     });
 });
