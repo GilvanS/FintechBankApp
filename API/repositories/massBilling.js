@@ -5,7 +5,7 @@
 // MESMOS nomes, então nenhum import de teste ou de outro módulo precisou mudar.
 const { esc } = require('./context');
 const { nowDb } = require('../utils/timezone');
-const { garantirColunasQuitacao } = require('../services/encargosPagamento');
+const { garantirColunasQuitacao, DESCRICAO_PAGAMENTO_TOTAL } = require('../services/encargosPagamento');
 const { sqlResidualFechadas } = require('../services/saldoAnterior');
 const { TOLERANCIA_QUITACAO } = require('../utils/invoiceMath');
 const {
@@ -283,7 +283,7 @@ async function seedMassBilling(db, cpf, options = {}) {
             await db.executeQuery(`
                 INSERT INTO ${db.fq('transactions')}
                 (id, cpf, type, amount, description, from_user, to_user, to_key, date)
-                VALUES (${esc(genId())}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${totalGasto.toFixed(2)}, 'Pagamento fatura', NULL, NULL, NULL, ${esc(dueDate.toISOString())})
+                VALUES (${esc(genId())}, ${esc(cpf)}, 'INVOICE_PAYMENT', ${totalGasto.toFixed(2)}, ${esc(DESCRICAO_PAGAMENTO_TOTAL)}, NULL, NULL, NULL, ${esc(dueDate.toISOString())})
             `);
             if (isLast) {
                 await db.executeQuery(`
