@@ -479,7 +479,7 @@ export const purchaseWithDebit = async (cpf: string, items: PurchasedItem[], cas
   }
 };
 
-export const payCreditCardInvoice = async (cpf: string, pin: string, amount?: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; paymentCodes?: PaymentCodesResponse['data'] }> => {
+export const payCreditCardInvoice = async (cpf: string, pin: string, amount?: number): Promise<{ success: boolean; message: string; user?: Omit<User, 'password'>; paymentCodes?: PaymentCodesResponse['data']; idempotent?: boolean; debitado?: boolean; amountPaid?: number; originalPaymentDate?: string }> => {
   try {
     const result = await apiCall<{ success: boolean; message: string; user?: any }>('/cards/invoice/pay', {
       method: 'POST',

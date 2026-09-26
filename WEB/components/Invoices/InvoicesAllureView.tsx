@@ -63,7 +63,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   const isMidnight = theme === 'midnight';
   const prefersReducedMotion = useReducedMotion();
   const { updateUser } = useAuth();
-  const { toast, showError, hide } = useToast();
+  const { toast, showError, showInfo, hide } = useToast();
 
   const [activeSection, setActiveSection] = useState<SubSectionKey>('fatura');
   const [faturaTab, setFaturaTab] = useState<'aberta' | 'fechada' | 'historico'>('aberta');
@@ -241,7 +241,30 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
     setIsPaying(true);
     try {
       const res = await payCreditCardInvoice(user.cpf, pin, pendingPaymentAmount);
-      if (res && res.success) {
+      if (res && res.success && res.idempotent) {
+        // Reenvio ignorado pela guarda de idempotência da API: NENHUM novo débito
+        // aconteceu (amountPaid = 0, a tx original vem em res.paymentId/originalPaymentDate).
+        // Antes caía no fluxo de sucesso normal — modal de "Pagamento realizado" como
+        // se o valor tivesse sido debitado agora (bug CT03.2 2026-09: sucesso falso).
+        // Aviso informativo (não erro): o pagamento original SUCCEEDED, só não houve
+        // novo débito. Modal de PIN fecha; nada de PaymentSuccessModal com o valor.
+        try {
+          const refreshed = await getUserByCpf(user.cpf);
+          if (refreshed.success && refreshed.user) {
+            updateUser(refreshed.user);
+          } else if (res.user) {
+            updateUser(res.user);
+          }
+        } catch {
+          if (res.user) updateUser(res.user);
+        }
+        setIsPasswordModalOpen(false);
+        setPendingPaymentAmount(null);
+        showInfo(
+          `Este pagamento já havia sido processado${res.originalPaymentDate ? ` (${new Date(res.originalPaymentDate).toLocaleString('pt-BR')})` : ''} — nenhum novo valor foi debitado. Confira o extrato para conferir o lançamento.`,
+          { title: 'Pagamento já processado' }
+        );
+      } else if (res && res.success) {
         // Revalida os dados no backend; se falhar, usa o user da resposta do pagamento.
         try {
           const refreshed = await getUserByCpf(user.cpf);
