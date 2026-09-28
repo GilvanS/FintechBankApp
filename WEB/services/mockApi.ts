@@ -2187,10 +2187,13 @@ export const adminGetCpfByCardNumber = async (_cardNumber: string) => demoFail()
 export const adminGetAllRecurringBills = async (_opts: { status?: string; cpf?: string } = {}) => ({ success: true, bills: [] });
 
 export const adminAuditConsistency = async (_options?: { cpf?: string; limit?: number }) => demoFail();
+export const adminAuditCsvConsistency = async (_options?: { cpf?: string; limit?: number }) => demoFail();
 export const adminAuditDoubleCount = async (_options?: { cpf?: string; limit?: number }) => demoFail();
 export const adminAuditOrphansPre005 = async () => demoFail();
 export const adminRunFullAudit = async () => demoFail();
 export const adminHealthCharges = async () => demoFail();
+export const adminFixOrphanInstallments = async (_cpf?: string) => demoFail();
+export const adminFixChargesProactive = async (_cpf?: string) => demoFail();
 export const adminCheckRegularized = async (_since: string) => ({
     success: false, count: 0, totalPaid: 0, items: [], checkedAt: new Date().toISOString(), message: DEMO_UNAVAILABLE,
 });
@@ -2257,6 +2260,7 @@ export const adminAuditFix = async (_cpf?: string, _dryRun?: boolean): Promise<{
 export const adminSyncOverdueDays = async (_cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminInvoicePdfPreview = async (_cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminMassaReport = async (_cpf: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
+export const adminGetPendingCards = async (_cpf?: string): Promise<{ success: boolean; users?: { cpf: string; full_name: string; card_brand: string; card_tier: string }[]; message?: string }> => demoFail();
 export const adminActivatePendingCards = async (_cpf?: string): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminRecalcularLimiteDisponivel = async (_cpf?: string, _dryRun?: boolean): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
 export const adminUtiRecuperacao = async (_cpf?: string, _dryRun?: boolean): Promise<{ success: boolean; data?: any; message?: string }> => demoFail();
