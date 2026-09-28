@@ -21,11 +21,12 @@ function colunasDoSelectFinal(sql) {
 }
 
 describe('tblDeMassasExport.buildQuery — contrato de colunas do CSV', () => {
-    test('colunas existentes mantêm ordem e tbl_pago_encargos é a ÚLTIMA', () => {
+    test('colunas existentes mantêm ordem e colunas novas ficam ao fim', () => {
         const cols = colunasDoSelectFinal(buildQuery());
         expect(cols.slice(0, COLUNAS_EXISTENTES.length)).toEqual(COLUNAS_EXISTENTES);
-        expect(cols).toHaveLength(COLUNAS_EXISTENTES.length + 1);
-        expect(cols[cols.length - 1]).toBe('tbl_pago_encargos');
+        expect(cols).toContain('tbl_pago_encargos');
+        expect(cols).toContain('limite_contrato');
+        expect(cols).toContain('parcelas_a_vencer');
     });
 
     // Reconciliação com a regra encargos-primeiro (2026-09-23): a fonte de "quanto foi

@@ -133,7 +133,9 @@ todas_fechadas AS (
     UNION ALL
     SELECT * FROM tx_fechadas_fallback
 ),
-fechadas AS (
+fechadas_unpaid AS (
+    -- Faturas fechadas NÃO pagas (em atraso/aberto): soma apenas as faturas não quitadas,
+    -- evitando inflar a dívida com faturas antigas que já foram pagas em meses anteriores.
     SELECT
         cpf,
         due_date,
@@ -142,6 +144,24 @@ fechadas AS (
         ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY due_date DESC) as rn,
         SUM(valor_total) OVER (PARTITION BY cpf) as total_fechadas
     FROM todas_fechadas
+    WHERE data_pagamento IS NULL
+),
+fechadas_all_paid AS (
+    -- Quando todas as faturas fechadas já foram pagas, pega a mais recente
+    SELECT
+        cpf,
+        due_date,
+        valor_total,
+        data_pagamento,
+        ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY due_date DESC) as rn,
+        valor_total as total_fechadas
+    FROM todas_fechadas
+    WHERE cpf NOT IN (SELECT cpf FROM fechadas_unpaid)
+),
+fechadas AS (
+    SELECT * FROM fechadas_unpaid
+    UNION ALL
+    SELECT * FROM fechadas_all_paid
 ),
 fechada_calculada AS (
     SELECT
@@ -207,6 +227,32 @@ encargos_herdados AS (
     WHERE status = 'pending'
     GROUP BY cpf
 ),
+-- encargos_por_tipo: mesma fonte de encargos_herdados (billing_charges, status='pending',
+-- acumulado diário — ver comentário em index.cjs ~linha 1179), só que separado por tipo
+-- em vez de somado. Pedido pra rastrear qual componente está acumulando errado em teste.
+encargos_por_tipo AS (
+    SELECT cpf,
+           SUM(amount) FILTER (WHERE charge_type = 'multa')                 AS multa,
+           SUM(amount) FILTER (WHERE charge_type = 'juros_mora')            AS juros_mora,
+           SUM(amount) FILTER (WHERE charge_type = 'juros_remuneratorios')  AS juros_remuneratorios,
+           SUM(amount) FILTER (WHERE charge_type = 'iof')                   AS iof
+    FROM fintech.billing_charges
+    WHERE status = 'pending'
+    GROUP BY cpf
+),
+-- parcelas_a_vencer: soma das parcelas futuras de planos ativos. remaining_installments
+-- JÁ exclui a parcela do ciclo aberto atual (mesma convenção do fluxo real de compra em
+-- shop.routes.js: remaining_installments = qty - 1 no momento da compra, e do fix do
+-- gerador em repositories/usersRepo.js — a parcela "em andamento" no ciclo aberto NUNCA
+-- entra em remaining_installments, só as que ainda vão aparecer em faturas futuras).
+-- Equivalente ao futureInstallments do enrichUserCreditCardData, em total flat em vez
+-- de por mês.
+parcelas_a_vencer AS (
+    SELECT cpf, SUM(installment_amount * remaining_installments) AS total
+    FROM fintech.installment_plans
+    WHERE LOWER(status) = 'active' AND remaining_installments > 0
+    GROUP BY cpf
+),
 cartao_fisico AS (
     SELECT DISTINCT ON (user_cpf) user_cpf, card_number, cvv
     FROM fintech.cards
@@ -261,6 +307,7 @@ todas_massas AS (
         u.credit_card_available_limit                               AS limite_disponivel,
         COALESCE(fc.valor_fechada_exibicao, 0)                      AS fatura_fechada,
         GREATEST(0, COALESCE(cc.total, 0) + COALESCE(fc.residual_total_fechadas, 0) + COALESCE(eh.total, 0) - COALESCE(an.total, 0)) AS fatura_aberta,
+        COALESCE(pav.total, 0)                                      AS parcelas_a_vencer,
         COALESCE(fc.status_fechada, 'ABERTA')                      AS status_fatura_fechada,
         CASE
             WHEN fc.status_fechada = 'PAGO_TOTAL' THEN 0
@@ -313,11 +360,22 @@ todas_massas AS (
         -- tbl_pago_encargos: SEMPRE a última coluna do CSV (a planilha de controle
         -- carrega por posição — coluna nova vai no fim, nunca no meio).
         COALESCE(pe.total, 0)                                        AS tbl_pago_encargos,
+        -- limite_contrato: adicionada no fim de propósito (não desloca nenhuma coluna
+        -- existente) — credit_card_total_limit bruto, sem depender de cálculo nenhum.
+        u.credit_card_total_limit                                    AS limite_contrato,
+        -- encargos pendentes (ainda não pagos), por tipo — mesmo total que compõe
+        -- fatura_aberta, só que quebrado. Zera quando não há fatura fechada vencida.
+        COALESCE(ept.multa, 0)                                       AS encargo_multa,
+        COALESCE(ept.juros_mora, 0)                                  AS encargo_juros_mora,
+        COALESCE(ept.juros_remuneratorios, 0)                        AS encargo_juros_remuneratorios,
+        COALESCE(ept.iof, 0)                                         AS encargo_iof,
         u.cpf                                                       AS _cpf_filtro
     FROM fintech.users u
     LEFT JOIN fechada_calculada fc ON fc.cpf = u.cpf
     LEFT JOIN compras_ciclo     cc ON cc.cpf = u.cpf
     LEFT JOIN encargos_herdados eh ON eh.cpf = u.cpf
+    LEFT JOIN encargos_por_tipo ept ON ept.cpf = u.cpf
+    LEFT JOIN parcelas_a_vencer pav ON pav.cpf = u.cpf
     LEFT JOIN cartao_fisico     cf ON cf.user_cpf = u.cpf
     LEFT JOIN cartao_virtual    cv ON cv.user_cpf = u.cpf
     LEFT JOIN pf_recente        pf ON pf.cpf = u.cpf
@@ -334,7 +392,8 @@ SELECT id_massa, cpf, dia_vencimento, nome_completo, saldo_conta, limite_utiliza
        tbl_pf_valor_parcela, tbl_pf_saldo_financiado, tbl_pf_iof_total, tbl_pf_iof_adicional, tbl_pf_cet_anual, tbl_pf_prazo, tbl_pf_data_contratacao,
        tbl_pa_valor_pagamento, tbl_pa_minimo, tbl_pa_piso, tbl_pa_valor_parcela, tbl_pa_saldo_financiado, tbl_pa_iof_total, tbl_pa_cet_anual, tbl_pa_data_contratacao,
        tbl_reneg, tbl_pf_elegivel, tbl_pf_valor_ativacao_automatica, tbl_cemiterio_teste, tbl_cemiterio_teste_motivo,
-       tbl_pago_encargos
+       tbl_pago_encargos, limite_contrato, parcelas_a_vencer,
+       encargo_multa, encargo_juros_mora, encargo_juros_remuneratorios, encargo_iof
 FROM todas_massas
 ${cpf ? `WHERE _cpf_filtro = ${esc(cpf)}` : ''}
 ORDER BY "data_criação" ASC;

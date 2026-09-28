@@ -37,11 +37,12 @@ Write-Host "==========================================================" -Foregro
 Write-Host "      TOP 15 PROCESSOS INDIVIDUAIS (COM PID PARA FECHAR)   " -ForegroundColor Yellow
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 15 | 
-    Select-Object Id, 
-                  ProcessName, 
-                  @{Name="RAM (MB)"; Expression={[math]::round($_.WorkingSet64 / 1MB, 2)}}, 
-                  @{Name="CPU (s)";  Expression={[math]::round($_.CPU, 2)}} |
+Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 15 |
+    Select-Object Id,
+                  ProcessName,
+                  @{Name="RAM (MB)"; Expression={[math]::round($_.WorkingSet64 / 1MB, 2)}},
+                  @{Name="CPU (s)";  Expression={[math]::round($_.CPU, 2)}},
+                  @{Name="Inicio";   Expression={try { $_.StartTime } catch { "?" }}} |
     Format-Table -AutoSize
 
 Write-Host "COMO FECHAR UM PROCESSO PELO PID (coluna Id):" -ForegroundColor Yellow
@@ -69,5 +70,61 @@ foreach ($porta in $portas.Keys | Sort-Object) {
     } else {
         Write-Host ("{0,-4} (porta {1}) -> nao esta rodando" -f $nome, $porta) -ForegroundColor DarkGray
     }
+}
+Write-Host ""
+
+# 5. Docker Desktop / WSL2 (vmmem) - vilao classico de RAM quando ligado, mas
+# invisivel se voce nao souber o nome do processo pra procurar.
+Write-Host "==========================================================" -ForegroundColor Cyan
+Write-Host "           DOCKER DESKTOP / WSL2 (vmmem)                   " -ForegroundColor Yellow
+Write-Host "==========================================================" -ForegroundColor Cyan
+$vmmem = Get-Process -Name "vmmem","vmmemWSL","com.docker.backend","Docker Desktop" -ErrorAction SilentlyContinue
+if ($vmmem) {
+    $vmmem | Select-Object Id, ProcessName, @{Name="RAM (MB)"; Expression={[math]::round($_.WorkingSet64 / 1MB, 2)}} |
+        Format-Table -AutoSize
+    Write-Host "Docker/WSL2 esta rodando e consumindo RAM acima." -ForegroundColor Red
+} else {
+    Write-Host "Docker Desktop / WSL2 nao esta rodando agora (nenhum vmmem ativo)." -ForegroundColor Green
+}
+Write-Host ""
+
+# 6. node.exe sem porta TCP em LISTEN = candidato a processo orfao (dev server
+# de preview/teste que ficou pra tras, ex.: Vite fechado errado). O node real
+# da API/WEB (secao 4 acima) sempre tem uma porta associada - quem nao tem,
+# sobrou de alguma coisa. Exclui quem tem processo filho (supervisor/launcher
+# tipo omniroute: o pai nao tem porta, mas sobe um filho que tem - matar o pai
+# errado derruba os dois).
+#
+# Checa 2x com 5s de intervalo: node.exe de CLI/script passageiro (npx, etc.)
+# aparece e sai sozinho em menos de 1s - um snapshot unico pega ele "no flagra"
+# e sugere matar um processo que ja ia morrer sozinho (caso real 2026-09-27,
+# PIDs 13820/25184/11620 - sumiram sozinhos antes do Stop-Process rodar). So
+# quem sobrevive nas DUAS checagens e orfao de verdade.
+function Get-NodeOrfaosSnapshot {
+    $portasEmUso = (Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue).OwningProcess
+    $pidsComFilho = (Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue).ParentProcessId | Select-Object -Unique
+    Get-Process -Name node -ErrorAction SilentlyContinue | Where-Object { $_.Id -notin $portasEmUso -and $_.Id -notin $pidsComFilho }
+}
+
+Write-Host "==========================================================" -ForegroundColor Cyan
+Write-Host "     NODE.EXE SEM PORTA ATIVA (candidato a orfao)          " -ForegroundColor Yellow
+Write-Host "==========================================================" -ForegroundColor Cyan
+$candidatos1 = Get-NodeOrfaosSnapshot | Select-Object -ExpandProperty Id
+if ($candidatos1) {
+    Write-Host "Confirmando em 5s (ignora CLI passageiro que sai sozinho)..." -ForegroundColor DarkGray
+    Start-Sleep -Seconds 5
+}
+$candidatos2 = Get-NodeOrfaosSnapshot
+$nodeOrfaos = $candidatos2 | Where-Object { $_.Id -in $candidatos1 }
+if ($nodeOrfaos) {
+    $nodeOrfaos | Select-Object Id,
+                                 @{Name="RAM (MB)"; Expression={[math]::round($_.WorkingSet64 / 1MB, 2)}},
+                                 @{Name="Inicio";   Expression={try { $_.StartTime } catch { "?" }}} |
+        Format-Table -AutoSize
+    Write-Host "Esses PIDs nao estao ouvindo nenhuma porta - normalmente sobra de dev server fechado errado." -ForegroundColor Yellow
+    $idsOrfaos = ($nodeOrfaos | Select-Object -ExpandProperty Id) -join ","
+    Write-Host "Fechar todos de uma vez: Stop-Process -Id $idsOrfaos -Force" -ForegroundColor Cyan
+} else {
+    Write-Host "Nenhum node.exe orfao encontrado - todos estao ouvindo alguma porta." -ForegroundColor Green
 }
 Write-Host ""

@@ -98,7 +98,7 @@ describe('dailyAudit service unit tests', () => {
             if (query.includes('LATERAL')) {
                 return []; // Nenhuma invoice com encargo divergente — Anomalia 8b não dispara aqui.
             }
-            if (query.includes('FROM "users"') && query.includes('account_status = \'inadimplente\'')) {
+            if (query.includes('FROM "users"') && !query.includes('installment_plans') && query.includes('account_status = \'inadimplente\'')) {
                 return [{
                     cpf: '12345678901',
                     full_name: 'Usuario Teste',
@@ -121,7 +121,7 @@ describe('dailyAudit service unit tests', () => {
 
     test('deve identificar anomalia 5: transações de cartão órfãs', async () => {
         mockDb.executeQuery.mockImplementation(async (query) => {
-            if (query.includes('FROM "transactions"') && query.includes('INVOICE_INSTALLMENT')) {
+            if (query.includes('FROM "transactions"') && query.includes('INVOICE_INSTALLMENT') && !query.includes('FROM "users"')) {
                 return [{
                     cpf: '12345678901',
                     id: 'tx-orfa',
@@ -138,6 +138,25 @@ describe('dailyAudit service unit tests', () => {
         expect(result.success).toBe(true);
         expect(result.count).toBe(1);
         expect(result.errors[0].type).toBe('TRANSACAO_ORFA');
+    });
+
+    test('deve identificar anomalia 11: massa com parcelamento esgotado ou menor que 6x', async () => {
+        mockDb.executeQuery.mockImplementation(async (query) => {
+            if (query.includes('FROM "users"') && query.includes('installment_plans')) {
+                return [{
+                    cpf: '12345678901',
+                    full_name: 'Usuario Teste',
+                    installments: 2,
+                    remaining_installments: 0
+                }];
+            }
+            return [];
+        });
+
+        const result = await runDailyAudit(mockDb, mockAuditLog);
+        expect(result.success).toBe(true);
+        expect(result.count).toBe(1);
+        expect(result.errors[0].type).toBe('PARCELAMENTO_ESGOTADO_CURADO');
     });
 
     test('deve identificar anomalia 10: ciclo de fatura perdido reconstruído vincula antecipação pendente', async () => {

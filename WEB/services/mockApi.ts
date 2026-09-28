@@ -357,7 +357,7 @@ export const anticipateCreditCardInstallments = async (cpf: string, transactionI
 // FIX: Added implementations and exports for all missing functions to resolve errors.
 // --- Stubs for other functions that might be needed ---
 
-export const parcelCreditCardInvoice = async (cpf: string, details: { installments: number }, _pin?: string): Promise<{ success: boolean; message: string; receipt?: InstallmentReceipt }> => {
+export const parcelCreditCardInvoice = async (cpf: string, details: { installments: number; tipoEntrada?: string; novaEntrada?: number }, _pin?: string): Promise<{ success: boolean; message: string; receipt?: InstallmentReceipt }> => {
     await delay(1500);
     const store = _getStore();
     const userIndex = store.users.findIndex(u => u.cpf === cpf);
@@ -378,15 +378,30 @@ export const parcelCreditCardInvoice = async (cpf: string, details: { installmen
         _addNotification(cpf, 'Seu cartão foi desbloqueado após o parcelamento da fatura.');
     }
 
+    // ENTRADA_DIFERENTE: cobrada no cartão (fatura aberta), abate o principal financiado —
+    // igual comportamento do backend real (não desconta do saldo em conta).
+    const novaEntrada = details.tipoEntrada === 'ENTRADA DIFERENTE DAS DEMAIS PARCELAS' ? Number(details.novaEntrada || 0) : 0;
+    const financedAmount = Math.max(0, amount - novaEntrada);
+
     // Mesmas taxas do backend (tabela Price + IOF), ver API/utils/billing.js
-    const plan = _computeInstallmentPlan(amount, installments);
+    const plan = _computeInstallmentPlan(financedAmount, installments);
     const totalWithInterest = plan.totalAmount;
     const installmentValue = plan.installmentValue;
 
     // Update available limit: restore paid invoice amount, then subtract new total debt
     user.creditCard.availableLimit += user.creditCard.closedInvoice;
     user.creditCard.availableLimit -= totalWithInterest;
-    
+    if (novaEntrada > 0) {
+        user.creditCard.availableLimit -= novaEntrada;
+        user.creditCard.transactions.unshift({
+            id: `ctx-entrada-${Date.now()}`,
+            date: new Date().toISOString(),
+            merchant: 'Entrada - Parcelamento de Fatura',
+            amount: novaEntrada,
+            type: 'SHOP_CREDIT',
+        });
+    }
+
     // Clear closed invoice details
     user.creditCard.closedInvoice = 0;
     user.creditCard.closedTransactions = [];
@@ -1572,14 +1587,183 @@ const _meUser = (): User | null => {
     }
 };
 
-export const getInvoiceInstallmentOptions = async (): Promise<{ success: boolean; amount?: number; options?: InstallmentPlan[]; message?: string }> => {
+// Meus Parcelamentos (demo): deriva de user.creditCard.transactions (INVOICE_INSTALLMENT)
+// já criadas pelo parcelCreditCardInvoice/renegotiateCreditCardDebt — sem tbl_pf/tbl_reneg
+// no demo, então o produto é inferido pelo texto do merchant.
+// Stub — feature admin-only sem equivalente no demo (achado ao verificar Meus
+// Parcelamentos: sem isso o Vite quebra o bundle inteiro, faltava export em mockApi.ts).
+export const adminAuditCsvConsistency = async (_options?: { cpf?: string; limit?: number }): Promise<{ success: boolean; message?: string }> => {
+    await delay(200);
+    return { success: false, message: 'Auditoria CSV não disponível no modo demo.' };
+};
+
+export const getMyInstallments = async (): Promise<{ success: boolean; plan: any | null; message?: string }> => {
+    await delay(200);
+    const user = _meUser();
+    if (!user) return { success: true, plan: null };
+    const txs = (user.creditCard.transactions || []).filter(t => t.type === 'INVOICE_INSTALLMENT');
+    if (!txs.length) return { success: true, plan: null };
+    const now = Date.now();
+    const lancadas = txs.filter(t => new Date(t.date).getTime() <= now).length;
+    const restantes = txs.filter(t => new Date(t.date).getTime() > now);
+    const valorRestante = restantes.reduce((s, t) => s + Math.abs(t.amount), 0);
+    const isReneg = txs.some(t => t.merchant === 'Renegociação de Dívida');
+    return {
+        success: true,
+        plan: {
+            produto: isReneg ? 'Reneg' : 'PF',
+            dataContratacao: txs[0]?.date ?? new Date().toISOString(),
+            valorTotal: txs.reduce((s, t) => s + Math.abs(t.amount), 0),
+            taxaMensal: isReneg ? 0.042 : 0.0795,
+            valorParcela: Math.abs(txs[0]?.amount ?? 0),
+            cetAnual: 0,
+            parcelasLancadas: lancadas,
+            totalParcelas: txs.length,
+            valorRestante: Math.round(valorRestante * 100) / 100,
+            proximaParcela: restantes[0]?.date ?? null,
+        }
+    };
+};
+
+// PA (demo): aproximação simples — elegível só 30-44d de atraso, mesma faixa do backend
+// real (willParcelamentoElegivel). Sem motor de 2 passadas nem taxa própria como o real.
+export const getPaInfo = async (): Promise<{ success: boolean; eligible: boolean; valorFatura?: number; entradaMinima?: number; saldoFinanciado?: number; parcelas?: number; valorParcela?: number; taxaMensal?: number; iofTotal?: number; cetAnual?: number; message?: string }> => {
+    await delay(300);
+    const user = _meUser();
+    const daysOverdue = user?.creditCard?.daysOverdue ?? 0;
+    const valorFatura = Number(user?.creditCard?.closedInvoice || 0);
+    if (!user || daysOverdue < 30 || daysOverdue >= 45 || valorFatura <= 0) {
+        return { success: true, eligible: false };
+    }
+    const minimo = Math.round(valorFatura * 0.10 * 100) / 100;
+    const piso = Math.round(minimo * 0.10 * 100) / 100;
+    const entradaMinima = Math.round((piso + 0.01) * 100) / 100;
+    const principal = Math.max(0, valorFatura - entradaMinima);
+    const plan = _computeInstallmentPlan(principal, 10);
+    return {
+        success: true,
+        eligible: true,
+        valorFatura,
+        entradaMinima,
+        saldoFinanciado: principal + plan.iof, // aproximação: sem 2ª passada de IOF no demo
+        parcelas: 10,
+        valorParcela: plan.installmentValue,
+        taxaMensal: 0.0895,
+        iofTotal: plan.iof,
+        cetAnual: plan.monthlyRate ? plan.monthlyRate * 12 : undefined,
+    };
+};
+
+export const getInvoiceInstallmentOptions = async (entrada?: { tipoEntrada?: string; novaEntrada?: number }): Promise<{ success: boolean; amount?: number; options?: InstallmentPlan[]; message?: string }> => {
     await delay(300);
     const user = _meUser();
     const amount = Number(user?.creditCard?.closedInvoice || 0);
     if (amount <= 0) return { success: false, message: 'Nenhuma fatura fechada para parcelar.' };
+    // Demo: aproximação simples — só abate a entrada do principal financiado
+    // (ENTRADA_DIFERENTE). Sem cálculo de dias/IOF em 2 passadas como o motor real.
+    const novaEntrada = entrada?.tipoEntrada === 'ENTRADA DIFERENTE DAS DEMAIS PARCELAS' ? Number(entrada.novaEntrada || 0) : 0;
+    const principal = Math.max(0, amount - novaEntrada);
     const options: InstallmentPlan[] = [];
-    for (let n = 2; n <= 12; n++) options.push(_computeInstallmentPlan(amount, n));
+    for (let n = 2; n <= 10; n++) options.push(_computeInstallmentPlan(principal, n));
     return { success: true, amount: Math.round(amount * 100) / 100, options };
+};
+
+// Reneg (demo): mesma tela de Entrada + simulação do PF, só troca escopo (soma o limite
+// usado inteiro, não só a fatura fechada) e vai até 36x. Aproximação — sem taxa própria
+// nem motor real de 2 passadas, igual o resto do mock.
+export const getRenegotiationOptions = async (entrada?: { tipoEntrada?: string; novaEntrada?: number }): Promise<{ success: boolean; amount?: number; options?: InstallmentPlan[]; message?: string }> => {
+    await delay(300);
+    const user = _meUser();
+    if (!user) return { success: false, message: 'Usuário não encontrado.' };
+    const amount = Math.max(0, user.creditCard.totalLimit - user.creditCard.availableLimit);
+    if (amount <= 0) return { success: false, message: 'Nenhuma dívida para renegociar.' };
+    const novaEntrada = entrada?.tipoEntrada === 'ENTRADA DIFERENTE DAS DEMAIS PARCELAS' ? Number(entrada.novaEntrada || 0) : 0;
+    const principal = Math.max(0, amount - novaEntrada);
+    const options: InstallmentPlan[] = [];
+    for (let n = 2; n <= 36; n++) options.push(_computeInstallmentPlan(principal, n));
+    return { success: true, amount: Math.round(amount * 100) / 100, options };
+};
+
+export const renegotiateCreditCardDebt = async (cpf: string, details: { installments: number; tipoEntrada?: string; novaEntrada?: number }, _pin?: string): Promise<{ success: boolean; message: string; receipt?: InstallmentReceipt }> => {
+    await delay(1500);
+    const store = _getStore();
+    const userIndex = store.users.findIndex(u => u.cpf === cpf);
+    if (userIndex === -1) return { success: false, message: 'Usuário não encontrado.' };
+
+    const user = store.users[userIndex];
+    const { installments } = details;
+    const amount = Math.max(0, user.creditCard.totalLimit - user.creditCard.availableLimit);
+    if (amount <= 0) return { success: false, message: 'Nenhuma dívida para renegociar.' };
+
+    const wasBlocked = user.creditCard.isBlocked;
+    if (wasBlocked) {
+        user.creditCard.isBlocked = false;
+        _addNotification(cpf, 'Seu cartão foi desbloqueado após a renegociação.');
+    }
+
+    const novaEntrada = details.tipoEntrada === 'ENTRADA DIFERENTE DAS DEMAIS PARCELAS' ? Number(details.novaEntrada || 0) : 0;
+    const financedAmount = Math.max(0, amount - novaEntrada);
+    const plan = _computeInstallmentPlan(financedAmount, installments);
+    const totalWithInterest = plan.totalAmount;
+    const installmentValue = plan.installmentValue;
+
+    user.creditCard.availableLimit = user.creditCard.totalLimit - totalWithInterest;
+    if (novaEntrada > 0) {
+        user.creditCard.availableLimit -= novaEntrada;
+        user.creditCard.transactions.unshift({
+            id: `ctx-entrada-reneg-${Date.now()}`,
+            date: new Date().toISOString(),
+            merchant: 'Entrada - Renegociação',
+            amount: novaEntrada,
+            type: 'SHOP_CREDIT',
+        });
+    }
+    user.creditCard.closedInvoice = 0;
+    user.creditCard.closedTransactions = [];
+    user.creditCard.closedInvoiceDueDate = undefined;
+
+    const parcelDate = new Date();
+    for (let i = 1; i <= installments; i++) {
+        const transactionDate = new Date(parcelDate);
+        transactionDate.setMonth(transactionDate.getMonth() + (i - 1));
+        user.creditCard.transactions.unshift({
+            id: `ctx-reneg-${Date.now()}-${i}`,
+            date: transactionDate.toISOString(),
+            merchant: 'Renegociação de Dívida',
+            amount: installmentValue,
+            type: 'INVOICE_INSTALLMENT',
+            installments: `${i}/${installments}`,
+            totalInstallments: installments,
+            currentInstallment: i
+        });
+    }
+
+    const invoiceDueDate = new Date(user.creditCard.invoiceDueDate);
+    user.creditCard.currentInvoice = user.creditCard.transactions
+        .filter(tx => tx.type !== 'PAYMENT' && new Date(tx.date) <= invoiceDueDate)
+        .reduce((sum, tx) => sum + tx.amount, 0);
+
+    _addNotification(cpf, `Sua dívida de ${amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} foi renegociada em ${installments}x.`);
+
+    store.users[userIndex] = user;
+    _saveStore(store);
+    const firstDue = new Date(parcelDate);
+    firstDue.setMonth(firstDue.getMonth() + 1);
+    return {
+        success: true,
+        message: 'Dívida renegociada com sucesso. Conta regularizada!',
+        receipt: {
+            installments,
+            installmentValue,
+            totalAmount: totalWithInterest,
+            iof: plan.iof,
+            juros: plan.juros,
+            monthlyRate: plan.monthlyRate,
+            amount,
+            firstDueDate: firstDue.toISOString(),
+            transactionId: `mock-reneg-${Date.now()}`,
+        }
+    };
 };
 
 export const getInvoiceHistory = async (): Promise<{ success: boolean; history?: InvoiceHistoryItem[] }> => {
@@ -1994,6 +2178,9 @@ export const adminCloseInvoice = async (_cpf: string) => demoFail();
 export const adminSimulateMass = async (_payload: any) => demoFail();
 export const adminForceRecurringEngine = async (_cpf?: string) => demoFail();
 export const adminFixOrphanPayments = async () => demoFail();
+export const adminFixOrphanInstallments = async (_cpf?: string) => demoFail();
+export const adminFixChargesProactive = async (_cpf?: string) => demoFail();
+export const adminFixInstallmentPlans = async (_cpf?: string) => demoFail();
 export const adminGetTransactionById = async (_id: string) => demoFail();
 export const adminCancelTransaction = async (_cpf: string, _id: string) => demoFail();
 export const adminGetCpfByCardNumber = async (_cardNumber: string) => demoFail();

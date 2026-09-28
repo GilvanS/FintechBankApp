@@ -5,6 +5,7 @@
 // MESMOS nomes, então nenhum import de teste ou de outro módulo precisou mudar.
 const { esc } = require('./context');
 const { nowDb } = require('../utils/timezone');
+const { computeNextInvoiceDueDate } = require('../utils/billing');
 const { garantirColunasQuitacao, DESCRICAO_PAGAMENTO_TOTAL } = require('../services/encargosPagamento');
 const { sqlResidualFechadas } = require('../services/saldoAnterior');
 const { TOLERANCIA_QUITACAO } = require('../utils/invoiceMath');
@@ -146,14 +147,24 @@ async function seedMassBilling(db, cpf, options = {}) {
     let totalInstallments = 0;
     let isInternacional = false; // merchant da compra parcelada da sequência inadimplente ATUAL (Task 3: IOF de câmbio)
     let sequenceStartDueDate = null; // data da 1ª fatura da sequência inadimplente ATUAL — days_overdue final usa esta, não a do último ciclo (decisão de design #5 do spec)
+    let planId = null; // hoisted pra poder lançar/atualizar a parcela do ciclo ABERTO atual depois do loop (bug: Fatura Aberta/"Parcelas a Vencer" não tinha a próxima parcela — installment_plans ficava com remaining_installments/next_due_date parados no valor inicial)
 
     // Compras do ciclo inadimplente: a 1ª da sequência abre UMA compra parcelada
     // (10-12x) + plano; as seguintes lançam só a próxima parcela. O principal da
     // fatura é o valor da parcela (installmentValue).
-    const comprasInadimplente = async (dueDate, isFirstOfSequence) => {
+    const comprasInadimplente = async (dueDate, isFirstOfSequence, cycleIndex) => {
         if (isFirstOfSequence) {
             sequenceStartDueDate = dueDate;
-            totalInstallments = 10 + Math.floor(Math.random() * 3);
+            // Garantir sempre 6x a 12x de parcelamento, com folga para que restem
+            // parcelas a vencer no ciclo aberto e além mesmo com vários ciclos
+            // inadimplentes consecutivos na sequência (senão totalInstallments podia
+            // esgotar antes da sequência acabar, gerando parcela impossível tipo "5/3").
+            const inadimplentesCount = cycleIndex != null
+                ? cycles.slice(cycleIndex).filter(c => statusDoCiclo(c) === 'inadimplente').length
+                : 1;
+            const minInstallments = Math.max(6, inadimplentesCount + 2);
+            const maxInstallments = Math.max(12, minInstallments);
+            totalInstallments = minInstallments + Math.floor(Math.random() * (maxInstallments - minInstallments + 1)); // 6 a 12x
             // Step 1.5: Fuzzing de Valores (+/- 10%)
             const baseVal = Number(overdueAmountBase) || 0;
             const fuzzFactor = 0.9 + (Math.random() * 0.2);
@@ -168,17 +179,23 @@ async function seedMassBilling(db, cpf, options = {}) {
             purchaseDate.setDate(purchaseDate.getDate() - (20 + Math.floor(Math.random() * 5)));
             await insertPurchase(principalTotal, merchant.nome, purchaseDate.toISOString(), 'INVOICE_INSTALLMENT', `1/${totalInstallments}`);
 
-            const planId = genId();
+            planId = genId();
+            const nextDueInitial = shiftMonthsSameDay(dueDate, 1, anchorDay);
             await db.executeQuery(`
                 INSERT INTO ${db.fq('installment_plans')}
-                (id, cpf, description, total_amount, installments, installment_amount, remaining_balance, remaining_installments)
-                VALUES (${esc(planId)}, ${esc(cpf)}, ${esc(merchant.nome)}, ${principalTotal.toFixed(2)}, ${totalInstallments}, ${installmentValue.toFixed(2)}, ${principalTotal.toFixed(2)}, ${totalInstallments})
+                (id, cpf, description, total_amount, installments, installment_amount, remaining_balance, remaining_installments, next_due_date, status)
+                VALUES (${esc(planId)}, ${esc(cpf)}, ${esc(merchant.nome)}, ${principalTotal.toFixed(2)}, ${totalInstallments}, ${installmentValue.toFixed(2)}, ${principalTotal.toFixed(2)}, ${totalInstallments}, ${esc(nextDueInitial.toISOString())}, 'ACTIVE')
             `);
         } else {
             installmentIndex++;
-            const txDate = new Date(dueDate);
-            txDate.setDate(txDate.getDate() - (20 + Math.floor(Math.random() * 5)));
-            await insertPurchase(installmentValue, pickMerchantName(), txDate.toISOString(), 'INVOICE_INSTALLMENT', `${installmentIndex}/${totalInstallments}`);
+            // totalInstallments agora é 6-12x (era 10-12x fixo) — o guard evita lançar
+            // parcela além do plano contratado (ex.: "13/10") se a sequência de ciclos
+            // inadimplentes consecutivos for mais longa que o previsto.
+            if (installmentIndex <= totalInstallments) {
+                const txDate = new Date(dueDate);
+                txDate.setDate(txDate.getDate() - (20 + Math.floor(Math.random() * 5)));
+                await insertPurchase(installmentValue, pickMerchantName(), txDate.toISOString(), 'INVOICE_INSTALLMENT', `${installmentIndex}/${totalInstallments}`);
+            }
         }
         return installmentValue;
     };
@@ -224,7 +241,7 @@ async function seedMassBilling(db, cpf, options = {}) {
 
         if (status === 'inadimplente') {
             const isFirstOfSequence = i === 0 || cycles[i - 1] !== 'inadimplente';
-            await comprasInadimplente(dueDate, isFirstOfSequence);
+            await comprasInadimplente(dueDate, isFirstOfSequence, i);
             if (isFirstOfSequence) saldoAnteriorAcumulado = 0;
 
             const principal = installmentValue;
@@ -295,6 +312,30 @@ async function seedMassBilling(db, cpf, options = {}) {
         }
 
         if (isLast && status === 'adimplente') await comprasCicloAberto();
+
+        if (isLast && status === 'inadimplente' && planId) {
+            // Ciclo ABERTO atual: a próxima parcela da sequência (ex.: 5/12) já está
+            // "correndo" nesse ciclo mesmo ele ainda não ter fechado — sem isso a Fatura
+            // Aberta/"Parcelas a Vencer" não refletia a parcela seguinte e
+            // installment_plans ficava com remaining_installments/next_due_date parados
+            // no valor inicial (bug real: "Parcelas a Vencer" = 0 numa massa recém-criada).
+            installmentIndex++;
+            const openCycleDueDate = computeNextInvoiceDueDate(anchorDay);
+            if (installmentIndex <= totalInstallments) {
+                const openTxDate = new Date(openCycleDueDate);
+                openTxDate.setDate(openTxDate.getDate() - (20 + Math.floor(Math.random() * 5)));
+                if (openTxDate.getTime() > now.getTime()) openTxDate.setTime(now.getTime() - 86400000);
+                await insertPurchase(installmentValue, pickMerchantName(), openTxDate.toISOString(), 'INVOICE_INSTALLMENT', `${installmentIndex}/${totalInstallments}`);
+            }
+            const remaining = Math.max(0, totalInstallments - installmentIndex);
+            const nextDue = remaining > 0 ? shiftMonthsSameDay(openCycleDueDate, 1, anchorDay) : null;
+            const finalStatus = remaining > 0 ? 'ACTIVE' : 'completed';
+            await db.executeQuery(`
+                UPDATE ${db.fq('installment_plans')}
+                SET remaining_installments = ${remaining}, next_due_date = ${nextDue ? esc(nextDue.toISOString()) : 'NULL'}, status = ${esc(finalStatus)}, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${esc(planId)}
+            `);
+        }
     }
 }
 
@@ -323,7 +364,7 @@ async function seedCiclosComPagamento(db, cpf, ctx) {
         let principal;
         let iofFixoExtra = 0;
         if (status === 'inadimplente') {
-            principal = await ctx.comprasInadimplente(dueDate, i === 0 || statusDoCiclo(cycles[i - 1]) !== 'inadimplente');
+            principal = await ctx.comprasInadimplente(dueDate, i === 0 || statusDoCiclo(cycles[i - 1]) !== 'inadimplente', i);
             // IOF de câmbio (6,38% fixo) só quando a compra parcelada da sequência é internacional.
             if (ctx.sequenciaInternacional()) iofFixoExtra = calcIofInternacional(principal);
         } else {

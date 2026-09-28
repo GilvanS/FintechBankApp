@@ -180,7 +180,7 @@ async function createMassUser(payload, { onStep } = {}) {
     const dueDay = payload.dueDay || 10;
     const invoiceDueDate = computeNextInvoiceDueDate(dueDay).toISOString();
 
-    // Gerador 4.0: histórico de 1-6 ciclos de fatura. Sem `cycles` no payload (clientes
+    // Gerador 5.0: histórico de 1-6 ciclos de fatura. Sem `cycles` no payload (clientes
     // antigos), deriva 1 ciclo do accountStatus — comportamento idêntico ao anterior.
     const cycles = normalizeMassCycles(payload.cycles, payload.accountStatus);
     const accountStatus = statusDoCiclo(cycles[cycles.length - 1]);
@@ -197,12 +197,12 @@ async function createMassUser(payload, { onStep } = {}) {
         )
         VALUES (
             ${esc(id)}, ${esc(payload.fullName)}, ${esc(cleanCpf)}, ${esc(email)}, ${esc(hash)},
-            ${esc(10000.00)}, ${esc(payload.pixLimit || 1000)}, 'user', false,
+            ${esc(25000.00)}, ${esc(payload.pixLimit || 1000)}, 'user', false,
             ${esc(payload.birthDate || null)}, ${esc(payload.age || null)}, ${esc(payload.hasTutor || false)},
             ${esc(tutor.fullName || null)}, ${esc(tutor.cpf || null)}, ${esc(tutor.relationship || null)}, ${esc(payload.countryOrigin || 'Brasil')},
             ${esc(addr.cep || null)}, ${esc(addr.street || null)}, ${esc(addr.number || null)}, ${esc(addr.complement || null)}, ${esc(addr.neighborhood || null)}, ${esc(addr.city || null)}, ${esc(addr.state || null)},
             ${esc(payload.cardBrand || 'MASTERCARD')}, ${esc(dueDay)}, ${esc(dueDay)}, ${esc(invoiceDueDate)}, ${esc(payload.daysOverdue || 0)}, ${esc(accountStatus)}, ${esc(overdueStatusFor(accountStatus, payload.daysOverdue))},
-            ${esc(payload.creditLimit || 5000)}, ${esc(payload.creditLimit || 5000)}, ${esc(now)}, ${esc(now)}
+            ${esc(payload.creditLimit || 15000)}, ${esc(payload.creditLimit || 15000)}, ${esc(now)}, ${esc(now)}
         )
     `);
 

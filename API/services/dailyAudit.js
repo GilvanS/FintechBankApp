@@ -163,7 +163,7 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
             WHERE t.type = 'INVOICE_INSTALLMENT'
               AND NOT EXISTS (
                   SELECT 1 FROM ${db.fq('installment_plans')} p
-                  WHERE p.cpf = t.cpf AND p.purchase_tx_id = t.id OR t.description LIKE '%' || p.id || '%'
+                  WHERE p.cpf = t.cpf AND (p.purchase_tx_id = t.id OR t.description LIKE '%' || p.id || '%' OR (p.description IS NOT NULL AND p.description <> '' AND t.description LIKE p.description || '%'))
               )
         `);
 
@@ -373,38 +373,20 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
             }
         }
 
-        // Anomalia 9: fatura ABERTA (credit_card_invoice_due_date) com mês adiantado
-        // incorretamente — bug histórico de computeNextInvoiceDueDate que sempre
-        // pulava pro mês seguinte mesmo antes do corte deste mês (ex.: hoje 18/09,
-        // corte 18/09, due_date mostrando 23/10 em vez de 23/09). Recalcula com a
-        // fórmula corrigida e corrige se divergir.
-        const usersComVencimentoAberto = await db.executeQuery(`
-            SELECT cpf, full_name, credit_card_due_day, credit_card_invoice_due_date
-            FROM ${db.fq('users')}
-            WHERE credit_card_due_day IS NOT NULL AND credit_card_invoice_due_date IS NOT NULL
-        `);
-
-        for (const u of usersComVencimentoAberto) {
-            const dueDay = Number(u.credit_card_due_day);
-            const correctDueDate = computeNextInvoiceDueDate(dueDay, new Date());
-            const currentDueDate = new Date(u.credit_card_invoice_due_date);
-            // Compara só ano/mês/dia — desconsidera hora, que varia por fuso/seed
-            const sameDay = currentDueDate.getFullYear() === correctDueDate.getFullYear()
-                && currentDueDate.getMonth() === correctDueDate.getMonth()
-                && currentDueDate.getDate() === correctDueDate.getDate();
-            if (!sameDay) {
-                await db.executeQuery(`
-                    UPDATE ${db.fq('users')}
-                    SET credit_card_invoice_due_date = '${correctDueDate.toISOString()}', updated_at = CURRENT_TIMESTAMP
-                    WHERE cpf = '${u.cpf}'
-                `);
-                errors.push({
-                    cpf: u.cpf,
-                    name: u.full_name,
-                    type: 'FATURA_ABERTA_MES_DIVERGENTE_CORRIGIDO',
-                    details: `Vencimento da fatura aberta estava ${toDateOnly(u.credit_card_invoice_due_date)}, corrigido para ${toDateOnly(correctDueDate.toISOString())} (dueDay ${dueDay}).`
-                });
-            }
+        // Anomalia 9: faturas em aberto cujo corte já passou (now > due_date - 5d) e ainda não foram fechadas.
+        // O cron principal roda à meia-noite (00:00), mas a auditoria (a cada 2h) autocura acionando o Invoice Engine imediatamente.
+        const { runEngine } = require('./invoiceEngine');
+        const engineResult = await runEngine().catch(err => {
+            console.warn('[Audit] Erro ao executar Invoice Engine durante auditoria:', err.message);
+            return null;
+        });
+        if (engineResult && engineResult.processed > 0) {
+            errors.push({
+                cpf: '00000000000',
+                name: 'Sistema / Invoice Engine',
+                type: 'FATURAS_CORTE_ATINGIDO_FECHADAS',
+                details: `${engineResult.processed} fatura(s) com data de corte ultrapassada foram fechadas e roladas para o próximo ciclo pelo Invoice Engine.`
+            });
         }
 
         // Anomalia 10: ciclos de fatura PERDIDOS — usuário cujo corte já passou há
@@ -545,6 +527,48 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
             }
         }
 
+        // Anomalia 11: Massa inadimplente com parcelamento esgotado (<6x ou remaining=0) ou faturas sem lançamentos.
+        // Autocura acionada na auditoria para corrigir lotes a cada 2h automaticamente.
+        const massasParcelamentoInvalido = await db.executeQuery(`
+            SELECT DISTINCT u.cpf, u.full_name, p.installments, p.remaining_installments
+            FROM ${db.fq('users')} u
+            LEFT JOIN ${db.fq('installment_plans')} p ON p.cpf = u.cpf
+            WHERE u.account_status = 'inadimplente'
+              AND (
+                  (p.id IS NOT NULL AND (p.installments < 6 OR p.remaining_installments = 0))
+                  OR EXISTS (
+                      SELECT 1 FROM ${db.fq('invoices')} i
+                      WHERE i.cpf = u.cpf AND i.valor_total > 0 AND i.status = 'FECHADA'
+                        AND NOT EXISTS (
+                            SELECT 1 FROM ${db.fq('transactions')} t
+                            WHERE t.cpf = u.cpf AND t.type IN ('SHOP_CREDIT', 'CREDIT', 'SUBSCRIPTION', 'INVOICE_INSTALLMENT')
+                              AND t.date <= i.due_date AND t.date > i.due_date - INTERVAL '35 days'
+                        )
+                  )
+              )
+        `);
+        if (massasParcelamentoInvalido.length > 0) {
+            const { curarMassaParcelas } = require('./installmentPlanCura');
+            for (const m of massasParcelamentoInvalido.slice(0, 15)) {
+                try {
+                    await curarMassaParcelas(db, { cpfFilter: m.cpf, dryRun: false });
+                    errors.push({
+                        cpf: m.cpf,
+                        name: m.full_name,
+                        type: 'PARCELAMENTO_ESGOTADO_CURADO',
+                        details: `Massa inadimplente com parcelamento esgotado ou inconsistente (${m.installments || 0}x) foi autocorrigida para regra canônica de 6x-12x com lançamentos e faturas sincronizadas.`
+                    });
+                } catch (curaErr) {
+                    errors.push({
+                        cpf: m.cpf,
+                        name: m.full_name,
+                        type: 'PARCELAMENTO_ESGOTADO_INADIMPLENTE',
+                        details: `Massa inadimplente com parcelamento esgotado (${m.installments || 0}x). Erro na autocura: ${curaErr.message}. Usar botão 'Curar Parcelas Esgotadas' no Admin.`
+                    });
+                }
+            }
+        }
+
         // Registrar no audit_log e mandar para o Telegram
         if (errors.length > 0) {
             console.log(`[Audit] ${errors.length} anomalias encontradas.`);
@@ -601,7 +625,7 @@ async function checkOrphanInstallments(db, cpf = null) {
         WHERE t.type = 'INVOICE_INSTALLMENT'
           AND NOT EXISTS (
               SELECT 1 FROM ${db.fq('installment_plans')} p
-              WHERE p.cpf = t.cpf AND p.purchase_tx_id = t.id OR t.description LIKE '%' || p.id || '%'
+              WHERE p.cpf = t.cpf AND (p.purchase_tx_id = t.id OR t.description LIKE '%' || p.id || '%')
           )
           ${cpfFilter}
     `);

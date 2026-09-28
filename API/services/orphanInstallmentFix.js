@@ -44,7 +44,7 @@ async function runOrphanInstallmentFix(dbService, { cpfFilter = null, dryRun = f
         WHERE t.type = 'INVOICE_INSTALLMENT'
           AND NOT EXISTS (
               SELECT 1 FROM ${dbService.fq('installment_plans')} p
-              WHERE p.cpf = t.cpf AND p.purchase_tx_id = t.id OR t.description LIKE '%' || p.id || '%'
+              WHERE p.cpf = t.cpf AND (p.purchase_tx_id = t.id OR t.description LIKE '%' || p.id || '%' OR (p.description IS NOT NULL AND p.description <> '' AND t.description LIKE p.description || '%'))
           )
     `;
     if (filterCpf) sql += ` AND t.cpf = ${esc(filterCpf)}`;

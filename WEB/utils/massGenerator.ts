@@ -530,8 +530,8 @@ export function generateRandomMassData(selectedCountry?: string, forceAgeConditi
     const last4 = cardGen.raw.slice(-4);
     const cardNumberMasked = brand === 'AMEX' ? `•••• •••••• •${last4}` : `•••• •••• •••• ${last4}`;
 
-    const balance = Math.round((Math.random() * 15000 + 500) * 100) / 100;
-    const limit = Math.round((Math.random() * 20000 + 2000) * 100) / 100;
+    const balance = 25000.00;
+    const limit = 15000.00;
     const dailyPixLimit = Math.round((Math.random() * 5000 + 1000) * 100) / 100;
 
     // Validade randômica (MM/AA, 3–6 anos no futuro)

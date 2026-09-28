@@ -28,7 +28,7 @@ module.exports = function createInvoiceController(deps) {
     } = deps;
 
     const { computeCurrentCycle, buildInstallmentOptions, computeNextInvoiceDueDate } = require('../../utils/billing');
-    const { calcularParcelamentoFatura, TIPOS_ENTRADA } = require('../../services/installmentCalcEngine');
+    const { calcularParcelamentoFatura, calcularParcelamentoAutomatico, checarElegibilidadePA, calcularRenegociacao, RENEG_TAXA_MENSAL, TIPOS_ENTRADA } = require('../../services/installmentCalcEngine');
 
     // Comprovante Telegram: sem essas duas o valor sai '4070.86' e a data '2026-07-15'.
     const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -46,6 +46,21 @@ module.exports = function createInvoiceController(deps) {
     // Pagamento abate ENCARGOS PRIMEIRO e registra quais billing_charges quitou
     // (services/encargosPagamento.js — regra de 2026-09-23).
     const encargosPagamento = require('../../services/encargosPagamento');
+
+    // Entrada (PF): SEM_ENTRADA (default) | ENTRADA_IGUAL (1ª parcela antecipada pro
+    // vencimento atual, sem valor extra) | ENTRADA_DIFERENTE (abate `novaEntrada` do
+    // principal financiado — cobrada à parte, na fatura ABERTA, não do saldo em conta).
+    function parseTipoEntrada(rawTipo, rawNovaEntrada, valorFatura) {
+        const tipoEntrada = rawTipo && Object.values(TIPOS_ENTRADA).includes(rawTipo) ? rawTipo : TIPOS_ENTRADA.SEM_ENTRADA;
+        let novaEntrada = 0;
+        if (tipoEntrada === TIPOS_ENTRADA.ENTRADA_DIFERENTE) {
+            novaEntrada = parseFloat(rawNovaEntrada);
+            if (!Number.isFinite(novaEntrada) || novaEntrada <= 0 || novaEntrada >= valorFatura) {
+                throw new Error('novaEntrada inválida — deve ser maior que 0 e menor que o valor da fatura.');
+            }
+        }
+        return { tipoEntrada, novaEntrada };
+    }
     const { planOpenCyclePayment } = require('../../services/openCyclePayment');
 
     // ── Comprovante de pagamento em PDF (evento de pagamento → tópico da massa) ──
@@ -459,6 +474,58 @@ module.exports = function createInvoiceController(deps) {
         });
     };
     
+    // Meus Parcelamentos (acompanhamento pós-contratação, PF/Reneg/PA): só leitura, sem
+    // schema novo. `parcel()`/`renegotiate()` já apagam as parcelas INVOICE_INSTALLMENT
+    // do produto anterior antes de criar as novas — só existe 1 produto ativo por vez,
+    // então dá pra achar qual é (o mais recente entre tbl_pf/tbl_reneg/tbl_pa) e derivar
+    // progresso contando as transactions por data (passadas = lançadas, futuras = restantes).
+    const myInstallments = async (req, res) => {
+        const { cpf } = req.user;
+        const { esc } = repoContext;
+
+        const safeQuery = async (sql) => {
+            try { return await dbService.executeQuery(sql); } catch (_e) { return []; }
+        };
+        const [pfRows, renegRows, paRows] = await Promise.all([
+            safeQuery(`SELECT *, 'PF' AS produto FROM ${dbService.fq('tbl_pf')} WHERE cpf=${esc(cpf)} ORDER BY data_contratacao DESC LIMIT 1`),
+            safeQuery(`SELECT *, 'Reneg' AS produto FROM ${dbService.fq('tbl_reneg')} WHERE cpf=${esc(cpf)} ORDER BY data_contratacao DESC LIMIT 1`),
+            safeQuery(`SELECT *, 'PA' AS produto FROM ${dbService.fq('tbl_pa')} WHERE cpf=${esc(cpf)} ORDER BY data_contratacao DESC LIMIT 1`),
+        ]);
+
+        const candidates = [pfRows[0], renegRows[0], paRows[0]].filter(Boolean);
+        if (!candidates.length) {
+            return res.json({ success: true, plan: null });
+        }
+        candidates.sort((a, b) => new Date(b.data_contratacao) - new Date(a.data_contratacao));
+        const row = candidates[0];
+
+        const txRows = await dbService.executeQuery(`
+            SELECT date, amount FROM ${dbService.fq('transactions')}
+            WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT'
+            ORDER BY date ASC
+        `);
+        const now = Date.now();
+        const parcelasLancadas = txRows.filter(r => new Date(r.date).getTime() <= now).length;
+        const restantes = txRows.filter(r => new Date(r.date).getTime() > now);
+        const valorRestante = restantes.reduce((s, r) => s + Math.abs(parseFloat(r.amount || 0)), 0);
+
+        res.json({
+            success: true,
+            plan: {
+                produto: row.produto,
+                dataContratacao: row.data_contratacao,
+                valorTotal: parseFloat(row.valor_fatura ?? row.valor_divida ?? 0),
+                taxaMensal: parseFloat(row.taxa_mensal ?? 0),
+                valorParcela: parseFloat(row.valor_parcela ?? 0),
+                cetAnual: parseFloat(row.cet_anual ?? 0),
+                parcelasLancadas,
+                totalParcelas: txRows.length,
+                valorRestante: Math.round(valorRestante * 100) / 100,
+                proximaParcela: restantes.length ? restantes[0].date : null,
+            }
+        });
+    };
+
     const installmentOptions = async (req, res) => {
         const { cpf } = req.user;
         const closedDebt = await getClosedInvoiceDebt(cpf);
@@ -471,16 +538,25 @@ module.exports = function createInvoiceController(deps) {
         const vencimentoProximoCorte = computeNextInvoiceDueDate(diaVencimento, dataLimitePagamento);
         const saldoAbertoAnterior = parseFloat(closedDebt.invoice.saldo_anterior || 0);
 
+        let tipoEntrada, novaEntrada;
+        try {
+            ({ tipoEntrada, novaEntrada } = parseTipoEntrada(req.query.tipoEntrada, req.query.novaEntrada, closedDebt.owed));
+        } catch (entradaErr) {
+            return res.status(400).json({ success: false, message: entradaErr.message });
+        }
+
         // Preview com o mesmo motor (7,95% a.m., datas reais) que /cards/invoice/parcel vai
         // cobrar de fato — antes usava Price simplificado (~15,39% a.m.) e divergia do cobrado.
+        // Máx 10x (regra de produto do PF — Reneg é o produto que vai até 36x).
         const options = [];
-        for (let n = 2; n <= 12; n++) {
+        for (let n = 2; n <= 10; n++) {
             const result = calcularParcelamentoFatura({
                 valorFatura: closedDebt.owed,
                 saldoAbertoAnterior,
                 taxaMensal: 0.0795,
                 prazo: n,
-                tipoEntrada: TIPOS_ENTRADA.SEM_ENTRADA,
+                tipoEntrada,
+                novaEntrada,
                 dataLimitePagamento,
                 vencimentoProximoCorte,
                 diaVencimento,
@@ -496,10 +572,69 @@ module.exports = function createInvoiceController(deps) {
         }
         res.json({ success: true, amount: closedDebt.owed, options });
     };
-    
+
+    // PA (Parcelamento Automático) — card informativo, SEM tela de simulação (plano
+    // pf-pa-reneg-implementation §3): mesmo motor do PF (calcularParcelamentoFatura, via
+    // o wrapper calcularParcelamentoAutomatico), só troca a taxa pra 8,95% e usa
+    // tipoEntrada=ENTRADA_DIFERENTE com novaEntrada = valor mínimo que o cliente pagaria.
+    // Elegível só 30-44d de atraso (willParcelamentoElegivel em billingValidation.js) — fora
+    // dessa faixa o PA não é oferecido, mesmo que a fatura fechada exista.
+    const paInfo = async (req, res) => {
+        const { cpf } = req.user;
+        const user = await usersRepo.findByCpf(cpf);
+        if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+        const daysOverdue = parseInt(user.days_overdue || 0, 10);
+        if (!(daysOverdue >= 30 && daysOverdue < 45)) {
+            return res.json({ success: true, eligible: false });
+        }
+
+        const closedDebt = await getClosedInvoiceDebt(cpf);
+        if (!closedDebt || closedDebt.owed <= 0) {
+            return res.json({ success: true, eligible: false });
+        }
+
+        const { minimo, piso } = checarElegibilidadePA({ valorTotal: closedDebt.owed, valorPago: 0 });
+        if (minimo <= piso) {
+            return res.json({ success: true, eligible: false });
+        }
+
+        // Entrada mínima exibida = logo acima do piso (a elegibilidade real exige > piso,
+        // estrito — ver checarElegibilidadePA). Ilustrativo pro card; o valor real pago pelo
+        // cliente é checado de novo na hora do pagamento (billingValidation.js).
+        const valorPagamento = Math.round((piso + 0.01) * 100) / 100;
+        const diaVencimento = user.credit_card_due_day || 10;
+        const dataLimitePagamento = new Date(closedDebt.invoice.due_date);
+        const vencimentoProximoCorte = computeNextInvoiceDueDate(diaVencimento, dataLimitePagamento);
+        const saldoAbertoAnterior = parseFloat(closedDebt.invoice.saldo_anterior || 0);
+
+        const result = calcularParcelamentoAutomatico({
+            valorFatura: closedDebt.owed,
+            valorPagamento,
+            saldoAbertoAnterior,
+            dataLimitePagamento,
+            vencimentoProximoCorte,
+            diaVencimento,
+        });
+
+        res.json({
+            success: true,
+            eligible: true,
+            valorFatura: closedDebt.owed,
+            entradaMinima: valorPagamento,
+            saldoFinanciado: result.saldoFinanciado,
+            parcelas: 10,
+            valorParcela: result.valorParcela,
+            taxaMensal: 0.0895,
+            iofTotal: result.iofTotal,
+            iofAdicional: result.iofAdicional,
+            cetAnual: result.cetAnual,
+        });
+    };
+
     const parcel = async (req, res) => {
         const { cpf, installments, pin } = req.body || {};
-        if (!cpf || cpf.length !== 11 || !Number.isInteger(installments) || installments < 2 || installments > 12 || !pin || pin.length !== 4) {
+        if (!cpf || cpf.length !== 11 || !Number.isInteger(installments) || installments < 2 || installments > 10 || !pin || pin.length !== 4) {
             return res.status(400).json({ success: false, message: 'Payload invalido.' });
         }
         if (req.user.cpf !== cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
@@ -536,6 +671,13 @@ module.exports = function createInvoiceController(deps) {
             return res.status(400).json({ success: false, message: 'Nenhuma fatura fechada para parcelar.' });
         }
 
+        let tipoEntrada, novaEntrada;
+        try {
+            ({ tipoEntrada, novaEntrada } = parseTipoEntrada(req.body.tipoEntrada, req.body.novaEntrada, principal));
+        } catch (entradaErr) {
+            return res.status(400).json({ success: false, message: entradaErr.message });
+        }
+
         // Motor real de PF (7,95% a.m., datas reais) só quando há fatura fechada de
         // verdade pra ancorar as datas/saldo herdado; o caminho legado (sem registro em
         // invoices) mantém o Price simplificado por não ter essa base.
@@ -545,6 +687,8 @@ module.exports = function createInvoiceController(deps) {
             dataLimitePagamento: cutoff,
             vencimentoProximoCorte: computeNextInvoiceDueDate(diaVencimento, cutoff),
             diaVencimento,
+            tipoEntrada,
+            novaEntrada,
         } : null;
 
         // O saldo antigo é refinanciado no novo plano: remove as parcelas/valor vencido
@@ -577,6 +721,17 @@ module.exports = function createInvoiceController(deps) {
         }
     
         const plan = await cardRepo.createInstallments({ cpf, amount: principal, installments, pf: pfParams });
+
+        // ENTRADA_DIFERENTE: o valor digitado é cobrado no CARTÃO, aparece na fatura
+        // ABERTA (não desconta do saldo em conta) — igual uma compra à vista comum.
+        if (tipoEntrada === TIPOS_ENTRADA.ENTRADA_DIFERENTE && novaEntrada > 0) {
+            const entradaId = dbService.generateUUID();
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('transactions')}
+                (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+                VALUES (${esc(entradaId)}, ${esc(cpf)}, 'SHOP_CREDIT', ${esc((-novaEntrada).toFixed(2))}, ${esc('Entrada - Parcelamento de Fatura')}, NULL, NULL, NULL, ${esc(nowDb())})
+            `);
+        }
 
         // tbl_pf: registro do contrato de Parcelamento de Fatura (histórico/auditoria —
         // hoje nada persiste os valores calculados, só as parcelas soltas em transactions).
@@ -611,7 +766,7 @@ module.exports = function createInvoiceController(deps) {
                     VALUES (
                         ${esc(cpf)}, ${esc(closedDebt ? closedDebt.invoice.id : null)}, ${esc(plan.planId)},
                         ${principal}, ${pfParams.saldoAbertoAnterior}, 0.0795, ${installments},
-                        ${esc(TIPOS_ENTRADA.SEM_ENTRADA)}, 0,
+                        ${esc(tipoEntrada)}, ${novaEntrada},
                         ${plan.installmentValue}, ${plan.saldoFinanciado}, ${plan.iof}, ${plan.iofAdicional}, ${plan.cetAnual}
                     )
                 `);
@@ -656,26 +811,16 @@ module.exports = function createInvoiceController(deps) {
         });
     };
     
-    // Renegociação (velvet-skipping-dream.md): saída pra quem está bloqueado (8-90d) ou
-    // na lista negra (90+). Reaproveita a mesma infra de `parcel` (cardRepo.createInstallments),
-    // mas parcela a dívida TOTAL — fechada + ciclo aberto (consumo de limite) + encargos
-    // pendentes — não só a fatura fechada. Ao contratar, tira o usuário do estado ruim por
-    // completo: zera is_blacklisted, credit_card_is_blocked, days_overdue, account_status.
-    const renegotiate = async (req, res) => {
-        const { cpf, installments, pin } = req.body || {};
-        if (!cpf || cpf.length !== 11 || !Number.isInteger(installments) || installments < 2 || installments > 12 || !pin || pin.length !== 4) {
-            return res.status(400).json({ success: false, message: 'Payload invalido.' });
-        }
-        if (req.user.cpf !== cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
+    const round2 = n => Math.round(n * 100) / 100;
 
-        const user = await usersRepo.findByCpf(cpf);
-        if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
-
+    // Consumo total do limite (fechada não paga + ciclo aberto ainda não faturado, o mesmo
+    // cálculo de invoiceAmount em invoiceStatus) + encargos pendentes à parte. Compartilhado
+    // por `renegotiateOptions` (simular) e `renegotiate` (contratar) — mesma base pros dois.
+    async function getRenegotiationDebt(cpf) {
         const { esc } = repoContext;
-        const round2 = n => Math.round(n * 100) / 100;
+        const user = await usersRepo.findByCpf(cpf);
+        if (!user) return { user: null, totalDebt: 0 };
 
-        // Consumo total do limite = fechada não paga + ciclo aberto ainda não faturado
-        // (o mesmo cálculo de invoiceAmount em invoiceStatus). Encargos pendentes somam à parte.
         const totalLimit = parseFloat(user.credit_card_total_limit || 0);
         const availableLimit = parseFloat(user.credit_card_available_limit || 0);
         const consumedLimit = Math.max(0, round2(totalLimit - availableLimit));
@@ -687,11 +832,90 @@ module.exports = function createInvoiceController(deps) {
         `);
         const pendingChargesTotal = round2(parseFloat(chargesRows[0]?.total || 0));
 
-        const totalDebt = round2(consumedLimit + pendingChargesTotal);
+        return { user, totalDebt: round2(consumedLimit + pendingChargesTotal) };
+    }
+
+    // Simular Reneg (mesma tela de Entrada + grade de parcelas do PF) — máx 36x, taxa
+    // própria (RENEG_TAXA_MENSAL), soma TODA a dívida (fechada + aberta + encargos).
+    const renegotiateOptions = async (req, res) => {
+        const { cpf } = req.user;
+        const { user, totalDebt } = await getRenegotiationDebt(cpf);
+        if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+        if (!user.credit_card_is_blocked && !user.is_blacklisted) {
+            return res.status(400).json({ success: false, message: 'Conta não elegível para renegociação.' });
+        }
         if (totalDebt <= 0) {
             return res.status(400).json({ success: false, message: 'Nenhuma dívida para renegociar.' });
         }
 
+        let tipoEntrada, novaEntrada;
+        try {
+            ({ tipoEntrada, novaEntrada } = parseTipoEntrada(req.query.tipoEntrada, req.query.novaEntrada, totalDebt));
+        } catch (entradaErr) {
+            return res.status(400).json({ success: false, message: entradaErr.message });
+        }
+
+        const diaVencimento = user.credit_card_due_day || 10;
+        const cutoff = new Date();
+        cutoff.setUTCHours(23, 59, 59, 999);
+        const vencimentoProximoCorte = computeNextInvoiceDueDate(diaVencimento, cutoff);
+
+        const options = [];
+        for (let n = 2; n <= 36; n++) {
+            const result = calcularRenegociacao({
+                valorDivida: totalDebt,
+                prazo: n,
+                dataLimitePagamento: cutoff,
+                vencimentoProximoCorte,
+                diaVencimento,
+                tipoEntrada,
+                novaEntrada,
+            });
+            options.push({
+                installments: n,
+                installmentValue: result.valorParcela,
+                totalAmount: result.totalAPagar,
+                iof: result.iofTotal,
+                juros: result.totalJuros,
+                monthlyRate: RENEG_TAXA_MENSAL,
+            });
+        }
+        res.json({ success: true, amount: totalDebt, options });
+    };
+
+    // Renegociação (velvet-skipping-dream.md): saída pra quem está bloqueado (8-90d) ou
+    // na lista negra (90+). Reaproveita a mesma infra de `parcel` (cardRepo.createInstallments),
+    // mas parcela a dívida TOTAL — fechada + ciclo aberto (consumo de limite) + encargos
+    // pendentes — não só a fatura fechada. Ao contratar, tira o usuário do estado ruim por
+    // completo: zera is_blacklisted, credit_card_is_blocked, days_overdue, account_status.
+    const renegotiate = async (req, res) => {
+        const { cpf, installments, pin } = req.body || {};
+        if (!cpf || cpf.length !== 11 || !Number.isInteger(installments) || installments < 2 || installments > 36 || !pin || pin.length !== 4) {
+            return res.status(400).json({ success: false, message: 'Payload invalido.' });
+        }
+        if (req.user.cpf !== cpf) return res.status(403).json({ success: false, message: 'Acesso negado.' });
+
+        const { user, totalDebt } = await getRenegotiationDebt(cpf);
+        if (!user) return res.status(404).json({ success: false, message: 'Usuario nao encontrado' });
+
+        // Elegibilidade (velvet-skipping-dream.md): bloqueado (8-90d) ou lista negra (90+).
+        // `renegociacao_elegiveis` (billingValidation.js, 45-89d) é só flag de campanha/aviso
+        // proativo — não é o gate do endpoint, que é mais amplo (8d+).
+        if (!user.credit_card_is_blocked && !user.is_blacklisted) {
+            return res.status(400).json({ success: false, message: 'Conta não elegível para renegociação.' });
+        }
+        if (totalDebt <= 0) {
+            return res.status(400).json({ success: false, message: 'Nenhuma dívida para renegociar.' });
+        }
+
+        let tipoEntrada, novaEntrada;
+        try {
+            ({ tipoEntrada, novaEntrada } = parseTipoEntrada(req.body.tipoEntrada, req.body.novaEntrada, totalDebt));
+        } catch (entradaErr) {
+            return res.status(400).json({ success: false, message: entradaErr.message });
+        }
+
+        const { esc } = repoContext;
         const nowIso = nowDb();
         const cutoff = new Date();
         cutoff.setUTCHours(23, 59, 59, 999);
@@ -703,13 +927,12 @@ module.exports = function createInvoiceController(deps) {
             DELETE FROM ${dbService.fq('transactions')}
             WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
         `);
-        if (pendingChargesTotal > 0) {
-            await dbService.executeQuery(`
-                UPDATE ${dbService.fq('billing_charges')}
-                SET status = 'paid'
-                WHERE cpf = ${esc(cpf)} AND status = 'pending'
-            `);
-        }
+        // Sempre roda (idempotente) — sem pendências, o UPDATE só afeta 0 linhas.
+        await dbService.executeQuery(`
+            UPDATE ${dbService.fq('billing_charges')}
+            SET status = 'paid'
+            WHERE cpf = ${esc(cpf)} AND status = 'pending'
+        `);
 
         const currentInvDue = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
         const nextInvDue = new Date(currentInvDue);
@@ -717,6 +940,7 @@ module.exports = function createInvoiceController(deps) {
 
         // Limite volta ao total (a dívida inteira, fechada + aberta, foi refinanciada) e o
         // usuário sai do estado ruim por completo — mesmo shape do pagamento total.
+        const totalLimit = parseFloat(user.credit_card_total_limit || 0);
         await dbService.executeQuery(`
             UPDATE ${dbService.fq('users')}
             SET credit_card_available_limit = ${totalLimit.toFixed(2)},
@@ -730,7 +954,67 @@ module.exports = function createInvoiceController(deps) {
             WHERE cpf = ${esc(cpf)}
         `);
 
-        const plan = await cardRepo.createInstallments({ cpf, amount: totalDebt, installments });
+        // Motor real (mesmo da PF, taxa própria 4,20% a.m.) — Reneg é consolidação única,
+        // sem saldo anterior herdado (totalDebt já soma tudo: fechada + aberta + encargos).
+        const diaVencimento = user.credit_card_due_day || 10;
+        const renegParams = {
+            saldoAbertoAnterior: 0,
+            dataLimitePagamento: cutoff,
+            vencimentoProximoCorte: computeNextInvoiceDueDate(diaVencimento, cutoff),
+            diaVencimento,
+            taxaMensal: RENEG_TAXA_MENSAL,
+            tipoEntrada,
+            novaEntrada,
+        };
+        const plan = await cardRepo.createInstallments({ cpf, amount: totalDebt, installments, pf: renegParams });
+
+        // ENTRADA_DIFERENTE: cobrada no cartão (fatura ABERTA), mesmo padrão do PF em `parcel`.
+        if (tipoEntrada === TIPOS_ENTRADA.ENTRADA_DIFERENTE && novaEntrada > 0) {
+            const entradaId = dbService.generateUUID();
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('transactions')}
+                (id, cpf, type, amount, description, from_user, to_user, to_key, date)
+                VALUES (${esc(entradaId)}, ${esc(cpf)}, 'SHOP_CREDIT', ${esc((-novaEntrada).toFixed(2))}, ${esc('Entrada - Renegociação')}, NULL, NULL, NULL, ${esc(nowDb())})
+            `);
+        }
+
+        // tbl_reneg: registro do contrato de Renegociação (histórico/auditoria) — mesmo
+        // padrão de tbl_pf em `parcel`.
+        try {
+            await dbService.executeQuery(`
+                CREATE TABLE IF NOT EXISTS ${dbService.fq('tbl_reneg')} (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    cpf VARCHAR(11) NOT NULL,
+                    plan_id VARCHAR(255),
+                    valor_divida NUMERIC(12,2) NOT NULL,
+                    taxa_mensal NUMERIC(6,4) NOT NULL,
+                    prazo INTEGER NOT NULL,
+                    tipo_entrada VARCHAR(50) NOT NULL DEFAULT 'SEM ENTRADA',
+                    nova_entrada NUMERIC(12,2) NOT NULL DEFAULT 0,
+                    valor_parcela NUMERIC(12,2) NOT NULL,
+                    saldo_financiado NUMERIC(12,2) NOT NULL,
+                    iof_total NUMERIC(12,2) NOT NULL,
+                    iof_adicional NUMERIC(12,2) NOT NULL,
+                    cet_anual NUMERIC(10,6) NOT NULL,
+                    data_contratacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            // Retrofit idempotente — tabela pode já existir de uma execução anterior sem essas colunas.
+            await dbService.executeQuery(`ALTER TABLE ${dbService.fq('tbl_reneg')} ADD COLUMN IF NOT EXISTS tipo_entrada VARCHAR(50) NOT NULL DEFAULT 'SEM ENTRADA'`);
+            await dbService.executeQuery(`ALTER TABLE ${dbService.fq('tbl_reneg')} ADD COLUMN IF NOT EXISTS nova_entrada NUMERIC(12,2) NOT NULL DEFAULT 0`);
+            await dbService.executeQuery(`
+                INSERT INTO ${dbService.fq('tbl_reneg')}
+                    (cpf, plan_id, valor_divida, taxa_mensal, prazo, tipo_entrada, nova_entrada,
+                     valor_parcela, saldo_financiado, iof_total, iof_adicional, cet_anual)
+                VALUES (
+                    ${esc(cpf)}, ${esc(plan.planId)}, ${totalDebt}, ${RENEG_TAXA_MENSAL}, ${installments},
+                    ${esc(tipoEntrada)}, ${novaEntrada},
+                    ${plan.installmentValue}, ${plan.saldoFinanciado}, ${plan.iof}, ${plan.iofAdicional}, ${plan.cetAnual}
+                )
+            `);
+        } catch (tblRenegErr) {
+            console.warn(`[Renegotiate] Falha ao registrar ${cpf} em tbl_reneg:`, tblRenegErr.message);
+        }
 
         await notificationsRepo.addNotification({
             cpf,
@@ -1001,6 +1285,138 @@ module.exports = function createInvoiceController(deps) {
         };
 
         if (!plano.principalQuitado) {
+            // PA (Parcelamento Automático) — TRIGGER automático: se o PRINCIPAL abatido
+            // (principalAplicado — já líquido de encargos, ver encargosPagamento.js) cai
+            // na faixa elegível (piso < principalAplicado < mínimo, checarElegibilidadePA),
+            // a conta está na janela 30-44d de atraso (willParcelamentoElegivel em
+            // billingValidation.js) e foi pago até o vencimento, SUBSTITUI o fluxo PARCIAL
+            // padrão: para de acumular encargos sobre o residual e vira parcelamento
+            // estruturado 10x/8,95% — sem contrato, sem tela, o cliente só pagou a entrada.
+            const daysOverdueAtPayment = parseInt(user.days_overdue || 0, 10);
+            const dentroJanelaPA = closedDebt && daysOverdueAtPayment >= 30 && daysOverdueAtPayment < 45
+                && Date.now() <= cutoff.getTime();
+            if (dentroJanelaPA) {
+                const { elegivel } = checarElegibilidadePA({ valorTotal: totalDue, valorPago: principalAplicado });
+                if (elegivel) {
+                    const diaVencimento = user.credit_card_due_day || 10;
+                    const paParams = {
+                        saldoAbertoAnterior: parseFloat(closedDebt.invoice.saldo_anterior || 0),
+                        dataLimitePagamento: cutoff,
+                        vencimentoProximoCorte: computeNextInvoiceDueDate(diaVencimento, cutoff),
+                        diaVencimento,
+                        taxaMensal: 0.0895,
+                        tipoEntrada: TIPOS_ENTRADA.ENTRADA_DIFERENTE,
+                        novaEntrada: principalAplicado,
+                    };
+
+                    // Cliente pagou payAmount em dinheiro: a parte que os encargos primeiro
+                    // já reservaram é quitada igual ao fluxo padrão (persistPaymentDistribution
+                    // + quitarEncargos, usando o mesmo `plano` calculado acima); só o
+                    // PRINCIPAL abatido (principalAplicado) vira entrada do PA. O restante
+                    // do principal (totalDue líquido da entrada) vira parcelamento — mesmo
+                    // padrão de parcel()/renegotiate(): refinancia a dívida inteira, restaura
+                    // o limite total e limpa parcelas legadas do ciclo.
+                    const nowIsoPA = nowDb();
+                    const { payId: payIdPA } = await persistPaymentDistribution({
+                        cpf,
+                        invoices: closedDebt?.invoices || [],
+                        payAmount,
+                        dateIso: nowIsoPA,
+                        description: 'Parcelamento Automático ativado',
+                        appliedToCharges: plano.encargosQuitados
+                    });
+                    await quitarEncargos(payIdPA, nowIsoPA);
+                    await dbService.executeQuery(`
+                        DELETE FROM ${dbService.fq('transactions')}
+                        WHERE cpf=${esc(cpf)} AND type='INVOICE_INSTALLMENT' AND date <= ${esc(cutoffIso)}
+                    `);
+                    await usersRepo.updateBalance(cpf, (balance - payAmount).toFixed(2));
+                    const restoredLimitPA = Math.min(totalLimit, availableLimit + totalDue);
+                    const currentInvDuePA = user.credit_card_invoice_due_date ? new Date(user.credit_card_invoice_due_date) : new Date();
+                    const nextInvDuePA = new Date(currentInvDuePA);
+                    nextInvDuePA.setMonth(currentInvDuePA.getMonth() + 1);
+                    await dbService.executeQuery(`
+                        UPDATE ${dbService.fq('users')}
+                        SET credit_card_available_limit = ${restoredLimitPA.toFixed(2)},
+                            credit_card_is_blocked = false,
+                            credit_card_invoice_due_date = '${nextInvDuePA.toISOString()}'
+                        WHERE cpf = ${esc(cpf)}
+                    `);
+                    await refreshAccountStatus(cpf);
+
+                    const plan = await cardRepo.createInstallments({ cpf, amount: totalDue, installments: 10, pf: paParams });
+
+                    try {
+                        await dbService.executeQuery(`
+                            CREATE TABLE IF NOT EXISTS ${dbService.fq('tbl_pa')} (
+                                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                                cpf VARCHAR(11) NOT NULL,
+                                invoice_id VARCHAR(255),
+                                valor_fatura NUMERIC(12,2) NOT NULL,
+                                valor_pagamento NUMERIC(12,2) NOT NULL,
+                                saldo_aberto_anterior NUMERIC(12,2) NOT NULL DEFAULT 0,
+                                minimo NUMERIC(12,2) NOT NULL,
+                                piso NUMERIC(12,2) NOT NULL,
+                                valor_parcela NUMERIC(12,2) NOT NULL,
+                                saldo_financiado NUMERIC(12,2) NOT NULL,
+                                iof_total NUMERIC(12,2) NOT NULL,
+                                cet_anual NUMERIC(10,6) NOT NULL,
+                                data_contratacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                            )
+                        `);
+                        await dbService.executeQuery(`DELETE FROM ${dbService.fq('tbl_pa')} WHERE cpf = ${esc(cpf)}`);
+                        await dbService.executeQuery(`
+                            INSERT INTO ${dbService.fq('tbl_pa')}
+                                (cpf, invoice_id, valor_fatura, valor_pagamento, saldo_aberto_anterior, minimo, piso,
+                                 valor_parcela, saldo_financiado, iof_total, cet_anual)
+                            VALUES (
+                                ${esc(cpf)}, ${esc(closedDebt.invoice.id)}, ${totalDue}, ${principalAplicado}, ${paParams.saldoAbertoAnterior},
+                                ${(totalDue * 0.10).toFixed(2)}, ${(totalDue * 0.01).toFixed(2)},
+                                ${plan.installmentValue}, ${plan.saldoFinanciado}, ${plan.iof}, ${plan.cetAnual}
+                            )
+                        `);
+                    } catch (tblPaErr) {
+                        console.warn(`[PA trigger] Falha ao registrar ${cpf} em tbl_pa:`, tblPaErr.message);
+                    }
+
+                    await notificationsRepo.addNotification({
+                        cpf,
+                        title: 'Parcelamento Automático ativado',
+                        message: [
+                            '💵 <b>PARCELAMENTO AUTOMÁTICO ATIVADO</b>',
+                            '',
+                            `<b>Cliente</b>    ${user.full_name}`,
+                            `<b>CPF</b>        <code>${telegramService.formatCpf(cpf)}</code>`,
+                            '',
+                            `<b>Entrada paga</b> <code>R$ ${brl(payAmount)}</code>`,
+                            `<b>Parcelas</b>   10x de <code>R$ ${brl(plan.installmentValue)}</code>`,
+                            `<b>Total</b>      <code>R$ ${brl(plan.totalAmount)}</code>`,
+                            `<b>1ª parcela</b> ${plan.firstDueDate ? diaBR(plan.firstDueDate) : 'Próxima fatura'}`,
+                            `<b>Ativado em</b> ${dataBR(nowIsoPA)}`,
+                            '',
+                            '<b>Status</b>     ATIVADO AUTOMATICAMENTE ✅'
+                        ].join('\n'),
+                        actionUrl: '/dashboard'
+                    });
+
+                    return res.json({
+                        success: true,
+                        message: 'Pagamento registrado — Parcelamento Automático ativado.',
+                        paActivated: true,
+                        receipt: {
+                            amount: payAmount,
+                            installments: 10,
+                            installmentValue: plan.installmentValue,
+                            totalAmount: plan.totalAmount,
+                            iof: plan.iof,
+                            juros: plan.juros,
+                            firstDueDate: plan.firstDueDate,
+                            transactionId: plan.planId
+                        }
+                    });
+                }
+            }
+
             // Classificação do pagamento (regra de negócio do ciclo de vida da fatura).
             // Com encargos primeiro, o que conta é o PRINCIPAL abatido — o mínimo exibido
             // (10% + 100% dos encargos) deixa exatamente 10% para o principal, o mesmo
@@ -1512,7 +1928,10 @@ module.exports = function createInvoiceController(deps) {
         pix,
         invoiceStatus,
         installmentOptions,
+        paInfo,
+        myInstallments,
         parcel,
+        renegotiateOptions,
         renegotiate,
         pay,
         summary,

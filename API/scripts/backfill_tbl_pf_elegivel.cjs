@@ -17,16 +17,13 @@
  * Rodar (dentro da pasta API):
  *   node scripts/backfill_tbl_pf_elegivel.cjs
  */
-const dotenv = require('dotenv');
 const path = require('path');
-dotenv.config({ path: path.join(__dirname, '../.env') });
 
-const DatabaseFactory = require('../services/database/DatabaseFactory');
-
-async function main() {
-    const db = DatabaseFactory.createDatabaseService();
-    await db.connect();
-
+// Reexportada pelo cron diário (index.cjs, motor 00:00) E pela rota de criação de
+// massa (POST /api/admin/users/mass). LIMITAÇÃO HERDADA: só copia de tbl_pf — CPF sem
+// nenhum Parcelamento de Fatura já contratado não gera linha aqui (tbl_pf só nasce
+// quando alguém realmente usa /cards/invoice/parcel, o gerador de massa não simula isso).
+async function runBackfillPFElegivel(db, { cpf = null } = {}) {
     await db.executeQuery(`
         CREATE TABLE IF NOT EXISTS fintech.tbl_pf_elegivel (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -41,12 +38,16 @@ async function main() {
         )
     `);
 
-    // Limpa pra refletir sempre o estado mais recente de tbl_pf (evita duplicar a cada rodada).
-    await db.executeQuery(`DELETE FROM fintech.tbl_pf_elegivel`);
+    // Limpa pra refletir sempre o estado mais recente de tbl_pf (evita duplicar a cada
+    // rodada) — escopado ao cpf quando chamado por massa; sem filtro (motor da meia-noite)
+    // limpa geral, igual sempre foi.
+    const cpfFiltro = cpf ? `WHERE cpf = '${cpf}'` : '';
+    await db.executeQuery(`DELETE FROM fintech.tbl_pf_elegivel ${cpfFiltro}`);
 
     const rows = await db.executeQuery(`
         SELECT DISTINCT ON (cpf) cpf, invoice_id, valor_fatura, valor_parcela, taxa_mensal
         FROM fintech.tbl_pf
+        ${cpf ? `WHERE cpf = '${cpf}'` : ''}
         ORDER BY cpf, data_contratacao DESC
     `);
 
@@ -63,10 +64,22 @@ async function main() {
     }
 
     console.log(`✅ ${ok} registro(s) gravados em tbl_pf_elegivel.`);
-    process.exit(0);
+    return { ok, total: rows.length };
 }
 
-main().catch((err) => {
-    console.error('❌ Erro no backfill:', err.message);
-    process.exit(1);
-});
+module.exports = { runBackfillPFElegivel };
+
+if (require.main === module) {
+    (async () => {
+        const dotenv = require('dotenv');
+        dotenv.config({ path: path.join(__dirname, '../.env') });
+        const DatabaseFactory = require('../services/database/DatabaseFactory');
+        const db = DatabaseFactory.createDatabaseService();
+        await db.connect();
+        await runBackfillPFElegivel(db);
+        process.exit(0);
+    })().catch((err) => {
+        console.error('❌ Erro no backfill:', err.message);
+        process.exit(1);
+    });
+}

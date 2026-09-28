@@ -7,10 +7,11 @@ const { DESCRICAO_PAGAMENTO_TOTAL } = require('../services/encargosPagamento');
 /**
  * @param {object} params
  * @param {object} [params.pf] - Quando informado, usa o motor real de Parcelamento de
- *   Fatura (7,95% a.m., IOF em 2 passadas, datas reais de vencimento) em vez do Price
+ *   Fatura/Renegociação (IOF em 2 passadas, datas reais de vencimento) em vez do Price
  *   simplificado — { saldoAbertoAnterior, dataLimitePagamento, vencimentoProximoCorte,
- *   diaVencimento }. Sem `pf`, mantém o cálculo antigo (usado hoje por `renegotiate`,
- *   que é outro produto ainda não migrado pro motor fiel à planilha).
+ *   diaVencimento, taxaMensal, tipoEntrada, novaEntrada }. `taxaMensal` default 0,0795 (PF); Reneg passa 0,042
+ *   (`installmentCalcEngine.RENEG_TAXA_MENSAL`). Sem `pf`, mantém o Price simplificado
+ *   (legado — nenhum produto usa mais esse caminho).
  */
 async function createInstallments({ cpf, amount, installments, pf }) {
     const db = getDb();
@@ -21,9 +22,10 @@ async function createInstallments({ cpf, amount, installments, pf }) {
         const result = calcularParcelamentoFatura({
             valorFatura: amount,
             saldoAbertoAnterior: pf.saldoAbertoAnterior || 0,
-            taxaMensal: 0.0795,
+            taxaMensal: pf.taxaMensal || 0.0795,
             prazo: installments,
-            tipoEntrada: TIPOS_ENTRADA.SEM_ENTRADA,
+            tipoEntrada: pf.tipoEntrada || TIPOS_ENTRADA.SEM_ENTRADA,
+            novaEntrada: pf.novaEntrada || 0,
             dataLimitePagamento: pf.dataLimitePagamento,
             vencimentoProximoCorte: pf.vencimentoProximoCorte,
             diaVencimento: pf.diaVencimento,

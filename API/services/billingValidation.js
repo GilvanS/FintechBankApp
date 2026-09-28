@@ -489,10 +489,12 @@ async function runBillingValidationInner(opts) {
                         LIMIT 1
                     `);
                     if (recentNotifs.length === 0) {
+                        const semEncargos = closedInvoiceData.valorTotal - closedInvoiceData._totalFeeAcc - closedInvoiceData._interestAcc;
+                        const pctSemEncargos = semEncargos > 0 ? ((closedInvoiceData.valorPago / semEncargos) * 100).toFixed(1) : ((closedInvoiceData.valorPago / closedInvoiceData.valorTotal) * 100).toFixed(1);
                         await notificationsRepo.addNotification({
                             cpf: u.cpf,
-                            title: 'Pagamento mínimo de fatura ✅',
-                            message: `R$ ${closedInvoiceData.valorPago.toFixed(2)} pagos (mínimo). Multa e juros de mora estacionados! Juros remuneratórios continuam sobre o saldo residual de R$ ${closedInvoiceData.amount.toFixed(2)}.`,
+                            title: 'Pagamento Mínimo Atingido ✅',
+                            message: `R$ ${closedInvoiceData.valorPago.toFixed(2)} pagos (${pctSemEncargos}% do cap. sem encargos). Multa e mora estão CONGELADOS! Juros remuneratórios ainda aplicam sobre o saldo residual de R$ ${closedInvoiceData.amount.toFixed(2)}. Fatura Original: R$ ${closedInvoiceData.valorTotal.toFixed(2)} (Encargos embutidos: R$ ${(closedInvoiceData._totalFeeAcc + closedInvoiceData._interestAcc).toFixed(2)}).`,
                             actionUrl: '/dashboard'
                         });
                         console.log(`[Notif] Pagamento mínimo detectado para ${u.cpf} — notificação enviada.`);
@@ -519,10 +521,13 @@ async function runBillingValidationInner(opts) {
                     `);
                     if (recentAbaixoNotifs.length === 0) {
                         const minimoNeeded = round2(closedInvoiceData.valorTotal * 0.10);
+                        const semEncargos = closedInvoiceData.valorTotal - closedInvoiceData._totalFeeAcc - closedInvoiceData._interestAcc;
+                        const pctSemEncargos = (closedInvoiceData.valorPago / semEncargos) * 100;
+
                         await notificationsRepo.addNotification({
                             cpf: u.cpf,
                             title: '⚠️ Pagamento abaixo do mínimo crítico',
-                            message: `Apenas R$ ${closedInvoiceData.valorPago.toFixed(2)} pagos (${(pctPago * 100).toFixed(0)}% do total). Mínimo necessário: R$ ${minimoNeeded.toFixed(2)}. Saldo residual: R$ ${closedInvoiceData.amount.toFixed(2)}. Encargos totais continuam!`,
+                            message: `Apenas R$ ${closedInvoiceData.valorPago.toFixed(2)} pagos (${pctSemEncargos.toFixed(1)}% do valor sem encargos). Mto baixo! Fatura total: R$ ${closedInvoiceData.valorTotal.toFixed(2)} (Encargos atuais: R$ ${(closedInvoiceData._totalFeeAcc + closedInvoiceData._interestAcc).toFixed(2)}). Mínimo necessário: R$ ${minimoNeeded.toFixed(2)}. Saldo residual: R$ ${closedInvoiceData.amount.toFixed(2)}.`,
                             actionUrl: '/admin/requests'
                         });
                         console.log(`[Notif] ⚠️ ABAIXO crítico detectado para ${u.cpf} — pagou apenas ${(pctPago * 100).toFixed(0)}% do total.`);

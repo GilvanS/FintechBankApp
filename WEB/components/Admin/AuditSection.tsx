@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, Wrench } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
-import { adminAuditConsistency, adminAuditDoubleCount, adminAuditCsvConsistency, adminFixOrphanInstallments, adminFixChargesProactive } from '../../services/api';
+import { adminAuditConsistency, adminAuditDoubleCount, adminAuditCsvConsistency, adminFixOrphanInstallments, adminFixChargesProactive, adminFixInstallmentPlans } from '../../services/api';
 
 type AuditSubTab = 'consistency' | 'double-count' | 'csv-consistency' | 'corrections';
 
@@ -45,30 +45,53 @@ const AuditSection: React.FC = () => {
 
     const [fixingOrphans, setFixingOrphans] = useState(false);
     const [fixingCharges, setFixingCharges] = useState(false);
+    const [fixingPlans, setFixingPlans] = useState(false);
+    const [cpfInput, setCpfInput] = useState('');
     const [orphansResult, setOrphansResult] = useState<Awaited<ReturnType<typeof adminFixOrphanInstallments>> | null>(null);
     const [chargesResult, setChargesResult] = useState<Awaited<ReturnType<typeof adminFixChargesProactive>> | null>(null);
+    const [plansResult, setPlansResult] = useState<Awaited<ReturnType<typeof adminFixInstallmentPlans>> | null>(null);
+
+    const runFixPlans = useCallback(async () => {
+        setFixingPlans(true);
+        setPlansResult(null);
+        try {
+            const cleanCpf = cpfInput.replace(/\D/g, '') || undefined;
+            const r = await adminFixInstallmentPlans(cleanCpf);
+            setPlansResult(r);
+        } catch (err: any) {
+            setPlansResult({ success: false, message: err?.message || 'Erro inesperado na cura de parcelamentos' });
+        } finally {
+            setFixingPlans(false);
+        }
+    }, [cpfInput]);
 
     const runFixOrphans = useCallback(async () => {
-        if (!window.confirm('Corrigir transações INVOICE_INSTALLMENT órfãs? Vai criar o installment_plans que falta pra cada uma (backfill), sem alterar as transações.')) return;
         setFixingOrphans(true);
+        setOrphansResult(null);
         try {
-            const r = await adminFixOrphanInstallments();
+            const cleanCpf = cpfInput.replace(/\D/g, '') || undefined;
+            const r = await adminFixOrphanInstallments(cleanCpf);
             setOrphansResult(r);
+        } catch (err: any) {
+            setOrphansResult({ success: false, message: err?.message || 'Erro inesperado na correção de órfãs' });
         } finally {
             setFixingOrphans(false);
         }
-    }, []);
+    }, [cpfInput]);
 
     const runFixCharges = useCallback(async () => {
-        if (!window.confirm('Corrigir encargos (billing_charges) pending divergentes do days_overdue real? Regera multa/juros/IOF de cada fatura afetada (FECHADA + ABERTA) com o valor correto.')) return;
         setFixingCharges(true);
+        setChargesResult(null);
         try {
-            const r = await adminFixChargesProactive();
+            const cleanCpf = cpfInput.replace(/\D/g, '') || undefined;
+            const r = await adminFixChargesProactive(cleanCpf);
             setChargesResult(r);
+        } catch (err: any) {
+            setChargesResult({ success: false, message: err?.message || 'Erro inesperado na correção de encargos' });
         } finally {
             setFixingCharges(false);
         }
-    }, []);
+    }, [cpfInput]);
 
     const fetchAll = useCallback(async () => {
         setLoading(true);
@@ -295,6 +318,33 @@ const AuditSection: React.FC = () => {
                         </h2>
                     </div>
 
+                    <div className={`p-3.5 rounded-2xl border mb-5 flex items-center gap-3 flex-wrap ${isMidnight ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-black/10'}`}>
+                        <div className="flex-1 min-w-[220px]">
+                            <label className="text-[10px] font-bold uppercase tracking-wider block opacity-70 mb-1">
+                                Filtrar por CPF Específico (Opcional)
+                            </label>
+                            <input
+                                type="text"
+                                value={cpfInput}
+                                onChange={(e) => setCpfInput(e.target.value)}
+                                placeholder="Deixe vazio para curar em lote (até 50 massas por clique) ou digite um CPF..."
+                                className={`w-full px-3 py-2 rounded-xl border text-xs font-bold outline-none transition-all ${
+                                    isMidnight ? 'bg-[#222] border-white/10 text-white focus:border-volt-green' : 'bg-white border-black/20 text-black focus:border-black'
+                                }`}
+                            />
+                        </div>
+                        {cpfInput && (
+                            <button
+                                onClick={() => setCpfInput('')}
+                                className={`px-3 py-2 rounded-xl text-xs font-bold self-end transition-all ${
+                                    isMidnight ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-black/10 text-black hover:bg-black/20'
+                                }`}
+                            >
+                                Limpar
+                            </button>
+                        )}
+                    </div>
+
                     <div className="space-y-5">
                         <div>
                             <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
@@ -357,6 +407,39 @@ const AuditSection: React.FC = () => {
                                     <p className="text-xs opacity-80 flex items-center gap-1.5">
                                         <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
                                         {chargesResult.summary?.invoicesFound ?? 0} fatura(s) divergente(s), {chargesResult.summary?.fixed ?? 0} corrigida(s), {chargesResult.summary?.skipped ?? 0} pulada(s).
+                                    </p>
+                                )
+                            )}
+                        </div>
+
+                        <div className={`border-t pt-5 ${isMidnight ? 'border-white/10' : 'border-black/10'}`}>
+                            <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wide">Parcelamentos Esgotados / Faturas</p>
+                                    <p className="text-xs opacity-60">PARCELAMENTO_ESGOTADO_INADIMPLENTE — reconstrói parcelamentos de compras que esgotaram antes do ciclo aberto (&lt;6x ou remaining=0 em massa inadimplente) e preenche lançamentos e parcelas a vencer.</p>
+                                </div>
+                                <button
+                                    onClick={runFixPlans}
+                                    disabled={fixingPlans}
+                                    className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 ${
+                                        isMidnight
+                                            ? 'bg-volt-green text-black focus-visible:outline-volt-green'
+                                            : 'bg-black text-white focus-visible:outline-black'
+                                    }`}
+                                >
+                                    <RefreshCw size={14} className={fixingPlans ? 'animate-spin motion-reduce:animate-none' : ''} />
+                                    {fixingPlans ? 'Curando…' : 'Curar Parcelas Esgotadas'}
+                                </button>
+                            </div>
+                            {plansResult && (
+                                plansResult.success === false ? (
+                                    <p className="text-xs text-red-500 font-bold flex items-center gap-1.5">
+                                        <AlertTriangle size={14} /> {plansResult.message || 'Erro ao curar.'}
+                                    </p>
+                                ) : (
+                                    <p className="text-xs opacity-80 flex items-center gap-1.5">
+                                        <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
+                                        {plansResult.totalFound ?? 0} massa(s) encontrada(s), {plansResult.totalCured ?? 0} curada(s), {plansResult.errorsCount ?? 0} erro(s).
                                     </p>
                                 )
                             )}

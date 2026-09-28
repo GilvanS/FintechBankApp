@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { PurchasedItem, Transaction, User } from '../types';
-import { payCreditCardInvoice, parcelCreditCardInvoice, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement, InstallmentReceipt as InstallmentReceiptDetails } from '../services/api';
+import { payCreditCardInvoice, parcelCreditCardInvoice, renegotiateCreditCardDebt, purchaseWithDebit, purchaseWithCard, anticipateCreditCardInstallments, getUserByCpf, getUserMe, getUserStatement, InstallmentReceipt as InstallmentReceiptDetails } from '../services/api';
 import { useDialog } from '../contexts/GlobalDialogContext';
 import { useAppState } from '../contexts/AppStateContext';
 
@@ -146,7 +146,7 @@ const Dashboard: React.FC = () => {
     const [checkoutTotal, setCheckoutTotal] = useState(0);
     const [confirmationDetails, setConfirmationDetails] = useState<any>(null);
     const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
-    const [parcelDetails, setParcelDetails] = useState<{ amount: number, installments: number, installmentValue?: number, totalAmount?: number, iof?: number, juros?: number } | null>(null);
+    const [parcelDetails, setParcelDetails] = useState<{ amount: number, installments: number, installmentValue?: number, totalAmount?: number, iof?: number, juros?: number, tipoEntrada?: string, novaEntrada?: number } | null>(null);
     const [invoicePaymentDetails, setInvoicePaymentDetails] = useState<any>(null);
     const [installmentReceiptDetails, setInstallmentReceiptDetails] = useState<InstallmentReceiptDetails | null>(null);
     const [lastPaymentCodes, setLastPaymentCodes] = useState<any>(null);
@@ -154,6 +154,9 @@ const Dashboard: React.FC = () => {
     // Tela de onde o fluxo de parcelamento foi iniciado — para o "voltar" retornar à
     // mesma tela de Fatura (ex: currentInvoice amarela) em vez de cair no closedInvoice.
     const [parcelEntryView, setParcelEntryView] = useState<View>('currentInvoice');
+    // Qual produto a tela de Simular/Confirmar está tratando — mesma tela, muda taxa/máx
+    // parcelas/escopo do saldo e qual endpoint contratar no final.
+    const [parcelProduct, setParcelProduct] = useState<'pf' | 'reneg'>('pf');
     
     useEffect(() => {
         if (currentView === 'cards' && user?.creditCard.isBlocked) {
@@ -520,10 +523,17 @@ const Dashboard: React.FC = () => {
     
     const handleParcelInvoice = () => {
         setParcelEntryView(currentView);
+        setParcelProduct('pf');
+        handleNavigate('installmentOptions');
+    };
+
+    const handleRenegotiateInvoice = () => {
+        setParcelEntryView(currentView);
+        setParcelProduct('reneg');
         handleNavigate('installmentOptions');
     };
     
-    const handleSelectInstallmentOption = (details: { amount: number, installments: number, installmentValue?: number, totalAmount?: number, iof?: number, juros?: number }) => {
+    const handleSelectInstallmentOption = (details: { amount: number, installments: number, installmentValue?: number, totalAmount?: number, iof?: number, juros?: number, tipoEntrada?: string, novaEntrada?: number }) => {
         setParcelDetails(details);
         passwordActionPayload.current = details; // Also save to ref for the action
         handleNavigate('installmentReviewInvoice');
@@ -536,12 +546,13 @@ const Dashboard: React.FC = () => {
     };
 
     const executeParcelInvoice = async () => {
-        const details = passwordActionPayload.current as { amount: number, installments: number } | null;
+        const details = passwordActionPayload.current as { amount: number, installments: number, tipoEntrada?: string, novaEntrada?: number } | null;
         if (!user || !details) return;
 
         setIsProcessing(true);
         const pin = (passwordActionPayload.current as any)?.pin;
-        const result = await parcelCreditCardInvoice(user.cpf, { installments: details.installments }, pin);
+        const contractCall = parcelProduct === 'reneg' ? renegotiateCreditCardDebt : parcelCreditCardInvoice;
+        const result = await contractCall(user.cpf, { installments: details.installments, tipoEntrada: details.tipoEntrada as any, novaEntrada: details.novaEntrada }, pin);
         if (result.success) {
             const refreshed = await getUserByCpf(user.cpf);
             if (refreshed.success && refreshed.user) {
@@ -649,6 +660,7 @@ const Dashboard: React.FC = () => {
                             theme={theme}
                             onBack={() => handleNavigate('home')}
                             onNavigate={handleNavigate}
+                            onRenegotiate={handleRenegotiateInvoice}
                             openBoletoModal={() => setIsBoletoOpen(true)}
                             openPixModal={() => setIsPixModalOpen(true)}
                         />
@@ -749,7 +761,7 @@ const Dashboard: React.FC = () => {
                 return <ClosedInvoice user={user} onBack={() => handleNavigate('cards')} onPayInvoice={handlePayInvoice} onParcel={handleParcelInvoice} openPixModal={() => setIsPixModalOpen(true)} />;
             case 'installmentOptions':
                 if (!user) return null;
-                return <InstallmentOptions user={user} onBack={() => handleNavigate(parcelEntryView)} onSelectOption={handleSelectInstallmentOption} />;
+                return <InstallmentOptions user={user} product={parcelProduct} onBack={() => handleNavigate(parcelEntryView)} onSelectOption={handleSelectInstallmentOption} />;
             case 'currentInvoice':
                 if (!user) return null;
                 return (

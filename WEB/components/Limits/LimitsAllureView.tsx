@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { LayoutGrid, FileText, CreditCard, ShoppingBag, User as UserIcon, TrendingUp, Shield, Activity } from 'lucide-react';
 import { AllureShell, type AllureSection } from '../shared/AllureShell';
 import LimitView from '../LimitView';
@@ -32,15 +32,35 @@ export function LimitsAllureView({ user, theme, onBack, onNavigate }: Props) {
     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 
+  // Parcelas a Vencer: soma futureInstallments (por mês, calculado no backend) exceto
+  // o mês da fatura aberta atual — esse mês já está contado no limite utilizado.
+  const currentCycleKey = useMemo(() => {
+    const dueRef = user?.creditCard?.invoiceDueDate || user?.creditCard?.dueDate;
+    if (!dueRef) return null;
+    const d = new Date(dueRef);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }, [user?.creditCard?.invoiceDueDate, user?.creditCard?.dueDate]);
+  const parcelasAVencer = useMemo(() => {
+    const futureMap = user?.creditCard?.futureInstallments ?? {};
+    return Object.entries(futureMap).reduce((sum: number, [ref, valor]) => {
+      if (ref === currentCycleKey) return sum;
+      return sum + (Number(valor) || 0);
+    }, 0);
+  }, [user?.creditCard, currentCycleKey]);
+
   const headerKpiExtra = (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
-      <div className={`p-4 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
-        <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Limite Crédito Disponível</p>
-        <p className="text-xl font-black mt-1 text-volt-green">{formatBRL(availableCredit)}</p>
-      </div>
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-2">
       <div className={`p-4 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
         <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Limite Crédito Total</p>
         <p className="text-xl font-black mt-1">{formatBRL(totalCredit)}</p>
+      </div>
+      <div className={`p-4 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
+        <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Parcelas a Vencer</p>
+        <p className="text-xl font-black mt-1 text-amber-500">{formatBRL(parcelasAVencer)}</p>
+      </div>
+      <div className={`p-4 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
+        <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Limite Crédito Disponível</p>
+        <p className="text-xl font-black mt-1 text-volt-green">{formatBRL(availableCredit)}</p>
       </div>
       <div className={`p-4 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
         <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Limite PIX Diário</p>
