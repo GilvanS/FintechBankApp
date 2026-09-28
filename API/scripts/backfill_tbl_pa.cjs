@@ -15,18 +15,14 @@
  * Rodar (dentro da pasta API):
  *   node scripts/backfill_tbl_pa.cjs
  */
-const dotenv = require('dotenv');
 const path = require('path');
-dotenv.config({ path: path.join(__dirname, '../.env') });
-
-const DatabaseFactory = require('../services/database/DatabaseFactory');
 const { computeNextInvoiceDueDate } = require('../utils/billing');
 const { calcularParcelamentoAutomatico, checarElegibilidadePA } = require('../services/installmentCalcEngine');
 
-async function main() {
-    const db = DatabaseFactory.createDatabaseService();
-    await db.connect();
-
+// Reexportada pelo cron diário (index.cjs, motor 00:00 — todas as massas elegíveis) E
+// pela rota de criação de massa (index.cjs, POST /api/admin/users/mass — só o CPF
+// recém-criado, direto no pre-flight, sem esperar o motor da meia-noite).
+async function runBackfillPA(db, { cpf = null } = {}) {
     await db.executeQuery(`
         CREATE TABLE IF NOT EXISTS fintech.tbl_pa (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -50,13 +46,14 @@ async function main() {
     // parcelamento_elegiveis: essa tabela só é populada quando runBillingValidation roda
     // (gera cobranças reais), e não queremos disparar isso só pra um backfill informativo —
     // o snapshot de days_overdue já reflete o atraso real de qualquer forma.
+    const cpfFiltro = cpf ? `AND u.cpf = '${cpf}'` : '';
     const rows = await db.executeQuery(`
         SELECT DISTINCT ON (u.cpf)
             u.cpf, i.id AS invoice_id, i.due_date, i.valor_total, i.saldo_anterior,
             COALESCE(u.credit_card_due_day, 10) AS dia_vencimento
         FROM fintech.users u
         INNER JOIN fintech.invoices i ON i.cpf = u.cpf AND i.status = 'FECHADA' AND i.valor_total > 0
-        WHERE u.days_overdue BETWEEN 30 AND 44
+        WHERE u.days_overdue BETWEEN 30 AND 44 ${cpfFiltro}
         ORDER BY u.cpf, i.due_date DESC
     `);
 
@@ -66,6 +63,9 @@ async function main() {
     let falhas = 0;
     for (const row of rows) {
         try {
+            // Idempotente: recalcula sempre que rodar (motor diário roda toda noite, e
+            // agora também a cada massa criada) — sem isso duplicava linha por rodada.
+            await db.executeQuery(`DELETE FROM fintech.tbl_pa WHERE cpf = '${row.cpf}'`);
             const dataLimitePagamento = new Date(row.due_date);
             const diaVencimento = row.dia_vencimento;
             const vencimentoProximoCorte = computeNextInvoiceDueDate(diaVencimento, dataLimitePagamento);
@@ -105,10 +105,22 @@ async function main() {
     }
 
     console.log(`✅ ${ok} registro(s) gravados em tbl_pa. ${falhas} falha(s)/pulos.`);
-    process.exit(0);
+    return { ok, falhas, total: rows.length };
 }
 
-main().catch((err) => {
-    console.error('❌ Erro no backfill:', err.message);
-    process.exit(1);
-});
+module.exports = { runBackfillPA };
+
+if (require.main === module) {
+    (async () => {
+        const dotenv = require('dotenv');
+        dotenv.config({ path: path.join(__dirname, '../.env') });
+        const DatabaseFactory = require('../services/database/DatabaseFactory');
+        const db = DatabaseFactory.createDatabaseService();
+        await db.connect();
+        await runBackfillPA(db);
+        process.exit(0);
+    })().catch((err) => {
+        console.error('❌ Erro no backfill:', err.message);
+        process.exit(1);
+    });
+}

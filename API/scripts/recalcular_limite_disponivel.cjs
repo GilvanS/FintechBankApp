@@ -27,7 +27,7 @@ const JSON_OUTPUT = process.argv.includes('--json');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-const { recalcularLimiteDisponivel, normalizeUser, enrichUserCreditCardData, usersRepo, dbService } = require('../index.cjs');
+const { recalcularLimiteDisponivel, usersRepo, dbService } = require('../index.cjs');
 
 // IS_TEST em index.cjs pula bootstrap() (que faria seed + app.listen, indesejados
 // aqui) — mas isso também deixa o pool de conexão sem conectar. connect() sozinho
@@ -39,29 +39,17 @@ async function ensureConnected() {
 }
 
 /**
- * Réplica ENXUTA do cálculo só para preview (dry-run) — não persiste. Mantém a
- * MESMA fórmula (limite_total - currentInvoiceTotal via enrichUserCreditCardData),
- * só pula o UPDATE. Necessário porque recalcularLimiteDisponivel real sempre
- * persiste quando `alterado` — não tem flag de dry-run própria (ela vive no
- * index.cjs e não teve motivo pra crescer um parâmetro só usado por este script).
+ * Preview (dry-run) — não persiste. Delega pra recalcularLimiteDisponivel real com
+ * `persist:false` (ela já suporta essa flag) em vez de duplicar a fórmula aqui —
+ * uma cópia própria da fórmula (limite_total - currentInvoiceTotal, sem
+ * parcelasAVencer) já ficou desatualizada uma vez (2026-09-26) quando a canônica
+ * ganhou o termo de parcelas a vencer; delegar elimina esse risco de novo.
  */
 async function simularSemPersistir(cpf) {
     // Exportada e chamada direto pelo uti_massa.cjs (sem passar por recalcularEmLote):
     // sem isto, "Pool não está conectado!" quando a UTI simula o limite primeiro.
     await ensureConnected();
-    const userRow = await usersRepo.findByCpf(cpf);
-    if (!userRow) return null;
-    const tempUser = normalizeUser(userRow);
-    await enrichUserCreditCardData(tempUser, cpf);
-    const totalLimit = parseFloat(userRow.credit_card_total_limit || 0);
-    const currentInvoiceTotal = tempUser.creditCard?.currentInvoiceTotal ?? 0;
-    const limiteAnterior = parseFloat(userRow.credit_card_available_limit || 0);
-    const limiteNovo = Math.round((totalLimit - currentInvoiceTotal) * 100) / 100;
-    const alterado = Math.abs(limiteNovo - limiteAnterior) > 0.005;
-    return {
-        cpf, fullName: userRow.full_name, totalLimit, currentInvoiceTotal,
-        limiteAnterior, limiteNovo, alterado, estourado: limiteNovo < 0,
-    };
+    return recalcularLimiteDisponivel(cpf, { persist: false });
 }
 
 /**

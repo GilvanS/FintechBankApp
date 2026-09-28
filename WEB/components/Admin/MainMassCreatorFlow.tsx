@@ -127,7 +127,7 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
     const isMidnight = theme === 'midnight';
 
     const [formData, setFormData] = useState<GeneratedMassData>(() => generateRandomMassData('Brasil'));
-    // Histórico de ciclos de fatura (Gerador 4.0): cycles[0] = mais antigo, último = estado ATUAL.
+    // Histórico de ciclos de fatura (Gerador 5.0): cycles[0] = mais antigo, último = estado ATUAL.
     const [cycles, setCycles] = useState<CycleStatus[]>(() => [cycleFromState(formData.overdueState)]);
     const [quantity, setQuantity] = useState<number>(1);
     const [isSaving, setIsSaving] = useState(false);
@@ -201,18 +201,29 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
         : 'border-2 border-black bg-white hover:bg-black/5 text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]';
 
     // Disparar Preenchimento Aleatório 🎲
+    // Fonte ÚNICA do "sorteio completo" (nome, CPF, endereço, cartão, país, histórico de
+    // ciclos) — usada tanto pelo botão "Gerar Aleatório" quanto pelo lote de criação
+    // ("Criar N Massas"). Antes eram 2 implementações separadas; a do lote lia o state
+    // `cycles` direto (congelado no valor do render em que o clique aconteceu) e nunca
+    // resortava país/ciclo — só o nome mudava a cada massa gerada.
+    const drawFullyRandomMassa = (country?: string) => {
+        const data = generateRandomMassData(country);
+        const historico = generateRandomCycleHistory();
+        return { data: { ...data, overdueState: historico.overdueState }, cycles: historico.cycles };
+    };
+
     // Sem `country` → randomiza também o país. Com `country` (seletor) → gera para o país escolhido.
     // `randomizeCycles` (botão 🎲 principal): sorteia também o histórico de ciclos (1-6,
     // adimplente/inadimplente) com tier coerente com o ciclo atual. Trocar país ou "Sortear"
     // endereço preserva o histórico configurado e só alinha o estado ao ciclo atual.
     const handleRandomFill = (country?: string, randomizeCycles = false) => {
-        const random = generateRandomMassData(country);
         if (randomizeCycles) {
-            const historico = generateRandomCycleHistory();
-            setCycles(historico.cycles);
-            setFormData({ ...random, overdueState: historico.overdueState });
-            showToast(`🎲 Dados gerados com sucesso (${random.countryOrigin}) — ${historico.cycles.length} ciclo(s) de fatura!`, 'success');
+            const { data, cycles: novosCiclos } = drawFullyRandomMassa(country);
+            setCycles(novosCiclos);
+            setFormData(data);
+            showToast(`🎲 Dados gerados com sucesso (${data.countryOrigin}) — ${novosCiclos.length} ciclo(s) de fatura!`, 'success');
         } else {
+            const random = generateRandomMassData(country);
             setFormData({ ...random, overdueState: stateForCycle(statusDoCiclo(cycles[cycles.length - 1]), random.overdueState) });
             showToast(`🎲 Dados gerados com sucesso (${random.countryOrigin})!`, 'success');
         }
@@ -376,15 +387,35 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
         let iteracoes = quantity > 0 ? quantity : 1;
         let sucessos = 0;
 
+        // Variável LOCAL, não o state `cycles` do componente: dentro deste loop, ler o
+        // state direto sempre devolvia o valor congelado do render em que a função foi
+        // criada (closure), então "Injetar N ciclo(s)" nunca mudava entre massas do
+        // mesmo lote — e nada além do nome/CPF/endereço era resorteado (país e o
+        // histórico de ciclos/tier de atraso ficavam presos no que estava no formulário
+        // antes do primeiro clique). Cada massa do lote agora sorteia de novo: país,
+        // histórico de ciclos (1-6, tier 7D/15D/30D incluído) e o resto que já era
+        // aleatório em generateRandomMassData.
+        let currentCycles = cycles;
+
+        // Qtd > 1: cada massa do lote é um sorteio 100% independente ("Gerar Aleatório"
+        // por trás dos panos) — inclusive a 1ª, que senão sairia igual ao rascunho que
+        // estava no formulário antes do clique. Qtd == 1: mantém o que está no formulário
+        // (o admin pode ter ajustado manualmente antes de clicar).
+        if (iteracoes > 1) {
+            const sorteioInicial = drawFullyRandomMassa();
+            currentData = sorteioInicial.data;
+            currentCycles = sorteioInicial.cycles;
+        }
+
         try {
             for (let i = 0; i < iteracoes; i++) {
                 let salvo = false;
                 for (let tentativa = 1; tentativa <= MAX_TENTATIVAS_NOME; tentativa++) {
                     activeMassCpfRef.current = currentData.cpf.replace(/\D/g, '');
                     setTodoTitle(iteracoes > 1 ? `Processo de Criação da Massa (${i + 1}/${iteracoes})` : 'Processo de Criação da Massa');
-                    setTodoItems(applyStep(buildTodoItems(currentData, cycles), { id: 'cadastro', status: 'running' }));
+                    setTodoItems(applyStep(buildTodoItems(currentData, currentCycles), { id: 'cadastro', status: 'running' }));
 
-                    const result = await adminCreateMassUser(montarPayload(currentData, cycles));
+                    const result = await adminCreateMassUser(montarPayload(currentData, currentCycles));
                     const finalSteps = result.steps;
                     if (finalSteps && finalSteps.length > 0) {
                         setTodoItems((prev) => finalSteps.reduce((acc, s) => applyStep(acc, s, true), prev));
@@ -410,13 +441,18 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
 
                 if (!salvo) break;
 
-                // Prepara próximo sorteio se houver mais de uma massa
-                // O histórico de ciclos é mantido; só o estado atual acompanha o último ciclo.
+                // Prepara próximo sorteio se houver mais de uma massa — mesma fonte do
+                // "Gerar Aleatório" (drawFullyRandomMassa): país livre + ciclo novo, não só o nome.
                 if (i < iteracoes - 1) {
-                    const proximo = generateRandomMassData(currentData.countryOrigin);
-                    currentData = { ...proximo, overdueState: stateForCycle(statusDoCiclo(cycles[cycles.length - 1]), currentData.overdueState) };
+                    const proximo = drawFullyRandomMassa();
+                    currentData = proximo.data;
+                    currentCycles = proximo.cycles;
                 }
             }
+
+            // Sincroniza o editor visual com a última massa do lote (o loop usou a
+            // variável local `currentCycles`, não o state, pra não sofrer de closure velha).
+            setCycles(currentCycles);
 
             if (sucessos > 0) {
                 showToast(iteracoes > 1 ? `🚀 ${sucessos} massas criadas com sucesso no PGDB!` : `🚀 Massa ${currentData.fullName} criada com sucesso no PGDB!`, 'success');
@@ -707,7 +743,7 @@ export const MainMassCreatorFlow: React.FC<Props> = ({ onSuccess, onCancel, comp
                             </div>
                         )}
 
-                        {/* HISTÓRICO DE CICLOS (Gerador 4.0) — 1 a 6 faturas encadeadas */}
+                        {/* HISTÓRICO DE CICLOS (Gerador 5.0) — 1 a 6 faturas encadeadas */}
                         <div data-testid="mass-cycles" className="space-y-2 pt-1">
                             <div className="flex items-center justify-between gap-2">
                                 <label className="text-[11px] font-bold opacity-80 flex items-center gap-1">

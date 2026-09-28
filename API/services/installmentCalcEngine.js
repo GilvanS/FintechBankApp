@@ -300,6 +300,40 @@ function calcularParcelamentoAutomatico(params) {
   });
 }
 
+const RENEG_TAXA_MENSAL = 0.042; // 4,20% a.m. — bem abaixo de PF (7,95%) e PA (8,95%): produto
+// "melhor negócio" que consolida TODA a dívida (fechada + aberta + encargos) num único plano.
+
+/**
+ * Renegociação (Reneg) — mesmo motor da PF/PA (aba 'PF' da planilha), com taxa própria
+ * (4,20% a.m., bem menor que PF/PA) e prazo livre até 36x (vs 10x de PF/PA). Diferente de
+ * PF (que herda `saldoAbertoAnterior` de fatura em fatura), Reneg é um evento de
+ * CONSOLIDAÇÃO ÚNICA: o `valorDivida` já entra pronto com tudo somado (fechada + aberta +
+ * encargos pendentes), então não há saldo anterior a descontar — sempre 0.
+ */
+function calcularRenegociacao(params) {
+  const {
+    valorDivida,
+    prazo,
+    dataLimitePagamento,
+    vencimentoProximoCorte,
+    diaVencimento,
+    tipoEntrada = TIPOS_ENTRADA.SEM_ENTRADA,
+    novaEntrada = 0,
+  } = params;
+
+  return calcularParcelamentoFatura({
+    valorFatura: valorDivida,
+    saldoAbertoAnterior: 0,
+    taxaMensal: RENEG_TAXA_MENSAL,
+    prazo,
+    tipoEntrada,
+    novaEntrada,
+    dataLimitePagamento,
+    vencimentoProximoCorte,
+    diaVencimento,
+  });
+}
+
 /**
  * Elegibilidade de valor pro Parcelamento Automático (PA): o cliente precisa ter pago um
  * valor ENTRE o piso (10% do mínimo) e o próprio mínimo — exclusive nas duas pontas.
@@ -320,8 +354,10 @@ function checarElegibilidadePA({ valorTotal, valorPago }) {
 module.exports = {
   calcularParcelamentoFatura,
   calcularParcelamentoAutomatico,
+  calcularRenegociacao,
   checarElegibilidadePA,
   TIPOS_ENTRADA,
+  RENEG_TAXA_MENSAL,
   // exportados só pra teste/validação isolada contra a planilha
   runAmortization,
   buildDueDates,

@@ -121,7 +121,10 @@ describe('Integração — Gerador de Massa 4.0 (N ciclos) × motor PF/PA', () =
 
         const plans = await db.executeQuery(`SELECT COUNT(*)::int AS total, MIN(installments) AS parcelas FROM fintech.installment_plans WHERE cpf='${cpf}'`);
         expect(Number(plans[0].total)).toBe(1);
-        expect(Number(plans[0].parcelas)).toBeGreaterThanOrEqual(10);
+        // Faixa real do gerador é 2-12x (totalInstallments = 2 + Math.random()*11 em
+        // usersRepo.js) — assertion antiga (>=10) presumia a faixa anterior (10-12x) e
+        // ficava flaky (~60% de falha) depois que a faixa foi alargada.
+        expect(Number(plans[0].parcelas)).toBeGreaterThanOrEqual(2);
         expect(Number(plans[0].parcelas)).toBeLessThanOrEqual(12);
 
         // 4 encargos por ciclo (multa, juros_mora, juros_remuneratorios, iof).

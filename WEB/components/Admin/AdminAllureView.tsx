@@ -34,7 +34,7 @@ const SECTIONS: AllureSection<AdminSectionKey>[] = [
     { key: 'billing', label: 'Faturamento', icon: Receipt, group: 'Financeiro' },
     { key: 'recurring', label: 'Contas Recorrentes', icon: Repeat, group: 'Financeiro' },
     { key: 'cards', label: 'Cartões & Massa', icon: CreditCard, group: 'Financeiro' },
-    { key: 'mass-creator', label: 'Gerador de Massa 4.0', icon: Sparkles, group: 'Gerador 4.0' },
+    { key: 'mass-creator', label: 'Gerador de Massa 5.0', icon: Sparkles, group: 'Gerador 5.0' },
     { key: 'audit', label: 'Auditoria', icon: ShieldCheck, group: 'Auditoria & Sistema' },
     { key: 'vitrine', label: 'Vitrine', icon: Timer, group: 'Auditoria & Sistema' },
     { key: 'telegram', label: 'Telegram', icon: Send, group: 'Auditoria & Sistema' },

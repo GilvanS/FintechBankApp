@@ -31,7 +31,7 @@ import { useToast, ToastContainer } from '../Toast';
 import PaymentSuccessModal from './PaymentSuccessModal';
 import { useCardOrder } from '../../hooks/useCardOrder';
 import { useAuth } from '../../context/AuthContext';
-import { payCreditCardInvoice, getUserByCpf } from '../../services/api';
+import { payCreditCardInvoice, getUserByCpf, getPaInfo, getMyInstallments, type PaInfo, type MyInstallmentPlan } from '../../services/api';
 import type { User } from '../../types';
 
 interface Props {
@@ -39,6 +39,7 @@ interface Props {
   theme: 'yellow' | 'midnight';
   onBack: () => void;
   onNavigate: (view: any) => void;
+  onRenegotiate?: () => void;
   openBoletoModal?: () => void;
   openPixModal?: () => void;
 }
@@ -59,7 +60,7 @@ function formatBRL(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoletoModal, openPixModal }: Props) {
+export function InvoicesAllureView({ user, theme, onBack, onNavigate, onRenegotiate, openBoletoModal, openPixModal }: Props) {
   const isMidnight = theme === 'midnight';
   const prefersReducedMotion = useReducedMotion();
   const { updateUser } = useAuth();
@@ -87,6 +88,24 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   const [customError, setCustomError] = useState('');
 
   const [resumoOrder, setResumoOrder] = useCardOrder('invoices_resumo', DEFAULT_RESUMO_ORDER);
+
+  // PA (Parcelamento Automático) — card informativo, sem tela própria (mesmo motor do
+  // PF, só troca taxa). Busca 1x ao montar; eligible=false na maior parte do tempo
+  // (só 30-44d de atraso), então o card só aparece quando fizer sentido.
+  const [paInfo, setPaInfo] = useState<PaInfo | null>(null);
+  useEffect(() => {
+    let active = true;
+    getPaInfo().then((res) => { if (active) setPaInfo(res); });
+    return () => { active = false; };
+  }, []);
+
+  // Meus Parcelamentos — produto ativo (PF/Reneg/PA), se houver algum em andamento.
+  const [myPlan, setMyPlan] = useState<MyInstallmentPlan | null>(null);
+  useEffect(() => {
+    let active = true;
+    getMyInstallments().then((res) => { if (active) setMyPlan(res.plan ?? null); });
+    return () => { active = false; };
+  }, []);
 
   const [isDesktopGrid, setIsDesktopGrid] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
@@ -123,6 +142,23 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   const limit = creditCard?.totalLimit ?? 5000;
   const availableLimit = creditCard?.availableLimit ?? limit;
   const usedLimit = Math.max(0, limit - availableLimit);
+
+  // Parcelas a Vencer: soma futureInstallments (por mês, já calculado no backend)
+  // exceto o mês da fatura aberta atual — esse mês já está em currentInvoiceTotal,
+  // somar os dois duplicaria o valor.
+  const currentCycleKey = useMemo(() => {
+    const dueRef = creditCard?.invoiceDueDate || creditCard?.dueDate;
+    if (!dueRef) return null;
+    const d = new Date(dueRef);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }, [creditCard?.invoiceDueDate, creditCard?.dueDate]);
+  const parcelasAVencer = useMemo(() => {
+    const futureMap = creditCard?.futureInstallments ?? {};
+    return Object.entries(futureMap).reduce((sum, [ref, valor]) => {
+      if (ref === currentCycleKey) return sum;
+      return sum + (Number(valor) || 0);
+    }, 0);
+  }, [creditCard?.futureInstallments, currentCycleKey]);
 
   // Valor da fatura efetivamente selecionada nas subtabs (Aberta/Fechada) — usado no card de valor e nas ações
   const selectedInvoiceTotal = faturaTab === 'fechada' ? closedInvoiceTotal : currentInvoiceTotal;
@@ -401,6 +437,13 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
             </span>
           </p>
         )}
+        {faturaTab === 'fechada' && !creditCard?.closedInvoiceIsPaid && (creditCard?._closedInvoiceValorPago ?? 0) > 0 && (
+          <p className="mt-2">
+            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full bg-yellow-500 text-black">
+              <AlertTriangle size={12} /> Pago Parcial
+            </span>
+          </p>
+        )}
       </div>
 
       {/* Ações — formato simples, sem sombra pesada */}
@@ -555,7 +598,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
                 return (
                   <div
                     key={txKey}
-                    className={`rounded-xl border transition-colors overflow-hidden ${
+                    className={`rounded-xl border transition-colors overflow-hidden shrink-0 ${
                       isPaymentEntry
                         ? 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/50'
                         : isMidnight
@@ -603,7 +646,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
                       <div className={`px-3.5 pb-3.5 pt-1 border-t text-[11px] space-y-1.5 ${isMidnight ? 'border-white/5' : 'border-black/10'}`}>
                         <div className="flex justify-between">
                           <span className={isMidnight ? 'text-on-surface-variant' : 'text-black/60'}>Valor da compra</span>
-                          <span className="font-bold">{formatBRL(Math.abs(t.totalAmount ?? t.amount))}</span>
+                          <span className="font-bold">{formatBRL(Math.abs(t.totalParcelado ?? t.totalAmount ?? t.amount))}</span>
                         </div>
                         {t.currentInstallment && t.totalInstallments && (
                           <div className="flex justify-between">
@@ -673,17 +716,75 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
               </div>
             </div>
           </ChartCard>
-          <ChartCard title="Parcelar Fatura" subtitle="Divida em até 12x" theme={theme}>
+          <ChartCard title="Parcelar Fatura" subtitle="Divida em até 10x" theme={theme}>
             <div className="p-4 flex flex-col gap-4">
               <p className={`text-xs ${isMidnight ? 'text-on-surface-variant' : 'text-black/70'}`}>
-                Parcele a fatura atual de <strong>{formatBRL(currentInvoiceTotal)}</strong> em até 12 vezes com juros.
+                Parcele a fatura atual de <strong>{formatBRL(currentInvoiceTotal)}</strong> em até 10 vezes com juros.
               </p>
               <button onClick={() => onNavigate('installmentOptions')} className={quickActionClass}>
                 Simular Parcelamento
               </button>
             </div>
           </ChartCard>
+          {onRenegotiate && (user?.creditCard?.isBlocked || user?.creditCard?.isBlacklisted) && (
+            <ChartCard title="Renegociar Dívida" subtitle="Divida em até 36x, taxa menor" theme={theme}>
+              <div className="p-4 flex flex-col gap-4">
+                <p className={`text-xs ${isMidnight ? 'text-on-surface-variant' : 'text-black/70'}`}>
+                  Consolide toda a dívida (faturas + encargos) num único parcelamento com taxa menor.
+                </p>
+                <button onClick={onRenegotiate} className={quickActionClass}>
+                  Simular Renegociação
+                </button>
+              </div>
+            </ChartCard>
+          )}
+          {paInfo?.eligible && (
+            <ChartCard title="Parcelamento Automático disponível" subtitle="Sem contratar nada — só pagar a entrada" theme={theme}>
+              <div className="p-4 flex flex-col gap-2">
+                <p className={`text-xs ${isMidnight ? 'text-on-surface-variant' : 'text-black/70'}`}>
+                  Pague a entrada mínima até o vencimento e o restante parcela sozinho — sem precisar contratar nada.
+                </p>
+                <div className={`text-[10px] font-bold uppercase tracking-wider pt-1 ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Entrada Mínima</div>
+                <div className={`text-lg font-black ${isMidnight ? 'text-volt-primary' : 'text-black'}`}>{formatBRL(paInfo.entradaMinima ?? 0)}</div>
+                <div className={`text-xs pt-1 ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>
+                  Saldo restante em até {paInfo.parcelas}x de {formatBRL(paInfo.valorParcela ?? 0)} — taxa {((paInfo.taxaMensal ?? 0) * 100).toFixed(2)}% a.m.
+                </div>
+              </div>
+            </ChartCard>
+          )}
         </div>
+
+        {/* Meus Parcelamentos — acompanhamento do produto ativo (PF/Reneg/PA), formato
+            tabela de detalhes (desktop), igual aos exemplos reais salvos em
+            docs/referencias-pf-pa-reneg.md §6-7 — não é o card de anel de progresso do
+            mobile, é lista de campos (Data Contratação / Valor Total / Parcelas Lançadas /
+            Valor Restante / Próxima Parcela / Taxa / CET), como uma tela de detalhe web. */}
+        {myPlan && (
+          <ChartCard
+            title="Meus Parcelamentos"
+            subtitle={`${myPlan.produto === 'PF' ? 'Parcelamento de Fatura' : myPlan.produto === 'Reneg' ? 'Renegociação' : 'Parcelamento Automático'} em andamento`}
+            theme={theme}
+          >
+            <div className="p-4">
+              <div className={`rounded-xl border divide-y ${isMidnight ? 'bg-volt-dark/50 border-white/10 divide-white/5' : 'bg-white border-2 border-black divide-black/10'}`}>
+                {[
+                  ['Data da Contratação', new Date(myPlan.dataContratacao).toLocaleDateString('pt-BR')],
+                  ['Valor Total', formatBRL(myPlan.valorTotal)],
+                  ['Parcelas Lançadas', `${myPlan.parcelasLancadas} de ${myPlan.totalParcelas}`],
+                  ['Valor Restante', formatBRL(myPlan.valorRestante)],
+                  ['Próxima Parcela', myPlan.proximaParcela ? new Date(myPlan.proximaParcela).toLocaleDateString('pt-BR') : '—'],
+                  ['Taxa de Juros', `${(myPlan.taxaMensal * 100).toFixed(2)}% a.m.`],
+                  ...(myPlan.cetAnual > 0 ? [['CET', `${(myPlan.cetAnual * 100).toFixed(2)}% a.a.`]] as [string, string][] : []),
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between items-center py-3 px-4">
+                    <span className={`text-xs font-bold ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>{label}</span>
+                    <span className="text-xs font-black">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </ChartCard>
+        )}
 
         {/* Histórico de Parcelas Futuras já contratadas */}
         <ChartCard title="Histórico de Parcelas Futuras" subtitle="Compras parceladas que ainda vão aparecer nas próximas faturas" theme={theme}>
@@ -736,10 +837,18 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoleto
   };
 
   const headerKpiExtra = (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-2">
+      <div className={`p-4 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
+        <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Limite do Contrato</p>
+        <p className="text-xl font-black mt-1">{formatBRL(limit)}</p>
+      </div>
       <div className={`p-4 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
         <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Fatura Aberta</p>
         <p className="text-xl font-black mt-1 text-rose-400">{formatBRL(currentInvoiceTotal)}</p>
+      </div>
+      <div className={`p-4 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
+        <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Parcelas a Vencer</p>
+        <p className="text-xl font-black mt-1 text-amber-500">{formatBRL(parcelasAVencer)}</p>
       </div>
       <div className={`p-4 rounded-xl border ${isMidnight ? 'bg-volt-dark/60 border-white/10' : 'bg-volt-yellow-pastel border-2 border-black'}`}>
         <p className={`text-[10px] font-black uppercase tracking-wider ${isMidnight ? 'text-on-surface-variant' : 'text-black/60'}`}>Limite Utilizado</p>

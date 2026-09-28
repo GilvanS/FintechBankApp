@@ -14,12 +14,20 @@ module.exports = function registerInvoiceRoutes({ apiRouter, bearerAuth, asyncHa
     // GET /billing/invoice-status — status da fatura do usuário logado (mobile)
     apiRouter.get('/billing/invoice-status', bearerAuth(), asyncHandler(controller.invoiceStatus));
 
-    // Opções de parcelamento (2x-12x) para a fatura FECHADA não paga
+    // Opções de parcelamento (2x-10x) para a fatura FECHADA não paga
     apiRouter.get('/cards/invoice/installment-options', bearerAuth(), asyncHandler(controller.installmentOptions));
     apiRouter.post('/cards/invoice/parcel', bearerAuth(), asyncHandler(controller.parcel));
 
+    // PA (Parcelamento Automático) — card informativo, sem simulação/contratação; ativa
+    // sozinho quando o pagamento mínimo elegível é feito até o vencimento.
+    apiRouter.get('/cards/invoice/pa', bearerAuth(), asyncHandler(controller.paInfo));
+
+    // Meus Parcelamentos — acompanhamento do produto ativo (PF/Reneg/PA), se houver.
+    apiRouter.get('/cards/invoice/my-installments', bearerAuth(), asyncHandler(controller.myInstallments));
+
     // Renegociação da dívida TOTAL (fechada + aberta + encargos) — saída para quem está
     // bloqueado (8-90d) ou na lista negra (90+) sem pagar tudo à vista.
+    apiRouter.get('/cards/invoice/renegotiate/options', bearerAuth(), asyncHandler(controller.renegotiateOptions));
     apiRouter.post('/cards/invoice/renegotiate', bearerAuth(), asyncHandler(controller.renegotiate));
 
     // Pagamento de fatura (total / mínimo / parcial)

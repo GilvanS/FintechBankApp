@@ -491,15 +491,74 @@ export const payCreditCardInvoice = async (cpf: string, pin: string, amount?: nu
   }
 };
 
-export const getInvoiceInstallmentOptions = async (): Promise<{ success: boolean; amount?: number; options?: InstallmentPlan[]; message?: string }> => {
+// Espelha installmentCalcEngine.TIPOS_ENTRADA (API) — strings exatas, o backend valida por igualdade.
+export const TIPOS_ENTRADA = {
+  SEM_ENTRADA: 'SEM ENTRADA',
+  ENTRADA_IGUAL: 'ENTRADA IGUAL AS DEMAIS PARCELAS',
+  ENTRADA_DIFERENTE: 'ENTRADA DIFERENTE DAS DEMAIS PARCELAS',
+} as const;
+export type TipoEntrada = typeof TIPOS_ENTRADA[keyof typeof TIPOS_ENTRADA];
+
+// PA (Parcelamento Automático) — card informativo, sem simulação/contratação (plano
+// pf-pa-reneg-implementation §3): mesmo motor do PF, só troca a taxa. Ativa sozinho
+// quando o pagamento mínimo elegível é feito até o vencimento.
+export interface PaInfo {
+  success: boolean;
+  eligible: boolean;
+  valorFatura?: number;
+  entradaMinima?: number;
+  saldoFinanciado?: number;
+  parcelas?: number;
+  valorParcela?: number;
+  taxaMensal?: number;
+  iofTotal?: number;
+  iofAdicional?: number;
+  cetAnual?: number;
+  message?: string;
+}
+export const getPaInfo = async (): Promise<PaInfo> => {
   try {
-    return await apiCall<{ success: boolean; amount: number; options: InstallmentPlan[] }>('/cards/invoice/installment-options');
+    return await apiCall<PaInfo>('/cards/invoice/pa');
+  } catch (error: any) {
+    return { success: false, eligible: false, message: error.message || 'Erro ao buscar Parcelamento Automático' };
+  }
+};
+
+// Meus Parcelamentos — acompanhamento do produto ativo (PF/Reneg/PA), se houver. Só 1
+// fica ativo por vez (contratar um novo apaga as parcelas do anterior).
+export interface MyInstallmentPlan {
+  produto: 'PF' | 'Reneg' | 'PA';
+  dataContratacao: string;
+  valorTotal: number;
+  taxaMensal: number;
+  valorParcela: number;
+  cetAnual: number;
+  parcelasLancadas: number;
+  totalParcelas: number;
+  valorRestante: number;
+  proximaParcela: string | null;
+}
+export const getMyInstallments = async (): Promise<{ success: boolean; plan: MyInstallmentPlan | null; message?: string }> => {
+  try {
+    return await apiCall<{ success: boolean; plan: MyInstallmentPlan | null }>('/cards/invoice/my-installments');
+  } catch (error: any) {
+    return { success: false, plan: null, message: error.message || 'Erro ao buscar parcelamentos' };
+  }
+};
+
+export const getInvoiceInstallmentOptions = async (entrada?: { tipoEntrada?: TipoEntrada; novaEntrada?: number }): Promise<{ success: boolean; amount?: number; options?: InstallmentPlan[]; message?: string }> => {
+  try {
+    const params = new URLSearchParams();
+    if (entrada?.tipoEntrada) params.set('tipoEntrada', entrada.tipoEntrada);
+    if (entrada?.novaEntrada != null) params.set('novaEntrada', String(entrada.novaEntrada));
+    const qs = params.toString();
+    return await apiCall<{ success: boolean; amount: number; options: InstallmentPlan[] }>(`/cards/invoice/installment-options${qs ? `?${qs}` : ''}`);
   } catch (error: any) {
     return { success: false, message: error.message || 'Erro ao buscar opções de parcelamento' };
   }
 };
 
-export const parcelCreditCardInvoice = async (cpf: string, details: { installments: number }, pin?: string): Promise<{ success: boolean; message: string; receipt?: InstallmentReceipt }> => {
+export const parcelCreditCardInvoice = async (cpf: string, details: { installments: number; tipoEntrada?: TipoEntrada; novaEntrada?: number }, pin?: string): Promise<{ success: boolean; message: string; receipt?: InstallmentReceipt }> => {
   try {
     const result = await apiCall<{ success: boolean; message: string; receipt?: InstallmentReceipt }>('/cards/invoice/parcel', {
       method: 'POST',
@@ -508,6 +567,32 @@ export const parcelCreditCardInvoice = async (cpf: string, details: { installmen
     return result;
   } catch (error: any) {
     return { success: false, message: error.message || 'Erro ao parcelar fatura' };
+  }
+};
+
+// Reneg: mesma tela de Entrada + simulação do PF — diferença é taxa própria (menor) e
+// prazo até 36x (vs 10x do PF); soma TODA a dívida (fechada + aberta + encargos), não só a fatura.
+export const getRenegotiationOptions = async (entrada?: { tipoEntrada?: TipoEntrada; novaEntrada?: number }): Promise<{ success: boolean; amount?: number; options?: InstallmentPlan[]; message?: string }> => {
+  try {
+    const params = new URLSearchParams();
+    if (entrada?.tipoEntrada) params.set('tipoEntrada', entrada.tipoEntrada);
+    if (entrada?.novaEntrada != null) params.set('novaEntrada', String(entrada.novaEntrada));
+    const qs = params.toString();
+    return await apiCall<{ success: boolean; amount: number; options: InstallmentPlan[] }>(`/cards/invoice/renegotiate/options${qs ? `?${qs}` : ''}`);
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao buscar opções de renegociação' };
+  }
+};
+
+export const renegotiateCreditCardDebt = async (cpf: string, details: { installments: number; tipoEntrada?: TipoEntrada; novaEntrada?: number }, pin?: string): Promise<{ success: boolean; message: string; receipt?: InstallmentReceipt }> => {
+  try {
+    const result = await apiCall<{ success: boolean; message: string; receipt?: InstallmentReceipt }>('/cards/invoice/renegotiate', {
+      method: 'POST',
+      body: JSON.stringify({ cpf, ...details, pin })
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Erro ao renegociar dívida' };
   }
 };
 
@@ -1380,6 +1465,27 @@ export const adminFixChargesProactive = async (cpf?: string): Promise<{
     return result;
   } catch (error: any) {
     return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao corrigir encargos' };
+  }
+};
+
+// Cura de massas com parcelamento esgotado (<6x ou remaining=0) e faturas sem lançamentos
+export const adminFixInstallmentPlans = async (cpf?: string): Promise<{
+  success: boolean;
+  message?: string;
+  totalFound?: number;
+  totalCured?: number;
+  errorsCount?: number;
+  cured?: any[];
+  errors?: any[];
+}> => {
+  try {
+    const result = await apiCall<{ success: boolean; totalFound?: number; totalCured?: number; errorsCount?: number; cured?: any[]; errors?: any[] }>('/admin/fix-installment-plans', {
+      method: 'POST',
+      body: JSON.stringify({ confirm: true, cpf }),
+    });
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao curar parcelamentos esgotados' };
   }
 };
 

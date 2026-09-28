@@ -372,6 +372,28 @@ scheduleCron('0 0 * * *', async () => {
         telegramService.alertGroup('ERRO ao reconciliar limite disponível: ' + e.message, 'system_error');
     }
 
+    // PA/PF-elegível: antes só rodavam via script manual, nunca automaticamente — massa
+    // gerada nunca era avaliada pra PA/PF a menos que alguém lembrasse de rodar o script.
+    console.log('[Cron] Recalculando elegibilidade de Parcelamento Automático (PA)...');
+    try {
+        const { runBackfillPA } = require('./scripts/backfill_tbl_pa.cjs');
+        const r = await runBackfillPA(dbService);
+        console.log(`[Cron] PA: ${r.ok}/${r.total} massa(s) elegível(is) recalculada(s).`);
+    } catch (e) {
+        console.error('[Cron] Erro ao recalcular PA:', e.message);
+        telegramService.alertGroup('ERRO ao recalcular PA: ' + e.message, 'system_error');
+    }
+
+    console.log('[Cron] Recalculando elegibilidade geral de Parcelamento de Fatura (PF)...');
+    try {
+        const { runBackfillPFElegivel } = require('./scripts/backfill_tbl_pf_elegivel.cjs');
+        const r = await runBackfillPFElegivel(dbService);
+        console.log(`[Cron] PF-elegível: ${r.ok}/${r.total} massa(s) com contrato PF recalculada(s).`);
+    } catch (e) {
+        console.error('[Cron] Erro ao recalcular PF-elegível:', e.message);
+        telegramService.alertGroup('ERRO ao recalcular PF-elegível: ' + e.message, 'system_error');
+    }
+
     // T6: registra o horario desta execucao para o catch-up de boot saber se o
     // motor ja rodou hoje.
     try {
@@ -533,6 +555,7 @@ const normalizeUser = (dbUser) => {
 const enrichUserCreditCardData = async (normalized, cpf) => {
     const { esc } = repoContext;
     let latestInvoice = null;
+    let invRows = [];
     try {
         // SEM LIMIT: uma massa com 6+ fechadas históricas perdia a mais antiga daqui (o
         // LIMIT 5 antigo), mas a soma de pago (transactions.invoice_id) continua somando
@@ -543,7 +566,7 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         // getClosedInvoiceDebt (invoiceController.js), que decide QUANTO cobrar, nunca teve
         // esse limite — só a leitura do dashboard tinha. Por CPF o volume é baixo (poucas
         // dezenas de faturas mesmo em contas antigas), sem custo de performance real.
-        const invRows = await dbService.executeQuery(`
+        invRows = await dbService.executeQuery(`
             SELECT id, status, due_date, valor_total, saldo_anterior, valor_iof, valor_multa,
                    valor_juros_remuneratorios, valor_juros_mora,
                    COALESCE(valor_pago, 0) AS valor_pago, itemized_transactions, data_pagamento
@@ -874,16 +897,17 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         _prevPrevCloseMs = _prevPrevCd.getTime();
     }
 
-    if (normalized.creditCard?.closedInvoiceDueDate) {
-        const _closedDue = new Date(normalized.creditCard.closedInvoiceDueDate);
-        if (!isNaN(_closedDue.getTime())) {
-            _closedDue.setUTCHours(23, 59, 59, 999);
-            const _closedCut = new Date(_closedDue);
-            _closedCut.setDate(_closedCut.getDate() - 5);
-            _prevCloseMs = _closedCut.getTime();
-            const _closedPrevCut = new Date(_closedCut);
-            _closedPrevCut.setMonth(_closedPrevCut.getMonth() - 1);
-            _prevPrevCloseMs = _closedPrevCut.getTime();
+    const mostRecentFechada = (invRows || []).find(i => i.status === 'FECHADA');
+    if (mostRecentFechada && mostRecentFechada.due_date) {
+        const _mrfDue = new Date(mostRecentFechada.due_date);
+        if (!isNaN(_mrfDue.getTime())) {
+            _mrfDue.setUTCHours(23, 59, 59, 999);
+            const _mrfCut = new Date(_mrfDue);
+            _mrfCut.setDate(_mrfCut.getDate() - 5);
+            _prevCloseMs = _mrfCut.getTime();
+            const _mrfPrevCut = new Date(_mrfCut);
+            _mrfPrevCut.setMonth(_mrfPrevCut.getMonth() - 1);
+            _prevPrevCloseMs = _mrfPrevCut.getTime();
         }
     }
 
@@ -985,11 +1009,11 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
             return plan ? attachPlanJurosInfo(baseTx, plan) : baseTx;
         }
         if (r.type === 'INVOICE_INSTALLMENT') {
-            const m = desc.match(/\((\d+)\/(\d+)\)/);
+            const m = desc.match(/\b(\d+)\/(\d+)\b/);
             const currentInstallment = m ? parseInt(m[1], 10) : undefined;
             const totalInstallments = m ? parseInt(m[2], 10) : undefined;
             const installments = m ? `${m[1]}/${m[2]}` : undefined;
-            const merchantName = desc.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim() || 'Compra credito';
+            const merchantName = desc.replace(/\s*\(\d+\/\d+.*$/, '').trim() || 'Compra parcelada';
             const baseTx = { ...base, merchant: merchantName, type: 'INVOICE_INSTALLMENT', installments, currentInstallment, totalInstallments };
             const plan = findPlanForInstallment(planRows, totalInstallments, base.amount);
             return plan ? attachPlanJurosInfo(baseTx, plan) : baseTx;
@@ -1083,36 +1107,19 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
         normalized.creditCard.paymentHistory = [];
     }
 
-    const isBlocked = Boolean(normalized.creditCard?.isBlocked);
-    const cutoff = invoiceDueDateEndOfDay && !isNaN(invoiceDueDateEndOfDay.getTime()) ? invoiceDueDateEndOfDay : new Date(new Date().setUTCHours(23, 59, 59, 999));
-
-    let closedTransactions;
-    if (isBlocked) {
-        closedTransactions = cardTransactions.filter(tx => {
-            const txDate = new Date(tx.date);
-            return tx.type === 'INVOICE_INSTALLMENT'
-                && !isNaN(txDate.getTime())
-                && txDate.getTime() <= cutoff.getTime();
-        });
-        // NÃO zerar currentInvoice aqui. Cartão bloqueado impede NOVAS compras,
-        // mas as compras já lançadas no ciclo aberto continuam devidas e têm que
-        // aparecer na fatura. Zerar fazia a fatura aberta sumir da tela assim que
-        // o cliente entrava em atraso — o valor calculado em :457 é o correto.
-    } else {
-        closedTransactions = cardTransactions.filter(tx => {
-            const txDate = new Date(tx.date).getTime();
-            // Janela ESTRITA do ciclo fechado. PAYMENT feito depois do fechamento NAO
-            // entra aqui (regra 6.4.1/8.1: pagamento vive so em openTransactions e em
-            // paymentHistory). Injetar o PAYMENT aqui mutava visualmente a fatura
-            // fechada, que e imutavel pela trigger da migration 005.
-            if (txDate <= _prevPrevCloseMs || txDate > _prevCloseMs) return false;
-            if (splitTxIds.has(tx.id)) return false;
-            if (tx.type === 'INVOICE_INSTALLMENT') return true;
-            if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT' || tx.type === 'SUBSCRIPTION') return true;
-            if (tx.type === 'PAYMENT' || tx.type === 'INVOICE_PAYMENT' || tx.type === 'INVOICE_ANTICIPATION') return true;
-            return false;
-        });
-    }
+    let closedTransactions = cardTransactions.filter(tx => {
+        const txDate = new Date(tx.date).getTime();
+        // Janela ESTRITA do ciclo fechado. PAYMENT feito depois do fechamento NAO
+        // entra aqui (regra 6.4.1/8.1: pagamento vive so em openTransactions e em
+        // paymentHistory). Injetar o PAYMENT aqui mutava visualmente a fatura
+        // fechada, que e imutavel pela trigger da migration 005.
+        if (txDate <= _prevPrevCloseMs || txDate > _prevCloseMs) return false;
+        if (splitTxIds.has(tx.id)) return false;
+        if (tx.type === 'INVOICE_INSTALLMENT') return true;
+        if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT' || tx.type === 'SUBSCRIPTION') return true;
+        if (tx.type === 'PAYMENT' || tx.type === 'INVOICE_PAYMENT' || tx.type === 'INVOICE_ANTICIPATION') return true;
+        return false;
+    });
 
     const closedSnapshot = normalized.creditCard._closedInvoiceSnapshot;
     delete normalized.creditCard._closedInvoiceSnapshot;
@@ -1122,6 +1129,25 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     normalized.creditCard.closedTransactions = Array.isArray(closedSnapshot)
         ? closedSnapshot.filter(tx => tx && tx.type !== 'PAYMENT' && tx.type !== 'INVOICE_PAYMENT' && tx.type !== 'INVOICE_ANTICIPATION')
         : closedTransactions;
+
+    // Vincula lançamentos aos itens de closedInvoicesList se não possuírem snapshot explícito
+    if (Array.isArray(normalized.creditCard.closedInvoicesList)) {
+        normalized.creditCard.closedInvoicesList = normalized.creditCard.closedInvoicesList.map(inv => {
+            const invDue = new Date(inv.dueDate);
+            const invCut = new Date(invDue);
+            invCut.setDate(invCut.getDate() - 5);
+            const invPrevCut = new Date(invCut);
+            invPrevCut.setMonth(invPrevCut.getMonth() - 1);
+            const txsForInv = cardTransactions.filter(tx => {
+                const t = new Date(tx.date).getTime();
+                return t > invPrevCut.getTime() && t <= invCut.getTime() && !splitTxIds.has(tx.id) && tx.type !== 'PAYMENT' && tx.type !== 'INVOICE_PAYMENT' && tx.type !== 'INVOICE_ANTICIPATION';
+            });
+            return {
+                ...inv,
+                transactions: txsForInv
+            };
+        });
+    }
     const rawInvoiceTotal = normalized.creditCard.closedTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
     // paidInCycle removido — closedInvoice já usa valor_pago (saldo residual do DB).
     // A subtração dupla (paidInCycle + valor_pago) causava double-counting.
@@ -7749,6 +7775,28 @@ apiRouter.post('/admin/fix-charges-proactive', bearerAuth(), authenticateAdmin, 
     res.json(result);
 }));
 
+// POST /admin/fix-installment-plans — cura de parcelamentos esgotados (<6x) e faturas sem lançamentos.
+// Lógica em services/installmentPlanCura.js.
+apiRouter.post('/admin/fix-installment-plans', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf: cpfFilter, confirm } = req.body || {};
+
+    if (confirm !== true) {
+        return res.status(400).json({
+            success: false,
+            message: 'Confirmação necessária. Envie { "confirm": true } no body para aplicar correções.'
+        });
+    }
+
+    const { curarMassaParcelas } = require('./services/installmentPlanCura');
+    const result = await curarMassaParcelas(dbService, {
+        cpfFilter,
+        dryRun: false
+    });
+
+    auditLog(req, 'admin.fix-installment-plans', 'warn', result);
+    res.json({ success: true, ...result });
+}));
+
 // ——— Badge de cobertura de regras (shields.io compatible) ——————————————————
 apiRouter.get('/admin/badge/rules-coverage', asyncHandler(async (req, res) => {
     try {
@@ -7949,6 +7997,23 @@ if (!IS_TEST) {
                 console.warn(`⚠️ [mass] recálculo de limite falhou para ${created.cpf}:`, limErr.message);
             }
 
+            // PA/PF-elegível: antes só rodavam no motor da meia-noite (ou nem isso — PA/PF
+            // nunca tiveram cron, só script manual). Massa recém-criada já pode nascer
+            // 30-44d "atrasada" (histórico de ciclos retroativo) — sem isso, ela ficava
+            // sem avaliação de PA/PF até alguém lembrar de rodar o script na mão.
+            try {
+                const { runBackfillPA } = require('./scripts/backfill_tbl_pa.cjs');
+                await runBackfillPA(dbService, { cpf: created.cpf });
+            } catch (paErr) {
+                console.warn(`⚠️ [mass] recálculo de PA falhou para ${created.cpf}:`, paErr.message);
+            }
+            try {
+                const { runBackfillPFElegivel } = require('./scripts/backfill_tbl_pf_elegivel.cjs');
+                await runBackfillPFElegivel(dbService, { cpf: created.cpf });
+            } catch (pfErr) {
+                console.warn(`⚠️ [mass] recálculo de PF-elegível falhou para ${created.cpf}:`, pfErr.message);
+            }
+
             const { runMassPreflight } = require('./services/massPreflight');
             const preflight = await runMassPreflight(dbService, { ...created, limite, limiteErro }, { onStep });
             if (!preflight.ok) {
@@ -7968,8 +8033,8 @@ if (!IS_TEST) {
             require('./services/eventBus').publish('mass.created', {
                 cpf: created.cpf,
                 fullName: created.fullName,
-                // Estado atual = status do último ciclo (Gerador 4.0; ciclo pode ser objeto com pagamento); cai no accountStatus do payload em clientes antigos.
-                accountStatus: created.accountStatus || payload.accountStatus,
+                // Estado atual = último ciclo (Gerador 5.0); cai no accountStatus do payload em clientes antigos.
+                accountStatus: created.cycles?.[created.cycles.length - 1] || payload.accountStatus,
                 cycles: created.cycles,
                 cardBrand: payload.cardBrand,
             }).catch(() => {});
@@ -8040,10 +8105,17 @@ if (!IS_TEST) {
  * enrichUserCreditCardData que já é fonte única do "Próxima Fatura" (Web/Admin).
  *
  * Fórmula: disponível = limite_total - currentInvoiceTotal (compras abertas +
- * fatura fechada residual + encargos herdados). PODE dar negativo de propósito —
- * significa limite estourado de verdade, não um erro a esconder (a UI do
- * Backoffice já trata availableLimit<0 como estado válido, com ícone/cor
- * próprios — ver BackofficeInvoiceSection.tsx).
+ * fatura fechada residual + encargos herdados) - parcelasAVencer (parcelas
+ * contratadas que ainda vão aparecer em faturas futuras — comprar parcelado já
+ * reserva o limite inteiro no ato da compra, não só a fatia do mês corrente;
+ * mesma regra aplicada no débito de credit_card_available_limit em cada compra
+ * real — ver index.cjs linha ~2260). Sem esse termo, toda massa com parcelamento
+ * ativo ficava com disponível inflado no valor exato das parcelas futuras (achado
+ * 2026-09-26 comparando com print de banco real: Limite Utilizado = Fatura Aberta
+ * + Parcelas a Vencer, nunca só Fatura Aberta sozinha).
+ * PODE dar negativo de propósito — significa limite estourado de verdade, não um
+ * erro a esconder (a UI do Backoffice já trata availableLimit<0 como estado
+ * válido, com ícone/cor próprios — ver BackofficeInvoiceSection.tsx).
  */
 // `persist: false` = simulação (painel Admin "Simular") — mesma conta, sem UPDATE.
 async function recalcularLimiteDisponivel(cpf, { persist = true } = {}) {
@@ -8056,8 +8128,22 @@ async function recalcularLimiteDisponivel(cpf, { persist = true } = {}) {
 
     const totalLimit = parseFloat(userRow.credit_card_total_limit || 0);
     const currentInvoiceTotal = tempUser.creditCard?.currentInvoiceTotal ?? 0;
+
+    // Mesma exclusão do mês da fatura aberta usada no tile WEB (InvoicesAllureView.tsx)
+    // e no CSV (utils/tblDeMassasExport.cjs) — sem isso o mês corrente duplicaria
+    // entre currentInvoiceTotal e parcelasAVencer.
+    const dueRef = tempUser.creditCard?.invoiceDueDate || tempUser.creditCard?.dueDate;
+    const currentCycleKey = dueRef
+        ? (() => { const d = new Date(dueRef); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; })()
+        : null;
+    const futureMap = tempUser.creditCard?.futureInstallments || {};
+    const parcelasAVencer = round2(Object.entries(futureMap).reduce((sum, [ref, valor]) => {
+        if (ref === currentCycleKey) return sum;
+        return sum + (Number(valor) || 0);
+    }, 0));
+
     const limiteAnterior = parseFloat(userRow.credit_card_available_limit || 0);
-    const limiteNovo = round2(totalLimit - currentInvoiceTotal);
+    const limiteNovo = round2(totalLimit - currentInvoiceTotal - parcelasAVencer);
     const alterado = Math.abs(limiteNovo - limiteAnterior) > 0.005;
 
     if (alterado && persist) {
@@ -8073,6 +8159,7 @@ async function recalcularLimiteDisponivel(cpf, { persist = true } = {}) {
         fullName: userRow.full_name,
         totalLimit,
         currentInvoiceTotal,
+        parcelasAVencer,
         limiteAnterior,
         limiteNovo,
         alterado,
