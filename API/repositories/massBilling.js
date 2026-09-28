@@ -205,6 +205,17 @@ async function seedMassBilling(db, cpf, options = {}) {
     // diferentes, não 1/3 de um total arbitrário). Devolve o total gasto no ciclo.
     const comprasAdimplente = async (dueDate) => {
         let totalGasto = 0;
+        // Se há uma compra parcelada correndo de uma sequência inadimplente anterior
+        // (planId + installmentIndex ainda não esgotou totalInstallments), a parcela
+        // deste ciclo ADIMPLENTE também entra na fatura — a sequência de parcelas não
+        // para só porque a conta voltou a ficar em dia num ciclo no meio dela.
+        if (planId && installmentIndex < totalInstallments) {
+            installmentIndex++;
+            const txDate = new Date(dueDate);
+            txDate.setDate(txDate.getDate() - (20 + Math.floor(Math.random() * 5)));
+            await insertPurchase(installmentValue, pickMerchantName(), txDate.toISOString(), 'INVOICE_INSTALLMENT', `${installmentIndex}/${totalInstallments}`);
+            totalGasto = round2(totalGasto + installmentValue);
+        }
         for (let k = 0; k < 3; k++) {
             const { nome, valor } = pickMerchantAvistaComValor(400 / 3, 1000 / 3);
             const txDate = new Date(dueDate);
@@ -313,7 +324,7 @@ async function seedMassBilling(db, cpf, options = {}) {
 
         if (isLast && status === 'adimplente') await comprasCicloAberto();
 
-        if (isLast && status === 'inadimplente' && planId) {
+        if (isLast && planId) {
             // Ciclo ABERTO atual: a próxima parcela da sequência (ex.: 5/12) já está
             // "correndo" nesse ciclo mesmo ele ainda não ter fechado — sem isso a Fatura
             // Aberta/"Parcelas a Vencer" não refletia a parcela seguinte e
