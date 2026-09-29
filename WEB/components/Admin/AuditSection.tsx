@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ShieldCheck, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, Wrench } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
-import { adminAuditConsistency, adminAuditDoubleCount, adminAuditCsvConsistency, adminAuditCicloDessincronizado, adminFixOrphanInstallments, adminFixChargesProactive, adminFixInstallmentPlans, adminFixCicloDessincronizado } from '../../services/api';
+import { adminAuditConsistency, adminAuditDoubleCount, adminAuditCsvConsistency, adminAuditCicloDessincronizado, adminHealthCharges, adminValidateBillingAll, adminFixOrphanInstallments, adminFixChargesProactive, adminFixInstallmentPlans, adminFixCicloDessincronizado } from '../../services/api';
+import AuditPendencias, { buildPendencias, type Pendencia, type ResultadoCorrecao } from './AuditPendencias';
 
 type AuditSubTab = 'consistency' | 'double-count' | 'csv-consistency' | 'corrections';
 
@@ -126,18 +127,25 @@ const AuditSection: React.FC = () => {
         }
     }, [cpfInput]);
 
+    const [charges, setCharges] = useState<Awaited<ReturnType<typeof adminHealthCharges>> | null>(null);
+    const [resultados, setResultados] = useState<Record<string, ResultadoCorrecao>>({});
+    const [executando, setExecutando] = useState<string | null>(null);
+
     const fetchAll = useCallback(async () => {
         setLoading(true);
         setStatusMessage('Consultando auditorias...');
         try {
-            const [c, d, cc, ci] = await Promise.all([adminAuditConsistency(), adminAuditDoubleCount(), adminAuditCsvConsistency(), adminAuditCicloDessincronizado()]);
+            const [c, d, cc, ci, ch] = await Promise.all([adminAuditConsistency(), adminAuditDoubleCount(), adminAuditCsvConsistency(), adminAuditCicloDessincronizado(), adminHealthCharges()]);
             setConsistency(c);
             setDoubleCount(d);
             setCsvConsistency(cc);
             setCiclos(ci);
+            setCharges(ch);
             setStatusMessage('Auditorias atualizadas.');
+            return { consistency: c, doubleCount: d, csv: cc, ciclos: ci, charges: ch };
         } catch {
             setStatusMessage('Falha ao consultar auditorias.');
+            return null;
         } finally {
             setLoading(false);
         }
@@ -146,6 +154,45 @@ const AuditSection: React.FC = () => {
     useEffect(() => {
         fetchAll();
     }, [fetchAll]);
+
+    // Curas do painel "Pendências encontradas": cada uma devolve um texto curto do que fez.
+    const acoesPendencias = useMemo(() => ({
+        sincronizarDias: async () => {
+            const r = await adminValidateBillingAll();
+            return r.success === false ? (r.message || 'Falha ao sincronizar.') : `${r.processadas ?? 0} massa(s) processada(s).`;
+        },
+        curarCiclos: async () => {
+            const r = await adminFixCicloDessincronizado();
+            return r.success === false ? (r.message || 'Falha ao curar.') : `${r.totalCured ?? 0} de ${r.totalFound ?? 0} massa(s) curada(s), ${r.errorsCount ?? 0} erro(s).`;
+        },
+        corrigirEncargos: async () => {
+            const r = await adminFixChargesProactive();
+            return r.success === false ? (r.message || 'Falha ao recalcular.') : `${r.summary?.fixed ?? 0} fatura(s) corrigida(s).`;
+        },
+    }), []);
+
+    const pendencias = useMemo(
+        () => buildPendencias({ consistency, doubleCount, csv: csvConsistency, ciclos, charges }, acoesPendencias),
+        [consistency, doubleCount, csvConsistency, ciclos, charges, acoesPendencias],
+    );
+
+    // Corrige e REVALIDA: depois da cura consulta tudo de novo e mostra antes → depois.
+    const corrigirPendencia = useCallback(async (p: Pendencia) => {
+        if (!p.acao) return;
+        setExecutando(p.id);
+        let mensagem = '';
+        try {
+            mensagem = await p.acao.run();
+        } catch (err: any) {
+            mensagem = err?.message || 'Erro inesperado na correção.';
+        }
+        const fresh = await fetchAll();
+        const depois = fresh
+            ? (buildPendencias(fresh, acoesPendencias).find((x) => x.id === p.id)?.contagem ?? p.contagem)
+            : p.contagem;
+        setResultados((s) => ({ ...s, [p.id]: { antes: p.contagem, depois, mensagem } }));
+        setExecutando(null);
+    }, [fetchAll, acoesPendencias]);
 
     const subTabs: { id: AuditSubTab; label: string }[] = [
         { id: 'consistency', label: 'Consistência' },
@@ -178,6 +225,16 @@ const AuditSection: React.FC = () => {
             </div>
 
             <span className="sr-only" role="status" aria-live="polite">{statusMessage}</span>
+
+            <AuditPendencias
+                pendencias={pendencias}
+                resultados={resultados}
+                executando={executando}
+                loading={loading}
+                isMidnight={isMidnight}
+                onCorrigir={corrigirPendencia}
+                onEscolherCpf={(cpf) => { setCpfInput(cpf); setSubTab('corrections'); }}
+            />
 
             <div className="flex items-center gap-2">
                 {subTabs.map(t => {

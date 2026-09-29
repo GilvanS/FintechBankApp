@@ -31,7 +31,13 @@
 *                       só o valor EXATO conta como MIN/TOTAL, tudo o resto é
 *                       parcial, mesmo pagamentos "família parcial" (CT03.4/3.5
 *                       do poc-fintech-playwright) que passam perto do mínimo.
- *  - fatura_aberta   = soma de compras do ciclo ATUAL (após corte da fechada) + encargos pending
+ *  - fatura_aberta   = soma de compras do ciclo ATUAL (janela do enrich: depois do corte da última
+ *                       fechada, até o fim do dia do vencimento; sem compra-mãe de parcelamento)
+ *                       + parcela projetada do plano que cai nesse ciclo (mesma injeção do
+ *                       enrichUserCreditCardData) + encargos pending. Fechada quitada por
+ *                       data_pagamento (gerador) não deixa resíduo.
+ *  - parcelas_a_vencer = parcelas futuras dos planos ativos SEM o mês do vencimento da aberta
+ *                       (regra da tela: essa parcela já está na aberta)
  *  - status_fatura_fechada = 'ABERTA' | 'VIGENTE' | 'PAGO_PARCIAL' | 'PAGO_MIN' | 'PAGO_TOTAL'
  *  Estas colunas espelham o que o backend calcula em enrichUserCreditCardData (index.cjs).
  *
@@ -142,7 +148,8 @@ fechadas_unpaid AS (
         valor_total,
         data_pagamento,
         ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY due_date DESC) as rn,
-        SUM(valor_total) OVER (PARTITION BY cpf) as total_fechadas
+        SUM(valor_total) OVER (PARTITION BY cpf) as total_fechadas,
+        FALSE AS all_paid
     FROM todas_fechadas
     WHERE data_pagamento IS NULL
 ),
@@ -154,7 +161,8 @@ fechadas_all_paid AS (
         valor_total,
         data_pagamento,
         ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY due_date DESC) as rn,
-        valor_total as total_fechadas
+        valor_total as total_fechadas,
+        TRUE AS all_paid
     FROM todas_fechadas
     WHERE cpf NOT IN (SELECT cpf FROM fechadas_unpaid)
 ),
@@ -168,7 +176,10 @@ fechada_calculada AS (
         f.cpf,
         COALESCE(pt.total_pago, 0) as total_pago,
         f.total_fechadas,
-        GREATEST(0, f.total_fechadas - COALESCE(pt.total_pago, 0)) as residual_total_fechadas,
+        -- Fechada quitada (data_pagamento preenchida — o gerador grava assim, com o INVOICE_PAYMENT
+        -- sem invoice_id): o backend a trata como paga, então não há resíduo a herdar na aberta.
+        -- Sem isto o CSV somava a fatura inteira na aberta (divergência de 87 massas na auditoria).
+        CASE WHEN f.all_paid THEN 0 ELSE GREATEST(0, f.total_fechadas - COALESCE(pt.total_pago, 0)) END as residual_total_fechadas,
         -- Granularidade pedida 2026-09-20 (caso real 71040451128: massa recebeu um
         -- pagamento Mínimo e DEPOIS um Total, que cobra o valor ORIGINAL de novo —
         -- excedente de R$187,63 gerado por pegar massa já tocada). 'VIGENTE' significa
@@ -190,6 +201,7 @@ fechada_calculada AS (
         -- VIGENTE olha o valor pago de fato: parcial só de encargos tem principal 0.
         CASE
             WHEN f.total_fechadas IS NULL THEN 'ABERTA'
+            WHEN COALESCE(pt.total_pago_bruto, 0) <= 0 AND f.all_paid THEN 'PAGO_TOTAL'
             WHEN COALESCE(pt.total_pago_bruto, 0) <= 0 THEN 'VIGENTE'
             WHEN ABS(f.total_fechadas - COALESCE(pt.total_pago, 0)) <= ${TOLERANCIA_QUITACAO} THEN 'PAGO_TOTAL'
             WHEN ABS(COALESCE(pt.total_pago, 0) - GREATEST(f.total_fechadas * 0.10, 10)) < 0.01 THEN 'PAGO_MIN'
@@ -203,7 +215,7 @@ fechada_calculada AS (
             SELECT due_date FROM fechadas f2
             WHERE f2.cpf = f.cpf AND f2.rn = 1
         ) as due_date_ancora
-    FROM (SELECT DISTINCT cpf, total_fechadas FROM fechadas) f
+    FROM (SELECT DISTINCT cpf, total_fechadas, all_paid FROM fechadas) f
     LEFT JOIN pagos_totais pt ON pt.cpf = f.cpf
 ),
 compras_ciclo AS (
@@ -218,7 +230,18 @@ compras_ciclo AS (
     LEFT JOIN fechada_calculada fc ON fc.cpf = t.cpf
     INNER JOIN fintech.users u ON u.cpf = t.cpf
     WHERE t.type IN ('SHOP_CREDIT', 'CREDIT', 'SUBSCRIPTION', 'INVOICE_INSTALLMENT')
-      AND (fc.due_date_ancora IS NULL OR t.date > fc.due_date_ancora)
+      AND (t.status IS NULL OR t.status <> 'cancelled')
+      -- Janela do ciclo aberto = a do enrichUserCreditCardData: depois do CORTE da última fechada
+      -- (vencimento − 5 dias, até o fim do dia) e até o fim do dia do vencimento da aberta. Antes o
+      -- CSV usava o próprio vencimento da fechada e não tinha teto, então perdia as compras dos 5
+      -- dias entre corte e vencimento e contava lançamentos futuros.
+      AND (fc.due_date_ancora IS NULL
+           OR t.date > (DATE_TRUNC('day', fc.due_date_ancora) - INTERVAL '5 days' + INTERVAL '1 day' - INTERVAL '1 millisecond'))
+      AND (u.credit_card_invoice_due_date IS NULL
+           OR t.date <= (DATE_TRUNC('day', u.credit_card_invoice_due_date) + INTERVAL '1 day' - INTERVAL '1 millisecond'))
+      -- A compra-mãe de um parcelamento não entra na fatura (as parcelas entram); o backend a exclui
+      -- por purchase_tx_id (splitTxIds).
+      AND NOT EXISTS (SELECT 1 FROM fintech.installment_plans ip WHERE ip.purchase_tx_id = t.id)
     GROUP BY t.cpf
 ),
 encargos_herdados AS (
@@ -240,18 +263,49 @@ encargos_por_tipo AS (
     WHERE status = 'pending'
     GROUP BY cpf
 ),
--- parcelas_a_vencer: soma das parcelas futuras de planos ativos. remaining_installments
--- JÁ exclui a parcela do ciclo aberto atual (mesma convenção do fluxo real de compra em
--- shop.routes.js: remaining_installments = qty - 1 no momento da compra, e do fix do
--- gerador em repositories/usersRepo.js — a parcela "em andamento" no ciclo aberto NUNCA
--- entra em remaining_installments, só as que ainda vão aparecer em faturas futuras).
--- Equivalente ao futureInstallments do enrichUserCreditCardData, em total flat em vez
--- de por mês.
+-- parcelas_a_vencer: espelha a tela ("Parcelas a Vencer" em InvoicesAllureView/LimitsAllureView).
+-- É o futureInstallments do enrichUserCreditCardData (uma entrada por mês a partir de
+-- next_due_date, uma por parcela restante) SEM o mês do vencimento da fatura ABERTA: a tela
+-- exclui esse mês porque a parcela dele já está na fatura aberta (somar as duas duplicaria).
+-- Antes o CSV somava valor × remaining e contava essa parcela em "a vencer" e fora da aberta,
+-- divergindo do Web (caso CPF 94973492973: CSV 1.026,48 × tela 898,17).
 parcelas_a_vencer AS (
-    SELECT cpf, SUM(installment_amount * remaining_installments) AS total
-    FROM fintech.installment_plans
-    WHERE LOWER(status) = 'active' AND remaining_installments > 0
-    GROUP BY cpf
+    SELECT p.cpf,
+           SUM(p.installment_amount) FILTER (
+               WHERE DATE_TRUNC('month', p.next_due_date + (g.i * INTERVAL '1 month'))
+                  <> DATE_TRUNC('month', u.credit_card_invoice_due_date)
+           ) AS total
+    FROM fintech.installment_plans p
+    JOIN fintech.users u ON u.cpf = p.cpf
+    CROSS JOIN LATERAL generate_series(0, p.remaining_installments - 1) AS g(i)
+    WHERE LOWER(p.status) = 'active' AND p.remaining_installments > 0
+      AND p.next_due_date IS NOT NULL AND u.credit_card_invoice_due_date IS NOT NULL
+    GROUP BY p.cpf
+),
+-- parcela_projetada_aberta: a próxima parcela do plano que o enrichUserCreditCardData INJETA na
+-- fatura aberta quando ainda não existe como lançamento (next_due_date dentro da janela do ciclo
+-- aberto: depois do corte da última fechada e até o fim do dia do vencimento, e sem transação
+-- física "(n/total)" do plano). Mesma condição do bloco "Injetar parcelas pendentes projetadas".
+parcela_projetada_aberta AS (
+    SELECT p.cpf, SUM(p.installment_amount) AS total
+    FROM fintech.installment_plans p
+    JOIN fintech.users u ON u.cpf = p.cpf
+    LEFT JOIN fechada_calculada fc ON fc.cpf = p.cpf
+    WHERE LOWER(p.status) = 'active' AND p.remaining_installments > 0
+      AND p.next_due_date IS NOT NULL AND u.credit_card_invoice_due_date IS NOT NULL
+      AND p.next_due_date > (
+            COALESCE(
+                DATE_TRUNC('day', fc.due_date_ancora) - INTERVAL '5 days',
+                DATE_TRUNC('day', u.credit_card_invoice_due_date) - INTERVAL '1 month' - INTERVAL '5 days'
+            ) + INTERVAL '1 day' - INTERVAL '1 millisecond')
+      AND p.next_due_date <= DATE_TRUNC('day', u.credit_card_invoice_due_date) + INTERVAL '1 day' - INTERVAL '1 millisecond'
+      AND NOT EXISTS (
+            SELECT 1 FROM fintech.transactions t
+            WHERE t.cpf = p.cpf AND t.type = 'INVOICE_INSTALLMENT'
+              AND t.description LIKE '%' || p.description || '%'
+              AND t.description LIKE '%(' || (p.installments - p.remaining_installments + 1) || '/' || p.installments || ')%'
+      )
+    GROUP BY p.cpf
 ),
 cartao_fisico AS (
     SELECT DISTINCT ON (user_cpf) user_cpf, card_number, cvv
@@ -306,7 +360,7 @@ todas_massas AS (
         (u.credit_card_total_limit - u.credit_card_available_limit) AS limite_utilizado,
         u.credit_card_available_limit                               AS limite_disponivel,
         COALESCE(fc.valor_fechada_exibicao, 0)                      AS fatura_fechada,
-        GREATEST(0, COALESCE(cc.total, 0) + COALESCE(fc.residual_total_fechadas, 0) + COALESCE(eh.total, 0) - COALESCE(an.total, 0)) AS fatura_aberta,
+        GREATEST(0, COALESCE(cc.total, 0) + COALESCE(ppa.total, 0) + COALESCE(fc.residual_total_fechadas, 0) + COALESCE(eh.total, 0) - COALESCE(an.total, 0)) AS fatura_aberta,
         COALESCE(pav.total, 0)                                      AS parcelas_a_vencer,
         COALESCE(fc.status_fechada, 'ABERTA')                      AS status_fatura_fechada,
         CASE
@@ -376,6 +430,7 @@ todas_massas AS (
     LEFT JOIN encargos_herdados eh ON eh.cpf = u.cpf
     LEFT JOIN encargos_por_tipo ept ON ept.cpf = u.cpf
     LEFT JOIN parcelas_a_vencer pav ON pav.cpf = u.cpf
+    LEFT JOIN parcela_projetada_aberta ppa ON ppa.cpf = u.cpf
     LEFT JOIN cartao_fisico     cf ON cf.user_cpf = u.cpf
     LEFT JOIN cartao_virtual    cv ON cv.user_cpf = u.cpf
     LEFT JOIN pf_recente        pf ON pf.cpf = u.cpf

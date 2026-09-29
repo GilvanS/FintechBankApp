@@ -19,6 +19,8 @@ const { apiMock } = vi.hoisted(() => ({
         adminFixChargesProactive: vi.fn(),
         adminFixInstallmentPlans: vi.fn(),
         adminFixCicloDessincronizado: vi.fn(),
+        adminHealthCharges: vi.fn(),
+        adminValidateBillingAll: vi.fn(),
     },
 }));
 
@@ -54,6 +56,65 @@ describe('AuditSection — aba Auditoria', () => {
         apiMock.adminAuditDoubleCount.mockResolvedValue(DOUBLE_COUNT_WITH_ISSUES);
         apiMock.adminAuditCsvConsistency.mockResolvedValue({ success: true, summary: { totalScanned: 10, consistent: 10, divergent: 0 } });
         apiMock.adminAuditCicloDessincronizado.mockResolvedValue({ success: true, summary: { divergent: 0, curaveisAuto: 0, valorNaoFaturado: 0 }, details: [] });
+        apiMock.adminHealthCharges.mockResolvedValue({ success: true, summary: { totalUsers: 10, consistent: 10, divergent: 0, noInvoice: 0 }, details: [] });
+    });
+
+    describe('painel Pendências encontradas', () => {
+        const CICLO = {
+            success: true,
+            summary: { divergent: 1, curaveisAuto: 1, valorNaoFaturado: 128.31 },
+            details: [{
+                cpf: '94973492973', name: 'Massa', dueAtual: '2026-11-02T18:00:00.000Z', dueEsperado: '2026-10-02T15:00:00.000Z',
+                ultimaFechada: '2026-09-02T18:00:00.000Z', ciclosPulados: 1, valorNaoFaturado: 128.31, curavelAuto: true,
+            }],
+        };
+
+        // O beforeEach do arquivo devolve 3 discrepâncias de double-count; aqui o cenário parte limpo
+        // para cada pendência ser isolada.
+        beforeEach(() => {
+            apiMock.adminAuditDoubleCount.mockResolvedValue({ success: true, scanned: 5, withPayments: 5, discrepancies: 0, details: [] });
+        });
+
+        it('sem inconsistência: informa que nada foi encontrado', async () => {
+            render(<AuditSection />);
+            expect(await screen.findByText('Nenhuma inconsistência encontrada')).toBeDefined();
+        });
+
+        it('lista o problema com o CPF e o valor, corrige com um clique e mostra antes → depois', async () => {
+            apiMock.adminAuditCicloDessincronizado.mockResolvedValue(CICLO);
+            apiMock.adminFixCicloDessincronizado.mockResolvedValue({ success: true, totalFound: 1, totalCured: 1, errorsCount: 0 });
+
+            render(<AuditSection />);
+            expect(await screen.findByText(/1 massa\(s\) com problema/)).toBeDefined();
+            expect(screen.getByText('Ciclo de fatura não fechado')).toBeDefined();
+
+            fireEvent.click(screen.getByRole('button', { name: /Ver CPFs/ }));
+            expect(await screen.findByText(/R\$ 128,31 sem fatura fechada/)).toBeDefined();
+
+            apiMock.adminAuditCicloDessincronizado.mockResolvedValue({ success: true, summary: { divergent: 0, curaveisAuto: 0, valorNaoFaturado: 0 }, details: [] });
+            fireEvent.click(screen.getByRole('button', { name: 'Fechar ciclos pendentes' }));
+
+            await waitFor(() => expect(apiMock.adminFixCicloDessincronizado).toHaveBeenCalledTimes(1));
+            expect(await screen.findByText(/Corrigido e validado: 1 → 0/)).toBeDefined();
+        });
+
+        it('quando a cura não resolve, avisa que a pendência continua', async () => {
+            apiMock.adminAuditCicloDessincronizado.mockResolvedValue(CICLO);
+            apiMock.adminFixCicloDessincronizado.mockResolvedValue({ success: true, totalFound: 1, totalCured: 0, errorsCount: 1 });
+
+            render(<AuditSection />);
+            await screen.findByText(/1 massa\(s\) com problema/);
+            fireEvent.click(screen.getByRole('button', { name: 'Fechar ciclos pendentes' }));
+
+            expect(await screen.findByText(/Não resolveu: continuam 1 pendência/)).toBeDefined();
+        });
+
+        it('problema sem cura automática explica o que fazer', async () => {
+            apiMock.adminAuditDoubleCount.mockResolvedValue({ success: true, scanned: 5, withPayments: 5, discrepancies: 2, details: [] });
+
+            render(<AuditSection />);
+            expect(await screen.findByText(/use "Corrigir Discrepâncias" no Admin/)).toBeDefined();
+        });
     });
 
     it('consulta as duas auditorias na montagem', async () => {

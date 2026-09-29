@@ -1525,6 +1525,16 @@ export const adminAuditCicloDessincronizado = async (options?: { cpf?: string; l
   }
 };
 
+// Roda a validação de faturamento inteira (dias de atraso, inadimplência e encargos) — a mesma
+// do cron diário. É a cura da auditoria "Consistência" (POST /admin/billing/validate-all).
+export const adminValidateBillingAll = async (): Promise<{ success: boolean; message?: string; processadas?: number; falhas?: number }> => {
+  try {
+    return await apiCall<any>('/admin/billing/validate-all', { method: 'POST' });
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao sincronizar dias de atraso' };
+  }
+};
+
 export const adminFixCicloDessincronizado = async (cpf?: string): Promise<{
   success: boolean;
   message?: string;
