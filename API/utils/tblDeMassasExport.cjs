@@ -59,6 +59,11 @@ const DELIM = ';';
  *   cpf: CPF já limpo (só dígitos) pra filtrar 1 massa; esc: helper de escape SQL
  */
 function buildQuery({ cpf, esc = (v) => `'${v}'` } = {}) {
+    // Fim do dia em UTC de (col - dias), no mesmo formato "naive" das colunas TIMESTAMP. O backend
+    // (JS) fecha as janelas do ciclo com setUTCHours(23,59,59,999); as colunas guardam o horário
+    // local (America/Sao_Paulo) sem fuso — truncar o dia direto no SQL erra 3h e joga fora compras
+    // da noite (caso CPF 31225067936: compra de 21/09 22:23 local ficava fora da janela).
+    const eodUtc = (col, dias) => `((DATE_TRUNC('day', (${col} AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'UTC') - INTERVAL '${dias} days' + INTERVAL '1 day' - INTERVAL '1 millisecond') AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo'`;
     return `
 WITH pagos_totais AS (
     -- Só o que abateu PRINCIPAL de fatura FECHADA (pagamento vinculado, invoice_id
@@ -111,7 +116,9 @@ fechadas_invoices AS (
         valor_total,
         data_pagamento
     FROM fintech.invoices
-    WHERE status = 'FECHADA'
+    -- valor_total > 0: o backend ignora fechada de R$ 0,00 (ciclo sem compras que o motor fecha)
+    -- e mostra a última com valor; sem este filtro o CSV zerava a fechada e marcava VIGENTE.
+    WHERE status = 'FECHADA' AND valor_total > 0
 ),
 tx_fechadas_fallback AS (
     -- Só entra aqui quem está REALMENTE em atraso (days_overdue > 0) e não tem
@@ -236,12 +243,14 @@ compras_ciclo AS (
       -- CSV usava o próprio vencimento da fechada e não tinha teto, então perdia as compras dos 5
       -- dias entre corte e vencimento e contava lançamentos futuros.
       AND (fc.due_date_ancora IS NULL
-           OR t.date > (DATE_TRUNC('day', fc.due_date_ancora) - INTERVAL '5 days' + INTERVAL '1 day' - INTERVAL '1 millisecond'))
+           OR t.date > (${eodUtc('fc.due_date_ancora', 5)}))
       AND (u.credit_card_invoice_due_date IS NULL
-           OR t.date <= (DATE_TRUNC('day', u.credit_card_invoice_due_date) + INTERVAL '1 day' - INTERVAL '1 millisecond'))
+           OR t.date <= (${eodUtc('u.credit_card_invoice_due_date', 0)}))
       -- A compra-mãe de um parcelamento não entra na fatura (as parcelas entram); o backend a exclui
       -- por purchase_tx_id (splitTxIds).
-      AND NOT EXISTS (SELECT 1 FROM fintech.installment_plans ip WHERE ip.purchase_tx_id = t.id)
+      -- Só planos ACTIVE (igual ao splitTxIds do backend): plano encerrado pelo UTI ('completed') não
+      -- esconde a parcela da fatura.
+      AND NOT EXISTS (SELECT 1 FROM fintech.installment_plans ip WHERE ip.purchase_tx_id = t.id AND ip.status = 'ACTIVE')
     GROUP BY t.cpf
 ),
 encargos_herdados AS (
@@ -293,12 +302,8 @@ parcela_projetada_aberta AS (
     LEFT JOIN fechada_calculada fc ON fc.cpf = p.cpf
     WHERE LOWER(p.status) = 'active' AND p.remaining_installments > 0
       AND p.next_due_date IS NOT NULL AND u.credit_card_invoice_due_date IS NOT NULL
-      AND p.next_due_date > (
-            COALESCE(
-                DATE_TRUNC('day', fc.due_date_ancora) - INTERVAL '5 days',
-                DATE_TRUNC('day', u.credit_card_invoice_due_date) - INTERVAL '1 month' - INTERVAL '5 days'
-            ) + INTERVAL '1 day' - INTERVAL '1 millisecond')
-      AND p.next_due_date <= DATE_TRUNC('day', u.credit_card_invoice_due_date) + INTERVAL '1 day' - INTERVAL '1 millisecond'
+      AND p.next_due_date > (${eodUtc('COALESCE(fc.due_date_ancora, u.credit_card_invoice_due_date - INTERVAL \'1 month\')', 5)})
+      AND p.next_due_date <= (${eodUtc('u.credit_card_invoice_due_date', 0)})
       AND NOT EXISTS (
             SELECT 1 FROM fintech.transactions t
             WHERE t.cpf = p.cpf AND t.type = 'INVOICE_INSTALLMENT'

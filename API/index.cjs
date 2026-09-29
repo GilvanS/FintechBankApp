@@ -215,6 +215,7 @@ const cardRepo = require('./repositories/cardRepo');
 const invoiceRepo = require('./repositories/invoiceRepo');
 const invoiceLifecycleRepo = require('./repositories/invoiceLifecycleRepo');
 const { bearerAuth, requireScope, pinGuard, withReqId, auditLog } = require('./middlewares/auth');
+const { createLocalOuAdmin } = require('./middlewares/localOuAdmin');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
@@ -5358,7 +5359,8 @@ const syncInvoiceDiasAtraso = async () => {
 };
 
 // POST /admin/billing/validate-all  (alias: /admin/billing/run-cycle)
-apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], asyncHandler(async (req, res) => {
+// Sem token só para o desktop (chamada local pelo ApiProxy); de fora exige admin. Ver middlewares/localOuAdmin.js.
+apiRouter.post(['/admin/billing/validate-all', '/admin/billing/run-cycle'], createLocalOuAdmin(bearerAuth, authenticateAdmin), asyncHandler(async (req, res) => {
     const result = await runBillingValidation();
     res.json(result);
 }));
@@ -7156,7 +7158,12 @@ async function runCsvConsistencyAuditQuery(cpfFilter, limit) {
         const realAberta = round2(cc.currentInvoiceTotal ?? 0);
         const diffFechada = round2(csvFechada - realFechada);
         const diffAberta = round2(csvAberta - realAberta);
-        const isConsistent = Math.abs(diffFechada) <= 0.02 && Math.abs(diffAberta) <= 0.02;
+        // A fechada é IMUTÁVEL: o CSV guarda o valor original de quando a massa foi extraída, e
+        // depois de um pagamento mínimo/parcial só saldo, limites, parcelas a vencer, fatura aberta
+        // e status são atualizados na planilha. A tela passa a mostrar o restante devido, então
+        // comparar a fechada dessas massas geraria falso positivo — só a aberta é cobrada.
+        const fechadaCongelada = row.status_fatura_fechada === 'PAGO_MIN' || row.status_fatura_fechada === 'PAGO_PARCIAL';
+        const isConsistent = (fechadaCongelada || Math.abs(diffFechada) <= 0.02) && Math.abs(diffAberta) <= 0.02;
 
         if (isConsistent) {
             consistent++;
