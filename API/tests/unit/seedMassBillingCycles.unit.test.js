@@ -62,6 +62,28 @@ test('sequência inadimplente usa 1 única compra parcelada, sem compra nova nos
     expect(newPurchases.length).toBeLessThanOrEqual(1);
 });
 
+test('sequência inadimplente parcelada mantém o MESMO merchant em todas as parcelas (1/N, 2/N, 3/N...)', async () => {
+    const db = makeFakeDb();
+    await seedMassBilling(db, '12345678900', {
+        cycles: ['inadimplente', 'inadimplente', 'inadimplente', 'inadimplente'],
+        overdueAmountBase: 2000,
+        creditLimit: 5000,
+        dueDay: 15,
+    });
+
+    const installmentInserts = db._transactions.filter(s => /INVOICE_INSTALLMENT/.test(s) && /\d+\/\d+/.test(s));
+    // 4 ciclos inadimplentes = 4 parcelas + a do ciclo aberto atual.
+    expect(installmentInserts.length).toBeGreaterThanOrEqual(4);
+
+    const merchants = installmentInserts.map(sql => {
+        const match = sql.match(/'((?:[^'\\]|\\.)*?)\s*\(\d+\/\d+\)'/);
+        return match ? match[1] : null;
+    });
+
+    expect(merchants.every(Boolean)).toBe(true);
+    expect(new Set(merchants).size).toBe(1);
+});
+
 // Regressão CPF 94973492973: users.credit_card_invoice_due_date ficava com o valor do INSERT
 // (ou o que o cron já tinha rolado antes de a massa ser regenerada), pulando um mês em relação
 // às FECHADAs semeadas — o motor nunca fechava o ciclo em aberto e o Web juntava dois ciclos.

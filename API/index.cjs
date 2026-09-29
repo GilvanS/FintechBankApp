@@ -1087,10 +1087,23 @@ const enrichUserCreditCardData = async (normalized, cpf) => {
     normalized.creditCard = normalized.creditCard || {};
 
     const maxDueTime = invoiceDueDateEndOfDay ? invoiceDueDateEndOfDay.getTime() : _closeMs;
+    // Ids ja faturados na fechada (itemized_transactions). A janela de datas
+    // (_prevCloseMs..maxDueTime) e uma APROXIMACAO de "o que ainda nao fechou" — ela
+    // assume que a fechada nunca contem compra mais nova que due_date-5. Massa de
+    // teste pode violar essa premissa (compra datada entre due_date-5 e due_date
+    // ainda assim entrou na fechada), e nesse caso a janela sozinha recontava na
+    // aberta uma compra que ja estava fechada E PAGA. Excluir por id (fonte: o
+    // proprio snapshot da fechada) fecha esse buraco sem depender da premissa de data.
+    const closedSnapshotIds = new Set(
+        Array.isArray(normalized.creditCard._closedInvoiceSnapshot)
+            ? normalized.creditCard._closedInvoiceSnapshot.map(tx => tx && tx.id).filter(Boolean)
+            : []
+    );
     const openTransactions = cardTransactions.filter(tx => {
         const txDate = new Date(tx.date).getTime();
         if (txDate <= _prevCloseMs || txDate > maxDueTime) return false;
         if (splitTxIds.has(tx.id)) return false;
+        if (closedSnapshotIds.has(tx.id)) return false;
         if (tx.type === 'INVOICE_INSTALLMENT') return true;
         if (tx.type === 'CREDIT' || tx.type === 'SHOP_CREDIT' || tx.type === 'SUBSCRIPTION') return true;
         if (tx.type === 'PAYMENT' || tx.type === 'INVOICE_PAYMENT' || tx.type === 'INVOICE_ANTICIPATION') return true;

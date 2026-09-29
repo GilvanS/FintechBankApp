@@ -242,8 +242,9 @@ compras_ciclo AS (
       -- (vencimento − 5 dias, até o fim do dia) e até o fim do dia do vencimento da aberta. Antes o
       -- CSV usava o próprio vencimento da fechada e não tinha teto, então perdia as compras dos 5
       -- dias entre corte e vencimento e contava lançamentos futuros.
-      AND (fc.due_date_ancora IS NULL
-           OR t.date > (${eodUtc('fc.due_date_ancora', 5)}))
+      -- Sem fechada real, o backend usa a janela (vencimento − 1 mês − 5d, vencimento]: compra de
+      -- ciclo já rolado e nunca fechado é ignorada (CPFs 11879646706, 17058588562, 29910306743).
+      AND (u.credit_card_invoice_due_date IS NULL OR t.date > (${eodUtc('COALESCE(fc.due_date_ancora, u.credit_card_invoice_due_date - INTERVAL \'1 month\')', 5)}))
       AND (u.credit_card_invoice_due_date IS NULL
            OR t.date <= (${eodUtc('u.credit_card_invoice_due_date', 0)}))
       -- A compra-mãe de um parcelamento não entra na fatura (as parcelas entram); o backend a exclui

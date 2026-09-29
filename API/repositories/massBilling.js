@@ -162,6 +162,7 @@ async function seedMassBilling(db, cpf, options = {}) {
     let installmentIndex = 0;
     let totalInstallments = 0;
     let isInternacional = false; // merchant da compra parcelada da sequência inadimplente ATUAL (Task 3: IOF de câmbio)
+    let merchantNomeSequencia = null; // nome sorteado na 1ª parcela — reusado nas demais para não trocar de loja no meio da compra parcelada
     let sequenceStartDueDate = null; // data da 1ª fatura da sequência inadimplente ATUAL — days_overdue final usa esta, não a do último ciclo (decisão de design #5 do spec)
     let planId = null; // hoisted pra poder lançar/atualizar a parcela do ciclo ABERTO atual depois do loop (bug: Fatura Aberta/"Parcelas a Vencer" não tinha a próxima parcela — installment_plans ficava com remaining_installments/next_due_date parados no valor inicial)
 
@@ -190,6 +191,7 @@ async function seedMassBilling(db, cpf, options = {}) {
 
             const merchant = pickMerchant();
             isInternacional = merchant.internacional;
+            merchantNomeSequencia = merchant.nome;
 
             const purchaseDate = new Date(dueDate);
             purchaseDate.setDate(purchaseDate.getDate() - (20 + Math.floor(Math.random() * 5)));
@@ -210,7 +212,7 @@ async function seedMassBilling(db, cpf, options = {}) {
             if (installmentIndex <= totalInstallments) {
                 const txDate = new Date(dueDate);
                 txDate.setDate(txDate.getDate() - (20 + Math.floor(Math.random() * 5)));
-                await insertPurchase(installmentValue, pickMerchantName(), txDate.toISOString(), 'INVOICE_INSTALLMENT', `${installmentIndex}/${totalInstallments}`);
+                await insertPurchase(installmentValue, merchantNomeSequencia ?? pickMerchantName(), txDate.toISOString(), 'INVOICE_INSTALLMENT', `${installmentIndex}/${totalInstallments}`);
             }
         }
         return installmentValue;
@@ -229,7 +231,7 @@ async function seedMassBilling(db, cpf, options = {}) {
             installmentIndex++;
             const txDate = new Date(dueDate);
             txDate.setDate(txDate.getDate() - (20 + Math.floor(Math.random() * 5)));
-            await insertPurchase(installmentValue, pickMerchantName(), txDate.toISOString(), 'INVOICE_INSTALLMENT', `${installmentIndex}/${totalInstallments}`);
+            await insertPurchase(installmentValue, merchantNomeSequencia ?? pickMerchantName(), txDate.toISOString(), 'INVOICE_INSTALLMENT', `${installmentIndex}/${totalInstallments}`);
             totalGasto = round2(totalGasto + installmentValue);
         }
         for (let k = 0; k < 3; k++) {
@@ -356,7 +358,7 @@ async function seedMassBilling(db, cpf, options = {}) {
                 const openTxDate = new Date(openCycleDueDate);
                 openTxDate.setDate(openTxDate.getDate() - (20 + Math.floor(Math.random() * 5)));
                 if (openTxDate.getTime() > now.getTime()) openTxDate.setTime(now.getTime() - 86400000);
-                await insertPurchase(installmentValue, pickMerchantName(), openTxDate.toISOString(), 'INVOICE_INSTALLMENT', `${installmentIndex}/${totalInstallments}`);
+                await insertPurchase(installmentValue, merchantNomeSequencia ?? pickMerchantName(), openTxDate.toISOString(), 'INVOICE_INSTALLMENT', `${installmentIndex}/${totalInstallments}`);
             }
             const remaining = Math.max(0, totalInstallments - installmentIndex);
             const nextDue = remaining > 0 ? shiftMonthsSameDay(openCycleDueDate, 1, anchorDay) : null;

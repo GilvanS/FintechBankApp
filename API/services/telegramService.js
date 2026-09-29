@@ -106,26 +106,40 @@ async function getOrCreateTopic(cpf, nome) {
 // Aceita `category` opcional: se informada e toggle OFF, no-op silencioso.
 async function alertUser(cpf, text, nome, category) {
     if (!ENABLED || !db) return;
-    if (category && !(await isCategoryActive(category))) {
-        console.debug(`[telegram:skip] category=${category} reason=disabled (alertUser cpf=${cpf})`);
-        return;
+    // O await de isCategoryActive roda FORA do enqueue() (único ponto com catch), então uma
+    // falha aqui (ex.: pool de conexões sob pressão logo após um pagamento) vira unhandled
+    // rejection — sem handler global na API, isso derruba o processo Node DEPOIS da escrita
+    // já commitada (bug real: pagamento gravado + 500 no cliente). Try/catch garante o
+    // contrato documentado acima: nunca lança.
+    try {
+        if (category && !(await isCategoryActive(category))) {
+            console.debug(`[telegram:skip] category=${category} reason=disabled (alertUser cpf=${cpf})`);
+            return;
+        }
+        enqueue(async () => {
+            const topicId = await getOrCreateTopic(cpf, nome);
+            // Sem parse_mode as tags <b>/<code>/<blockquote> chegam como texto cru.
+            await tg('sendMessage', { chat_id: CHAT_ID, message_thread_id: topicId, text, parse_mode: 'HTML' });
+        });
+    } catch (err) {
+        console.error('[telegram] alertUser:', err.message);
     }
-    enqueue(async () => {
-        const topicId = await getOrCreateTopic(cpf, nome);
-        // Sem parse_mode as tags <b>/<code>/<blockquote> chegam como texto cru.
-        await tg('sendMessage', { chat_id: CHAT_ID, message_thread_id: topicId, text, parse_mode: 'HTML' });
-    });
 }
 
 // Alerta no General (motor/job/cron). Fire-and-forget.
 // Aceita `category` opcional: se informada e toggle OFF, no-op silencioso.
 async function alertGroup(text, category) {
     if (!ENABLED) return;
-    if (category && !(await isCategoryActive(category))) {
-        console.debug(`[telegram:skip] category=${category} reason=disabled (alertGroup)`);
-        return;
+    // Mesmo risco de unhandled rejection do alertUser acima — try/catch pelo mesmo motivo.
+    try {
+        if (category && !(await isCategoryActive(category))) {
+            console.debug(`[telegram:skip] category=${category} reason=disabled (alertGroup)`);
+            return;
+        }
+        enqueue(() => tg('sendMessage', { chat_id: CHAT_ID, text, parse_mode: 'HTML' }));
+    } catch (err) {
+        console.error('[telegram] alertGroup:', err.message);
     }
-    enqueue(() => tg('sendMessage', { chat_id: CHAT_ID, text, parse_mode: 'HTML' }));
 }
 
 // Tópico persistente do fórum por NOME (ex.: "🔎 Auditoria · Limite"), guardado via
