@@ -61,3 +61,28 @@ test('sequência inadimplente usa 1 única compra parcelada, sem compra nova nos
     const newPurchases = db._transactions.filter(s => s.includes("1/1") || s.includes('installments'));
     expect(newPurchases.length).toBeLessThanOrEqual(1);
 });
+
+// Regressão CPF 94973492973: users.credit_card_invoice_due_date ficava com o valor do INSERT
+// (ou o que o cron já tinha rolado antes de a massa ser regenerada), pulando um mês em relação
+// às FECHADAs semeadas — o motor nunca fechava o ciclo em aberto e o Web juntava dois ciclos.
+test('alinha o vencimento do usuário ao ciclo seguinte à última FECHADA semeada', async () => {
+    const db = makeFakeDb();
+    await seedMassBilling(db, '12345678900', {
+        cycles: ['inadimplente', 'inadimplente'],
+        overdueAmountBase: 1200,
+        creditLimit: 5000,
+        dueDay: 15,
+    });
+
+    const lastInvoiceInsert = db._invoices.filter(s => s.includes('INSERT INTO fintech.invoices')).pop();
+    const lastDue = new Date(lastInvoiceInsert.match(/'FECHADA', '([^']+)'/)[1]);
+
+    const updates = db.executeQuery.mock.calls.map(c => c[0])
+        .filter(s => /UPDATE fintech\.users\s+SET credit_card_invoice_due_date/.test(s));
+    expect(updates).toHaveLength(1);
+
+    const alinhado = new Date(updates[0].match(/credit_card_invoice_due_date = '([^']+)'/)[1]);
+    const meses = (alinhado.getUTCFullYear() - lastDue.getUTCFullYear()) * 12 + (alinhado.getUTCMonth() - lastDue.getUTCMonth());
+    expect(meses).toBe(1);
+    expect(alinhado.getUTCDate()).toBe(15);
+});

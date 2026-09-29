@@ -389,6 +389,31 @@ async function runDailyAudit(dbService, auditLog, recalcularLimiteDisponivel = n
             });
         }
 
+        // Anomalia 11: vencimento do usuário ADIANTADO sem a FECHADA do ciclo (massa gerada ou
+        // regenerada entre o corte e o vencimento). O runEngine acima só fecha quando
+        // now > corte(vencimento ATUAL), então nunca enxerga esse ciclo; e a Anomalia 10 só olha
+        // ciclos cujo vencimento já passou. Sem cura o Web soma dois ciclos na fatura aberta.
+        try {
+            const { curarCicloDessincronizado } = require('./cicloDessincronizadoFix');
+            const cura = await curarCicloDessincronizado(db);
+            for (const c of cura.cured) {
+                errors.push({
+                    cpf: c.cpf,
+                    name: c.name,
+                    type: 'CICLO_DESSINCRONIZADO_CURADO',
+                    details: `Vencimento estava em ${toDateOnly(c.de)} sem a FECHADA do ciclo anterior; recuado para ${toDateOnly(c.para)} e ${c.ciclosFechados} ciclo(s) fechado(s) pelo Invoice Engine.`
+                });
+            }
+            for (const s of cura.skipped) {
+                errors.push({ cpf: s.cpf, name: '', type: 'CICLO_DESSINCRONIZADO_MANUAL', details: s.motivo });
+            }
+            for (const e of cura.errors) {
+                errors.push({ cpf: e.cpf, name: '', type: 'CICLO_DESSINCRONIZADO_FALHA', details: e.error });
+            }
+        } catch (err) {
+            console.warn('[Audit] Erro ao curar ciclos dessincronizados:', err.message);
+        }
+
         // Anomalia 10: ciclos de fatura PERDIDOS — usuário cujo corte já passou há
         // 1+ meses mas nunca teve invoice FECHADA cobrindo aquele período. Causa: o
         // due_date nasceu errado (bug histórico), então o runEngine nunca viu esse

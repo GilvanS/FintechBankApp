@@ -361,4 +361,30 @@ async function runEngine(targetCpf = null) {
   }
 }
 
-module.exports = { runEngine };
+/**
+ * Quantas massas já passaram do corte e ainda não foram fechadas (o backlog que runEngine
+ * fecharia agora). Serve ao catch-up de boot: o carimbo "já rodou hoje" sozinho não basta —
+ * um cron que rodou mas falhou em parte (ou massa gerada depois da meia-noite, já vencida
+ * do corte) deixa fechamentos pendentes o dia inteiro.
+ */
+async function contarFechamentosPendentes() {
+  const db = getDb();
+  const users = await db.executeQuery(`
+    SELECT credit_card_invoice_due_date
+    FROM ${db.fq('users')}
+    WHERE credit_card_invoice_due_date IS NOT NULL AND COALESCE(is_blacklisted, false) = false
+  `);
+  const now = new Date();
+  let pendentes = 0;
+  for (const u of users || []) {
+    const due = new Date(u.credit_card_invoice_due_date);
+    if (isNaN(due.getTime())) continue;
+    const corte = new Date(due);
+    corte.setDate(corte.getDate() - INVOICE_CUTOFF_DAYS);
+    corte.setUTCHours(23, 59, 59, 999);
+    if (now > corte) pendentes++;
+  }
+  return pendentes;
+}
+
+module.exports = { runEngine, contarFechamentosPendentes };

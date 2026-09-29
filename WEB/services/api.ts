@@ -1493,6 +1493,58 @@ export const adminFixInstallmentPlans = async (cpf?: string): Promise<{
   }
 };
 
+// Massa com o vencimento do usuário adiantado sem a FECHADA do ciclo (o Web soma dois ciclos na
+// fatura aberta). Validação = somente leitura; cura recua o vencimento e o Invoice Engine fecha
+// o ciclo. services/cicloDessincronizadoFix.js.
+export interface CicloDessincronizado {
+  cpf: string;
+  name: string;
+  dueAtual: string;
+  dueEsperado: string;
+  ultimaFechada: string;
+  ciclosPulados: number;
+  valorNaoFaturado: number;
+  curavelAuto: boolean;
+}
+
+export const adminAuditCicloDessincronizado = async (options?: { cpf?: string; limit?: number }): Promise<{
+  success: boolean;
+  message?: string;
+  summary?: { divergent: number; curaveisAuto: number; valorNaoFaturado: number };
+  details?: CicloDessincronizado[];
+  tip?: string;
+}> => {
+  try {
+    const params = new URLSearchParams();
+    if (options?.cpf) params.set('cpf', options.cpf);
+    if (options?.limit) params.set('limit', String(options.limit));
+    const qs = params.toString();
+    return await apiCall<any>(`/admin/audit-ciclo-dessincronizado${qs ? '?' + qs : ''}`);
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao auditar ciclos dessincronizados' };
+  }
+};
+
+export const adminFixCicloDessincronizado = async (cpf?: string): Promise<{
+  success: boolean;
+  message?: string;
+  totalFound?: number;
+  totalCured?: number;
+  errorsCount?: number;
+  cured?: Array<{ cpf: string; name: string; ciclosFechados: number; de: string; para: string }>;
+  skipped?: Array<{ cpf: string; motivo: string }>;
+  errors?: Array<{ cpf: string; error: string }>;
+}> => {
+  try {
+    return await apiCall<any>('/admin/fix-ciclo-dessincronizado', {
+      method: 'POST',
+      body: JSON.stringify({ confirm: true, cpf }),
+    });
+  } catch (error: any) {
+    return { success: false, message: error?.response?.data?.message || error.message || 'Erro ao curar ciclos dessincronizados' };
+  }
+};
+
 export interface SimulateMassPayload {
     count: number;
     purchaseType?: 'all' | 'avista' | 'parcelado_sem_juros' | 'parcelado_com_juros' | 'internacional_avista' | 'internacional_parcelado';
