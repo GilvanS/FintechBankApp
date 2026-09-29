@@ -13,8 +13,6 @@ interface InstallmentReviewProps {
         totalAmount?: number;
         iof?: number;
         juros?: number;
-        tipoEntrada?: string;
-        novaEntrada?: number;
     };
     onConfirm: () => void;
     onBack: () => void;
@@ -88,7 +86,6 @@ const InstallmentReview: React.FC<InstallmentReviewProps> = ({ type, user, detai
                     <InfoRow label="1ª parcela" value={firstInstallmentDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })} />
                     {iof != null && <InfoRow label="IOF" value={fmtBRL(iof)} />}
                     {juros != null && <InfoRow label="Juros" value={fmtBRL(juros)} />}
-                    {!!details.novaEntrada && <InfoRow label="Entrada (cobrada agora na fatura)" value={fmtBRL(details.novaEntrada)} />}
                     <InfoRow label="Taxa de juros" value={`${(interestRatePerInstallment * 100).toFixed(2)}% ao mês; ${(totalInterest * 100).toFixed(2)}% ao período`} />
                 </div>
 

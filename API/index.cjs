@@ -261,7 +261,8 @@ const scheduleCron = (expr, fn) => {
     }
     cron.schedule(expr, fn);
 };
-const { runEngine } = require('./services/invoiceEngine');
+const { runEngine, contarFechamentosPendentes } = require('./services/invoiceEngine');
+const { curarCicloDessincronizado, detectarCiclosDessincronizados } = require('./services/cicloDessincronizadoFix');
 const { runDailyAudit } = require('./services/dailyAudit');
 const { runInvoiceImmutabilityHealth, resolveOrphanCutoff } = require('./services/invoiceImmutabilityHealth');
 const { assertTimezone } = require('./utils/timezone');
@@ -291,16 +292,39 @@ function reportarResultadoMotor(nomeMotor, result) {
     );
 }
 
-scheduleCron('0 0 * * *', async () => {
-    telegramService.alertGroup('⚠️ Motor diário iniciando: fechamento de faturas, billing, recorrências e sincronização...', 'system_start');
-    console.log('[Cron] Executando Invoice Engine...');
+// Pipeline diário COMPLETO. Usado pelo cron das 00:00 e pelo catch-up de boot — os dois
+// precisam rodar exatamente os mesmos passos (antes o catch-up rodava menos que o cron e
+// deixava limite/PA/PF sem reconciliar). Cada passo que falha entra em `falhas`: o carimbo
+// last_engine_run_at só é gravado se TUDO terminou limpo, senão o próximo boot tenta de novo
+// (um cron que "rodou" pela metade não pode contar como dia processado).
+async function runDailyMotor(origem = 'cron') {
+    const falhas = [];
+    telegramService.alertGroup(`⚠️ Motor diário iniciando (${origem}): fechamento de faturas, billing, recorrências e sincronização...`, 'system_start');
+    console.log(`[Cron] Executando Invoice Engine (${origem})...`);
     try {
         await assertTimezone(dbService);
         const result = await runEngine();
         reportarResultadoMotor('Invoice Engine', result);
     } catch (e) {
+        falhas.push('invoice_engine');
         console.error('[Cron] Erro no Invoice Engine:', e);
         telegramService.alertGroup(`🚨 ERRO no Invoice Engine: ${e.message}`, 'system_error');
+    }
+
+    // Vencimento adiantado sem a FECHADA do ciclo (massa gerada/regenerada entre o corte e o
+    // vencimento): o runEngine acima não enxerga esse ciclo — ver cicloDessincronizadoFix.js.
+    console.log('[Cron] Curando ciclos dessincronizados (vencimento adiantado sem FECHADA)...');
+    try {
+        const r = await curarCicloDessincronizado(dbService);
+        console.log(`[Cron] Ciclos dessincronizados: ${r.totalCured}/${r.totalFound} curado(s), ${r.errorsCount} erro(s).`);
+        if (r.errorsCount > 0) falhas.push('ciclo_dessincronizado');
+        if (r.totalCured > 0) {
+            telegramService.alertGroup(`🔧 Ciclos dessincronizados: ${r.totalCured} massa(s) com vencimento adiantado tiveram o ciclo fechado pelo motor.`, 'system_done');
+        }
+    } catch (e) {
+        falhas.push('ciclo_dessincronizado');
+        console.error('[Cron] Erro ao curar ciclos dessincronizados:', e.message);
+        telegramService.alertGroup('ERRO ao curar ciclos dessincronizados: ' + e.message, 'system_error');
     }
 
     // Roda logo após o Invoice Engine: marca contas inadimplentes e recalcula
@@ -312,6 +336,7 @@ scheduleCron('0 0 * * *', async () => {
         console.log('[Cron] Validação de faturamento concluída:', result && result.message);
         reportarResultadoMotor('Validacao de faturamento', result);
     } catch (e) {
+        falhas.push('billing_validation');
         console.error('[Cron] Erro na validação de faturamento:', e);
         telegramService.alertGroup(`🚨 ERRO na validação de faturamento: ${e.message}`, 'system_error');
     }
@@ -323,6 +348,7 @@ scheduleCron('0 0 * * *', async () => {
         const result = await recurringEngine.runEngine();
         console.log('[Cron] Cobrança de assinaturas realizada:', result && result.processedCount, 'processadas');
     } catch (e) {
+        falhas.push('assinaturas');
         console.error('[Cron] Erro na cobrança de assinaturas:', e);
         telegramService.alertGroup(`🚨 ERRO na cobrança de assinaturas: ${e.message}`, 'system_error');
     }
@@ -338,6 +364,7 @@ scheduleCron('0 0 * * *', async () => {
             console.warn('[Cron] Falha na sincronização de dias_atraso:', syncResult.error);
         }
     } catch (e) {
+        falhas.push('dias_atraso');
         console.error('[Cron] Erro ao sincronizar dias_atraso:', e);
         telegramService.alertGroup('ERRO ao sincronizar dias_atraso: ' + e.message, 'system_error');
     }
@@ -368,6 +395,7 @@ scheduleCron('0 0 * * *', async () => {
             telegramService.alertGroup(`🔧 Reconciliação de limite: ${corrigidos} massa(s) tinham credit_card_available_limit divergente da dívida real e foram corrigidas (${estourados} continuam com limite estourado — dívida real acima do limite total).`, 'system_done');
         }
     } catch (e) {
+        falhas.push('limite_disponivel');
         console.error('[Cron] Erro ao reconciliar limite disponível:', e);
         telegramService.alertGroup('ERRO ao reconciliar limite disponível: ' + e.message, 'system_error');
     }
@@ -380,6 +408,7 @@ scheduleCron('0 0 * * *', async () => {
         const r = await runBackfillPA(dbService);
         console.log(`[Cron] PA: ${r.ok}/${r.total} massa(s) elegível(is) recalculada(s).`);
     } catch (e) {
+        falhas.push('pa');
         console.error('[Cron] Erro ao recalcular PA:', e.message);
         telegramService.alertGroup('ERRO ao recalcular PA: ' + e.message, 'system_error');
     }
@@ -390,19 +419,31 @@ scheduleCron('0 0 * * *', async () => {
         const r = await runBackfillPFElegivel(dbService);
         console.log(`[Cron] PF-elegível: ${r.ok}/${r.total} massa(s) com contrato PF recalculada(s).`);
     } catch (e) {
+        falhas.push('pf_elegivel');
         console.error('[Cron] Erro ao recalcular PF-elegível:', e.message);
         telegramService.alertGroup('ERRO ao recalcular PF-elegível: ' + e.message, 'system_error');
     }
 
     // T6: registra o horario desta execucao para o catch-up de boot saber se o
-    // motor ja rodou hoje.
-    try {
-        await dbService.executeQuery(`UPDATE ${dbService.fq('billing_config')} SET last_engine_run_at = CURRENT_TIMESTAMP WHERE id = 1`);
-    } catch (updErr) {
-        console.warn('[Cron] Nao foi possivel registrar last_engine_run_at:', updErr.message);
+    // motor ja rodou hoje — SÓ quando todos os passos terminaram sem erro. Com falha, fica
+    // sem carimbo e o próximo boot refaz o pipeline inteiro.
+    if (falhas.length === 0) {
+        try {
+            await dbService.executeQuery(`UPDATE ${dbService.fq('billing_config')} SET last_engine_run_at = CURRENT_TIMESTAMP WHERE id = 1`);
+        } catch (updErr) {
+            falhas.push('carimbo');
+            console.warn('[Cron] Nao foi possivel registrar last_engine_run_at:', updErr.message);
+        }
     }
-    telegramService.alertGroup('✅ Motor diário concluído: faturas, billing, assinaturas e sincronização processados.', 'system_done');
-});
+    if (falhas.length === 0) {
+        telegramService.alertGroup('✅ Motor diário concluído: faturas, billing, assinaturas e sincronização processados.', 'system_done');
+    } else {
+        telegramService.alertGroup(`⚠️ Motor diário (${origem}) terminou com falha em: ${falhas.join(', ')}. Carimbo NÃO gravado — será refeito no próximo boot.`, 'system_error');
+    }
+    return { limpo: falhas.length === 0, falhas };
+}
+
+scheduleCron('0 0 * * *', () => runDailyMotor('cron'));
 
 // Cron de auditoria diária de anomalias (executa às 02:00 BRT)
 // Auditoria a cada 2h (era 1x/dia 02:00) — lotes menores em dailyAudit.js
@@ -7797,6 +7838,52 @@ apiRouter.post('/admin/fix-installment-plans', bearerAuth(), authenticateAdmin, 
     res.json({ success: true, ...result });
 }));
 
+// GET /admin/audit-ciclo-dessincronizado — valida (somente leitura) massas com o vencimento do
+// usuário adiantado sem a FECHADA do ciclo (o motor nunca fecharia esse ciclo sozinho e o Web
+// mostra a fatura aberta somando dois ciclos, divergindo do CSV). services/cicloDessincronizadoFix.js.
+apiRouter.get('/admin/audit-ciclo-dessincronizado', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const rawCpf = typeof req.query?.cpf === 'string' ? req.query.cpf.replace(/\D/g, '') : '';
+    const cpfFilter = rawCpf.length === 11 ? rawCpf : null;
+    const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
+    const limit = !isNaN(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 500) : 200;
+
+    const found = await detectarCiclosDessincronizados(dbService, { cpfFilter, limit });
+    res.json({
+        success: true,
+        summary: {
+            divergent: found.length,
+            curaveisAuto: found.filter(f => f.curavelAuto).length,
+            valorNaoFaturado: Math.round(found.reduce((s, f) => s + f.valorNaoFaturado, 0) * 100) / 100,
+        },
+        details: found.slice(0, 50),
+        filters: { cpf: cpfFilter, limit },
+        tip: found.length > 0
+            ? 'Vencimento do usuário adiantado sem a FECHADA do ciclo. Use "Curar ciclos" (aba Correções): recua o vencimento e o Invoice Engine fecha o ciclo.'
+            : undefined,
+    });
+}));
+
+// POST /admin/fix-ciclo-dessincronizado — cura: recua users.credit_card_invoice_due_date para o
+// vencimento esperado e roda o Invoice Engine para fechar o(s) ciclo(s). dryRun:true só lista.
+apiRouter.post('/admin/fix-ciclo-dessincronizado', bearerAuth(), authenticateAdmin, asyncHandler(async (req, res) => {
+    const { cpf: cpfFilter, confirm, dryRun } = req.body || {};
+
+    if (confirm !== true && dryRun !== true) {
+        return res.status(400).json({
+            success: false,
+            message: 'Confirmação necessária. Envie { "confirm": true } no body para aplicar correções.'
+        });
+    }
+
+    const result = await curarCicloDessincronizado(dbService, {
+        cpfFilter: cpfFilter ? String(cpfFilter).replace(/\D/g, '') : null,
+        dryRun: dryRun === true,
+    });
+
+    if (!result.dryRun) auditLog(req, 'admin.fix-ciclo-dessincronizado', 'warn', result);
+    res.json({ success: true, ...result });
+}));
+
 // ——— Badge de cobertura de regras (shields.io compatible) ——————————————————
 apiRouter.get('/admin/badge/rules-coverage', asyncHandler(async (req, res) => {
     try {
@@ -7915,33 +8002,33 @@ async function catchUpDailyMotorIfNeeded() {
         const hojeLocal = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
         const ultimaExecLocal = lastRun ? lastRun.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : null;
 
-        if (ultimaExecLocal === hojeLocal) {
-            console.log('[BootCatchUp] Motor diario ja rodou hoje (' + hojeLocal + '). Nada a fazer.');
+        // O carimbo "rodou hoje" sozinho não basta: o cron pode ter rodado e falhado em parte, ou
+        // a massa pode ter sido gerada depois da meia-noite já vencida do corte. Por isso o
+        // catch-up também dispara se sobrou backlog de fechamento ou ciclo dessincronizado.
+        const carimboDeHoje = ultimaExecLocal === hojeLocal;
+        const [pendentes, dessincronizados] = await Promise.all([
+            contarFechamentosPendentes(),
+            detectarCiclosDessincronizados(dbService, { limit: 1 }).then(r => r.length),
+        ]);
+
+        if (carimboDeHoje && pendentes === 0 && dessincronizados === 0) {
+            console.log('[BootCatchUp] Motor diario ja rodou hoje (' + hojeLocal + ') e nao ha fechamento pendente. Nada a fazer.');
             return;
         }
 
-        console.log('[BootCatchUp] Motor diario nao rodou hoje (ultima execucao: ' + (ultimaExecLocal || 'nunca') + '). Disparando catch-up...');
+        const motivo = !carimboDeHoje
+            ? 'motor diario nao rodou hoje (ultima execucao: ' + (ultimaExecLocal || 'nunca') + ')'
+            : pendentes > 0
+                ? pendentes + ' massa(s) passaram do corte sem fechamento'
+                : 'ciclo(s) dessincronizado(s) detectado(s)';
+        console.log('[BootCatchUp] ' + motivo + '. Disparando catch-up...');
+        telegramService.alertGroup('Catch-up de boot: ' + motivo + '. Executando agora.', 'system_start');
+
+        const resultado = await runDailyMotor('catch-up de boot');
         telegramService.alertGroup(
-            'Catch-up de boot: motor diario nao rodou hoje (ultima execucao: ' + (ultimaExecLocal || 'nunca') + '). Executando agora.',
-            'system_start'
+            resultado.limpo ? 'Catch-up de boot concluido.' : 'Catch-up de boot terminou com falha em: ' + resultado.falhas.join(', '),
+            resultado.limpo ? 'system_done' : 'system_error'
         );
-
-        await assertTimezone(dbService);
-        const engineResult = await runEngine();
-        reportarResultadoMotor('Invoice Engine (catch-up)', engineResult);
-
-        const billingResult = await runBillingValidation();
-        reportarResultadoMotor('Validacao de faturamento (catch-up)', billingResult);
-
-        const recurringEngine = require('./services/recurringEngine');
-        await recurringEngine.runEngine();
-
-        await syncInvoiceDiasAtraso();
-
-        await dbService.executeQuery(
-            `UPDATE ${dbService.fq('billing_config')} SET last_engine_run_at = CURRENT_TIMESTAMP WHERE id = 1`
-        );
-        telegramService.alertGroup('Catch-up de boot concluido.', 'system_done');
     } catch (e) {
         console.error('[BootCatchUp] Erro ao verificar/disparar catch-up do motor:', e.message);
         telegramService.alertGroup('ERRO no catch-up de boot: ' + e.message, 'system_error');

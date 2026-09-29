@@ -13,6 +13,12 @@ const { apiMock } = vi.hoisted(() => ({
     apiMock: {
         adminAuditConsistency: vi.fn(),
         adminAuditDoubleCount: vi.fn(),
+        adminAuditCsvConsistency: vi.fn(),
+        adminAuditCicloDessincronizado: vi.fn(),
+        adminFixOrphanInstallments: vi.fn(),
+        adminFixChargesProactive: vi.fn(),
+        adminFixInstallmentPlans: vi.fn(),
+        adminFixCicloDessincronizado: vi.fn(),
     },
 }));
 
@@ -46,6 +52,8 @@ describe('AuditSection — aba Auditoria', () => {
         vi.clearAllMocks();
         apiMock.adminAuditConsistency.mockResolvedValue(CONSISTENCY_OK);
         apiMock.adminAuditDoubleCount.mockResolvedValue(DOUBLE_COUNT_WITH_ISSUES);
+        apiMock.adminAuditCsvConsistency.mockResolvedValue({ success: true, summary: { totalScanned: 10, consistent: 10, divergent: 0 } });
+        apiMock.adminAuditCicloDessincronizado.mockResolvedValue({ success: true, summary: { divergent: 0, curaveisAuto: 0, valorNaoFaturado: 0 }, details: [] });
     });
 
     it('consulta as duas auditorias na montagem', async () => {
@@ -95,6 +103,47 @@ describe('AuditSection — aba Auditoria', () => {
         await waitFor(() => {
             expect(apiMock.adminAuditConsistency).toHaveBeenCalledTimes(2);
             expect(apiMock.adminAuditDoubleCount).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('ciclo dessincronizado (aba Correções)', () => {
+        const COM_CICLO = {
+            success: true,
+            summary: { divergent: 1, curaveisAuto: 1, valorNaoFaturado: 128.31 },
+            details: [{
+                cpf: '94973492973', name: 'Massa', dueAtual: '2026-11-02T18:00:00.000Z', dueEsperado: '2026-10-02T15:00:00.000Z',
+                ultimaFechada: '2026-09-02T18:00:00.000Z', ciclosPulados: 1, valorNaoFaturado: 128.31, curavelAuto: true,
+            }],
+        };
+
+        it('valida, lista a massa e cura; o botão Curar só habilita quando há massa a curar', async () => {
+            apiMock.adminAuditCicloDessincronizado.mockResolvedValue(COM_CICLO);
+            apiMock.adminFixCicloDessincronizado.mockResolvedValue({ success: true, totalFound: 1, totalCured: 1, errorsCount: 0 });
+
+            render(<AuditSection />);
+            await screen.findByText('Consistência de Dias em Atraso');
+            fireEvent.click(screen.getByRole('button', { name: 'Correções' }));
+
+            expect(await screen.findByText(/1 massa\(s\) precisam de cura/)).toBeDefined();
+            expect(screen.getByText(/94973492973/)).toBeDefined();
+
+            apiMock.adminAuditCicloDessincronizado.mockResolvedValue({ success: true, summary: { divergent: 0, curaveisAuto: 0, valorNaoFaturado: 0 }, details: [] });
+            fireEvent.click(screen.getByRole('button', { name: /Curar Ciclos/ }));
+
+            await waitFor(() => expect(apiMock.adminFixCicloDessincronizado).toHaveBeenCalledTimes(1));
+            expect(await screen.findByText(/1 massa\(s\) encontrada\(s\), 1 curada\(s\)/)).toBeDefined();
+            expect(await screen.findByText('Nenhuma massa com ciclo dessincronizado.')).toBeDefined();
+            expect((screen.getByRole('button', { name: /Curar Ciclos/ }) as HTMLButtonElement).disabled).toBe(true);
+        });
+
+        it('CSV × Backend avisa quando há ciclo dessincronizado', async () => {
+            apiMock.adminAuditCicloDessincronizado.mockResolvedValue(COM_CICLO);
+
+            render(<AuditSection />);
+            await screen.findByText('Consistência de Dias em Atraso');
+            fireEvent.click(screen.getByRole('button', { name: 'CSV × Backend' }));
+
+            expect(await screen.findByText(/ciclo dessincronizado \(vencimento adiantado/)).toBeDefined();
         });
     });
 

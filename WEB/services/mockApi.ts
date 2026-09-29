@@ -2187,13 +2187,10 @@ export const adminGetCpfByCardNumber = async (_cardNumber: string) => demoFail()
 export const adminGetAllRecurringBills = async (_opts: { status?: string; cpf?: string } = {}) => ({ success: true, bills: [] });
 
 export const adminAuditConsistency = async (_options?: { cpf?: string; limit?: number }) => demoFail();
-export const adminAuditCsvConsistency = async (_options?: { cpf?: string; limit?: number }) => demoFail();
 export const adminAuditDoubleCount = async (_options?: { cpf?: string; limit?: number }) => demoFail();
 export const adminAuditOrphansPre005 = async () => demoFail();
 export const adminRunFullAudit = async () => demoFail();
 export const adminHealthCharges = async () => demoFail();
-export const adminFixOrphanInstallments = async (_cpf?: string) => demoFail();
-export const adminFixChargesProactive = async (_cpf?: string) => demoFail();
 export const adminCheckRegularized = async (_since: string) => ({
     success: false, count: 0, totalPaid: 0, items: [], checkedAt: new Date().toISOString(), message: DEMO_UNAVAILABLE,
 });

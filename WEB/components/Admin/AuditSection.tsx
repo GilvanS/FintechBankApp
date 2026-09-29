@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, Wrench } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
-import { adminAuditConsistency, adminAuditDoubleCount, adminAuditCsvConsistency, adminFixOrphanInstallments, adminFixChargesProactive, adminFixInstallmentPlans } from '../../services/api';
+import { adminAuditConsistency, adminAuditDoubleCount, adminAuditCsvConsistency, adminAuditCicloDessincronizado, adminFixOrphanInstallments, adminFixChargesProactive, adminFixInstallmentPlans, adminFixCicloDessincronizado } from '../../services/api';
 
 type AuditSubTab = 'consistency' | 'double-count' | 'csv-consistency' | 'corrections';
 
@@ -51,6 +51,39 @@ const AuditSection: React.FC = () => {
     const [chargesResult, setChargesResult] = useState<Awaited<ReturnType<typeof adminFixChargesProactive>> | null>(null);
     const [plansResult, setPlansResult] = useState<Awaited<ReturnType<typeof adminFixInstallmentPlans>> | null>(null);
 
+    // Ciclo dessincronizado: validar (somente leitura) e curar. A validação alimenta o aviso do
+    // CSV × Backend e a lista da aba Correções.
+    const [ciclos, setCiclos] = useState<Awaited<ReturnType<typeof adminAuditCicloDessincronizado>> | null>(null);
+    const [validatingCiclos, setValidatingCiclos] = useState(false);
+    const [fixingCiclos, setFixingCiclos] = useState(false);
+    const [ciclosFixResult, setCiclosFixResult] = useState<Awaited<ReturnType<typeof adminFixCicloDessincronizado>> | null>(null);
+
+    const validateCiclos = useCallback(async () => {
+        setValidatingCiclos(true);
+        try {
+            const cleanCpf = cpfInput.replace(/\D/g, '') || undefined;
+            setCiclos(await adminAuditCicloDessincronizado({ cpf: cleanCpf }));
+        } finally {
+            setValidatingCiclos(false);
+        }
+    }, [cpfInput]);
+
+    const runFixCiclos = useCallback(async () => {
+        setFixingCiclos(true);
+        setCiclosFixResult(null);
+        try {
+            const cleanCpf = cpfInput.replace(/\D/g, '') || undefined;
+            const r = await adminFixCicloDessincronizado(cleanCpf);
+            setCiclosFixResult(r);
+            // Revalida: a lista precisa refletir o que sobrou depois da cura.
+            setCiclos(await adminAuditCicloDessincronizado({ cpf: cleanCpf }));
+        } catch (err: any) {
+            setCiclosFixResult({ success: false, message: err?.message || 'Erro inesperado na cura de ciclos' });
+        } finally {
+            setFixingCiclos(false);
+        }
+    }, [cpfInput]);
+
     const runFixPlans = useCallback(async () => {
         setFixingPlans(true);
         setPlansResult(null);
@@ -97,10 +130,11 @@ const AuditSection: React.FC = () => {
         setLoading(true);
         setStatusMessage('Consultando auditorias...');
         try {
-            const [c, d, cc] = await Promise.all([adminAuditConsistency(), adminAuditDoubleCount(), adminAuditCsvConsistency()]);
+            const [c, d, cc, ci] = await Promise.all([adminAuditConsistency(), adminAuditDoubleCount(), adminAuditCsvConsistency(), adminAuditCicloDessincronizado()]);
             setConsistency(c);
             setDoubleCount(d);
             setCsvConsistency(cc);
+            setCiclos(ci);
             setStatusMessage('Auditorias atualizadas.');
         } catch {
             setStatusMessage('Falha ao consultar auditorias.');
@@ -305,6 +339,20 @@ const AuditSection: React.FC = () => {
                                     : <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" />}
                                 {csvConsistency.tip ?? 'Compara fatura_fechada/fatura_aberta do CSV de massas (botão "Exportar CSV") contra o cálculo real do backend (enrichUserCreditCardData) — pega regressão na query do CSV antes que vire massa de teste ruim.'}
                             </p>
+                            {(ciclos?.summary?.divergent ?? 0) > 0 && (
+                                <div className="mt-3 flex items-start gap-2 flex-wrap text-xs font-bold text-amber-500">
+                                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                                    <span className="flex-1 min-w-[220px]">
+                                        {ciclos?.summary?.divergent} massa(s) com ciclo dessincronizado (vencimento adiantado sem a fatura fechada do ciclo) — causa provável de fatura aberta diferente do CSV. Valide e cure na aba Correções.
+                                    </span>
+                                    <button
+                                        onClick={() => setSubTab('corrections')}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold ${isMidnight ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-black/10 text-black hover:bg-black/20'}`}
+                                    >
+                                        Ir para Correções
+                                    </button>
+                                </div>
+                            )}
                         </>
                     )}
                 </section>
@@ -440,6 +488,80 @@ const AuditSection: React.FC = () => {
                                     <p className="text-xs opacity-80 flex items-center gap-1.5">
                                         <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
                                         {plansResult.totalFound ?? 0} massa(s) encontrada(s), {plansResult.totalCured ?? 0} curada(s), {plansResult.errorsCount ?? 0} erro(s).
+                                    </p>
+                                )
+                            )}
+                        </div>
+
+                        <div className={`border-t pt-5 ${isMidnight ? 'border-white/10' : 'border-black/10'}`}>
+                            <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                                <div className="flex-1 min-w-[220px]">
+                                    <p className="text-xs font-bold uppercase tracking-wide">Ciclo Dessincronizado</p>
+                                    <p className="text-xs opacity-60">CICLO_DESSINCRONIZADO — vencimento do usuário adiantado sem a fatura fechada do ciclo (massa gerada/regenerada entre o corte e o vencimento). O Web soma dois ciclos na fatura aberta e diverge do CSV. A cura recua o vencimento e o Invoice Engine fecha o ciclo; roda sozinha no boot e a cada 2h.</p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                                    <button
+                                        onClick={validateCiclos}
+                                        disabled={validatingCiclos || fixingCiclos}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 ${
+                                            isMidnight
+                                                ? 'bg-white/10 text-white hover:bg-white/20 focus-visible:outline-volt-green'
+                                                : 'bg-black/10 text-black hover:bg-black/20 focus-visible:outline-black'
+                                        }`}
+                                    >
+                                        <ShieldCheck size={14} />
+                                        {validatingCiclos ? 'Validando…' : 'Validar'}
+                                    </button>
+                                    <button
+                                        onClick={runFixCiclos}
+                                        disabled={fixingCiclos || validatingCiclos || (ciclos?.summary?.divergent ?? 0) === 0}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 ${
+                                            isMidnight
+                                                ? 'bg-volt-green text-black focus-visible:outline-volt-green'
+                                                : 'bg-black text-white focus-visible:outline-black'
+                                        }`}
+                                    >
+                                        <RefreshCw size={14} className={fixingCiclos ? 'animate-spin motion-reduce:animate-none' : ''} />
+                                        {fixingCiclos ? 'Curando…' : 'Curar Ciclos'}
+                                    </button>
+                                </div>
+                            </div>
+                            {ciclos && (
+                                ciclos.success === false ? (
+                                    <p className="text-xs text-red-500 font-bold flex items-center gap-1.5">
+                                        <AlertTriangle size={14} /> {ciclos.message || 'Erro ao validar.'}
+                                    </p>
+                                ) : (ciclos.summary?.divergent ?? 0) === 0 ? (
+                                    <p className="text-xs opacity-80 flex items-center gap-1.5">
+                                        <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
+                                        Nenhuma massa com ciclo dessincronizado.
+                                    </p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <p className="text-xs font-bold text-amber-500 flex items-center gap-1.5">
+                                            <AlertTriangle size={14} />
+                                            {ciclos.summary?.divergent} massa(s) precisam de cura ({ciclos.summary?.curaveisAuto} automática(s)), R$ {(ciclos.summary?.valorNaoFaturado ?? 0).toFixed(2)} sem fatura fechada.
+                                        </p>
+                                        <ul className="text-xs opacity-80 space-y-0.5 max-h-40 overflow-y-auto">
+                                            {(ciclos.details ?? []).slice(0, 20).map((d) => (
+                                                <li key={d.cpf} className="tabular-nums">
+                                                    {d.cpf} — vencimento {d.dueAtual.slice(0, 10)} (esperado {d.dueEsperado.slice(0, 10)}), R$ {d.valorNaoFaturado.toFixed(2)}
+                                                    {!d.curavelAuto && ' — regenerar a massa'}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )
+                            )}
+                            {ciclosFixResult && (
+                                ciclosFixResult.success === false ? (
+                                    <p className="text-xs text-red-500 font-bold flex items-center gap-1.5 mt-2">
+                                        <AlertTriangle size={14} /> {ciclosFixResult.message || 'Erro ao curar.'}
+                                    </p>
+                                ) : (
+                                    <p className="text-xs opacity-80 flex items-center gap-1.5 mt-2">
+                                        <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
+                                        {ciclosFixResult.totalFound ?? 0} massa(s) encontrada(s), {ciclosFixResult.totalCured ?? 0} curada(s), {ciclosFixResult.errorsCount ?? 0} erro(s).
                                     </p>
                                 )
                             )}

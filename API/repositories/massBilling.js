@@ -28,6 +28,22 @@ function shiftMonthsSameDay(date, k, dueDay) {
     return new Date(y, m, Math.min(dueDay, lastDay), 12, 0, 0);
 }
 
+// O vencimento do USUÁRIO tem que ser o do ciclo seguinte à última FECHADA semeada — a
+// mesma regra com que o invoiceEngine rola o vencimento a cada fechamento. Sem isto ele
+// fica com o valor do INSERT (computeNextInvoiceDueDate(hoje)) ou, numa massa regenerada,
+// com o vencimento que o cron já tinha rolado antes do DELETE das faturas. Entre o corte e
+// o vencimento de um ciclo isso pula um mês: o motor nunca fecha o ciclo e o Web junta dois
+// ciclos na fatura aberta (bug da massa 94973492973, ver cicloDessincronizadoFix.js).
+async function alinharVencimentoDoUsuario(db, cpf, ultimaFechadaDue, dueDay) {
+    if (!ultimaFechadaDue) return;
+    const proximo = computeNextInvoiceDueDate(Number(dueDay) || 10, ultimaFechadaDue);
+    await db.executeQuery(`
+        UPDATE ${db.fq('users')}
+        SET credit_card_invoice_due_date = ${esc(proximo.toISOString())}, updated_at = CURRENT_TIMESTAMP
+        WHERE cpf = ${esc(cpf)}
+    `);
+}
+
 // `minDaysPassed` (opcional): garante que o vencimento devolvido tenha ao menos N dias
 // de atraso em relação à referência — recua mês a mês até satisfazer. Usado para o ciclo
 // ATUAL inadimplente da massa: uma fatura que venceu hoje (ou há 2 dias) não pode nascer
@@ -237,12 +253,16 @@ async function seedMassBilling(db, cpf, options = {}) {
         }
     };
 
+    const ultimaFechadaDue = cycleDueDates[cycleDueDates.length - 1];
+
     if (comPagamento) {
-        return seedCiclosComPagamento(db, cpf, {
+        const sim = await seedCiclosComPagamento(db, cpf, {
             cycles, cycleDueDates, now, genId,
             comprasInadimplente, comprasAdimplente, comprasCicloAberto,
             sequenciaInternacional: () => isInternacional,
         });
+        await alinharVencimentoDoUsuario(db, cpf, ultimaFechadaDue, anchorDay);
+        return sim;
     }
 
     for (let i = 0; i < cycles.length; i++) {
@@ -331,7 +351,7 @@ async function seedMassBilling(db, cpf, options = {}) {
             // installment_plans ficava com remaining_installments/next_due_date parados
             // no valor inicial (bug real: "Parcelas a Vencer" = 0 numa massa recém-criada).
             installmentIndex++;
-            const openCycleDueDate = computeNextInvoiceDueDate(anchorDay);
+            const openCycleDueDate = computeNextInvoiceDueDate(anchorDay, ultimaFechadaDue);
             if (installmentIndex <= totalInstallments) {
                 const openTxDate = new Date(openCycleDueDate);
                 openTxDate.setDate(openTxDate.getDate() - (20 + Math.floor(Math.random() * 5)));
@@ -348,6 +368,8 @@ async function seedMassBilling(db, cpf, options = {}) {
             `);
         }
     }
+
+    await alinharVencimentoDoUsuario(db, cpf, ultimaFechadaDue, anchorDay);
 }
 
 /**
