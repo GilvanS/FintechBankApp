@@ -128,6 +128,17 @@ describe('calcularParcelamentoFatura — PF', () => {
         // Principal líquido de entrada financia menos, então a parcela cai
         expect(comEntrada.valorParcela).toBeLessThan(semEntrada.valorParcela);
     });
+
+    test('CET com ENTRADA DIFERENTE fica positivo e próximo do CET sem entrada (regressão: saía negativo)', () => {
+        const base = {
+            valorFatura: 1500, saldoAbertoAnterior: 0, taxaMensal: 0.0795, prazo: 5,
+            dataLimitePagamento: DATA_LIMITE, vencimentoProximoCorte: PROXIMO_CORTE, diaVencimento: DIA_VENCIMENTO,
+        };
+        const sem = calcularParcelamentoFatura({ ...base, tipoEntrada: TIPOS_ENTRADA.SEM_ENTRADA });
+        const com = calcularParcelamentoFatura({ ...base, novaEntrada: 200, tipoEntrada: TIPOS_ENTRADA.ENTRADA_DIFERENTE });
+        expect(com.cetAnual).toBeGreaterThan(0);
+        expect(Math.abs(com.cetAnual - sem.cetAnual)).toBeLessThan(0.15);
+    });
 });
 
 describe('calcularParcelamentoAutomatico — PA', () => {

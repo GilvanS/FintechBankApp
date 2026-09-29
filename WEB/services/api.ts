@@ -203,6 +203,10 @@ export interface InstallmentPlan {
   iof: number;
   juros: number;
   monthlyRate?: number;
+  /** Só o motor real devolve (PF/Reneg); o modo demo não tem. */
+  iofAdicional?: number;
+  saldoFinanciado?: number;
+  cetAnual?: number;
 }
 
 export interface InstallmentReceipt extends InstallmentPlan {

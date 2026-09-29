@@ -249,7 +249,9 @@ function calcularParcelamentoFatura(params) {
   const saldoFinanciado = round2(principalSeed + iof2 + iofAdicional2);
   const final = runAmortization(saldoFinanciado, taxaMensal, dates);
 
-  const cashflows = [-valorFatura, ...final.rows.map((r) => r.pmt)];
+  // Entrada DIFERENTE é paga na origem, fora das parcelas: só o restante entra como saída
+  // inicial. Sem isso o CET sai negativo (parcelas somam menos que a fatura cheia).
+  const cashflows = [-(valorFatura - pagamentoEntrada), ...final.rows.map((r) => r.pmt)];
   const cetAnual = xirr(cashflows, dates);
 
   return {

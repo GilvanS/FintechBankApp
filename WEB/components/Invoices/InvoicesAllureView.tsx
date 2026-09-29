@@ -32,6 +32,7 @@ import PaymentSuccessModal from './PaymentSuccessModal';
 import { useCardOrder } from '../../hooks/useCardOrder';
 import { useAuth } from '../../context/AuthContext';
 import { payCreditCardInvoice, getUserByCpf, getPaInfo, getMyInstallments, type PaInfo, type MyInstallmentPlan } from '../../services/api';
+import { InstallmentContractAllureView, type ContractProduct } from './InstallmentContractAllureView';
 import type { User } from '../../types';
 
 interface Props {
@@ -39,7 +40,6 @@ interface Props {
   theme: 'yellow' | 'midnight';
   onBack: () => void;
   onNavigate: (view: any) => void;
-  onRenegotiate?: () => void;
   openBoletoModal?: () => void;
   openPixModal?: () => void;
 }
@@ -60,7 +60,7 @@ function formatBRL(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-export function InvoicesAllureView({ user, theme, onBack, onNavigate, onRenegotiate, openBoletoModal, openPixModal }: Props) {
+export function InvoicesAllureView({ user, theme, onBack, onNavigate, openBoletoModal, openPixModal }: Props) {
   const isMidnight = theme === 'midnight';
   const prefersReducedMotion = useReducedMotion();
   const { updateUser } = useAuth();
@@ -106,6 +106,17 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, onRenegoti
     getMyInstallments().then((res) => { if (active) setMyPlan(res.plan ?? null); });
     return () => { active = false; };
   }, []);
+
+  // Simulação/contratação de PF e Reneg: tela web dedicada (abas PF | Reneg dentro dela).
+  const [contractProduct, setContractProduct] = useState<ContractProduct | null>(null);
+  const handleContracted = async () => {
+    if (user) {
+      const refreshed = await getUserByCpf(user.cpf);
+      if (refreshed.success && refreshed.user) updateUser(refreshed.user);
+    }
+    const plan = await getMyInstallments();
+    setMyPlan(plan.plan ?? null);
+  };
 
   const [isDesktopGrid, setIsDesktopGrid] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
@@ -469,7 +480,7 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, onRenegoti
           <List size={16} /> Ver Lançamentos
         </button>
         <button
-          onClick={() => onNavigate('installmentOptions')}
+          onClick={() => setContractProduct('pf')}
           disabled={disablePayActions}
           className={`${quickActionClass} ${disablePayActions ? 'opacity-40 pointer-events-none' : ''}`}
         >
@@ -721,18 +732,18 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, onRenegoti
               <p className={`text-xs ${isMidnight ? 'text-on-surface-variant' : 'text-black/70'}`}>
                 Parcele a fatura atual de <strong>{formatBRL(currentInvoiceTotal)}</strong> em até 10 vezes com juros.
               </p>
-              <button onClick={() => onNavigate('installmentOptions')} className={quickActionClass}>
+              <button onClick={() => setContractProduct('pf')} className={quickActionClass}>
                 Simular Parcelamento
               </button>
             </div>
           </ChartCard>
-          {onRenegotiate && (user?.creditCard?.isBlocked || user?.creditCard?.isBlacklisted) && (
+          {(user?.creditCard?.isBlocked || user?.creditCard?.isBlacklisted) && (
             <ChartCard title="Renegociar Dívida" subtitle="Divida em até 36x, taxa menor" theme={theme}>
               <div className="p-4 flex flex-col gap-4">
                 <p className={`text-xs ${isMidnight ? 'text-on-surface-variant' : 'text-black/70'}`}>
                   Consolide toda a dívida (faturas + encargos) num único parcelamento com taxa menor.
                 </p>
-                <button onClick={onRenegotiate} className={quickActionClass}>
+                <button onClick={() => setContractProduct('reneg')} className={quickActionClass}>
                   Simular Renegociação
                 </button>
               </div>
@@ -860,6 +871,23 @@ export function InvoicesAllureView({ user, theme, onBack, onNavigate, onRenegoti
       </div>
     </div>
   );
+
+  if (contractProduct) {
+    return (
+      <InstallmentContractAllureView
+        user={user}
+        theme={theme}
+        initialProduct={contractProduct}
+        renegElegivel={!!(user?.creditCard?.isBlocked || user?.creditCard?.isBlacklisted)}
+        onBack={() => setContractProduct(null)}
+        onContracted={handleContracted}
+        onFinish={(verParcelamentos) => {
+          setContractProduct(null);
+          if (verParcelamentos) setActiveSection('parcelamentos');
+        }}
+      />
+    );
+  }
 
   return (
     <AllureShell

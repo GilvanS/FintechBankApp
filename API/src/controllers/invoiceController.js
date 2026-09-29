@@ -568,6 +568,9 @@ module.exports = function createInvoiceController(deps) {
                 iof: result.iofTotal,
                 juros: result.totalJuros,
                 monthlyRate: 0.0795,
+                iofAdicional: result.iofAdicional,
+                saldoFinanciado: result.saldoFinanciado,
+                cetAnual: result.cetAnual,
             });
         }
         res.json({ success: true, amount: closedDebt.owed, options });
@@ -878,6 +881,9 @@ module.exports = function createInvoiceController(deps) {
                 iof: result.iofTotal,
                 juros: result.totalJuros,
                 monthlyRate: RENEG_TAXA_MENSAL,
+                iofAdicional: result.iofAdicional,
+                saldoFinanciado: result.saldoFinanciado,
+                cetAnual: result.cetAnual,
             });
         }
         res.json({ success: true, amount: totalDebt, options });
